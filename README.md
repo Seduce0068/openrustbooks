@@ -38,6 +38,7 @@ Tauriのバージョンは未決定です。
 - [要件と未決定事項](docs/requirements.md)
 - [構成案と開発順序の案](docs/architecture.md)
 - [ADR-0001: OS WebView方式の採用](docs/decisions/0001-use-system-webview.md)
+- [ADR-0002: AI支援Markdown生成・修正パイプライン](docs/decisions/0002-ai-markdown-pipeline.md)
 
 利用者が求めた要件、合意済みの決定、設計上の提案を区別して記録しています。
 

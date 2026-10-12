@@ -149,6 +149,48 @@ axumがアクセスするファイルは、サーバーの実行環境にある�
 OS WebViewの差に影響する表示・入力は、対象環境で確認する。
 数値による性能要件や対応ファイルの上限は、まだ決まっていない。
 
+## AI Markdown パイプライン
+
+[ADR-0002](../decisions/0002-ai-markdown-pipeline.md) で決定。
+
+### 共通コアへの組み込み
+
+| モジュール | 責務 | Wasm対応 |
+| --- | --- | --- |
+| `ai_markdown::pipeline` | 生成・修正・検証の往復制御 | 必須 |
+| `ai_markdown::prompt` | プロンプトテンプレート管理・バージョニング | 必須 |
+| `ai_markdown::client` | AIプロバイダ抽象化 (`AiClient` trait) | 必須 |
+| `ai_markdown::lint` | `rumdl` ラッパー・ルールセット適用・自動修正 | 必須 |
+| `ai_markdown::diff` | 差分計算・インライン表示用データ生成 | 必須 |
+
+### 依存クレート (予定)
+
+- `rumdl` — markdownlint 互換 lint (Wasm 対応確認済み次第採用)
+- `async-openai` / `rig-core` — AI API クライアント
+- `tiktoken-rs` — トークン計算
+- `similar` — 差分アルゴリズム
+- `pulldown-cmark` / `comrak` — Markdown AST 操作 (必要に応じて)
+
+### プロンプト戦略
+
+- **ファイルベース管理**: `prompts/{generate,refine,table,frontmatter}.hbs` (Handlebars風)
+- **バージョニング**: Git 管理・セマンティックバージョン付与
+- **注入変数**: 対象文書・ユーザー指示・プロジェクト設定 (`.markdownlint.yaml`)・文脈 (カーソル位置等)
+
+### UI 統合案 (CodeMirror 6 拡張)
+
+- コマンドパレット: `AI: Generate Markdown`, `AI: Refine Selection`
+- インラインアクション: 選択範囲右クリック → `AI 改善`
+- ストリーミング表示: 生成途中もトークン単位でエディタ反映
+- 差分ビュー: `original` / `proposed` 並列表示・チェリーピック採用
+
+### リスク検証項目 (優先順)
+
+1. `rumdl` Wasm ビルドサイズ・初期化速度・メモリ使用量
+2. AI API レイテンシ・コスト・ストリーミング対応 (ローカルLLM含む)
+3. プロンプトインジェクション耐性・出力検証の堅牢性
+4. 大容量文書 (100KB+) へのスケーラビリティ
+
 ## 文書の運用
 
 要件は[requirements.md](requirements.md)、
