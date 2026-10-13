@@ -1,0 +1,33 @@
+---
+id = "builtin-refine"
+prompt_type = "refine"
+version = "1.0.0"
+description = "Refine existing Markdown with instructions"
+tags = ["builtin", "refinement"]
+---
+
+Instruction: {{user_prompt}}
+
+{{#if context}}
+Context:
+{{context}}
+{{/if}}
+
+Current Markdown content:
+```markdown
+{{current_content}}
+```
+
+Requirements:
+- Apply the instruction while maintaining valid markdownlint compliance
+- Preserve original structure unless explicitly asked to change
+- Keep front matter intact if present
+- Maintain heading hierarchy
+- Fix any lint issues introduced by the changes
+- Output the complete revised Markdown document
+
+{{#if attempt}}
+Previous attempt had lint issues. Please fix them.
+{{/if}}
+
+Output only the revised Markdown content.

@@ -1,47 +1,106 @@
----
-type: Reference
-title: "openrustbooks"
-description: "Rustを活用する、ブラウザでも使えるリーダー兼テキストエディタ。"
-tags:
-  - Rust
-  - Reader
-  - Editor
-status: planning
----
+# openrustbooks
 
-Rustを活用して、本や文書を読むためのリーダーと、
-テキスト系ファイルを編集するエディタを作るプロジェクトです。
+Rustを活用する、ブラウザでも使えるリーダー兼テキストエディタ。
 
-現在は構想・要件整理の段階です。
-以下は目標と設計方針であり、実装済み機能の一覧ではありません。
+## プロジェクト構成
 
-## 目指すこと
+```
+openrustbooks/
+├── Cargo.toml                    # ワークスペース設定
+├── README.md                     # プロジェクト概要
+├── LICENSE                       # MIT License
+├── docs/
+│   ├── requirements.md           # 要件定義
+│   ├── architecture.md           # アーキテクチャ設計
+│   └── decisions/                # ADR (Architecture Decision Records)
+│       ├── 0001-use-system-webview.md
+│       └── 0002-ai-markdown-pipeline.md
+├── crates/
+│   ├── core/                     # 共通コアライブラリ (native + wasm)
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── error.rs
+│   │   │   ├── document.rs       # ドキュメントモデル
+│   │   │   ├── io.rs             # ストレージ抽象化
+│   │   │   ├── config.rs         # 設定管理
+│   │   │   ├── ai_markdown/      # AI Markdownパイプライン
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── client.rs     # AIプロバイダ抽象化
+│   │   │   │   ├── lint.rs       # rumdlによるlint
+│   │   │   │   ├── prompt.rs     # プロンプトテンプレート
+│   │   │   │   ├── diff.rs       # 差分計算
+│   │   │   │   └── pipeline.rs   # 高レベルサービス
+│   │   │   └── wasm.rs           # Wasmバインディング
+│   │   ├── prompts/              # プロンプトテンプレート
+│   │   └── Cargo.toml
+│   ├── desktop/                  # Tauriデスクトップアプリ
+│   │   ├── src/
+│   │   │   ├── main.rs
+│   │   │   ├── state/            # アプリケーション状態
+│   │   │   ├── window/           # ウィンドウ管理
+│   │   │   └── commands/         # Tauriコマンド
+│   │   ├── src-tauri/
+│   │   │   └── tauri.conf.json
+│   │   └── Cargo.toml
+│   └── web/                      # Wasmウェブアプリ (Leptos)
+│       ├── src/
+│       │   └── lib.rs
+│       ├── static/
+│       │   └── index.html
+│       └── Cargo.toml
+```
 
-- EPUB・ZIP・PDF・TXT・Markdownを扱う。
-- TXT・Markdownなどのテキスト系ファイルを編集する。
-- デスクトップアプリとブラウザから利用する。
-- フォルダを簡単に開き、文書を扱えるようにする。
-- Google Driveなどと連携し、フォルダやアーカイブとして保存する。
-- Markdown Preview Enhanced、markdownlint、
-  Markdown All in Oneに相当する機能を利用できるようにする。
+## 技術スタック
 
-## 決定済みの方針
+| レイヤー | 技術 |
+|----------|------|
+| **共通コア** | Rust 2024, `rumdl` (markdownlint互換), `async-openai`, `tiktoken-rs` |
+| **デスクトップ** | Tauri 2.0 (OS WebView / wry) |
+| **Web** | Leptos 0.7 (CSR), Wasm |
+| **Markdown処理** | `pulldown-cmark`, `comrak`, `rumdl` (Wasm対応) |
+| **AI/LLM** | OpenAI API互換, Ollama (ローカル) |
+| **設定** | `figment` (TOML + 環境変数) |
+| **ストレージ** | ローカルFS, Google Drive (予定) |
 
-Rustを積極的に活用します。
-デスクトップ版はTauriの標準的なOS WebView方式（wry）を採用します。
+## 主な機能 (設計段階)
 
-Leptos・Yew・axumや個別ライブラリの採用、
-Tauriのバージョンは未決定です。
+- **ドキュメント閲覧**: EPUB, ZIP, PDF, TXT, Markdown
+- **テキスト編集**: TXT, Markdown (CodeMirror 6ベース)
+- **AI支援**: Markdown生成・修正・リファクタリング + `rumdl`品質保証
+- **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
+- **フォルダ操作**: 既存フォルダ直接参照, インポート不要
+- **クラウド連携**: Google Drive (手動保存から開始)
+
+## 開発セットアップ
+
+### 前提条件
+
+- Rust 1.80+ (2024 edition)
+- Node.js 20+ (フロントエンド開発用)
+- Tauri CLI: `cargo install tauri-cli`
+
+### ビルド
+
+```bash
+# ワークスペース全体
+cargo build --workspace
+
+# デスクトップアプリ開発
+cd crates/desktop
+cargo tauri dev
+
+# Webアプリ開発 (wasm-pack)
+cd crates/web
+wasm-pack build --target web --out-dir ../desktop/static/pkg
+```
 
 ## ドキュメント
 
-- [要件と未決定事項](docs/requirements.md)
-- [構成案と開発順序の案](docs/architecture.md)
-- [ADR-0001: OS WebView方式の採用](docs/decisions/0001-use-system-webview.md)
-- [ADR-0002: AI支援Markdown生成・修正パイプライン](docs/decisions/0002-ai-markdown-pipeline.md)
-
-利用者が求めた要件、合意済みの決定、設計上の提案を区別して記録しています。
+- [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
+- [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
+- [ADR-0001: OS WebView採用](docs/decisions/0001-use-system-webview.md)
+- [ADR-0002: AI Markdownパイプライン](docs/decisions/0002-ai-markdown-pipeline.md)
 
 ## ライセンス
 
-[LICENSE](LICENSE)を参照してください。
+MIT License - see [LICENSE](LICENSE) for details.

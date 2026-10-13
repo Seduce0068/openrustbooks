@@ -1,0 +1,27 @@
+---
+id = "builtin-summarize"
+prompt_type = "summarize"
+version = "1.0.0"
+description = "Summarize content to Markdown"
+tags = ["builtin", "summarize"]
+---
+
+Create a concise Markdown summary of the following content.
+
+Content:
+```markdown
+{{current_content}}
+```
+
+{{#if user_prompt}}
+Focus on: {{user_prompt}}
+{{/if}}
+
+Format:
+- Title as H1
+- Key points as bullet list under H2 "Summary"
+- Important details as sub-bullets
+- Code snippets if relevant
+- Links to referenced resources if any
+
+Output only the summary Markdown.

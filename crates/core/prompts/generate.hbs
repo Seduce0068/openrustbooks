@@ -1,0 +1,30 @@
+---
+id = "builtin-generate"
+prompt_type = "generate"
+version = "1.0.0"
+description = "Generate Markdown from natural language"
+tags = ["builtin", "generation"]
+---
+
+{{user_prompt}}
+
+{{#if context}}
+Context:
+{{context}}
+{{/if}}
+
+{{#if template}}
+Template to follow:
+{{template}}
+{{/if}}
+
+Requirements:
+- Use proper heading hierarchy (H1 → H2 → H3)
+- Use consistent list markers (- or 1.)
+- Use fenced code blocks with language identifiers
+- Ensure all links are valid (relative or absolute)
+- No trailing spaces
+- Maximum line length 120 characters (soft limit)
+- Include front matter if document appears to be a standalone article
+
+Generate only the Markdown content, no additional explanation.

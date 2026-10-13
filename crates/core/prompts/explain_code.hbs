@@ -1,0 +1,29 @@
+---
+id = "builtin-explain-code"
+prompt_type = "explaincode"
+version = "1.0.0"
+description = "Explain code in Markdown format"
+tags = ["builtin", "code", "education"]
+---
+
+Explain the following code in clear, educational Markdown.
+
+Code:
+```{{language}}
+{{current_content}}
+```
+
+{{#if user_prompt}}
+Focus: {{user_prompt}}
+{{/if}}
+
+Format:
+- H1: Overview (what this code does)
+- H2: Key Components (functions, classes, modules)
+- H2: Step-by-Step Walkthrough
+- H2: Important Patterns/Concepts
+- H2: Usage Example (if applicable)
+- H2: Potential Issues/Caveats
+
+Use code blocks for snippets, inline code for terms.
+Output only the explanation Markdown.

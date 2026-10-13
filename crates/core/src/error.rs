@@ -1,0 +1,89 @@
+//! Error types for openrustbooks-core.
+
+use thiserror::Error;
+
+/// Core error type
+#[derive(Error, Debug)]
+pub enum CoreError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
+
+    #[error("Configuration error: {0}")]
+    Config(#[from] figment::Error),
+
+    #[error("Storage error: {0}")]
+    Storage(String),
+
+    #[error("Document not found: {0}")]
+    DocumentNotFound(String),
+
+    #[error("Unsupported format: {0}")]
+    UnsupportedFormat(String),
+
+    #[error("AI pipeline error: {0}")]
+    AiPipeline(String),
+
+    #[error("AI provider error: {0}")]
+    AiProvider(String),
+
+    #[error("Lint error: {0}")]
+    Lint(String),
+
+    #[error("Token limit exceeded: {0}")]
+    TokenLimitExceeded(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+/// Result type alias for core operations
+pub type CoreResult<T> = Result<T, CoreError>;
+
+impl CoreError {
+    /// Create a storage error
+    pub fn storage(msg: impl Into<String>) -> Self {
+        Self::Storage(msg.into())
+    }
+
+    /// Create an AI pipeline error
+    pub fn ai_pipeline(msg: impl Into<String>) -> Self {
+        Self::AiPipeline(msg.into())
+    }
+
+    /// Create an AI provider error
+    pub fn ai_provider(msg: impl Into<String>) -> Self {
+        Self::AiProvider(msg.into())
+    }
+
+    /// Create a lint error
+    pub fn lint(msg: impl Into<String>) -> Self {
+        Self::Lint(msg.into())
+    }
+
+    /// Create a validation error
+    pub fn validation(msg: impl Into<String>) -> Self {
+        Self::Validation(msg.into())
+    }
+
+    /// Create an internal error
+    pub fn internal(msg: impl Into<String>) -> Self {
+        Self::Internal(msg.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_creation() {
+        let err = CoreError::storage("test message");
+        assert!(err.to_string().contains("test message"));
+    }
+}

@@ -1,0 +1,29 @@
+---
+id = "builtin-table"
+prompt_type = "table"
+version = "1.0.0"
+description = "Convert structured data to Markdown table"
+tags = ["builtin", "conversion", "table"]
+---
+
+Convert the following {{format}} data to a GitHub Flavored Markdown table.
+
+Data:
+```
+{{user_prompt}}
+```
+
+{{#if headers}}
+Use these column headers: {{headers}}
+{{/if}}
+
+{{#if alignment}}
+Column alignment: {{alignment}}
+{{/if}}
+
+Requirements:
+- Properly escape pipe characters in cell content
+- Use alignment syntax (|:---|---:|:---:|) if specified
+- Handle empty cells appropriately
+- Ensure valid markdownlint table formatting (MD058)
+- Output only the table, no additional text

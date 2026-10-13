@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "openrustbooks",
+  "version": "0.1.0",
+  "identifier": "com.onoderakeita.openrustbooks",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "openrustbooks",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://api.openai.com wss://api.openai.com http://localhost:11434;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "Copyright © 2026 onoderakeita",
+    "category": "Productivity",
+    "shortDescription": "Rust-powered reader and editor for documents",
+    "longDescription": "A modern document reader and editor built with Rust, supporting EPUB, PDF, Markdown, and more.",
+    "publisher": "onoderakeita",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "fs": {
+      "scope": {
+        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
+      }
+    },
+    "dialog": {
+      "scope": {
+        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
+      }
+    },
+    "shell": {
+      "scope": {
+        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
+      }
+    }
+  }
+}

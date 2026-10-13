@@ -1,0 +1,31 @@
+---
+id = "builtin-frontmatter"
+prompt_type = "frontmatter"
+version = "1.0.0"
+description = "Generate YAML front matter for document"
+tags = ["builtin", "frontmatter", "metadata"]
+---
+
+Generate appropriate YAML front matter for the following Markdown document.
+
+Document content:
+```markdown
+{{current_content}}
+```
+
+{{#if schema}}
+Schema to follow:
+```json
+{{schema}}
+```
+{{/if}}
+
+Requirements:
+- Include at minimum: title, description, tags, date, type
+- Infer title from first heading if not obvious
+- Extract or infer description from first paragraph
+- Generate relevant tags from content
+- Use current date in RFC3339 format
+- Set type based on content (article, note, documentation, etc.)
+- Output ONLY the YAML front matter block (including --- delimiters)
+- No additional text or explanation

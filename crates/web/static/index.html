@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>openrustbooks</title>
+    <meta name="description" content="Rust-powered document reader and editor">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --color-bg: #ffffff;
+            --color-fg: #1a1a2e;
+            --color-muted: #6b7280;
+            --color-border: #e5e7eb;
+            --color-primary: #2563eb;
+            --color-primary-hover: #1d4ed8;
+            --color-secondary: #f3f4f6;
+            --color-secondary-hover: #e5e7eb;
+            --color-danger: #dc2626;
+            --color-success: #16a34a;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-sans: 'Noto Sans JP', system-ui, sans-serif;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
+            --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-bg: #0f172a;
+                --color-fg: #f1f5f9;
+                --color-muted: #94a3b8;
+                --color-border: #334155;
+                --color-primary: #3b82f6;
+                --color-primary-hover: #60a5fa;
+                --color-secondary: #1e293b;
+                --color-secondary-hover: #334155;
+            }
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--color-bg);
+            color: var(--color-fg);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-md) var(--spacing-xl);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-bg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .app-header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--color-primary);
+        }
+
+        .app-header nav a {
+            margin-left: var(--spacing-md);
+            color: var(--color-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .app-header nav a:hover {
+            color: var(--color-primary);
+        }
+
+        .app-main {
+            flex: 1;
+            padding: var(--spacing-xl);
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: var(--spacing-xs) var(--spacing-md);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            font-family: var(--font-sans);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--color-secondary);
+            color: var(--color-fg);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--color-secondary-hover);
+        }
+
+        .btn-danger {
+            background: var(--color-danger);
+            color: white;
+            border-color: var(--color-danger);
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
+            flex-wrap: wrap;
+        }
+
+        /* File tree */
+        .file-tree {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+        }
+
+        .file-tree ul {
+            list-style: none;
+            padding-left: var(--spacing-md);
+        }
+
+        .file-tree li {
+            padding: var(--spacing-xs) 0;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .file-tree li:hover {
+            color: var(--color-primary);
+        }
+
+        .file-tree .folder-name {
+            font-weight: 500;
+        }
+
+        /* Editor */
+        .editor-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-md);
+            height: calc(100vh - 200px);
+            min-height: 500px;
+        }
+
+        .editor-toolbar {
+            display: flex;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-sm);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-secondary);
+        }
+
+        .editor-pane,
+        .preview-pane {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .editor-pane {
+            background: var(--color-bg);
+        }
+
+        #editor {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .preview-pane {
+            background: var(--color-bg);
+        }
+
+        .preview {
+            flex: 1;
+            padding: var(--spacing-md);
+            overflow-y: auto;
+        }
+
+        .preview h1, .preview h2, .preview h3 {
+            margin-top: var(--spacing-lg);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .preview code {
+            font-family: var(--font-mono);
+            background: var(--color-secondary);
+            padding: 0.125rem 0.375rem;
+            border-radius: var(--radius-sm);
+        }
+
+        .preview pre {
+            background: var(--color-secondary);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            overflow-x: auto;
+            margin: var(--spacing-md) 0;
+        }
+
+        .preview pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        /* Reader */
+        .reader-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 200px);
+        }
+
+        .reader-toolbar {
+            display: flex;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-sm);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-secondary);
+        }
+
+        .reader-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--spacing-xl);
+        }
+
+        .document-content {
+            max-width: 800px;
+            margin: 0 auto;
+            font-size: 1.125rem;
+            line-height: 1.8;
+        }
+
+        .document-content h1, .document-content h2, .document-content h3 {
+            margin-top: var(--spacing-xl);
+            margin-bottom: var(--spacing-md);
+            line-height: 1.3;
+        }
+
+        /* Settings */
+        .settings-form {
+            max-width: 600px;
+        }
+
+        .settings-form section {
+            margin-bottom: var(--spacing-xl);
+            padding-bottom: var(--spacing-xl);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .settings-form h3 {
+            margin-bottom: var(--spacing-md);
+            color: var(--color-primary);
+        }
+
+        .settings-form label {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-sm);
+            cursor: pointer;
+        }
+
+        .settings-form input[type="text"],
+        .settings-form input[type="password"],
+        .settings-form input[type="number"],
+        .settings-form select {
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-bg);
+            color: var(--color-fg);
+            font-family: var(--font-sans);
+            font-size: 0.875rem;
+            margin-left: auto;
+        }
+
+        /* About */
+        .about-content {
+            max-width: 600px;
+        }
+
+        .about-content h2 {
+            margin-bottom: var(--spacing-md);
+        }
+
+        .about-content p {
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .about-content hr {
+            margin: var(--spacing-lg) 0;
+            border-color: var(--color-border);
+        }
+
+        /* Loading state */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            color: var(--color-muted);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .editor-container {
+                grid-template-columns: 1fr;
+            }
+
+            .app-header {
+                flex-direction: column;
+                gap: var(--spacing-sm);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script type="module">
+        import init, { main } from '/openrustbooks_web.js';
+
+        async function run() {
+            await init();
+            main();
+        }
+
+        run().catch(console.error);
+    </script>
+</body>
+</html>

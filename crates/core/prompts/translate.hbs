@@ -1,0 +1,26 @@
+---
+id = "builtin-translate"
+prompt_type = "translate"
+version = "1.0.0"
+description = "Translate Markdown preserving formatting"
+tags = ["builtin", "translate"]
+---
+
+Translate the following Markdown content to {{target_language}}.
+
+Source Markdown:
+```markdown
+{{current_content}}
+```
+
+Requirements:
+- Preserve ALL Markdown formatting (headings, lists, code blocks, tables, links, images)
+- Keep code blocks unchanged (do not translate code)
+- Keep URLs and link targets unchanged
+- Translate only human-readable text
+- Maintain front matter if present (translate title/description only)
+- Output only the translated Markdown
+
+{{#if context}}
+Additional context: {{context}}
+{{/if}}
