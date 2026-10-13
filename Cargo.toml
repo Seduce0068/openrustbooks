@@ -29,7 +29,7 @@ uuid = { version = "1.8", features = ["serde", "v4"] }
 # Markdown processing
 pulldown-cmark = { version = "0.12", features = ["simd"] }
 comrak = { version = "0.28", features = ["default"] }
-rumdl = { version = "0.2", features = ["wasm"] }  # markdownlint compatible, Wasm support
+rumdl = { version = "0.2", default-features = true }  # markdownlint compatible, Wasm support
 
 # AI / LLM
 async-openai = "0.30"
