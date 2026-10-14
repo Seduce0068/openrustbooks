@@ -9,40 +9,40 @@ description = "Shared core library for openrustbooks: document models, I/O abstr
 
 [lib]
 name = "openrustbooks_core"
-crate-type = ["cdylib", "rlib"]  # cdylib for Wasm, rlib for native
+crate-type = ["rlib"]
 
 [dependencies]
-# Workspace dependencies
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "fs", "io-util"] }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-pulldown-cmark = { workspace = true }
-comrak = { workspace = true }
-rumdl = { workspace = true }
-async-openai = { workspace = true }
-tiktoken-rs = { workspace = true }
-similar = { workspace = true }
-figment = { workspace = true }
-directories = { workspace = true }
-futures = { workspace = true }
-reqwest = { workspace = true }
-bytes = { workspace = true }
+# Explicit serde with derive macro to ensure proc-macro is available
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+anyhow = "1.0"
+pulldown-cmark = { version = "0.12", features = ["simd"] }
+comrak = { version = "0.28", features = ["default"] }
+rumdl = { version = "0.2", default-features = true }
+async-openai = "0.30"
+async-trait = "0.1"
+tiktoken-rs = "0.4"
+similar = "2.7.0"
+figment = { version = "0.10", features = ["toml", "env"] }
+directories = "5.0"
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+bytes = "1.5"
 
 # Additional core dependencies
 url = "2.5"
 walkdir = "2.5"
 ignore = "0.4"
-async-trait = "0.1"
 once_cell = "1.19"
 parking_lot = "0.12"
 serde_yaml = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.8", features = ["serde", "v4"] }
-toml = { workspace = true }
+toml = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"

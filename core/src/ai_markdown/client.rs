@@ -17,7 +17,7 @@ pub trait AiClient: Send + Sync {
     async fn complete(&self, prompt: &str, max_tokens: usize, streaming: bool) -> CoreResult<AiResponse>;
 
     /// Stream completion tokens
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream>>;
+    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>>;
 
     /// Count tokens for a prompt
     fn count_tokens(&self, text: &str) -> CoreResult<usize>;
@@ -36,13 +36,13 @@ pub struct AiResponse {
 
 /// Token stream for streaming responses
 #[async_trait]
-pub trait TokenStream: Send + Sync {
+pub trait TokenStream: Send + Sync + Unpin + 'static {
     async fn next_token(&mut self) -> CoreResult<Option<String>>;
     fn is_done(&self) -> bool;
 }
 
 /// Create an AI client from configuration
-pub async fn create_client(config: &AiConfig) -> CoreResult<Box<dyn AiClient>> {
+pub async fn create_client(config: &AiConfig) -> CoreResult<Box<dyn AiClient + Send + 'static>> {
     match config.default_provider.as_str() {
         "openai" => Ok(Box::new(OpenAiClient::new(&config.openai).await?)),
         "ollama" => Ok(Box::new(OllamaClient::new(&config.ollama).await?)),
@@ -118,7 +118,7 @@ impl AiClient for OpenAiClient {
         })
     }
 
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream>> {
+    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>> {
         let messages = vec![
             ChatCompletionRequestSystemMessageArgs::default()
                 .content("You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation.")
@@ -157,8 +157,14 @@ impl AiClient for OpenAiClient {
 
 /// OpenAI token stream
 struct OpenAiTokenStream {
-    stream: async_openai::types::ChatCompletionStream,
+    stream: async_openai::types::ChatCompletionResponseStream,
     buffer: String,
+}
+
+impl std::fmt::Debug for OpenAiTokenStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAiTokenStream").finish()
+    }
 }
 
 #[async_trait]
@@ -240,7 +246,7 @@ impl AiClient for OllamaClient {
         })
     }
 
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream>> {
+    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>> {
         let request = serde_json::json!({
             "model": self.model,
             "prompt": prompt,

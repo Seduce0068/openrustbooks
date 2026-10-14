@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use std::path::PathBuf;
-use crate::{CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat, DocumentMetadata, ZipEntry}, FileEntry};
+use crate::{CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat, DocumentMetadata, ZipEntry}};
 
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,7 +202,7 @@ impl StorageManager {
         self.backends.iter().find(|b| b.id() == id).map(|b| b.as_ref())
     }
 
-    pub fn get_backend_mut(&mut self, id: &str) -> Option<&mut dyn StorageBackend> {
+    pub fn get_backend_mut(&mut self, id: &str) -> Option<&mut (dyn StorageBackend + '_)> {
         self.backends.iter_mut().find(|b| b.id() == id).map(|b| b.as_mut())
     }
 

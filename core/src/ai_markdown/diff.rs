@@ -1,7 +1,8 @@
 //! Diff computation and display for Markdown changes.
 
 use crate::CoreResult;
-use similar::{Algorithm, ChangeTag, TextDiff};
+use serde::{Deserialize, Serialize};
+use similar::{Algorithm, DiffTag, DiffOp, TextDiff};
 use std::fmt;
 
 /// Diff result containing changes between two texts
@@ -26,16 +27,16 @@ pub struct DiffHunk {
 /// A single line in a diff
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffLine {
-    pub tag: DiffTag,
+    pub tag: DiffTagWrapper,
     pub old_line_number: Option<usize>,
     pub new_line_number: Option<usize>,
     pub content: String,
 }
 
-/// Diff line tag
+/// Diff line tag (serializable wrapper for similar::DiffTag)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum DiffTag {
+pub enum DiffTagWrapper {
     Equal,
     Insert,
     Delete,
@@ -63,6 +64,7 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
     let mut old_line_num = 0;
     let mut new_line_num = 0;
 
+    // Use grouped_ops with context of 3 lines
     for group in diff.grouped_ops(3).iter() {
         let mut hunk_lines = Vec::new();
         let mut hunk_old_start = 0;
@@ -72,94 +74,121 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
         let mut first = true;
 
         for op in group {
-            match op {
-                ChangeTag::Equal => {
-                    for line in op.values() {
+            let tag = op.tag();
+            let diff_tag = match tag {
+                DiffTag::Equal => DiffTagWrapper::Equal,
+                DiffTag::Insert => DiffTagWrapper::Insert,
+                DiffTag::Delete => DiffTagWrapper::Delete,
+                DiffTag::Replace => DiffTagWrapper::Replace,
+            };
+
+            match tag {
+                DiffTag::Equal => {
+                    let (old_start, old_end) = (op.old_range().start, op.old_range().end);
+                    let len = old_end - old_start;
+
+                    for i in 0..len {
                         if first {
                             hunk_old_start = old_line_num + 1;
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
+                        let line_content = &diff.old_slices()[old_start + i];
                         old_line_num += 1;
                         new_line_num += 1;
                         hunk_old_lines += 1;
                         hunk_new_lines += 1;
                         stats.unchanged += 1;
                         hunk_lines.push(DiffLine {
-                            tag: DiffTag::Equal,
+                            tag: DiffTagWrapper::Equal,
                             old_line_number: Some(old_line_num),
                             new_line_number: Some(new_line_num),
-                            content: line.to_string(),
+                            content: line_content.to_string(),
                         });
                     }
                 }
-                ChangeTag::Insert => {
-                    for line in op.values() {
+                DiffTag::Insert => {
+                    let (_, new_end) = (op.old_range().start, op.old_range().end);
+                    let (new_start, new_end) = (op.new_range().start, op.new_range().end);
+                    let len = new_end - new_start;
+
+                    for i in 0..len {
                         if first {
                             hunk_old_start = old_line_num + 1;
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
+                        let line_content = &diff.new_slices()[new_start + i];
                         new_line_num += 1;
                         hunk_new_lines += 1;
                         stats.additions += 1;
                         hunk_lines.push(DiffLine {
-                            tag: DiffTag::Insert,
+                            tag: DiffTagWrapper::Insert,
                             old_line_number: None,
                             new_line_number: Some(new_line_num),
-                            content: line.to_string(),
+                            content: line_content.to_string(),
                         });
                     }
                 }
-                ChangeTag::Delete => {
-                    for line in op.values() {
+                DiffTag::Delete => {
+                    let (old_start, old_end) = (op.old_range().start, op.old_range().end);
+                    let (_, _) = (op.new_range().start, op.new_range().end);
+                    let len = old_end - old_start;
+
+                    for i in 0..len {
                         if first {
                             hunk_old_start = old_line_num + 1;
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
+                        let line_content = &diff.old_slices()[old_start + i];
                         old_line_num += 1;
                         hunk_old_lines += 1;
                         stats.deletions += 1;
                         hunk_lines.push(DiffLine {
-                            tag: DiffTag::Delete,
+                            tag: DiffTagWrapper::Delete,
                             old_line_number: Some(old_line_num),
                             new_line_number: None,
-                            content: line.to_string(),
+                            content: line_content.to_string(),
                         });
                     }
                 }
-                ChangeTag::Replace => {
-                    // Handle as delete + insert pair
-                    let old_lines: Vec<_> = op.old_values().collect();
-                    let new_lines: Vec<_> = op.new_values().collect();
+                DiffTag::Replace => {
+                    // Replace is a delete + insert pair
+                    let (old_start, old_end) = (op.old_range().start, op.old_range().end);
+                    let (new_start, new_end) = (op.new_range().start, op.new_range().end);
+                    let old_len = old_end - old_start;
+                    let new_len = new_end - new_start;
 
-                    for line in &old_lines {
+                    // Handle as delete
+                    for i in 0..old_len {
                         if first {
                             hunk_old_start = old_line_num + 1;
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
+                        let line_content = &diff.old_slices()[old_start + i];
                         old_line_num += 1;
                         hunk_old_lines += 1;
                         stats.deletions += 1;
                         hunk_lines.push(DiffLine {
-                            tag: DiffTag::Delete,
+                            tag: DiffTagWrapper::Delete,
                             old_line_number: Some(old_line_num),
                             new_line_number: None,
-                            content: line.to_string(),
+                            content: line_content.to_string(),
                         });
                     }
 
-                    for line in &new_lines {
+                    // Handle as insert
+                    for i in 0..new_len {
                         new_line_num += 1;
                         hunk_new_lines += 1;
                         stats.additions += 1;
                         hunk_lines.push(DiffLine {
-                            tag: DiffTag::Insert,
+                            tag: DiffTagWrapper::Insert,
                             old_line_number: None,
                             new_line_number: Some(new_line_num),
-                            content: line.to_string(),
+                            content: diff.new_slices()[new_start + i].to_string(),
                         });
                     }
                     stats.modifications += 1;
@@ -198,10 +227,10 @@ pub fn render_unified(diff: &DiffResult, _context_lines: usize) -> String {
 
         for line in &hunk.lines {
             let prefix = match line.tag {
-                DiffTag::Equal => " ",
-                DiffTag::Insert => "+",
-                DiffTag::Delete => "-",
-                DiffTag::Replace => "!",
+                DiffTagWrapper::Equal => " ",
+                DiffTagWrapper::Insert => "+",
+                DiffTagWrapper::Delete => "-",
+                DiffTagWrapper::Replace => "!",
             };
             output.push_str(&format!("{}{}\n", prefix, line.content));
         }
@@ -224,20 +253,14 @@ pub fn render_html(diff: &DiffResult) -> String {
 
         for line in &hunk.lines {
             let (class, prefix) = match line.tag {
-                DiffTag::Equal => ("diff-equal", " "),
-                DiffTag::Insert => ("diff-insert", "+"),
-                DiffTag::Delete => ("diff-delete", "-"),
-                DiffTag::Replace => ("diff-replace", "!"),
+                DiffTagWrapper::Equal => ("diff-equal", " "),
+                DiffTagWrapper::Insert => ("diff-insert", "+"),
+                DiffTagWrapper::Delete => ("diff-delete", "-"),
+                DiffTagWrapper::Replace => ("diff-replace", "!"),
             };
 
-            let old_num = line
-                .old_line_number
-                .map(|n| n.to_string())
-                .unwrap_or_else(|| "".to_string());
-            let new_num = line
-                .new_line_number
-                .map(|n| n.to_string())
-                .unwrap_or_else(|| "".to_string());
+            let old_num = line.old_line_number.map(|n| n.to_string()).unwrap_or_else(|| "".to_string());
+            let new_num = line.new_line_number.map(|n| n.to_string()).unwrap_or_else(|| "".to_string());
 
             html.push_str(&format!(
                 "    <div class=\"diff-line {}\" data-old=\"{}\" data-new=\"{}\">\n",
@@ -274,7 +297,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
     for hunk in &diff.hunks {
         for line in &hunk.lines {
             match line.tag {
-                DiffTag::Equal => {
+                DiffTagWrapper::Equal => {
                     old_line += 1;
                     new_line += 1;
                     left.push_str(&format!(
@@ -286,7 +309,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
                         new_line, new_line, html_escape(&line.content)
                     ));
                 }
-                DiffTag::Insert => {
+                DiffTagWrapper::Insert => {
                     new_line += 1;
                     left.push_str(&format!(
                         "<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n"
@@ -296,7 +319,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
                         new_line, new_line, html_escape(&line.content)
                     ));
                 }
-                DiffTag::Delete => {
+                DiffTagWrapper::Delete => {
                     old_line += 1;
                     left.push_str(&format!(
                         "<div class=\"diff-line delete\" data-line=\"{}\"><span class=\"lineno\">{}</span><span class=\"content\">{}</span></div>\n",
@@ -306,7 +329,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
                         "<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n"
                     ));
                 }
-                DiffTag::Replace => {
+                DiffTagWrapper::Replace => {
                     // Show as delete on left, insert on right
                     old_line += 1;
                     new_line += 1;
@@ -328,11 +351,12 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
 
 /// Escape HTML special characters
 fn html_escape(s: &str) -> String {
+    let sq: char = '\'';
     s.replace('&', "&")
         .replace('<', "<")
         .replace('>', ">")
         .replace('"', "\"")
-        .replace('\'', "'")
+        .replace(sq, "'")
 }
 
 /// Inline diff for small changes (word-level)
@@ -343,42 +367,29 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
 
     let mut segments = Vec::new();
 
-    for op in diff.iter() {
-        match op {
-            ChangeTag::Equal => {
+    for op in diff.iter_all_changes() {
+        let tag = op.tag();
+        match tag {
+            similar::ChangeTag::Equal => {
                 for ch in op.values() {
                     segments.push(InlineDiffSegment {
-                        tag: DiffTag::Equal,
+                        tag: DiffTagWrapper::Equal,
                         content: ch.to_string(),
                     });
                 }
             }
-            ChangeTag::Insert => {
+            similar::ChangeTag::Insert => {
                 for ch in op.values() {
                     segments.push(InlineDiffSegment {
-                        tag: DiffTag::Insert,
+                        tag: DiffTagWrapper::Insert,
                         content: ch.to_string(),
                     });
                 }
             }
-            ChangeTag::Delete => {
+            similar::ChangeTag::Delete => {
                 for ch in op.values() {
                     segments.push(InlineDiffSegment {
-                        tag: DiffTag::Delete,
-                        content: ch.to_string(),
-                    });
-                }
-            }
-            ChangeTag::Replace => {
-                for ch in op.old_values() {
-                    segments.push(InlineDiffSegment {
-                        tag: DiffTag::Delete,
-                        content: ch.to_string(),
-                    });
-                }
-                for ch in op.new_values() {
-                    segments.push(InlineDiffSegment {
-                        tag: DiffTag::Insert,
+                        tag: DiffTagWrapper::Delete,
                         content: ch.to_string(),
                     });
                 }
@@ -404,6 +415,6 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
 /// Inline diff segment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InlineDiffSegment {
-    pub tag: DiffTag,
+    pub tag: DiffTagWrapper,
     pub content: String,
 }

@@ -251,7 +251,7 @@ impl Document {
 }
 
 /// Extract YAML front matter from markdown content
-fn extract_front_matter(
+pub fn extract_front_matter(
     content: &str,
 ) -> (Option<serde_json::Map<String, serde_json::Value>>, String) {
     let lines: Vec<&str> = content.lines().collect();
