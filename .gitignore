@@ -1,23 +1,14 @@
 # Rust
 /target
 **/*.rs.bk
-Cargo.lock
 
-# Tauri
-crates/desktop/target
-crates/desktop/src-tauri/target
-crates/desktop/src-tauri/gen
-crates/desktop/src-tauri/.idea
-crates/desktop/src-tauri/*.app
-crates/desktop/src-tauri/*.dmg
-crates/desktop/src-tauri/*.deb
-crates/desktop/src-tauri/*.AppImage
-crates/desktop/src-tauri/*.msi
+# Tauri (generated)
+desktop/gen
 
-# Web/Wasm
-crates/web/pkg
-crates/web/target
-crates/web/static/pkg
+# Web/Wasm build output
+web/dist
+web/pkg
+web/static/pkg
 
 # IDE
 .vscode
@@ -38,9 +29,6 @@ logs/
 .env
 .env.local
 .env.*.local
-
-# Tauri config (generated)
-crates/desktop/src-tauri/tauri.conf.jsonc
 
 # Test coverage
 coverage/
