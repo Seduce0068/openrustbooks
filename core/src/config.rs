@@ -1,6 +1,5 @@
 //! Configuration types for openrustbooks.
 
-use crate::document::DocumentFormat;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -340,7 +339,11 @@ impl Default for ReaderConfig {
 }
 
 impl AppConfig {
-    /// Load configuration from default locations
+    /// Load configuration from default locations.
+    ///
+    /// Native only: the Wasm build has no filesystem or environment access.
+    /// Browser persistence is planned to go through `localStorage` instead.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load() -> crate::CoreResult<Self> {
         use directories::ProjectDirs;
         use figment::{
@@ -365,7 +368,10 @@ impl AppConfig {
         Ok(figment.extract()?)
     }
 
-    /// Save configuration to default location
+    /// Save configuration to default location.
+    ///
+    /// Native only; see [`AppConfig::load`].
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self) -> crate::CoreResult<()> {
         use directories::ProjectDirs;
         use std::fs;

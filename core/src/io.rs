@@ -1,9 +1,6 @@
 //! Storage abstraction layer for multiple backends (local, Google Drive, etc.)
 
-use crate::{
-    CoreError, CoreResult,
-    document::{Document, DocumentFormat, DocumentId, DocumentMetadata, ZipEntry},
-};
+use crate::{CoreError, CoreResult, document::DocumentFormat};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -245,11 +242,13 @@ impl Default for StorageManager {
     }
 }
 
-/// Local filesystem storage backend
+/// Local filesystem storage backend.
+///
+/// Native only: relies on `tokio::fs` and OS process spawning, neither of
+/// which exists on `wasm32-unknown-unknown`.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod local {
     use super::*;
-    use std::fs;
-    use std::os::unix::fs::MetadataExt;
     use tokio::fs as tokio_fs;
 
     pub struct LocalStorage {
@@ -480,16 +479,24 @@ pub mod local {
 
         async fn open_in_system(&self, path: &PathBuf) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
-            #[cfg(target_os = "macos")]
-            std::process::Command::new("open").arg(&full_path).spawn()?;
-            #[cfg(target_os = "windows")]
-            std::process::Command::new("explorer")
-                .arg(&full_path)
-                .spawn()?;
-            #[cfg(target_os = "linux")]
-            std::process::Command::new("xdg-open")
-                .arg(&full_path)
-                .spawn()?;
+
+            // `cfg!` rather than `#[cfg]` so every platform compiles the same
+            // code path; unsupported platforms report an explicit error
+            // instead of pretending the file was opened.
+            let opener = if cfg!(target_os = "macos") {
+                "open"
+            } else if cfg!(target_os = "windows") {
+                "explorer"
+            } else if cfg!(target_os = "linux") {
+                "xdg-open"
+            } else {
+                return Err(CoreError::storage(format!(
+                    "Opening files in the system handler is not supported on this platform: {}",
+                    full_path.display()
+                )));
+            };
+
+            std::process::Command::new(opener).arg(&full_path).spawn()?;
             Ok(())
         }
 

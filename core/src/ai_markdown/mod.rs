@@ -7,21 +7,30 @@
 //! 4. Retry up to N times (default 3) until lint passes
 //! 5. Diff display → User confirmation → Save/Preview
 
+/// HTTP-backed AI client. Native only: `reqwest`/`async-openai` do not build
+/// for `wasm32-unknown-unknown`. Browser builds will get a `fetch`-based client.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod client;
 pub mod diff;
 pub mod lint;
+/// Retry/lint orchestration. Native only, because it drives [`client`].
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pipeline;
 pub mod prompt;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use pipeline::AiMarkdownService;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::{
     CoreError, CoreResult,
     config::{AiConfig, LintConfig},
 };
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 /// Main entry point for the AI Markdown pipeline
+#[cfg(not(target_arch = "wasm32"))]
 pub struct AiMarkdownPipeline {
     client: Arc<dyn client::AiClient + Send + Sync>,
     linter: lint::MarkdownLinter,
@@ -56,6 +65,7 @@ impl Default for PipelineConfig {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AiMarkdownPipeline {
     /// Get reference to the linter
     pub fn linter(&self) -> &lint::MarkdownLinter {
@@ -205,6 +215,7 @@ pub struct PipelineExecutionResult {
 }
 
 // Re-export client::AiResponse for use in this module
+#[cfg(not(target_arch = "wasm32"))]
 pub use client::AiResponse;
 
 // --- Request/Response Types ---
@@ -457,16 +468,19 @@ impl PipelineOutput for FrontMatterResult {
 }
 
 // Pipeline request wrapper
+#[cfg(not(target_arch = "wasm32"))]
 struct PipelineRequest<Req> {
     inner: Req,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<Req: PipelineInput> From<Req> for PipelineRequest<Req> {
     fn from(inner: Req) -> Self {
         Self { inner }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<Req: PipelineInput> PipelineInput for PipelineRequest<Req> {
     fn prompt_type(&self) -> prompt::PromptType {
         self.inner.prompt_type()

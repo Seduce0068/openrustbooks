@@ -4,12 +4,6 @@
 //! via wasm-bindgen for use in the browser version.
 
 #[cfg(target_arch = "wasm32")]
-use crate::{
-    CoreError, CoreResult,
-    ai_markdown::*,
-    document::{Document, DocumentFormat, DocumentId, DocumentMetadata},
-};
-#[cfg(target_arch = "wasm32")]
 use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -19,19 +13,11 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
-
-    #[wasm_bindgen(js_namespace = console)]
-    fn error(s: &str);
 }
 
 #[cfg(target_arch = "wasm32")]
 macro_rules! console_log {
     ($($t:tt)*) => (log(&format!($($t)*)))
-}
-
-#[cfg(target_arch = "wasm32")]
-macro_rules! console_error {
-    ($($t:tt)*) => (error(&format!($($t)*)))
 }
 
 /// Initialize the library for Wasm use
@@ -52,8 +38,10 @@ pub struct WasmDocument {
     format: String,
     title: Option<String>,
     content: String,
-    front_matter: Option<JsValue>,
-    metadata: JsValue,
+    /// Front matter is arbitrary data, so it is kept as a JSON value rather
+    /// than a `JsValue` (which has no `serde` impls).
+    front_matter: Option<serde_json::Value>,
+    metadata: serde_json::Value,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -67,7 +55,7 @@ impl WasmDocument {
             title: None,
             content,
             front_matter: None,
-            metadata: JsValue::NULL,
+            metadata: serde_json::Value::Null,
         }
     }
 
@@ -103,9 +91,10 @@ impl WasmDocument {
 }
 
 /// Wasm-compatible AI pipeline result
+///
+/// Not `serde`-derivable: [`WasmDiffResult`] holds `JsValue`s by design.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize)]
 pub struct WasmPipelineResult {
     content: String,
     diff: Option<WasmDiffResult>,
@@ -144,9 +133,12 @@ impl WasmPipelineResult {
 }
 
 /// Wasm-compatible diff result
+///
+/// Fields are `JsValue` so the JS side receives plain objects; that also means
+/// the struct cannot derive `Serialize`/`Deserialize` (see above in this module).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone)]
 pub struct WasmDiffResult {
     hunks: JsValue,
     stats: JsValue,
@@ -182,8 +174,9 @@ impl WasmDiffResult {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct WasmAiMarkdownService {
-    // In reality, this would hold a reference to the actual service
-    // For now, we'll use a simplified approach
+    /// Reserved for the browser AI client, which is not implemented yet: the
+    /// methods below still return placeholder content.
+    #[allow(dead_code)]
     config: JsValue,
 }
 
@@ -200,7 +193,7 @@ impl WasmAiMarkdownService {
     pub async fn generate(
         &self,
         prompt: String,
-        context: Option<String>,
+        _context: Option<String>,
     ) -> Result<WasmPipelineResult, JsValue> {
         // This would call the actual pipeline
         // For now, return a placeholder
@@ -220,7 +213,7 @@ impl WasmAiMarkdownService {
         &self,
         content: String,
         instruction: String,
-        context: Option<String>,
+        _context: Option<String>,
     ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Refine called with instruction: {}", instruction);
         Ok(WasmPipelineResult {
@@ -236,9 +229,9 @@ impl WasmAiMarkdownService {
     #[wasm_bindgen]
     pub async fn to_table(
         &self,
-        data: String,
+        _data: String,
         format: String,
-        headers: Option<JsValue>,
+        _headers: Option<JsValue>,
     ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Table conversion for format: {}", format);
         Ok(WasmPipelineResult {
@@ -256,7 +249,7 @@ impl WasmAiMarkdownService {
     pub async fn front_matter(
         &self,
         content: String,
-        schema: Option<JsValue>,
+        _schema: Option<JsValue>,
     ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Front matter generation");
         Ok(WasmPipelineResult {
@@ -273,6 +266,8 @@ impl WasmAiMarkdownService {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct WasmMarkdownLinter {
+    /// Reserved for wiring up `rumdl` rules in the browser build.
+    #[allow(dead_code)]
     config: JsValue,
 }
 
@@ -426,7 +421,6 @@ impl WasmConfig {
 
 /// Utility functions for Wasm
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub mod utils {
     use wasm_bindgen::prelude::*;
 

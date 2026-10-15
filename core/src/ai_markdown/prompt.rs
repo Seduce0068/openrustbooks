@@ -3,6 +3,7 @@
 use crate::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -50,8 +51,11 @@ pub struct PromptRegistry {
 }
 
 impl PromptRegistry {
-    /// Load built-in and custom templates
-    pub fn load() -> CoreResult<Self> {
+    /// Create a registry with the built-in templates registered.
+    ///
+    /// Portable across native and Wasm targets: the built-in templates are
+    /// embedded via `include_str!` and need no filesystem access.
+    pub fn with_builtins() -> CoreResult<Self> {
         let mut registry = Self {
             templates: HashMap::new(),
             custom_templates: HashMap::new(),
@@ -81,6 +85,17 @@ impl PromptRegistry {
             include_str!("../../prompts/explain_code.hbs"),
         )?;
 
+        Ok(registry)
+    }
+
+    /// Load built-in and custom templates from the user's config directory.
+    ///
+    /// Native only: scanning the `prompts/` directory requires filesystem
+    /// access. Wasm callers should use [`PromptRegistry::with_builtins`].
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load() -> CoreResult<Self> {
+        let mut registry = Self::with_builtins()?;
+
         // Try to load custom templates from prompts directory
         if let Ok(custom_dir) = Self::custom_prompts_dir() {
             registry.load_custom_from_dir(&custom_dir)?;
@@ -90,6 +105,7 @@ impl PromptRegistry {
     }
 
     /// Get the custom prompts directory
+    #[cfg(not(target_arch = "wasm32"))]
     fn custom_prompts_dir() -> CoreResult<PathBuf> {
         use directories::ProjectDirs;
         if let Some(proj_dirs) = ProjectDirs::from("com", "onoderakeita", "openrustbooks") {
@@ -100,6 +116,7 @@ impl PromptRegistry {
     }
 
     /// Load custom templates from a directory
+    #[cfg(not(target_arch = "wasm32"))]
     fn load_custom_from_dir(&mut self, dir: &PathBuf) -> CoreResult<()> {
         if !dir.exists() {
             return Ok(());
@@ -257,5 +274,11 @@ static REGISTRY: OnceLock<PromptRegistry> = OnceLock::new();
 
 /// Get the global prompt registry
 pub fn global_registry() -> &'static PromptRegistry {
-    REGISTRY.get_or_init(|| PromptRegistry::load().expect("Failed to load prompt registry"))
+    REGISTRY.get_or_init(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        let loaded = PromptRegistry::load();
+        #[cfg(target_arch = "wasm32")]
+        let loaded = PromptRegistry::with_builtins();
+        loaded.expect("Failed to load prompt registry")
+    })
 }

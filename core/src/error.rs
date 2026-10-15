@@ -11,6 +11,7 @@ pub enum CoreError {
     #[error("Serialization error: {0}")]
     Serde(#[from] serde_json::Error),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Configuration error: {0}")]
     Config(#[from] figment::Error),
 
@@ -35,15 +36,18 @@ pub enum CoreError {
     #[error("AI provider error: {0}")]
     AiProvider(String),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("AI provider error: {0}")]
     OpenAiError(#[from] async_openai::error::OpenAIError),
 
     #[error("Anyhow error: {0}")]
     Anyhow(#[from] anyhow::Error),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Tokio task join error: {0}")]
     JoinError(#[from] tokio::task::JoinError),
 

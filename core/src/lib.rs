@@ -5,17 +5,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-// Force dependency linking by using them in lib.rs
-use async_openai;
-use async_trait;
-use directories;
-use futures;
-use rumdl_lib;
-use serde::{Deserialize, Serialize};
-use similar;
-use tiktoken_rs;
-use tokio;
-
 pub mod ai_markdown;
 pub mod config;
 pub mod document;

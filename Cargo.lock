@@ -4388,6 +4388,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -5734,6 +5735,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "colored",
+ "console_error_panic_hook",
  "dyn-clone",
  "ec4rs",
  "env_logger",
@@ -5757,6 +5759,7 @@ dependencies = [
  "regex",
  "schemars 1.2.3",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_yaml",
  "similar 3.2.0",
@@ -5769,6 +5772,7 @@ dependencies = [
  "unicase",
  "unicode-normalization",
  "unicode-width",
+ "wasm-bindgen",
  "windows-sys 0.61.2",
 ]
 
