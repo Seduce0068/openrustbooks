@@ -1,8 +1,15 @@
 //! Application state management.
 
-use openrustbooks_core::{AppConfig, CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat}, ai_markdown::{AiMarkdownService, GenerateRequest, RefineRequest, TableRequest, FrontMatterRequest, TableFormat}};
-use std::sync::{Arc, RwLock};
+use openrustbooks_core::{
+    AppConfig, CoreError, CoreResult,
+    ai_markdown::{
+        AiMarkdownService, FrontMatterRequest, GenerateRequest, RefineRequest, TableFormat,
+        TableRequest,
+    },
+    document::{Document, DocumentFormat, DocumentId},
+};
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Manager};
 
 /// Application state shared across commands
@@ -78,17 +85,28 @@ impl AppState {
 
     /// Mark document as having unsaved changes
     pub fn mark_unsaved(&self, id: &DocumentId) {
-        self.unsaved_changes.write().unwrap().insert(id.clone(), true);
+        self.unsaved_changes
+            .write()
+            .unwrap()
+            .insert(id.clone(), true);
     }
 
     /// Mark document as saved
     pub fn mark_saved(&self, id: &DocumentId) {
-        self.unsaved_changes.write().unwrap().insert(id.clone(), false);
+        self.unsaved_changes
+            .write()
+            .unwrap()
+            .insert(id.clone(), false);
     }
 
     /// Check if document has unsaved changes
     pub fn is_unsaved(&self, id: &DocumentId) -> bool {
-        self.unsaved_changes.read().unwrap().get(id).copied().unwrap_or(false)
+        self.unsaved_changes
+            .read()
+            .unwrap()
+            .get(id)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Check if any document has unsaved changes

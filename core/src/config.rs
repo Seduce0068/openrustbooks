@@ -344,8 +344,8 @@ impl AppConfig {
     pub fn load() -> crate::CoreResult<Self> {
         use directories::ProjectDirs;
         use figment::{
-            providers::{Env, Format, Serialized, Toml},
             Figment,
+            providers::{Env, Format, Serialized, Toml},
         };
 
         let mut figment = Figment::new().merge(Serialized::defaults(Self::default()));

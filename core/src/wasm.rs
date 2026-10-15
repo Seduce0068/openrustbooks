@@ -4,11 +4,15 @@
 //! via wasm-bindgen for use in the browser version.
 
 #[cfg(target_arch = "wasm32")]
+use crate::{
+    CoreError, CoreResult,
+    ai_markdown::*,
+    document::{Document, DocumentFormat, DocumentId, DocumentMetadata},
+};
+#[cfg(target_arch = "wasm32")]
+use serde::{Deserialize, Serialize};
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
-use serde::{Serialize, Deserialize};
-#[cfg(target_arch = "wasm32")]
-use crate::{CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat, DocumentMetadata}, ai_markdown::*};
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -68,22 +72,34 @@ impl WasmDocument {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn id(&self) -> String { self.id.clone() }
+    pub fn id(&self) -> String {
+        self.id.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn format(&self) -> String { self.format.clone() }
+    pub fn format(&self) -> String {
+        self.format.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn title(&self) -> Option<String> { self.title.clone() }
+    pub fn title(&self) -> Option<String> {
+        self.title.clone()
+    }
 
     #[wasm_bindgen(setter)]
-    pub fn set_title(&mut self, title: String) { self.title = Some(title); }
+    pub fn set_title(&mut self, title: String) {
+        self.title = Some(title);
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn content(&self) -> String { self.content.clone() }
+    pub fn content(&self) -> String {
+        self.content.clone()
+    }
 
     #[wasm_bindgen(setter)]
-    pub fn set_content(&mut self, content: String) { self.content = content; }
+    pub fn set_content(&mut self, content: String) {
+        self.content = content;
+    }
 }
 
 /// Wasm-compatible AI pipeline result
@@ -102,19 +118,29 @@ pub struct WasmPipelineResult {
 #[wasm_bindgen]
 impl WasmPipelineResult {
     #[wasm_bindgen(getter)]
-    pub fn content(&self) -> String { self.content.clone() }
+    pub fn content(&self) -> String {
+        self.content.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn diff(&self) -> Option<WasmDiffResult> { self.diff.clone() }
+    pub fn diff(&self) -> Option<WasmDiffResult> {
+        self.diff.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn lint_passed(&self) -> bool { self.lint_passed }
+    pub fn lint_passed(&self) -> bool {
+        self.lint_passed
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn attempts(&self) -> usize { self.attempts }
+    pub fn attempts(&self) -> usize {
+        self.attempts
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn tokens_used(&self) -> usize { self.tokens_used }
+    pub fn tokens_used(&self) -> usize {
+        self.tokens_used
+    }
 }
 
 /// Wasm-compatible diff result
@@ -132,16 +158,24 @@ pub struct WasmDiffResult {
 #[wasm_bindgen]
 impl WasmDiffResult {
     #[wasm_bindgen(getter)]
-    pub fn hunks(&self) -> JsValue { self.hunks.clone() }
+    pub fn hunks(&self) -> JsValue {
+        self.hunks.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn stats(&self) -> JsValue { self.stats.clone() }
+    pub fn stats(&self) -> JsValue {
+        self.stats.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn original_lines(&self) -> usize { self.original_lines }
+    pub fn original_lines(&self) -> usize {
+        self.original_lines
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn modified_lines(&self) -> usize { self.modified_lines }
+    pub fn modified_lines(&self) -> usize {
+        self.modified_lines
+    }
 }
 
 /// Wasm-compatible AI Markdown service
@@ -163,7 +197,11 @@ impl WasmAiMarkdownService {
 
     /// Generate Markdown from prompt
     #[wasm_bindgen]
-    pub async fn generate(&self, prompt: String, context: Option<String>) -> Result<WasmPipelineResult, JsValue> {
+    pub async fn generate(
+        &self,
+        prompt: String,
+        context: Option<String>,
+    ) -> Result<WasmPipelineResult, JsValue> {
         // This would call the actual pipeline
         // For now, return a placeholder
         console_log!("Generate called with prompt: {}", prompt);
@@ -178,7 +216,12 @@ impl WasmAiMarkdownService {
 
     /// Refine existing Markdown
     #[wasm_bindgen]
-    pub async fn refine(&self, content: String, instruction: String, context: Option<String>) -> Result<WasmPipelineResult, JsValue> {
+    pub async fn refine(
+        &self,
+        content: String,
+        instruction: String,
+        context: Option<String>,
+    ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Refine called with instruction: {}", instruction);
         Ok(WasmPipelineResult {
             content: format!("{}\n\n<!-- Refined: {} -->", content, instruction),
@@ -191,10 +234,16 @@ impl WasmAiMarkdownService {
 
     /// Convert to table
     #[wasm_bindgen]
-    pub async fn to_table(&self, data: String, format: String, headers: Option<JsValue>) -> Result<WasmPipelineResult, JsValue> {
+    pub async fn to_table(
+        &self,
+        data: String,
+        format: String,
+        headers: Option<JsValue>,
+    ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Table conversion for format: {}", format);
         Ok(WasmPipelineResult {
-            content: "| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |".to_string(),
+            content: "| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
+                .to_string(),
             diff: None,
             lint_passed: true,
             attempts: 1,
@@ -204,7 +253,11 @@ impl WasmAiMarkdownService {
 
     /// Generate front matter
     #[wasm_bindgen]
-    pub async fn front_matter(&self, content: String, schema: Option<JsValue>) -> Result<WasmPipelineResult, JsValue> {
+    pub async fn front_matter(
+        &self,
+        content: String,
+        schema: Option<JsValue>,
+    ) -> Result<WasmPipelineResult, JsValue> {
         console_log!("Front matter generation");
         Ok(WasmPipelineResult {
             content: format!("---\ntitle: Generated\n---\n\n{}", content),
@@ -279,16 +332,24 @@ pub struct WasmLintFixResult {
 #[wasm_bindgen]
 impl WasmLintFixResult {
     #[wasm_bindgen(getter)]
-    pub fn passed(&self) -> bool { self.passed }
+    pub fn passed(&self) -> bool {
+        self.passed
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn issues(&self) -> JsValue { serde_wasm_bindgen::to_value(&self.issues).unwrap() }
+    pub fn issues(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self.issues).unwrap()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn fixed_content(&self) -> String { self.fixed_content.clone() }
+    pub fn fixed_content(&self) -> String {
+        self.fixed_content.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn fixes_applied(&self) -> usize { self.fixes_applied }
+    pub fn fixes_applied(&self) -> usize {
+        self.fixes_applied
+    }
 }
 
 /// Wasm-compatible configuration
@@ -318,29 +379,49 @@ impl WasmConfig {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn ai_enabled(&self) -> bool { self.ai_enabled }
+    pub fn ai_enabled(&self) -> bool {
+        self.ai_enabled
+    }
     #[wasm_bindgen(setter)]
-    pub fn set_ai_enabled(&mut self, v: bool) { self.ai_enabled = v; }
+    pub fn set_ai_enabled(&mut self, v: bool) {
+        self.ai_enabled = v;
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn ai_provider(&self) -> String { self.ai_provider.clone() }
+    pub fn ai_provider(&self) -> String {
+        self.ai_provider.clone()
+    }
     #[wasm_bindgen(setter)]
-    pub fn set_ai_provider(&mut self, v: String) { self.ai_provider = v; }
+    pub fn set_ai_provider(&mut self, v: String) {
+        self.ai_provider = v;
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn ai_model(&self) -> String { self.ai_model.clone() }
+    pub fn ai_model(&self) -> String {
+        self.ai_model.clone()
+    }
     #[wasm_bindgen(setter)]
-    pub fn set_ai_model(&mut self, v: String) { self.ai_model = v; }
+    pub fn set_ai_model(&mut self, v: String) {
+        self.ai_model = v;
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn lint_enabled(&self) -> bool { self.lint_enabled }
+    pub fn lint_enabled(&self) -> bool {
+        self.lint_enabled
+    }
     #[wasm_bindgen(setter)]
-    pub fn set_lint_enabled(&mut self, v: bool) { self.lint_enabled = v; }
+    pub fn set_lint_enabled(&mut self, v: bool) {
+        self.lint_enabled = v;
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn auto_fix(&self) -> bool { self.auto_fix }
+    pub fn auto_fix(&self) -> bool {
+        self.auto_fix
+    }
     #[wasm_bindgen(setter)]
-    pub fn set_auto_fix(&mut self, v: bool) { self.auto_fix = v; }
+    pub fn set_auto_fix(&mut self, v: bool) {
+        self.auto_fix = v;
+    }
 }
 
 /// Utility functions for Wasm
@@ -372,7 +453,8 @@ pub mod utils {
             "pdf" => "pdf",
             "zip" => "zip",
             _ => "unknown",
-        }.to_string()
+        }
+        .to_string()
     }
 }
 

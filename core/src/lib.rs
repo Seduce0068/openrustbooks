@@ -6,31 +6,31 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Force dependency linking by using them in lib.rs
-use serde::{Deserialize, Serialize};
-use tokio;
-use async_trait;
-use futures;
 use async_openai;
-use tiktoken_rs;
-use similar;
-use rumdl_lib;
+use async_trait;
 use directories;
+use futures;
+use rumdl_lib;
+use serde::{Deserialize, Serialize};
+use similar;
+use tiktoken_rs;
+use tokio;
 
 pub mod ai_markdown;
-pub mod document;
-pub mod io;
-pub mod error;
 pub mod config;
+pub mod document;
+pub mod error;
+pub mod io;
 pub mod wasm;
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::*;
 
+pub use config::{AiConfig, AppConfig, LintConfig};
+pub use document::{Document, DocumentFormat, DocumentId, DocumentMetadata};
 /// Re-export commonly used types
 pub use error::{CoreError, CoreResult};
-pub use document::{Document, DocumentId, DocumentMetadata, DocumentFormat};
-pub use io::{StorageBackend, StorageCapabilities, FileEntry};
-pub use config::{AppConfig, AiConfig, LintConfig};
+pub use io::{FileEntry, StorageBackend, StorageCapabilities};
 
 /// Initialize the core library (logging, panic hook for Wasm, etc.)
 pub fn init() {

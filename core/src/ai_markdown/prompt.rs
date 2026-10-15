@@ -157,13 +157,27 @@ impl PromptRegistry {
     /// Default system prompts for each type
     fn default_system_prompt(prompt_type: PromptType) -> &'static str {
         match prompt_type {
-            PromptType::Generate => "You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation. Use proper heading hierarchy, consistent list markers, fenced code blocks with languages, and valid links.",
-            PromptType::Refine => "You are a Markdown editor. Improve the given Markdown according to the user's instructions while maintaining valid markdownlint compliance. Preserve the original structure unless explicitly asked to change it.",
-            PromptType::Table => "You are a data-to-Markdown converter. Convert the provided data into a well-formatted GitHub Flavored Markdown table with proper alignment and escaping.",
-            PromptType::FrontMatter => "You are a document metadata expert. Generate appropriate YAML front matter for the given document content. Include title, description, tags, date, and any other relevant metadata.",
-            PromptType::Summarize => "You are a technical writer. Create a concise Markdown summary of the provided content with key points as a bullet list.",
-            PromptType::Translate => "You are a translator. Translate the Markdown content to the target language while preserving all Markdown formatting, code blocks, and structure.",
-            PromptType::ExplainCode => "You are a code educator. Explain the provided code in clear Markdown with headings, code blocks, and step-by-step breakdowns.",
+            PromptType::Generate => {
+                "You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation. Use proper heading hierarchy, consistent list markers, fenced code blocks with languages, and valid links."
+            }
+            PromptType::Refine => {
+                "You are a Markdown editor. Improve the given Markdown according to the user's instructions while maintaining valid markdownlint compliance. Preserve the original structure unless explicitly asked to change it."
+            }
+            PromptType::Table => {
+                "You are a data-to-Markdown converter. Convert the provided data into a well-formatted GitHub Flavored Markdown table with proper alignment and escaping."
+            }
+            PromptType::FrontMatter => {
+                "You are a document metadata expert. Generate appropriate YAML front matter for the given document content. Include title, description, tags, date, and any other relevant metadata."
+            }
+            PromptType::Summarize => {
+                "You are a technical writer. Create a concise Markdown summary of the provided content with key points as a bullet list."
+            }
+            PromptType::Translate => {
+                "You are a translator. Translate the Markdown content to the target language while preserving all Markdown formatting, code blocks, and structure."
+            }
+            PromptType::ExplainCode => {
+                "You are a code educator. Explain the provided code in clear Markdown with headings, code blocks, and step-by-step breakdowns."
+            }
         }
     }
 
