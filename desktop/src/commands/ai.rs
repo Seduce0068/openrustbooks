@@ -4,8 +4,8 @@ use crate::state::AppState;
 use openrustbooks_core::{
     CoreError,
     ai_markdown::{
-        AiMarkdownService, FrontMatterRequest, FrontMatterResult, GenerateRequest, GenerateResult,
-        RefineRequest, RefineResult, TableAlignment, TableFormat, TableRequest, TableResult,
+        FrontMatterRequest, FrontMatterResult, GenerateRequest, GenerateResult, RefineRequest,
+        RefineResult, TableAlignment, TableFormat, TableRequest, TableResult,
     },
 };
 use std::sync::Arc;

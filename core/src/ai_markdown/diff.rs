@@ -1,9 +1,7 @@
 //! Diff computation and display for Markdown changes.
 
-use crate::CoreResult;
 use serde::{Deserialize, Serialize};
-use similar::{Algorithm, DiffOp, DiffTag, TextDiff};
-use std::fmt;
+use similar::{Algorithm, DiffTag, TextDiff};
 
 /// Diff result containing changes between two texts
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,12 +73,6 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
 
         for op in group {
             let tag = op.tag();
-            let diff_tag = match tag {
-                DiffTag::Equal => DiffTagWrapper::Equal,
-                DiffTag::Insert => DiffTagWrapper::Insert,
-                DiffTag::Delete => DiffTagWrapper::Delete,
-                DiffTag::Replace => DiffTagWrapper::Replace,
-            };
 
             match tag {
                 DiffTag::Equal => {
@@ -108,7 +100,6 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                     }
                 }
                 DiffTag::Insert => {
-                    let (_, new_end) = (op.old_range().start, op.old_range().end);
                     let (new_start, new_end) = (op.new_range().start, op.new_range().end);
                     let len = new_end - new_start;
 

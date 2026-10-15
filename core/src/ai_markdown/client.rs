@@ -5,8 +5,8 @@ use crate::{
     config::{AiConfig, OllamaConfig, OpenAiConfig},
 };
 use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-    ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequest,
+    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequest,
 };
 use async_openai::{Client, config::OpenAIConfig};
 use async_trait::async_trait;

@@ -1,16 +1,12 @@
 //! Application state management.
 
 use openrustbooks_core::{
-    AppConfig, CoreError, CoreResult,
-    ai_markdown::{
-        AiMarkdownService, FrontMatterRequest, GenerateRequest, RefineRequest, TableFormat,
-        TableRequest,
-    },
-    document::{Document, DocumentFormat, DocumentId},
+    AppConfig, CoreResult,
+    ai_markdown::AiMarkdownService,
+    document::{Document, DocumentId},
 };
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tauri::{AppHandle, Manager};
 
 /// Application state shared across commands
 pub struct AppState {
@@ -118,12 +114,4 @@ impl AppState {
     pub fn save_config(&self) -> CoreResult<()> {
         self.config.read().unwrap().save()
     }
-}
-
-/// Tauri state wrapper for easy access
-pub type State = Arc<AppState>;
-
-/// Helper to get state from Tauri app handle
-pub fn get_state(app: &AppHandle) -> State {
-    app.state::<State>().inner().clone()
 }

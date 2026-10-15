@@ -12,11 +12,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State, command};
 
-/// Convert CoreError to String for Tauri commands
-fn map_err(e: CoreError) -> String {
-    e.to_string()
-}
-
 /// Open a document from path
 #[command]
 pub async fn open_document(

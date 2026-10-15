@@ -10,7 +10,6 @@ mod commands;
 mod state;
 mod window;
 
-use commands::*;
 use state::AppState;
 use window::setup_window;
 
@@ -119,6 +118,9 @@ pub fn run() {
             // Configuration commands
             commands::config::get_config,
             commands::config::update_config,
+            commands::config::update_ai_config,
+            commands::config::update_lint_config,
+            commands::config::reset_config,
             // Window commands
             commands::window::close_window,
             commands::window::set_title,

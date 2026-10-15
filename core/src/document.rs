@@ -206,9 +206,10 @@ pub struct ZipEntry {
 impl Document {
     /// Create a new text document
     pub fn new_text(id: DocumentId, content: String) -> Self {
-        let size = content.len() as u64;
+        let mut metadata = DocumentMetadata::new(id, DocumentFormat::Txt);
+        metadata.size_bytes = content.len() as u64;
         Self {
-            metadata: DocumentMetadata::new(id, DocumentFormat::Txt),
+            metadata,
             content: DocumentContent::Text(content),
         }
     }
@@ -217,8 +218,10 @@ impl Document {
     pub fn new_markdown(id: DocumentId, content: String) -> Self {
         let size = content.len() as u64;
         let (front_matter, body) = extract_front_matter(&content);
+        let mut metadata = DocumentMetadata::new(id, DocumentFormat::Markdown);
+        metadata.size_bytes = size;
         Self {
-            metadata: DocumentMetadata::new(id, DocumentFormat::Markdown),
+            metadata,
             content: DocumentContent::Markdown {
                 content: body,
                 front_matter,

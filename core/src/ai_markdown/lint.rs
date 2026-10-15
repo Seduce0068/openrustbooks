@@ -8,7 +8,6 @@ use rumdl_lib::{
     rule::{LintError, LintWarning, Severity},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Lint issue found in markdown
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,7 +44,6 @@ pub struct LintResultWrapper {
 /// Markdown linter wrapper around rumdl
 pub struct MarkdownLinter {
     rules: Vec<Box<dyn Rule>>,
-    config: LintConfig,
 }
 
 impl MarkdownLinter {
@@ -84,10 +82,7 @@ impl MarkdownLinter {
             rules.push(rule);
         }
 
-        Ok(Self {
-            rules,
-            config: config.clone(),
-        })
+        Ok(Self { rules })
     }
 
     /// Lint markdown content and return issues
