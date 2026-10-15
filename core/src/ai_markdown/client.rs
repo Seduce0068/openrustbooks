@@ -1,29 +1,72 @@
 //! AI Provider abstraction and implementations.
 
-use async_trait::async_trait;
-use crate::{CoreResult, CoreError, config::{AiConfig, OpenAiConfig, OllamaConfig}};
-use async_openai::{Client, config::OpenAIConfig};
-use async_openai::types::{
-    ChatCompletionRequestMessage, CreateChatCompletionRequest, Role,
-    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+use crate::{
+    CoreError, CoreResult,
+    config::{AiConfig, OllamaConfig, OpenAiConfig},
 };
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequest,
+};
+use async_openai::{Client, config::OpenAIConfig};
+use async_trait::async_trait;
 use futures::StreamExt;
-use tiktoken_rs::{get_bpe_from_model, CoreBPE};
+use std::pin::Pin;
+use std::sync::Arc;
+use tiktoken_rs::{CoreBPE, get_bpe_from_model};
 
 /// Trait for AI clients
 #[async_trait]
 pub trait AiClient: Send + Sync {
     /// Complete a prompt and return the response
-    async fn complete(&self, prompt: &str, max_tokens: usize, streaming: bool) -> CoreResult<AiResponse>;
+    async fn complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+        streaming: bool,
+    ) -> CoreResult<AiResponse>;
 
     /// Stream completion tokens
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>>;
+    async fn stream_complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+    ) -> CoreResult<Box<dyn TokenStream + Send>>;
 
     /// Count tokens for a prompt
     fn count_tokens(&self, text: &str) -> CoreResult<usize>;
 
     /// Get model name
     fn model_name(&self) -> &str;
+}
+
+/// Automatically implement AiClient for Arc<dyn AiClient>
+#[async_trait]
+impl AiClient for Arc<dyn AiClient + Send + Sync> {
+    async fn complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+        streaming: bool,
+    ) -> CoreResult<AiResponse> {
+        self.as_ref().complete(prompt, max_tokens, streaming).await
+    }
+
+    async fn stream_complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+    ) -> CoreResult<Box<dyn TokenStream + Send>> {
+        self.as_ref().stream_complete(prompt, max_tokens).await
+    }
+
+    fn count_tokens(&self, text: &str) -> CoreResult<usize> {
+        self.as_ref().count_tokens(text)
+    }
+
+    fn model_name(&self) -> &str {
+        self.as_ref().model_name()
+    }
 }
 
 /// AI response
@@ -36,17 +79,20 @@ pub struct AiResponse {
 
 /// Token stream for streaming responses
 #[async_trait]
-pub trait TokenStream: Send + Sync + Unpin + 'static {
+pub trait TokenStream: Send + Unpin + 'static {
     async fn next_token(&mut self) -> CoreResult<Option<String>>;
     fn is_done(&self) -> bool;
 }
 
 /// Create an AI client from configuration
-pub async fn create_client(config: &AiConfig) -> CoreResult<Box<dyn AiClient + Send + 'static>> {
+pub async fn create_client(config: &AiConfig) -> CoreResult<Arc<dyn AiClient + Send + Sync>> {
     match config.default_provider.as_str() {
-        "openai" => Ok(Box::new(OpenAiClient::new(&config.openai).await?)),
-        "ollama" => Ok(Box::new(OllamaClient::new(&config.ollama).await?)),
-        _ => Err(CoreError::ai_provider(format!("Unknown provider: {}", config.default_provider))),
+        "openai" => Ok(Arc::new(OpenAiClient::new(&config.openai).await?)),
+        "ollama" => Ok(Arc::new(OllamaClient::new(&config.ollama).await?)),
+        _ => Err(CoreError::ai_provider(format!(
+            "Unknown provider: {}",
+            config.default_provider
+        ))),
     }
 }
 
@@ -77,7 +123,12 @@ impl OpenAiClient {
 
 #[async_trait]
 impl AiClient for OpenAiClient {
-    async fn complete(&self, prompt: &str, max_tokens: usize, _streaming: bool) -> CoreResult<AiResponse> {
+    async fn complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+        _streaming: bool,
+    ) -> CoreResult<AiResponse> {
         let messages = vec![
             ChatCompletionRequestSystemMessageArgs::default()
                 .content("You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation.")
@@ -92,24 +143,31 @@ impl AiClient for OpenAiClient {
         let request = CreateChatCompletionRequest {
             model: self.model.clone(),
             messages,
-            max_tokens: Some(max_tokens as u32),
+            max_completion_tokens: Some(max_tokens as u32),
             temperature: Some(0.3),
             top_p: Some(0.9),
             stream: Some(false),
             ..Default::default()
         };
 
-        let response = self.client.chat().create(request).await
+        let response = self
+            .client
+            .chat()
+            .create(request)
+            .await
             .map_err(|e| CoreError::ai_provider(format!("OpenAI API error: {}", e)))?;
 
-        let content = response.choices.first()
+        let content = response
+            .choices
+            .first()
             .and_then(|c| c.message.content.as_ref())
             .cloned()
             .unwrap_or_default();
 
-        let tokens_used = response.usage.map(|u| u.total_tokens as usize).unwrap_or_else(|| {
-            self.count_tokens(&content).unwrap_or(0)
-        });
+        let tokens_used = response
+            .usage
+            .map(|u| u.total_tokens as usize)
+            .unwrap_or_else(|| self.count_tokens(&content).unwrap_or(0));
 
         Ok(AiResponse {
             content,
@@ -118,7 +176,11 @@ impl AiClient for OpenAiClient {
         })
     }
 
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>> {
+    async fn stream_complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+    ) -> CoreResult<Box<dyn TokenStream + Send>> {
         let messages = vec![
             ChatCompletionRequestSystemMessageArgs::default()
                 .content("You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation.")
@@ -133,17 +195,24 @@ impl AiClient for OpenAiClient {
         let request = CreateChatCompletionRequest {
             model: self.model.clone(),
             messages,
-            max_tokens: Some(max_tokens as u32),
+            max_completion_tokens: Some(max_tokens as u32),
             temperature: Some(0.3),
             top_p: Some(0.9),
             stream: Some(true),
             ..Default::default()
         };
 
-        let stream = self.client.chat().create_stream(request).await
+        let stream = self
+            .client
+            .chat()
+            .create_stream(request)
+            .await
             .map_err(|e| CoreError::ai_provider(format!("OpenAI stream error: {}", e)))?;
 
-        Ok(Box::new(OpenAiTokenStream { stream, buffer: String::new() }))
+        Ok(Box::new(OpenAiTokenStream {
+            stream,
+            buffer: String::new(),
+        }))
     }
 
     fn count_tokens(&self, text: &str) -> CoreResult<usize> {
@@ -171,7 +240,8 @@ impl std::fmt::Debug for OpenAiTokenStream {
 impl TokenStream for OpenAiTokenStream {
     async fn next_token(&mut self) -> CoreResult<Option<String>> {
         while let Some(chunk) = self.stream.next().await {
-            let chunk = chunk.map_err(|e| CoreError::ai_provider(format!("Stream error: {}", e)))?;
+            let chunk =
+                chunk.map_err(|e| CoreError::ai_provider(format!("Stream error: {}", e)))?;
             if let Some(choice) = chunk.choices.first() {
                 if let Some(delta) = &choice.delta.content {
                     self.buffer.push_str(delta);
@@ -214,7 +284,12 @@ impl OllamaClient {
 
 #[async_trait]
 impl AiClient for OllamaClient {
-    async fn complete(&self, prompt: &str, max_tokens: usize, _streaming: bool) -> CoreResult<AiResponse> {
+    async fn complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+        _streaming: bool,
+    ) -> CoreResult<AiResponse> {
         let request = serde_json::json!({
             "model": self.model,
             "prompt": prompt,
@@ -226,14 +301,17 @@ impl AiClient for OllamaClient {
             }
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/api/generate", self.base_url))
             .json(&request)
             .send()
             .await
             .map_err(|e| CoreError::ai_provider(format!("Ollama request error: {}", e)))?;
 
-        let result: serde_json::Value = response.json().await
+        let result: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| CoreError::ai_provider(format!("Ollama response error: {}", e)))?;
 
         let content = result["response"].as_str().unwrap_or("").to_string();
@@ -246,7 +324,11 @@ impl AiClient for OllamaClient {
         })
     }
 
-    async fn stream_complete(&self, prompt: &str, max_tokens: usize) -> CoreResult<Box<dyn TokenStream + Send>> {
+    async fn stream_complete(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+    ) -> CoreResult<Box<dyn TokenStream + Send>> {
         let request = serde_json::json!({
             "model": self.model,
             "prompt": prompt,
@@ -258,7 +340,8 @@ impl AiClient for OllamaClient {
             }
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/api/generate", self.base_url))
             .json(&request)
             .send()
@@ -266,7 +349,10 @@ impl AiClient for OllamaClient {
             .map_err(|e| CoreError::ai_provider(format!("Ollama stream request error: {}", e)))?;
 
         let stream = response.bytes_stream();
-        Ok(Box::new(OllamaTokenStream { stream, buffer: String::new() }))
+        Ok(Box::new(OllamaTokenStream {
+            stream: Box::pin(stream),
+            buffer: String::new(),
+        }))
     }
 
     fn count_tokens(&self, text: &str) -> CoreResult<usize> {
@@ -280,7 +366,7 @@ impl AiClient for OllamaClient {
 
 /// Ollama token stream
 struct OllamaTokenStream {
-    stream: futures::stream::BoxStream<'static, Result<bytes::Bytes, reqwest::Error>>,
+    stream: Pin<Box<dyn futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
     buffer: String,
 }
 
@@ -290,7 +376,8 @@ impl TokenStream for OllamaTokenStream {
         use futures::StreamExt;
 
         while let Some(chunk) = self.stream.next().await {
-            let chunk = chunk.map_err(|e| CoreError::ai_provider(format!("Ollama stream error: {}", e)))?;
+            let chunk =
+                chunk.map_err(|e| CoreError::ai_provider(format!("Ollama stream error: {}", e)))?;
             let text = String::from_utf8_lossy(&chunk);
 
             // Ollama streams JSON lines

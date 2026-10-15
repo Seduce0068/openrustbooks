@@ -1,9 +1,14 @@
 //! Configuration commands.
 
-use tauri::{command, State};
-use openrustbooks_core::{CoreResult, AppConfig, AiConfig, LintConfig};
 use crate::state::AppState;
+use openrustbooks_core::{AiConfig, AppConfig, CoreError, LintConfig};
 use std::sync::Arc;
+use tauri::{State, command};
+
+/// Convert CoreError to String for Tauri commands
+fn map_err(e: CoreError) -> String {
+    e.to_string()
+}
 
 /// Get current configuration
 #[command]
@@ -13,12 +18,9 @@ pub fn get_config(state: State<'_, Arc<AppState>>) -> AppConfig {
 
 /// Update configuration
 #[command]
-pub fn update_config(
-    state: State<'_, Arc<AppState>>,
-    config: AppConfig,
-) -> CoreResult<()> {
-    state.update_config(config)?;
-    state.save_config()?;
+pub fn update_config(state: State<'_, Arc<AppState>>, config: AppConfig) -> Result<(), String> {
+    state.update_config(config).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
     Ok(())
 }
 
@@ -27,14 +29,15 @@ pub fn update_config(
 pub fn update_ai_config(
     state: State<'_, Arc<AppState>>,
     ai_config: AiConfig,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let mut config = state.config();
+    let ai_enabled = ai_config.enabled; // Check before moving
     config.ai = ai_config;
-    state.update_config(config)?;
-    state.save_config()?;
+    state.update_config(config).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
 
     // Reinitialize AI service if enabled
-    if config.ai.enabled {
+    if ai_enabled {
         let state_clone = state.inner().clone();
         tauri::async_runtime::spawn(async move {
             let _ = state_clone.init_ai_service().await;
@@ -49,19 +52,19 @@ pub fn update_ai_config(
 pub fn update_lint_config(
     state: State<'_, Arc<AppState>>,
     lint_config: LintConfig,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let mut config = state.config();
     config.lint = lint_config;
-    state.update_config(config)?;
-    state.save_config()?;
+    state.update_config(config).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
     Ok(())
 }
 
 /// Reset configuration to defaults
 #[command]
-pub fn reset_config(state: State<'_, Arc<AppState>>) -> CoreResult<AppConfig> {
+pub fn reset_config(state: State<'_, Arc<AppState>>) -> Result<AppConfig, String> {
     let config = AppConfig::default();
-    state.update_config(config.clone())?;
-    state.save_config()?;
+    state.update_config(config.clone()).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
     Ok(config)
 }

@@ -2,7 +2,7 @@
 
 use crate::CoreResult;
 use serde::{Deserialize, Serialize};
-use similar::{Algorithm, DiffTag, DiffOp, TextDiff};
+use similar::{Algorithm, DiffOp, DiffTag, TextDiff};
 use std::fmt;
 
 /// Diff result containing changes between two texts
@@ -259,8 +259,14 @@ pub fn render_html(diff: &DiffResult) -> String {
                 DiffTagWrapper::Replace => ("diff-replace", "!"),
             };
 
-            let old_num = line.old_line_number.map(|n| n.to_string()).unwrap_or_else(|| "".to_string());
-            let new_num = line.new_line_number.map(|n| n.to_string()).unwrap_or_else(|| "".to_string());
+            let old_num = line
+                .old_line_number
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "".to_string());
+            let new_num = line
+                .new_line_number
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "".to_string());
 
             html.push_str(&format!(
                 "    <div class=\"diff-line {}\" data-old=\"{}\" data-new=\"{}\">\n",
@@ -371,7 +377,7 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
         let tag = op.tag();
         match tag {
             similar::ChangeTag::Equal => {
-                for ch in op.values() {
+                for ch in op.value().chars() {
                     segments.push(InlineDiffSegment {
                         tag: DiffTagWrapper::Equal,
                         content: ch.to_string(),
@@ -379,7 +385,7 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
                 }
             }
             similar::ChangeTag::Insert => {
-                for ch in op.values() {
+                for ch in op.value().chars() {
                     segments.push(InlineDiffSegment {
                         tag: DiffTagWrapper::Insert,
                         content: ch.to_string(),
@@ -387,7 +393,7 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
                 }
             }
             similar::ChangeTag::Delete => {
-                for ch in op.values() {
+                for ch in op.value().chars() {
                     segments.push(InlineDiffSegment {
                         tag: DiffTagWrapper::Delete,
                         content: ch.to_string(),
@@ -398,7 +404,7 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
     }
 
     // Merge adjacent segments with same tag
-    let mut merged = Vec::new();
+    let mut merged: Vec<InlineDiffSegment> = Vec::new();
     for seg in segments {
         if let Some(last) = merged.last_mut() {
             if last.tag == seg.tag {

@@ -13,12 +13,17 @@ pub mod lint;
 pub mod pipeline;
 pub mod prompt;
 
-use crate::{CoreResult, CoreError, config::{AiConfig, LintConfig}};
+pub use pipeline::AiMarkdownService;
+
+use crate::{
+    CoreError, CoreResult,
+    config::{AiConfig, LintConfig},
+};
 use std::sync::Arc;
 
 /// Main entry point for the AI Markdown pipeline
 pub struct AiMarkdownPipeline {
-    client: Arc<dyn client::AiClient>,
+    client: Arc<dyn client::AiClient + Send + Sync>,
     linter: lint::MarkdownLinter,
     prompt_registry: prompt::PromptRegistry,
     config: PipelineConfig,
@@ -52,6 +57,11 @@ impl Default for PipelineConfig {
 }
 
 impl AiMarkdownPipeline {
+    /// Get reference to the linter
+    pub fn linter(&self) -> &lint::MarkdownLinter {
+        &self.linter
+    }
+
     /// Create a new pipeline with the given configuration
     pub async fn new(
         ai_config: &AiConfig,
@@ -63,7 +73,7 @@ impl AiMarkdownPipeline {
         let prompt_registry = prompt::PromptRegistry::load()?;
 
         Ok(Self {
-            client: Arc::new(client),
+            client,
             linter,
             prompt_registry,
             config: pipeline_config,
@@ -71,26 +81,17 @@ impl AiMarkdownPipeline {
     }
 
     /// Generate Markdown from natural language prompt
-    pub async fn generate(
-        &self,
-        request: GenerateRequest,
-    ) -> CoreResult<GenerateResult> {
+    pub async fn generate(&self, request: GenerateRequest) -> CoreResult<GenerateResult> {
         self.execute_pipeline(request.into()).await
     }
 
     /// Refine existing Markdown with instructions
-    pub async fn refine(
-        &self,
-        request: RefineRequest,
-    ) -> CoreResult<RefineResult> {
+    pub async fn refine(&self, request: RefineRequest) -> CoreResult<RefineResult> {
         self.execute_pipeline(request.into()).await
     }
 
     /// Convert structured data (CSV/JSON) to Markdown table
-    pub async fn convert_to_table(
-        &self,
-        request: TableRequest,
-    ) -> CoreResult<TableResult> {
+    pub async fn convert_to_table(&self, request: TableRequest) -> CoreResult<TableResult> {
         self.execute_pipeline(request.into()).await
     }
 
@@ -103,7 +104,7 @@ impl AiMarkdownPipeline {
     }
 
     /// Core pipeline execution with retry logic
-    async fn execute_pipeline<Req, Res>(&self, request: PipelineRequest<Req>) -> CoreResult<Res>
+    async fn execute_pipeline<Req, Res>(&self, mut request: PipelineRequest<Req>) -> CoreResult<Res>
     where
         Req: PipelineInput + Send + Sync,
         Res: PipelineOutput + Send + Sync,
@@ -112,7 +113,11 @@ impl AiMarkdownPipeline {
         let mut current_content = request.initial_content().unwrap_or_default();
 
         for attempt in 0..=self.config.max_retries {
-            tracing::debug!("Pipeline attempt {}/{}", attempt + 1, self.config.max_retries + 1);
+            tracing::debug!(
+                "Pipeline attempt {}/{}",
+                attempt + 1,
+                self.config.max_retries + 1
+            );
 
             // 1. Generate/modify content via AI
             let ai_result = self.call_ai(&request, &current_content, attempt).await?;
@@ -122,14 +127,16 @@ impl AiMarkdownPipeline {
 
             // 3. Check if lint passes
             if lint_result.passed || attempt == self.config.max_retries {
+                let original = request.initial_content().unwrap_or_default();
+                let fixed = lint_result.fixed_content.clone();
                 return Ok(Res::from_pipeline_result(PipelineExecutionResult {
-                    original_content: request.initial_content().unwrap_or_default(),
+                    original_content: original.clone(),
                     generated_content: ai_result.content,
-                    final_content: lint_result.fixed_content,
+                    final_content: fixed.clone(),
                     lint_passed: lint_result.passed,
                     lint_issues: lint_result.issues,
                     diff: if self.config.show_diff {
-                        Some(self.diff.compute(&request.initial_content().unwrap_or_default(), &lint_result.fixed_content))
+                        Some(crate::ai_markdown::diff::compute(&original, &fixed))
                     } else {
                         None
                     },
@@ -140,15 +147,18 @@ impl AiMarkdownPipeline {
 
             // 4. Prepare for retry with lint feedback
             current_content = lint_result.fixed_content;
-            last_error = Some(format!("Lint validation failed after attempt {}", attempt + 1));
+            last_error = Some(format!(
+                "Lint validation failed after attempt {}",
+                attempt + 1
+            ));
 
             // Add lint errors to next prompt as context
             request.add_lint_feedback(&lint_result.issues);
         }
 
-        Err(CoreError::ai_pipeline(
-            last_error.unwrap_or_else(|| "Pipeline failed after max retries".to_string())
-        ))
+        Err(CoreError::ai_pipeline(last_error.unwrap_or_else(|| {
+            "Pipeline failed after max retries".to_string()
+        })))
     }
 
     /// Call AI with appropriate prompt
@@ -157,9 +167,14 @@ impl AiMarkdownPipeline {
         request: &Req,
         current_content: &str,
         attempt: usize,
-    ) -> CoreResult<AiResponse> {
-        let prompt = self.prompt_registry.render(&request.prompt_type(), request.prompt_variables(current_content, attempt))?;
-        self.client.complete(&prompt, self.config.token_limit, self.config.streaming).await
+    ) -> CoreResult<client::AiResponse> {
+        let prompt = self.prompt_registry.render(
+            request.prompt_type(),
+            request.prompt_variables(current_content, attempt),
+        )?;
+        self.client
+            .complete(&prompt, self.config.token_limit, self.config.streaming)
+            .await
     }
 }
 
@@ -189,13 +204,8 @@ pub struct PipelineExecutionResult {
     pub tokens_used: usize,
 }
 
-/// AI response
-#[derive(Debug, Clone)]
-pub struct AiResponse {
-    pub content: String,
-    pub tokens_used: usize,
-    pub model: String,
-}
+// Re-export client::AiResponse for use in this module
+pub use client::AiResponse;
 
 // --- Request/Response Types ---
 
@@ -207,7 +217,9 @@ pub struct GenerateRequest {
 }
 
 impl PipelineInput for GenerateRequest {
-    fn prompt_type(&self) -> prompt::PromptType { prompt::PromptType::Generate }
+    fn prompt_type(&self) -> prompt::PromptType {
+        prompt::PromptType::Generate
+    }
     fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables {
         prompt::PromptVariables {
             user_prompt: self.prompt.clone(),
@@ -218,14 +230,24 @@ impl PipelineInput for GenerateRequest {
             ..Default::default()
         }
     }
-    fn initial_content(&self) -> Option<String> { None }
+    fn initial_content(&self) -> Option<String> {
+        None
+    }
     fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) {
-        let feedback = issues.iter().map(|i| format!("- {}: {}", i.rule, i.message)).collect::<Vec<_>>().join("\n");
-        self.context = Some(format!("{}\n\nPrevious lint issues to fix:\n{}", self.context.as_deref().unwrap_or(""), feedback));
+        let feedback = issues
+            .iter()
+            .map(|i| format!("- {}: {}", i.rule, i.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.context = Some(format!(
+            "{}\n\nPrevious lint issues to fix:\n{}",
+            self.context.as_deref().unwrap_or(""),
+            feedback
+        ));
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct GenerateResult {
     pub content: String,
     pub diff: Option<diff::DiffResult>,
@@ -254,8 +276,10 @@ pub struct RefineRequest {
 }
 
 impl PipelineInput for RefineRequest {
-    fn prompt_type(&self) -> prompt::PromptType { prompt::PromptType::Refine }
-    fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables {
+    fn prompt_type(&self) -> prompt::PromptType {
+        prompt::PromptType::Refine
+    }
+    fn prompt_variables(&self, _current_content: &str, attempt: usize) -> prompt::PromptVariables {
         prompt::PromptVariables {
             user_prompt: self.instruction.clone(),
             context: self.context.clone(),
@@ -264,14 +288,23 @@ impl PipelineInput for RefineRequest {
             ..Default::default()
         }
     }
-    fn initial_content(&self) -> Option<String> { Some(self.content.clone()) }
+    fn initial_content(&self) -> Option<String> {
+        Some(self.content.clone())
+    }
     fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) {
-        let feedback = issues.iter().map(|i| format!("- {}: {}", i.rule, i.message)).collect::<Vec<_>>().join("\n");
-        self.instruction = format!("{}\n\nPrevious lint issues to fix:\n{}", self.instruction, feedback);
+        let feedback = issues
+            .iter()
+            .map(|i| format!("- {}: {}", i.rule, i.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.instruction = format!(
+            "{}\n\nPrevious lint issues to fix:\n{}",
+            self.instruction, feedback
+        );
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct RefineResult {
     pub content: String,
     pub diff: Option<diff::DiffResult>,
@@ -292,6 +325,20 @@ impl PipelineOutput for RefineResult {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub enum TableFormat {
+    Csv,
+    Json,
+    Tsv,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub enum TableAlignment {
+    Left,
+    Center,
+    Right,
+}
+
 #[derive(Debug, Clone)]
 pub struct TableRequest {
     pub data: String, // CSV or JSON
@@ -300,22 +347,10 @@ pub struct TableRequest {
     pub alignment: Option<Vec<TableAlignment>>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum TableFormat {
-    Csv,
-    Json,
-    Tsv,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum TableAlignment {
-    Left,
-    Center,
-    Right,
-}
-
 impl PipelineInput for TableRequest {
-    fn prompt_type(&self) -> prompt::PromptType { prompt::PromptType::Table }
+    fn prompt_type(&self) -> prompt::PromptType {
+        prompt::PromptType::Table
+    }
     fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables {
         prompt::PromptVariables {
             user_prompt: self.data.clone(),
@@ -323,7 +358,10 @@ impl PipelineInput for TableRequest {
             attempt,
             extra: {
                 let mut m = std::collections::HashMap::new();
-                m.insert("format".to_string(), serde_json::json!(format!("{:?}", self.format)));
+                m.insert(
+                    "format".to_string(),
+                    serde_json::json!(format!("{:?}", self.format)),
+                );
                 if let Some(h) = &self.headers {
                     m.insert("headers".to_string(), serde_json::json!(h));
                 }
@@ -335,11 +373,13 @@ impl PipelineInput for TableRequest {
             ..Default::default()
         }
     }
-    fn initial_content(&self) -> Option<String> { None }
+    fn initial_content(&self) -> Option<String> {
+        None
+    }
     fn add_lint_feedback(&mut self, _issues: &[lint::LintIssue]) {}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TableResult {
     pub content: String,
     pub diff: Option<diff::DiffResult>,
@@ -367,8 +407,10 @@ pub struct FrontMatterRequest {
 }
 
 impl PipelineInput for FrontMatterRequest {
-    fn prompt_type(&self) -> prompt::PromptType { prompt::PromptType::FrontMatter }
-    fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables {
+    fn prompt_type(&self) -> prompt::PromptType {
+        prompt::PromptType::FrontMatter
+    }
+    fn prompt_variables(&self, _current_content: &str, attempt: usize) -> prompt::PromptVariables {
         prompt::PromptVariables {
             user_prompt: "Generate appropriate YAML front matter for this document".to_string(),
             current_content: self.content.clone(),
@@ -383,11 +425,13 @@ impl PipelineInput for FrontMatterRequest {
             ..Default::default()
         }
     }
-    fn initial_content(&self) -> Option<String> { Some(self.content.clone()) }
+    fn initial_content(&self) -> Option<String> {
+        Some(self.content.clone())
+    }
     fn add_lint_feedback(&mut self, _issues: &[lint::LintIssue]) {}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct FrontMatterResult {
     pub content: String, // Full document with front matter
     pub front_matter: serde_json::Map<String, serde_json::Value>,
@@ -424,10 +468,16 @@ impl<Req: PipelineInput> From<Req> for PipelineRequest<Req> {
 }
 
 impl<Req: PipelineInput> PipelineInput for PipelineRequest<Req> {
-    fn prompt_type(&self) -> prompt::PromptType { self.inner.prompt_type() }
+    fn prompt_type(&self) -> prompt::PromptType {
+        self.inner.prompt_type()
+    }
     fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables {
         self.inner.prompt_variables(current_content, attempt)
     }
-    fn initial_content(&self) -> Option<String> { self.inner.initial_content() }
-    fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) { self.inner.add_lint_feedback(issues) }
+    fn initial_content(&self) -> Option<String> {
+        self.inner.initial_content()
+    }
+    fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) {
+        self.inner.add_lint_feedback(issues)
+    }
 }

@@ -1,13 +1,23 @@
 //! High-level pipeline orchestration for AI Markdown operations.
 
-use crate::{CoreResult, CoreError, config::AppConfig};
-use crate::ai_markdown::{AiMarkdownPipeline, PipelineConfig, GenerateRequest, RefineRequest, TableRequest, FrontMatterRequest};
+use crate::ai_markdown::{
+    AiMarkdownPipeline, FrontMatterRequest, GenerateRequest, PipelineConfig, RefineRequest,
+    TableRequest,
+};
+use crate::{CoreError, CoreResult, config::AppConfig};
 use std::sync::Arc;
 
 /// High-level service for AI Markdown operations
 pub struct AiMarkdownService {
     pipeline: Arc<AiMarkdownPipeline>,
     config: AppConfig,
+}
+
+impl AiMarkdownService {
+    /// Get reference to the pipeline for direct access
+    pub fn pipeline(&self) -> &AiMarkdownPipeline {
+        &self.pipeline
+    }
 }
 
 impl AiMarkdownService {
@@ -29,43 +39,74 @@ impl AiMarkdownService {
     }
 
     /// Generate Markdown from natural language
-    pub async fn generate(&self, prompt: &str, context: Option<&str>) -> CoreResult<GenerateResult> {
-        self.pipeline.generate(GenerateRequest {
-            prompt: prompt.to_string(),
-            context: context.map(|s| s.to_string()),
-            template: None,
-        }).await
+    pub async fn generate(
+        &self,
+        prompt: &str,
+        context: Option<&str>,
+    ) -> CoreResult<GenerateResult> {
+        self.pipeline
+            .generate(GenerateRequest {
+                prompt: prompt.to_string(),
+                context: context.map(|s| s.to_string()),
+                template: None,
+            })
+            .await
     }
 
     /// Refine existing Markdown
-    pub async fn refine(&self, content: &str, instruction: &str, context: Option<&str>) -> CoreResult<RefineResult> {
-        self.pipeline.refine(RefineRequest {
-            content: content.to_string(),
-            instruction: instruction.to_string(),
-            context: context.map(|s| s.to_string()),
-        }).await
+    pub async fn refine(
+        &self,
+        content: &str,
+        instruction: &str,
+        context: Option<&str>,
+    ) -> CoreResult<RefineResult> {
+        self.pipeline
+            .refine(RefineRequest {
+                content: content.to_string(),
+                instruction: instruction.to_string(),
+                context: context.map(|s| s.to_string()),
+            })
+            .await
     }
 
     /// Convert data to Markdown table
-    pub async fn to_table(&self, data: &str, format: TableFormat, headers: Option<Vec<String>>) -> CoreResult<TableResult> {
-        self.pipeline.convert_to_table(TableRequest {
-            data: data.to_string(),
-            format,
-            headers,
-            alignment: None,
-        }).await
+    pub async fn to_table(
+        &self,
+        data: &str,
+        format: TableFormat,
+        headers: Option<Vec<String>>,
+    ) -> CoreResult<TableResult> {
+        self.pipeline
+            .convert_to_table(TableRequest {
+                data: data.to_string(),
+                format,
+                headers,
+                alignment: None,
+            })
+            .await
     }
 
     /// Generate front matter for document
-    pub async fn front_matter(&self, content: &str, schema: Option<serde_json::Value>) -> CoreResult<FrontMatterResult> {
-        self.pipeline.generate_front_matter(FrontMatterRequest {
-            content: content.to_string(),
-            schema,
-        }).await
+    pub async fn front_matter(
+        &self,
+        content: &str,
+        schema: Option<serde_json::Value>,
+    ) -> CoreResult<FrontMatterResult> {
+        self.pipeline
+            .generate_front_matter(FrontMatterRequest {
+                content: content.to_string(),
+                schema,
+            })
+            .await
     }
 
     /// Stream generate with callback for each token
-    pub async fn stream_generate<F>(&self, prompt: &str, context: Option<&str>, mut on_token: F) -> CoreResult<GenerateResult>
+    pub async fn stream_generate<F>(
+        &self,
+        prompt: &str,
+        context: Option<&str>,
+        mut on_token: F,
+    ) -> CoreResult<GenerateResult>
     where
         F: FnMut(&str) + Send + 'static,
     {
@@ -97,13 +138,14 @@ impl AiMarkdownService {
 }
 
 /// Result types re-exported for convenience
-pub use crate::ai_markdown::{GenerateResult, RefineResult, TableResult, FrontMatterResult, TableFormat, TableAlignment};
+pub use crate::ai_markdown::{
+    FrontMatterResult, GenerateResult, RefineResult, TableAlignment, TableFormat, TableResult,
+};
 
 /// Streaming callback type
 pub type TokenCallback = Box<dyn FnMut(&str) + Send>;
 
 /// Streaming generate options
-#[derive(Debug, Clone)]
 pub struct StreamOptions {
     pub on_token: Option<TokenCallback>,
     pub on_complete: Option<Box<dyn FnOnce(&GenerateResult) + Send>>,
@@ -186,26 +228,38 @@ impl AiOperationBuilder {
         if self.prompt.is_empty() {
             return Err(CoreError::ai_pipeline("Prompt is required for generation"));
         }
-        self.service.generate(&self.prompt, self.context.as_deref()).await
+        self.service
+            .generate(&self.prompt, self.context.as_deref())
+            .await
     }
 
     /// Execute as refinement
     pub async fn refine(self) -> CoreResult<RefineResult> {
-        let content = self.content.ok_or_else(|| CoreError::ai_pipeline("Content is required for refinement"))?;
-        let instruction = self.instruction.ok_or_else(|| CoreError::ai_pipeline("Instruction is required for refinement"))?;
-        self.service.refine(&content, &instruction, self.context.as_deref()).await
+        let content = self
+            .content
+            .ok_or_else(|| CoreError::ai_pipeline("Content is required for refinement"))?;
+        let instruction = self
+            .instruction
+            .ok_or_else(|| CoreError::ai_pipeline("Instruction is required for refinement"))?;
+        self.service
+            .refine(&content, &instruction, self.context.as_deref())
+            .await
     }
 
     /// Execute as table conversion
     pub async fn table(self) -> CoreResult<TableResult> {
-        let data = self.content.ok_or_else(|| CoreError::ai_pipeline("Data is required for table conversion"))?;
+        let data = self
+            .content
+            .ok_or_else(|| CoreError::ai_pipeline("Data is required for table conversion"))?;
         let format = self.format.unwrap_or(TableFormat::Csv);
         self.service.to_table(&data, format, self.headers).await
     }
 
     /// Execute as front matter generation
     pub async fn front_matter(self) -> CoreResult<FrontMatterResult> {
-        let content = self.content.ok_or_else(|| CoreError::ai_pipeline("Content is required for front matter generation"))?;
+        let content = self.content.ok_or_else(|| {
+            CoreError::ai_pipeline("Content is required for front matter generation")
+        })?;
         self.service.front_matter(&content, self.schema).await
     }
 }

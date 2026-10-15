@@ -1,9 +1,20 @@
 //! AI Markdown pipeline commands.
 
-use tauri::{command, State};
-use openrustbooks_core::{CoreResult, CoreError, ai_markdown::{GenerateRequest, RefineRequest, TableRequest, FrontMatterRequest, TableFormat, TableAlignment, AiMarkdownService}};
 use crate::state::AppState;
+use openrustbooks_core::{
+    CoreError,
+    ai_markdown::{
+        AiMarkdownService, FrontMatterRequest, FrontMatterResult, GenerateRequest, GenerateResult,
+        RefineRequest, RefineResult, TableAlignment, TableFormat, TableRequest, TableResult,
+    },
+};
 use std::sync::Arc;
+use tauri::{State, command};
+
+/// Convert CoreError to String for Tauri commands
+fn map_err(e: CoreError) -> String {
+    e.to_string()
+}
 
 /// Generate Markdown from natural language prompt
 #[command]
@@ -12,15 +23,20 @@ pub async fn generate_markdown(
     prompt: String,
     context: Option<String>,
     template: Option<String>,
-) -> CoreResult<openrustbooks_core::ai_markdown::GenerateResult> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<GenerateResult, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    service.pipeline.generate(GenerateRequest {
-        prompt,
-        context,
-        template,
-    }).await
+    service
+        .pipeline()
+        .generate(GenerateRequest {
+            prompt,
+            context,
+            template,
+        })
+        .await
+        .map_err(map_err)
 }
 
 /// Refine existing Markdown with instructions
@@ -30,15 +46,20 @@ pub async fn refine_markdown(
     content: String,
     instruction: String,
     context: Option<String>,
-) -> CoreResult<openrustbooks_core::ai_markdown::RefineResult> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<RefineResult, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    service.pipeline.refine(RefineRequest {
-        content,
-        instruction,
-        context,
-    }).await
+    service
+        .pipeline()
+        .refine(RefineRequest {
+            content,
+            instruction,
+            context,
+        })
+        .await
+        .map_err(map_err)
 }
 
 /// Convert structured data to Markdown table
@@ -49,32 +70,41 @@ pub async fn convert_to_table(
     format: String,
     headers: Option<Vec<String>>,
     alignment: Option<Vec<String>>,
-) -> CoreResult<openrustbooks_core::ai_markdown::TableResult> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<TableResult, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
     let table_format = match format.to_lowercase().as_str() {
         "csv" => TableFormat::Csv,
         "json" => TableFormat::Json,
         "tsv" => TableFormat::Tsv,
-        _ => return Err(CoreError::validation("Invalid format. Use csv, json, or tsv")),
+        _ => {
+            return Err(CoreError::validation("Invalid format. Use csv, json, or tsv").to_string());
+        }
     };
 
     let table_alignment = alignment.map(|a| {
-        a.into_iter().map(|s| match s.to_lowercase().as_str() {
-            "left" => TableAlignment::Left,
-            "center" => TableAlignment::Center,
-            "right" => TableAlignment::Right,
-            _ => TableAlignment::Left,
-        }).collect()
+        a.into_iter()
+            .map(|s| match s.to_lowercase().as_str() {
+                "left" => TableAlignment::Left,
+                "center" => TableAlignment::Center,
+                "right" => TableAlignment::Right,
+                _ => TableAlignment::Left,
+            })
+            .collect()
     });
 
-    service.pipeline.convert_to_table(TableRequest {
-        data,
-        format: table_format,
-        headers,
-        alignment: table_alignment,
-    }).await
+    service
+        .pipeline()
+        .convert_to_table(TableRequest {
+            data,
+            format: table_format,
+            headers,
+            alignment: table_alignment,
+        })
+        .await
+        .map_err(map_err)
 }
 
 /// Generate front matter for a document
@@ -83,14 +113,16 @@ pub async fn generate_front_matter(
     state: State<'_, Arc<AppState>>,
     content: String,
     schema: Option<serde_json::Value>,
-) -> CoreResult<openrustbooks_core::ai_markdown::FrontMatterResult> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<FrontMatterResult, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    service.pipeline.generate_front_matter(FrontMatterRequest {
-        content,
-        schema,
-    }).await
+    service
+        .pipeline()
+        .generate_front_matter(FrontMatterRequest { content, schema })
+        .await
+        .map_err(map_err)
 }
 
 /// Lint Markdown content
@@ -98,11 +130,12 @@ pub async fn generate_front_matter(
 pub async fn lint_markdown(
     state: State<'_, Arc<AppState>>,
     content: String,
-) -> CoreResult<Vec<openrustbooks_core::ai_markdown::lint::LintIssue>> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<Vec<openrustbooks_core::ai_markdown::lint::LintIssue>, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    service.pipeline.linter.lint(&content).await
+    service.pipeline().linter().lint(&content).map_err(map_err)
 }
 
 /// Lint and auto-fix Markdown content
@@ -110,9 +143,15 @@ pub async fn lint_markdown(
 pub async fn lint_and_fix_markdown(
     state: State<'_, Arc<AppState>>,
     content: String,
-) -> CoreResult<openrustbooks_core::ai_markdown::lint::LintResult> {
-    let service = state.ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized"))?;
+) -> Result<openrustbooks_core::ai_markdown::lint::LintResultWrapper, String> {
+    let service = state
+        .ai_service()
+        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    service.pipeline.linter.lint_and_fix(&content).await
+    service
+        .pipeline()
+        .linter()
+        .lint_and_fix(&content)
+        .await
+        .map_err(map_err)
 }

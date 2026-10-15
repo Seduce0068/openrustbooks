@@ -1,10 +1,35 @@
 //! File system commands.
 
-use tauri::{command, State, AppHandle};
-use openrustbooks_core::{CoreResult, CoreError, io::{StorageManager, local::LocalStorage, ListOptions, ReadOptions, WriteOptions, FileEntry, StorageBackend, StorageCapabilities}};
 use crate::state::AppState;
-use std::sync::Arc;
+use openrustbooks_core::{
+    CoreError,
+    io::{
+        FileEntry, ListOptions, ReadOptions, StorageBackend, StorageManager, WriteOptions,
+        local::LocalStorage,
+    },
+};
 use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State, command};
+
+/// Convert CoreError to String for Tauri commands
+fn map_err(e: CoreError) -> String {
+    e.to_string()
+}
+
+/// Helper to create storage manager with configured local roots
+async fn create_storage(config: &crate::state::AppState) -> Result<StorageManager, String> {
+    let mut storage = StorageManager::new();
+    let app_config = config.config();
+
+    for root in &app_config.storage.local_roots {
+        let mut local = LocalStorage::new(root.path.clone());
+        local.initialize().await.map_err(map_err)?;
+        storage.add_backend(Box::new(local));
+    }
+
+    Ok(storage)
+}
 
 /// Read directory contents
 #[command]
@@ -12,23 +37,17 @@ pub async fn read_directory(
     state: State<'_, Arc<AppState>>,
     path: String,
     options: Option<ListOptions>,
-) -> CoreResult<Vec<FileEntry>> {
-    let config = state.config();
-    let storage = StorageManager::new();
-
-    // Add local roots from config
-    for root in &config.storage.local_roots {
-        let mut local = LocalStorage::new(root.path.clone());
-        local.initialize().await?;
-        storage.add_backend(Box::new(local));
-    }
-
-    // Use default backend
-    let backend = storage.default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available"))?;
+) -> Result<Vec<FileEntry>, String> {
+    let storage = create_storage(&state).await?;
+    let backend = storage
+        .default_backend()
+        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
 
     let path_buf = PathBuf::from(path);
-    backend.list(&path_buf, options.unwrap_or_default()).await
+    backend
+        .list(&path_buf, options.unwrap_or_default())
+        .await
+        .map_err(map_err)
 }
 
 /// Create a new file
@@ -38,32 +57,33 @@ pub async fn create_file(
     app: AppHandle,
     path: String,
     content: Option<String>,
-) -> CoreResult<FileEntry> {
+) -> Result<FileEntry, String> {
     let path_buf = PathBuf::from(&path);
-    let config = state.config();
-    let storage = StorageManager::new();
+    let storage = create_storage(&state).await?;
 
-    for root in &config.storage.local_roots {
-        let mut local = LocalStorage::new(root.path.clone());
-        local.initialize().await?;
-        storage.add_backend(Box::new(local));
-    }
-
-    let backend = storage.default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available"))?;
+    let backend = storage
+        .default_backend()
+        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
 
     // Create parent directories
     if let Some(parent) = path_buf.parent() {
-        backend.create_dir(parent, true).await?;
+        let parent_buf = parent.to_path_buf();
+        backend
+            .create_dir(&parent_buf, true)
+            .await
+            .map_err(map_err)?;
     }
 
     // Write file
     let content = content.unwrap_or_default();
-    backend.write_text(&path_buf, &content, WriteOptions::default()).await?;
+    backend
+        .write_text(&path_buf, &content, WriteOptions::default())
+        .await
+        .map_err(map_err)?;
 
     let _ = app.emit("file-created", &path);
 
-    backend.metadata(&path_buf).await
+    backend.metadata(&path_buf).await.map_err(map_err)
 }
 
 /// Delete a file or directory
@@ -73,21 +93,18 @@ pub async fn delete_file(
     app: AppHandle,
     path: String,
     recursive: Option<bool>,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
-    let config = state.config();
-    let storage = StorageManager::new();
+    let storage = create_storage(&state).await?;
 
-    for root in &config.storage.local_roots {
-        let mut local = LocalStorage::new(root.path.clone());
-        local.initialize().await?;
-        storage.add_backend(Box::new(local));
-    }
+    let backend = storage
+        .default_backend()
+        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
 
-    let backend = storage.default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available"))?;
-
-    backend.delete(&path_buf, recursive.unwrap_or(false)).await?;
+    backend
+        .delete(&path_buf, recursive.unwrap_or(false))
+        .await
+        .map_err(map_err)?;
 
     let _ = app.emit("file-deleted", &path);
 
@@ -102,26 +119,26 @@ pub async fn rename_file(
     from: String,
     to: String,
     overwrite: Option<bool>,
-) -> CoreResult<FileEntry> {
+) -> Result<FileEntry, String> {
     let from_buf = PathBuf::from(&from);
     let to_buf = PathBuf::from(&to);
-    let config = state.config();
-    let storage = StorageManager::new();
+    let storage = create_storage(&state).await?;
 
-    for root in &config.storage.local_roots {
-        let mut local = LocalStorage::new(root.path.clone());
-        local.initialize().await?;
-        storage.add_backend(Box::new(local));
-    }
+    let backend = storage
+        .default_backend()
+        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
 
-    let backend = storage.default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available"))?;
+    backend
+        .move_item(&from_buf, &to_buf, overwrite.unwrap_or(false))
+        .await
+        .map_err(map_err)?;
 
-    backend.move_item(&from_buf, &to_buf, overwrite.unwrap_or(false)).await?;
+    let _ = app.emit(
+        "file-renamed",
+        serde_json::json!({ "from": from, "to": to }),
+    );
 
-    let _ = app.emit("file-renamed", serde_json::json!({ "from": from, "to": to }));
-
-    backend.metadata(&to_buf).await
+    backend.metadata(&to_buf).await.map_err(map_err)
 }
 
 /// Watch a directory for changes
@@ -130,21 +147,15 @@ pub async fn watch_directory(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
     path: String,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
-    let config = state.config();
-    let storage = StorageManager::new();
+    let storage = create_storage(&state).await?;
 
-    for root in &config.storage.local_roots {
-        let mut local = LocalStorage::new(root.path.clone());
-        local.initialize().await?;
-        storage.add_backend(Box::new(local));
-    }
+    let backend = storage
+        .default_backend()
+        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
 
-    let backend = storage.default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available"))?;
-
-    let mut stream = backend.watch(&path_buf).await?;
+    let mut stream = backend.watch(&path_buf).await.map_err(map_err)?;
 
     // Spawn task to forward events
     tauri::async_runtime::spawn(async move {

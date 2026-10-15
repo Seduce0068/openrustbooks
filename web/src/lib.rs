@@ -3,16 +3,19 @@
 //! This crate compiles to WebAssembly and provides the browser-based
 //! version of the application using Leptos.
 
-use leptos::*;
-use leptos_router::*;
-use openrustbooks_core::{init, wasm::*};
+use leptos::html::Div;
+use leptos::prelude::*;
+use leptos_router::components::{Route, Router, Routes};
+use leptos_router::hooks::use_params_map;
+use leptos_router::path;
+use openrustbooks_core::init;
 use wasm_bindgen::prelude::*;
 
 // Initialize panic hook and tracing for Wasm
 #[wasm_bindgen(start)]
 pub fn main() {
     init();
-    console_log!("openrustbooks-web starting...");
+    leptos::logging::log!("openrustbooks-web starting...");
 
     // Mount the Leptos app
     mount_to_body(|| view! { <App/> });
@@ -23,12 +26,12 @@ pub fn main() {
 fn App() -> impl IntoView {
     view! {
         <Router>
-            <Routes>
-                <Route path="/" view=HomePage/>
-                <Route path="/editor/:id" view=EditorPage/>
-                <Route path="/reader/:id" view=ReaderPage/>
-                <Route path="/settings" view=SettingsPage/>
-                <Route path="/about" view=AboutPage/>
+            <Routes fallback=|| view! { <p class="not-found">"Page not found"</p> }>
+                <Route path=path!("/") view=HomePage/>
+                <Route path=path!("/editor/:id") view=EditorPage/>
+                <Route path=path!("/reader/:id") view=ReaderPage/>
+                <Route path=path!("/settings") view=SettingsPage/>
+                <Route path=path!("/about") view=AboutPage/>
             </Routes>
         </Router>
     }
@@ -63,16 +66,21 @@ fn HomePage() -> impl IntoView {
     }
 }
 
+/// Extract the `id` path parameter of the current route.
+fn route_doc_id() -> Signal<String> {
+    let params = use_params_map();
+    Signal::derive(move || params.get().get("id").unwrap_or_default())
+}
+
 /// Editor page
 #[component]
 fn EditorPage() -> impl IntoView {
-    let params = use_params_map();
-    let doc_id = move || params.get().get("id").cloned().unwrap_or_default();
+    let doc_id = route_doc_id();
 
     view! {
         <div class="app editor-page">
             <header class="app-header">
-                <h1>"Editor: " {doc_id}</h1>
+                <h1>"Editor: " {move || doc_id.get()}</h1>
                 <nav>
                     <a href="/">"← Back"</a>
                 </nav>
@@ -87,13 +95,12 @@ fn EditorPage() -> impl IntoView {
 /// Reader page
 #[component]
 fn ReaderPage() -> impl IntoView {
-    let params = use_params_map();
-    let doc_id = move || params.get().get("id").cloned().unwrap_or_default();
+    let doc_id = route_doc_id();
 
     view! {
         <div class="app reader-page">
             <header class="app-header">
-                <h1>"Reader: " {doc_id}</h1>
+                <h1>"Reader: " {move || doc_id.get()}</h1>
                 <nav>
                     <a href="/">"← Back"</a>
                 </nav>
@@ -173,26 +180,29 @@ fn FileTree() -> impl IntoView {
 
 /// Editor component with CodeMirror
 #[component]
-fn Editor(doc_id: impl Fn() -> String + 'static) -> impl IntoView {
-    let (content, set_content) = create_signal(String::new());
-    let (saving, set_saving) = create_signal(false);
+fn Editor(doc_id: Signal<String>) -> impl IntoView {
+    let (content, set_content) = signal(String::new());
+    let (saving, set_saving) = signal(false);
+    let editor_ref = NodeRef::<Div>::new();
 
-    // Initialize CodeMirror on mount
-    on_mount(move || {
-        // CodeMirror initialization would go here
-        // Using web_sys to create editor instance
+    // Initialize CodeMirror once the editor pane is mounted.
+    // CodeMirror 6 integration via wasm-bindgen will hook in here.
+    Effect::new(move |_| {
+        if editor_ref.get().is_some() {
+            tracing::debug!("editor pane mounted for {}", doc_id.get());
+        }
     });
 
     let save = move |_| {
-        set_saving(true);
+        set_saving.set(true);
         // Save logic
-        set_saving(false);
+        set_saving.set(false);
     };
 
     view! {
         <div class="editor-container">
             <div class="editor-toolbar">
-                <button class="btn" on:click=save disabled=saving>
+                <button class="btn" on:click=save disabled=move || saving.get()>
                     {move || if saving.get() { "Saving..." } else { "Save" }}
                 </button>
                 <button class="btn">"AI Generate"</button>
@@ -203,9 +213,9 @@ fn Editor(doc_id: impl Fn() -> String + 'static) -> impl IntoView {
                     <option value="txt">"Plain Text"</option>
                 </select>
             </div>
-            <div class="editor-pane" id="editor"></div>
+            <div class="editor-pane" id="editor" node_ref=editor_ref></div>
             <div class="preview-pane">
-                <Preview content=content/>
+                <Preview content=content set_content=set_content/>
             </div>
         </div>
     }
@@ -213,9 +223,9 @@ fn Editor(doc_id: impl Fn() -> String + 'static) -> impl IntoView {
 
 /// Reader component
 #[component]
-fn Reader(doc_id: impl Fn() -> String + 'static) -> impl IntoView {
+fn Reader(doc_id: Signal<String>) -> impl IntoView {
     view! {
-        <div class="reader-container">
+        <div class="reader-container" data-doc-id=move || doc_id.get()>
             <div class="reader-toolbar">
                 <button class="btn">"◀"</button>
                 <button class="btn">"▶"</button>
@@ -238,7 +248,8 @@ fn Reader(doc_id: impl Fn() -> String + 'static) -> impl IntoView {
 
 /// Preview component for Markdown
 #[component]
-fn Preview(content: ReadSignal<String>) -> impl IntoView {
+fn Preview(content: ReadSignal<String>, set_content: WriteSignal<String>) -> impl IntoView {
+    let _ = set_content;
     view! {
         <div class="preview" inner_html=move || {
             // Would use comrak or pulldown-cmark to render
@@ -255,7 +266,7 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"AI Settings"</h3>
                 <label>
-                    <input type="checkbox" /> "Enable AI Features"
+                    <input type="checkbox"/> "Enable AI Features"
                 </label>
                 <label>
                     "Provider: "
@@ -266,36 +277,36 @@ fn SettingsForm() -> impl IntoView {
                 </label>
                 <label>
                     "Model: "
-                    <input type="text" placeholder="gpt-4o-mini" />
+                    <input type="text" placeholder="gpt-4o-mini"/>
                 </label>
                 <label>
                     "API Key: "
-                    <input type="password" placeholder="sk-..." />
+                    <input type="password" placeholder="sk-..."/>
                 </label>
             </section>
             <section>
                 <h3>"Editor Settings"</h3>
                 <label>
                     "Font Size: "
-                    <input type="number" value="14" min="10" max="24" />
+                    <input type="number" value="14" min="10" max="24"/>
                 </label>
                 <label>
-                    <input type="checkbox" /> "Line Numbers"
+                    <input type="checkbox"/> "Line Numbers"
                 </label>
                 <label>
-                    <input type="checkbox" /> "Word Wrap"
+                    <input type="checkbox"/> "Word Wrap"
                 </label>
                 <label>
-                    <input type="checkbox" /> "Vim Mode"
+                    <input type="checkbox"/> "Vim Mode"
                 </label>
             </section>
             <section>
                 <h3>"Lint Settings"</h3>
                 <label>
-                    <input type="checkbox" /> "Enable Linting"
+                    <input type="checkbox"/> "Enable Linting"
                 </label>
                 <label>
-                    <input type="checkbox" /> "Auto-fix on Save"
+                    <input type="checkbox"/> "Auto-fix on Save"
                 </label>
             </section>
             <button type="submit" class="btn btn-primary">"Save Settings"</button>

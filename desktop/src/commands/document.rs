@@ -1,10 +1,21 @@
 //! Document management commands.
 
-use tauri::{command, State, AppHandle};
-use openrustbooks_core::{CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat, DocumentMetadata, DocumentContent}};
 use crate::state::AppState;
-use std::sync::Arc;
+use openrustbooks_core::{
+    CoreError,
+    document::{
+        Document, DocumentContent, DocumentFormat, DocumentId, DocumentMetadata,
+        extract_front_matter,
+    },
+};
 use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State, command};
+
+/// Convert CoreError to String for Tauri commands
+fn map_err(e: CoreError) -> String {
+    e.to_string()
+}
 
 /// Open a document from path
 #[command]
@@ -12,24 +23,28 @@ pub async fn open_document(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
     path: String,
-) -> CoreResult<Document> {
+) -> Result<Document, String> {
     let path_buf = PathBuf::from(&path);
 
     // Read file content
-    let content = tokio::fs::read_to_string(&path_buf).await
-        .map_err(|e| CoreError::Io(e))?;
+    let content = tokio::fs::read_to_string(&path_buf)
+        .await
+        .map_err(|e| CoreError::Io(e).to_string())?;
 
     // Detect format
-    let format = DocumentFormat::from_extension(
-        path_buf.extension().and_then(|s| s.to_str()).unwrap_or("")
-    ).unwrap_or(DocumentFormat::Txt);
+    let format =
+        DocumentFormat::from_extension(path_buf.extension().and_then(|s| s.to_str()).unwrap_or(""))
+            .unwrap_or(DocumentFormat::Txt);
 
     // Create document
     let id = DocumentId::from_string(path.clone());
     let metadata = DocumentMetadata {
         id: id.clone(),
         format,
-        title: path_buf.file_stem().and_then(|s| s.to_str()).map(String::from),
+        title: path_buf
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(String::from),
         author: None,
         created_at: None,
         modified_at: None,
@@ -44,8 +59,11 @@ pub async fn open_document(
         metadata,
         content: match format {
             DocumentFormat::Markdown => {
-                let (fm, body) = crate::document::extract_front_matter(&content);
-                DocumentContent::Markdown { content: body, front_matter: fm }
+                let (fm, body) = extract_front_matter(&content);
+                DocumentContent::Markdown {
+                    content: body,
+                    front_matter: fm,
+                }
             }
             _ => DocumentContent::Text(content),
         },
@@ -67,10 +85,11 @@ pub async fn save_document(
     app: AppHandle,
     id: String,
     content: Option<String>,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let doc_id = DocumentId::from_string(id);
-    let mut document = state.get_document(&doc_id)
-        .ok_or_else(|| CoreError::document_not_found(&doc_id.0))?;
+    let mut document = state
+        .get_document(&doc_id)
+        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
 
     // Update content if provided
     if let Some(new_content) = content {
@@ -81,11 +100,13 @@ pub async fn save_document(
 
     // Write to file if path exists
     if let Some(path) = &document.metadata.path {
-        let text = document.as_text()
-            .ok_or_else(|| CoreError::validation("Document is not text-editable"))?;
+        let text = document
+            .as_text()
+            .ok_or_else(|| CoreError::validation("Document is not text-editable").to_string())?;
 
-        tokio::fs::write(path, text).await
-            .map_err(|e| CoreError::Io(e))?;
+        tokio::fs::write(path, text)
+            .await
+            .map_err(|e| CoreError::Io(e).to_string())?;
 
         // Update metadata
         document.metadata.size_bytes = text.len() as u64;
@@ -107,12 +128,12 @@ pub async fn close_document(
     app: AppHandle,
     id: String,
     force: Option<bool>,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let doc_id = DocumentId::from_string(id);
 
     // Check for unsaved changes
     if !force.unwrap_or(false) && state.is_unsaved(&doc_id) {
-        return Err(CoreError::validation("Document has unsaved changes"));
+        return Err(CoreError::validation("Document has unsaved changes").to_string());
     }
 
     let document = state.remove_document(&doc_id);
@@ -131,14 +152,16 @@ pub fn list_documents(state: State<'_, Arc<AppState>>) -> Vec<Document> {
 
 /// Get document content
 #[command]
-pub fn get_document_content(state: State<'_, Arc<AppState>>, id: String) -> CoreResult<String> {
+pub fn get_document_content(state: State<'_, Arc<AppState>>, id: String) -> Result<String, String> {
     let doc_id = DocumentId::from_string(id);
-    let document = state.get_document(&doc_id)
-        .ok_or_else(|| CoreError::document_not_found(&doc_id.0))?;
+    let document = state
+        .get_document(&doc_id)
+        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
 
-    document.as_text()
+    document
+        .as_text()
         .map(String::from)
-        .ok_or_else(|| CoreError::validation("Document is not text-editable"))
+        .ok_or_else(|| CoreError::validation("Document is not text-editable").to_string())
 }
 
 /// Set document content
@@ -148,10 +171,11 @@ pub fn set_document_content(
     app: AppHandle,
     id: String,
     content: String,
-) -> CoreResult<()> {
+) -> Result<(), String> {
     let doc_id = DocumentId::from_string(id);
-    let mut document = state.get_document(&doc_id)
-        .ok_or_else(|| CoreError::document_not_found(&doc_id.0))?;
+    let mut document = state
+        .get_document(&doc_id)
+        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
 
     if let Some(text) = document.as_text_mut() {
         *text = content;
@@ -160,6 +184,6 @@ pub fn set_document_content(
         let _ = app.emit("document-changed", &document);
         Ok(())
     } else {
-        Err(CoreError::validation("Document is not text-editable"))
+        Err(CoreError::validation("Document is not text-editable").to_string())
     }
 }

@@ -1,9 +1,10 @@
 //! openrustbooks-desktop: Tauri desktop application entry point.
 
-use openrustbooks_core::{init, AppConfig, CoreResult};
-use tauri::{Manager, Runtime, WindowEvent};
-use tauri_plugin_log::{Target, TargetKind};
+use log;
+use openrustbooks_core::{AppConfig, init};
 use std::sync::Arc;
+use tauri::{Emitter, Manager, WindowEvent};
+use tauri_plugin_log::{Target, TargetKind};
 
 mod commands;
 mod state;
@@ -13,29 +14,62 @@ use commands::*;
 use state::AppState;
 use window::setup_window;
 
-/// Application entry point
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    init();
-
+/// Build the Tauri application with platform-specific plugins
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn build_app() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::new()
-            .targets([
-                Target::new(TargetKind::Stdout),
-                Target::new(TargetKind::LogDir { file_name: Some("openrustbooks".to_string()) }),
-                Target::new(TargetKind::Webview),
-            ])
-            .level(log::LevelFilter::Info)
-            .build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("openrustbooks".to_string()),
+                    }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_clipboard::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+/// Build the Tauri application for mobile platforms (without global shortcut)
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn build_app() -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("openrustbooks".to_string()),
+                    }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+/// Application entry point
+pub fn run() {
+    init();
+
+    build_app()
         .setup(|app| {
             // Load configuration
             let config = AppConfig::load().unwrap_or_default();
@@ -49,11 +83,11 @@ pub fn run() {
             setup_window(&window)?;
 
             // Initialize AI service if enabled
-            #[cfg(feature = "ai")]
-            {
-                let state = app.state::<Arc<AppState>>();
+            let state = app.state::<Arc<AppState>>();
+            if state.is_ai_enabled() {
+                let state_clone = state.inner().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = state.init_ai_service().await {
+                    if let Err(e) = state_clone.init_ai_service().await {
                         log::error!("Failed to initialize AI service: {}", e);
                     }
                 });
@@ -86,10 +120,9 @@ pub fn run() {
             commands::config::get_config,
             commands::config::update_config,
             // Window commands
-            commands::window::minimize_window,
-            commands::window::maximize_window,
             commands::window::close_window,
             commands::window::set_title,
+            commands::window::get_window_state,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

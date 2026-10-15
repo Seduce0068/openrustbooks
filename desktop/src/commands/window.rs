@@ -1,22 +1,6 @@
 //! Window management commands.
 
-use tauri::{command, Manager, WebviewWindow};
-
-/// Minimize window
-#[command]
-pub fn minimize_window(window: WebviewWindow) -> Result<(), String> {
-    window.minimize().map_err(|e| e.to_string())
-}
-
-/// Maximize window
-#[command]
-pub fn maximize_window(window: WebviewWindow) -> Result<(), String> {
-    if window.is_maximized().unwrap_or(false) {
-        window.unmaximize().map_err(|e| e.to_string())
-    } else {
-        window.maximize().map_err(|e| e.to_string())
-    }
-}
+use tauri::{WebviewWindow, command};
 
 /// Close window
 #[command]
@@ -28,15 +12,6 @@ pub fn close_window(window: WebviewWindow) -> Result<(), String> {
 #[command]
 pub fn set_title(window: WebviewWindow, title: String) -> Result<(), String> {
     window.set_title(&title).map_err(|e| e.to_string())
-}
-
-/// Toggle fullscreen
-#[command]
-pub fn toggle_fullscreen(window: WebviewWindow) -> Result<(), String> {
-    let is_fullscreen = window.is_fullscreen().unwrap_or(false);
-    window
-        .set_fullscreen(!is_fullscreen)
-        .map_err(|e| e.to_string())
 }
 
 /// Get window state

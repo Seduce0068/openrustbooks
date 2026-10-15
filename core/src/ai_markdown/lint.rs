@@ -1,7 +1,12 @@
 //! Markdown linting using rumdl (Rust markdownlint compatible).
 
-use crate::{CoreResult, CoreError, config::LintConfig};
-use rumdl_lib::{rule::Rule, lint, config::MarkdownFlavor, rule::{LintWarning, LintError, Severity, Fix}};
+use crate::{CoreError, CoreResult, config::LintConfig};
+use rumdl_lib::{
+    config::{Config, MarkdownFlavor},
+    lint,
+    rule::Rule,
+    rule::{LintError, LintWarning, Severity},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -29,7 +34,7 @@ pub enum LintSeverity {
 }
 
 /// Lint result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LintResultWrapper {
     pub passed: bool,
     pub issues: Vec<LintIssue>,
@@ -48,8 +53,9 @@ impl MarkdownLinter {
     pub fn new(config: &LintConfig) -> CoreResult<Self> {
         let mut rules: Vec<Box<dyn Rule>> = Vec::new();
 
-        // Load all built-in rules
-        let all_rules = rumdl_lib::rules::all_rules();
+        // Load all built-in rules - need a default config
+        let rumdl_config = Config::default();
+        let all_rules = rumdl_lib::rules::all_rules(&rumdl_config);
 
         // Filter rules based on config
         for rule in all_rules {
@@ -57,26 +63,38 @@ impl MarkdownLinter {
             let rule_id = rule_id_from_name(&rule_name);
 
             // Check if rule is explicitly disabled
-            if config.disable_rules.iter().any(|r| r == &rule_id || r == &rule_name) {
+            if config
+                .disable_rules
+                .iter()
+                .any(|r| r == &rule_id || r == &rule_name)
+            {
                 continue;
             }
 
             // Check if rule is explicitly enabled (if enable_rules is not empty)
-            if !config.enable_rules.is_empty() &&
-               !config.enable_rules.iter().any(|r| r == &rule_id || r == &rule_name) {
+            if !config.enable_rules.is_empty()
+                && !config
+                    .enable_rules
+                    .iter()
+                    .any(|r| r == &rule_id || r == &rule_name)
+            {
                 continue;
             }
 
             rules.push(rule);
         }
 
-        Ok(Self { rules, config: config.clone() })
+        Ok(Self {
+            rules,
+            config: config.clone(),
+        })
     }
 
     /// Lint markdown content and return issues
     pub fn lint(&self, content: &str) -> CoreResult<Vec<LintIssue>> {
         let flavor = MarkdownFlavor::Standard;
-        let result: Result<Vec<LintWarning>, LintError> = lint(content, &self.rules, false, flavor, None, None);
+        let result: Result<Vec<LintWarning>, LintError> =
+            lint(content, &self.rules, false, flavor, None, None);
 
         let warnings = result.map_err(|e| CoreError::lint(format!("Lint error: {:?}", e)))?;
 
@@ -119,17 +137,23 @@ impl MarkdownLinter {
 
     /// Get all available rule names
     pub fn available_rules(&self) -> Vec<String> {
-        self.rules.iter().map(|r| rule_id_from_name(&r.name())).collect()
+        self.rules
+            .iter()
+            .map(|r| rule_id_from_name(&r.name()))
+            .collect()
     }
 
     /// Get rule metadata
     pub fn rule_metadata(&self) -> Vec<RuleMetadata> {
-        self.rules.iter().map(|r| RuleMetadata {
-            id: rule_id_from_name(&r.name()),
-            name: r.name().to_string(),
-            description: r.description().to_string(),
-            fixable: r.is_fixable(),
-        }).collect()
+        self.rules
+            .iter()
+            .map(|r| RuleMetadata {
+                id: rule_id_from_name(&r.name()),
+                name: r.name().to_string(),
+                description: r.description().to_string(),
+                fixable: false, // rumdl Rule trait doesn't expose is_fixable directly
+            })
+            .collect()
     }
 }
 
@@ -145,24 +169,24 @@ pub struct RuleMetadata {
 /// Convert rule name to rule ID (e.g., "heading-style" -> "MD003")
 fn rule_id_from_name(name: &str) -> String {
     match name {
-        "heading-style" => "MD003",
-        "heading-increment" => "MD001",
-        "first-heading-h1" => "MD002",
-        "ul-style" => "MD004",
-        "ol-prefix" => "MD005",
-        "list-indent" => "MD007",
-        "no-hard-tabs" => "MD010",
-        "no-multiple-blanks" => "MD012",
-        "line-length" => "MD013",
-        "no-trailing-spaces" => "MD009",
-        "no-multiple-space-atx" => "MD019",
-        "no-multiple-space-closed-atx" => "MD020",
-        "no-missing-space-atx" => "MD018",
-        "no-missing-space-closed-atx" => "MD021",
-        "fenced-code-language" => "MD040",
-        "no-duplicate-heading" => "MD024",
-        "no-empty-links" => "MD042",
-        "no-bare-urls" => "MD034",
+        "heading-style" => "MD003".to_string(),
+        "heading-increment" => "MD001".to_string(),
+        "first-heading-h1" => "MD002".to_string(),
+        "ul-style" => "MD004".to_string(),
+        "ol-prefix" => "MD005".to_string(),
+        "list-indent" => "MD007".to_string(),
+        "no-hard-tabs" => "MD010".to_string(),
+        "no-multiple-blanks" => "MD012".to_string(),
+        "line-length" => "MD013".to_string(),
+        "no-trailing-spaces" => "MD009".to_string(),
+        "no-multiple-space-atx" => "MD019".to_string(),
+        "no-multiple-space-closed-atx" => "MD020".to_string(),
+        "no-missing-space-atx" => "MD018".to_string(),
+        "no-missing-space-closed-atx" => "MD021".to_string(),
+        "fenced-code-language" => "MD040".to_string(),
+        "no-duplicate-heading" => "MD024".to_string(),
+        "no-empty-links" => "MD042".to_string(),
+        "no-bare-urls" => "MD034".to_string(),
         _ => {
             if let Some(num) = name.strip_prefix("MD") {
                 if num.parse::<u32>().is_ok() {
@@ -171,5 +195,5 @@ fn rule_id_from_name(name: &str) -> String {
             }
             name.to_uppercase()
         }
-    }.to_string()
+    }
 }

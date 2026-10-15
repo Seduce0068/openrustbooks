@@ -1,8 +1,12 @@
 //! Storage abstraction layer for multiple backends (local, Google Drive, etc.)
 
+use crate::{
+    CoreError, CoreResult,
+    document::{Document, DocumentFormat, DocumentId, DocumentMetadata, ZipEntry},
+};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use crate::{CoreResult, CoreError, document::{Document, DocumentId, DocumentFormat, DocumentMetadata, ZipEntry}};
 
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,7 +94,7 @@ pub struct WriteOptions {
 }
 
 /// Options for listing directories
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct ListOptions {
     /// Include hidden files
     pub include_hidden: bool,
@@ -133,7 +137,8 @@ pub trait StorageBackend: Send + Sync {
     async fn write(&self, path: &PathBuf, data: &[u8], options: WriteOptions) -> CoreResult<()>;
 
     /// Write text with encoding
-    async fn write_text(&self, path: &PathBuf, text: &str, options: WriteOptions) -> CoreResult<()>;
+    async fn write_text(&self, path: &PathBuf, text: &str, options: WriteOptions)
+    -> CoreResult<()>;
 
     /// Create a directory
     async fn create_dir(&self, path: &PathBuf, recursive: bool) -> CoreResult<()>;
@@ -199,15 +204,25 @@ impl StorageManager {
     }
 
     pub fn get_backend(&self, id: &str) -> Option<&dyn StorageBackend> {
-        self.backends.iter().find(|b| b.id() == id).map(|b| b.as_ref())
+        self.backends
+            .iter()
+            .find(|b| b.id() == id)
+            .map(|b| b.as_ref())
     }
 
     pub fn get_backend_mut(&mut self, id: &str) -> Option<&mut (dyn StorageBackend + '_)> {
-        self.backends.iter_mut().find(|b| b.id() == id).map(|b| b.as_mut())
+        for b in self.backends.iter_mut() {
+            if b.id() == id {
+                return Some(b.as_mut());
+            }
+        }
+        None
     }
 
     pub fn default_backend(&self) -> Option<&dyn StorageBackend> {
-        self.default_backend.as_ref().and_then(|id| self.get_backend(id))
+        self.default_backend
+            .as_ref()
+            .and_then(|id| self.get_backend(id))
     }
 
     pub fn set_default_backend(&mut self, id: &str) -> CoreResult<()> {
@@ -261,9 +276,15 @@ pub mod local {
 
     #[async_trait]
     impl StorageBackend for LocalStorage {
-        fn id(&self) -> &str { "local" }
-        fn name(&self) -> &str { "Local Filesystem" }
-        fn capabilities(&self) -> StorageCapabilities { self.capabilities.clone() }
+        fn id(&self) -> &str {
+            "local"
+        }
+        fn name(&self) -> &str {
+            "Local Filesystem"
+        }
+        fn capabilities(&self) -> StorageCapabilities {
+            self.capabilities.clone()
+        }
 
         async fn initialize(&mut self) -> CoreResult<()> {
             tokio_fs::create_dir_all(&self.root).await?;
@@ -290,9 +311,11 @@ pub mod local {
                 let is_dir = metadata.is_dir();
                 let format = if !is_dir {
                     DocumentFormat::from_extension(
-                        path.extension().and_then(|s| s.to_str()).unwrap_or("")
+                        path.extension().and_then(|s| s.to_str()).unwrap_or(""),
                     )
-                } else { None };
+                } else {
+                    None
+                };
 
                 entries.push(FileEntry {
                     name,
@@ -341,12 +364,17 @@ pub mod local {
                 let lossy = String::from_utf8_lossy(e.as_bytes()).to_string();
                 CoreError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid UTF-8, using lossy: {}", lossy)
+                    format!("Invalid UTF-8, using lossy: {}", lossy),
                 ))
             })
         }
 
-        async fn write(&self, path: &PathBuf, data: &[u8], options: WriteOptions) -> CoreResult<()> {
+        async fn write(
+            &self,
+            path: &PathBuf,
+            data: &[u8],
+            options: WriteOptions,
+        ) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
 
             if options.create_parents {
@@ -366,7 +394,12 @@ pub mod local {
             Ok(())
         }
 
-        async fn write_text(&self, path: &PathBuf, text: &str, options: WriteOptions) -> CoreResult<()> {
+        async fn write_text(
+            &self,
+            path: &PathBuf,
+            text: &str,
+            options: WriteOptions,
+        ) -> CoreResult<()> {
             self.write(path, text.as_bytes(), options).await
         }
 
@@ -416,16 +449,22 @@ pub mod local {
             let is_dir = metadata.is_dir();
 
             Ok(FileEntry {
-                name: full_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                name: full_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
                 path: path.clone(),
                 is_dir,
                 size: if is_dir { None } else { Some(metadata.len()) },
                 modified: metadata.modified().ok().map(|t| t.into()),
                 format: if !is_dir {
                     DocumentFormat::from_extension(
-                        full_path.extension().and_then(|s| s.to_str()).unwrap_or("")
+                        full_path.extension().and_then(|s| s.to_str()).unwrap_or(""),
                     )
-                } else { None },
+                } else {
+                    None
+                },
                 mime_type: None,
             })
         }
@@ -444,9 +483,13 @@ pub mod local {
             #[cfg(target_os = "macos")]
             std::process::Command::new("open").arg(&full_path).spawn()?;
             #[cfg(target_os = "windows")]
-            std::process::Command::new("explorer").arg(&full_path).spawn()?;
+            std::process::Command::new("explorer")
+                .arg(&full_path)
+                .spawn()?;
             #[cfg(target_os = "linux")]
-            std::process::Command::new("xdg-open").arg(&full_path).spawn()?;
+            std::process::Command::new("xdg-open")
+                .arg(&full_path)
+                .spawn()?;
             Ok(())
         }
 

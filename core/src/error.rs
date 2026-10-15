@@ -14,6 +14,12 @@ pub enum CoreError {
     #[error("Configuration error: {0}")]
     Config(#[from] figment::Error),
 
+    #[error("TOML deserialization error: {0}")]
+    TomlDeserialize(#[from] toml::de::Error),
+
+    #[error("TOML serialization error: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
+
     #[error("Storage error: {0}")]
     Storage(String),
 
@@ -28,6 +34,18 @@ pub enum CoreError {
 
     #[error("AI provider error: {0}")]
     AiProvider(String),
+
+    #[error("AI provider error: {0}")]
+    OpenAiError(#[from] async_openai::error::OpenAIError),
+
+    #[error("Anyhow error: {0}")]
+    Anyhow(#[from] anyhow::Error),
+
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    #[error("Tokio task join error: {0}")]
+    JoinError(#[from] tokio::task::JoinError),
 
     #[error("Lint error: {0}")]
     Lint(String),
