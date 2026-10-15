@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="openrustbooks">
+  <rect width="32" height="32" rx="6" fill="#2563eb"/>
+  <g fill="#ffffff">
+    <path d="M6 9.5c2.6-.9 5.1-.6 7.3.9v12.1c-2.2-1.5-4.7-1.8-7.3-.9z"/>
+    <path d="M26 9.5c-2.6-.9-5.1-.6-7.3.9v12.1c2.2-1.5 4.7-1.8 7.3-.9z"/>
+  </g>
+  <path d="M15.6 10.4h.8v12.1h-.8z" fill="#2563eb"/>
+</svg>

@@ -7,6 +7,7 @@ Rustを活用する、ブラウザでも使えるリーダー兼テキストエ�
 ```
 openrustbooks/
 ├── Cargo.toml                    # ワークスペース設定
+├── Cargo.lock                    # アプリケーションのため追跡する
 ├── README.md                     # プロジェクト概要
 ├── LICENSE                       # MIT License
 ├── docs/
@@ -14,40 +15,42 @@ openrustbooks/
 │   ├── architecture.md           # アーキテクチャ設計
 │   └── decisions/                # ADR (Architecture Decision Records)
 │       ├── 0001-use-system-webview.md
-│       └── 0002-ai-markdown-pipeline.md
-├── crates/
-│   ├── core/                     # 共通コアライブラリ (native + wasm)
-│   │   ├── src/
-│   │   │   ├── lib.rs
-│   │   │   ├── error.rs
-│   │   │   ├── document.rs       # ドキュメントモデル
-│   │   │   ├── io.rs             # ストレージ抽象化
-│   │   │   ├── config.rs         # 設定管理
-│   │   │   ├── ai_markdown/      # AI Markdownパイプライン
-│   │   │   │   ├── mod.rs
-│   │   │   │   ├── client.rs     # AIプロバイダ抽象化
-│   │   │   │   ├── lint.rs       # rumdlによるlint
-│   │   │   │   ├── prompt.rs     # プロンプトテンプレート
-│   │   │   │   ├── diff.rs       # 差分計算
-│   │   │   │   └── pipeline.rs   # 高レベルサービス
-│   │   │   └── wasm.rs           # Wasmバインディング
-│   │   ├── prompts/              # プロンプトテンプレート
-│   │   └── Cargo.toml
-│   ├── desktop/                  # Tauriデスクトップアプリ
-│   │   ├── src/
-│   │   │   ├── main.rs
-│   │   │   ├── state/            # アプリケーション状態
-│   │   │   ├── window/           # ウィンドウ管理
-│   │   │   └── commands/         # Tauriコマンド
-│   │   ├── src-tauri/
-│   │   │   └── tauri.conf.json
-│   │   └── Cargo.toml
-│   └── web/                      # Wasmウェブアプリ (Leptos)
-│       ├── src/
-│       │   └── lib.rs
-│       ├── static/
-│       │   └── index.html
-│       └── Cargo.toml
+│       ├── 0002-ai-markdown-pipeline.md
+│       └── 0003-native-wasm-target-split.md
+├── core/                         # 共通コアライブラリ (native + wasm)
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── error.rs
+│   │   ├── document.rs           # ドキュメントモデル
+│   │   ├── io.rs                 # ストレージ抽象化 (local はネイティブ専用)
+│   │   ├── config.rs             # 設定管理
+│   │   ├── ai_markdown/          # AI Markdownパイプライン
+│   │   │   ├── mod.rs
+│   │   │   ├── client.rs         # AIプロバイダ抽象化 (ネイティブ専用)
+│   │   │   ├── lint.rs           # rumdlによるlint (native + wasm)
+│   │   │   ├── prompt.rs         # プロンプトテンプレート
+│   │   │   ├── diff.rs           # 差分計算
+│   │   │   └── pipeline.rs       # 高レベルサービス (ネイティブ専用)
+│   │   └── wasm.rs               # Wasmバインディング
+│   ├── prompts/                  # プロンプトテンプレート
+│   └── Cargo.toml
+├── desktop/                      # Tauriデスクトップアプリ
+│   ├── src/
+│   │   ├── main.rs
+│   │   ├── build.rs              # tauri-build
+│   │   ├── state/                # アプリケーション状態
+│   │   ├── window/               # ウィンドウ管理
+│   │   └── commands/             # Tauriコマンド
+│   ├── tauri.conf.json           # tauri-build がクレート直下を参照する
+│   ├── icons/
+│   └── Cargo.toml
+└── web/                          # Wasmウェブアプリ (Leptos)
+    ├── src/
+    │   └── lib.rs
+    ├── index.html                # Trunk エントリポイント
+    ├── Trunk.toml
+    ├── favicon.svg
+    └── Cargo.toml
 ```
 
 ## 技術スタック
@@ -75,24 +78,33 @@ openrustbooks/
 
 ### 前提条件
 
-- Rust 1.80+ (2024 edition)
-- Node.js 20+ (フロントエンド開発用)
-- Tauri CLI: `cargo install tauri-cli`
+- Rust 1.85+ (2024 edition)
+- Trunk (`cargo install trunk`, または各ディストリビューションのパッケージ)
+- `wasm32-unknown-unknown` ターゲット (`rustup target add wasm32-unknown-unknown`)
+- `wasm-bindgen` CLI (Trunk は通常自動取得する。取得できない環境では
+  `cargo install wasm-bindgen-cli --version <Cargo.lock の wasm-bindgen と同一>`)
+- Tauri CLI: `cargo install tauri-cli` (デスクトップアプリ開発時)
 
 ### ビルド
 
 ```bash
-# ワークスペース全体
-cargo build --workspace
+# ワークスペース全体 (ネイティブ)
+cargo check --workspace
+cargo test --workspace
 
-# デスクトップアプリ開発
-cd crates/desktop
+# ブラウザ版 (Trunk が Wasm をビルドし web/dist に出力する)
+cd web
+trunk build          # 本番ビルドは trunk build --release
+trunk serve --port 1420
+
+# デスクトップアプリ開発 (beforeDevCommand が trunk serve を起動する)
+cd desktop
 cargo tauri dev
-
-# Webアプリ開発 (wasm-pack)
-cd crates/web
-wasm-pack build --target web --out-dir ../desktop/static/pkg
 ```
+
+### 対応ターゲット
+
+共通コアはネイティブと `wasm32-unknown-unknown` の両方でビルドできる。ネイティブ専用の依存と機能は ADR-0003 に従ってターゲット別に分離されている。
 
 ## ドキュメント
 
@@ -100,6 +112,7 @@ wasm-pack build --target web --out-dir ../desktop/static/pkg
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
 - [ADR-0001: OS WebView採用](docs/decisions/0001-use-system-webview.md)
 - [ADR-0002: AI Markdownパイプライン](docs/decisions/0002-ai-markdown-pipeline.md)
+- [ADR-0003: Native/Wasm ターゲット分離](docs/decisions/0003-native-wasm-target-split.md)
 
 ## ライセンス
 

@@ -50,8 +50,10 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 rumdl = { version = "0.2", default-features = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# Browser builds lint in-process: no tokio, no rayon, no file watching.
-rumdl = { version = "0.2", default-features = false, features = ["wasm"] }
+# Lint in-process. Featureless on purpose: `native` pulls tower-lsp/tokio/notify
+# and `wasm` would export rumdl's own `#[wasm_bindgen(start)] init`, which
+# collides with the core's wasm-bindgen surface.
+rumdl = { version = "0.2", default-features = false }
 wasm-bindgen = "0.2"
 # Required by `#[wasm_bindgen]` on async functions.
 wasm-bindgen-futures = "0.4"

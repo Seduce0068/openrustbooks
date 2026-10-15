@@ -1,0 +1,13 @@
+[build]
+# Trunk entry point; the Rust app is declared with a `data-trunk` link there.
+target = "index.html"
+dist = "dist"
+
+[serve]
+addresses = ["127.0.0.1"]
+# Matches `build.devUrl` in desktop/tauri.conf.json.
+port = 1420
+
+[watch]
+# Rebuild when the shared core changes, not just the web crate.
+watch = ["src", "index.html", "../core/src", "../core/Cargo.toml"]
