@@ -36,3 +36,6 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# opencode goal loop（ローカル検証ツール。ログと agent 定義を追跡しない）
+.opencode/
