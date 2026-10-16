@@ -58,13 +58,13 @@ impl MarkdownLinter {
         // Filter rules based on config
         for rule in all_rules {
             let rule_name = rule.name();
-            let rule_id = rule_id_from_name(&rule_name);
+            let rule_id = rule_id_from_name(rule_name);
 
             // Check if rule is explicitly disabled
             if config
                 .disable_rules
                 .iter()
-                .any(|r| r == &rule_id || r == &rule_name)
+                .any(|r| r == &rule_id || r == rule_name)
             {
                 continue;
             }
@@ -74,7 +74,7 @@ impl MarkdownLinter {
                 && !config
                     .enable_rules
                     .iter()
-                    .any(|r| r == &rule_id || r == &rule_name)
+                    .any(|r| r == &rule_id || r == rule_name)
             {
                 continue;
             }
@@ -134,7 +134,7 @@ impl MarkdownLinter {
     pub fn available_rules(&self) -> Vec<String> {
         self.rules
             .iter()
-            .map(|r| rule_id_from_name(&r.name()))
+            .map(|r| rule_id_from_name(r.name()))
             .collect()
     }
 
@@ -143,7 +143,7 @@ impl MarkdownLinter {
         self.rules
             .iter()
             .map(|r| RuleMetadata {
-                id: rule_id_from_name(&r.name()),
+                id: rule_id_from_name(r.name()),
                 name: r.name().to_string(),
                 description: r.description().to_string(),
                 fixable: false, // rumdl Rule trait doesn't expose is_fixable directly
@@ -183,10 +183,10 @@ fn rule_id_from_name(name: &str) -> String {
         "no-empty-links" => "MD042".to_string(),
         "no-bare-urls" => "MD034".to_string(),
         _ => {
-            if let Some(num) = name.strip_prefix("MD") {
-                if num.parse::<u32>().is_ok() {
-                    return name.to_string();
-                }
+            if let Some(num) = name.strip_prefix("MD")
+                && num.parse::<u32>().is_ok()
+            {
+                return name.to_string();
             }
             name.to_uppercase()
         }

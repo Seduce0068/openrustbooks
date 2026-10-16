@@ -87,10 +87,10 @@ pub async fn save_document(
         .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
 
     // Update content if provided
-    if let Some(new_content) = content {
-        if let Some(text) = document.as_text_mut() {
-            *text = new_content;
-        }
+    if let Some(new_content) = content
+        && let Some(text) = document.as_text_mut()
+    {
+        *text = new_content;
     }
 
     // Write to file if path exists

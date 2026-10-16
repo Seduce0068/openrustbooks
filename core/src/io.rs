@@ -3,7 +3,7 @@
 use crate::{CoreError, CoreResult, document::DocumentFormat};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,44 +122,43 @@ pub trait StorageBackend: Send + Sync {
     async fn health_check(&self) -> CoreResult<bool>;
 
     /// List directory contents
-    async fn list(&self, path: &PathBuf, options: ListOptions) -> CoreResult<Vec<FileEntry>>;
+    async fn list(&self, path: &Path, options: ListOptions) -> CoreResult<Vec<FileEntry>>;
 
     /// Read a file
-    async fn read(&self, path: &PathBuf, options: ReadOptions) -> CoreResult<Vec<u8>>;
+    async fn read(&self, path: &Path, options: ReadOptions) -> CoreResult<Vec<u8>>;
 
     /// Read a file as text with encoding detection
-    async fn read_text(&self, path: &PathBuf, options: ReadOptions) -> CoreResult<String>;
+    async fn read_text(&self, path: &Path, options: ReadOptions) -> CoreResult<String>;
 
     /// Write a file
-    async fn write(&self, path: &PathBuf, data: &[u8], options: WriteOptions) -> CoreResult<()>;
+    async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()>;
 
     /// Write text with encoding
-    async fn write_text(&self, path: &PathBuf, text: &str, options: WriteOptions)
-    -> CoreResult<()>;
+    async fn write_text(&self, path: &Path, text: &str, options: WriteOptions) -> CoreResult<()>;
 
     /// Create a directory
-    async fn create_dir(&self, path: &PathBuf, recursive: bool) -> CoreResult<()>;
+    async fn create_dir(&self, path: &Path, recursive: bool) -> CoreResult<()>;
 
     /// Delete a file or directory
-    async fn delete(&self, path: &PathBuf, recursive: bool) -> CoreResult<()>;
+    async fn delete(&self, path: &Path, recursive: bool) -> CoreResult<()>;
 
     /// Move/rename a file or directory
-    async fn move_item(&self, from: &PathBuf, to: &PathBuf, overwrite: bool) -> CoreResult<()>;
+    async fn move_item(&self, from: &Path, to: &Path, overwrite: bool) -> CoreResult<()>;
 
     /// Get file metadata
-    async fn metadata(&self, path: &PathBuf) -> CoreResult<FileEntry>;
+    async fn metadata(&self, path: &Path) -> CoreResult<FileEntry>;
 
     /// Check if path exists
-    async fn exists(&self, path: &PathBuf) -> CoreResult<bool>;
+    async fn exists(&self, path: &Path) -> CoreResult<bool>;
 
     /// Get available space (if applicable)
     async fn available_space(&self) -> CoreResult<Option<u64>>;
 
     /// Open the path in system file manager (if local)
-    async fn open_in_system(&self, path: &PathBuf) -> CoreResult<()>;
+    async fn open_in_system(&self, path: &Path) -> CoreResult<()>;
 
     /// Watch for changes (returns a stream of events)
-    async fn watch(&self, path: &PathBuf) -> CoreResult<Box<dyn StorageWatchStream>>;
+    async fn watch(&self, path: &Path) -> CoreResult<Box<dyn StorageWatchStream>>;
 }
 
 /// Stream of storage watch events
@@ -258,15 +257,17 @@ pub mod local {
 
     impl LocalStorage {
         pub fn new(root: PathBuf) -> Self {
-            let mut capabilities = StorageCapabilities::default();
-            capabilities.is_local = true;
-            capabilities.can_watch = true;
+            let capabilities = StorageCapabilities {
+                is_local: true,
+                can_watch: true,
+                ..Default::default()
+            };
             Self { root, capabilities }
         }
 
-        fn resolve_path(&self, path: &PathBuf) -> PathBuf {
+        fn resolve_path(&self, path: &Path) -> PathBuf {
             if path.is_absolute() {
-                path.clone()
+                path.to_path_buf()
             } else {
                 self.root.join(path)
             }
@@ -294,7 +295,7 @@ pub mod local {
             Ok(self.root.exists())
         }
 
-        async fn list(&self, path: &PathBuf, options: ListOptions) -> CoreResult<Vec<FileEntry>> {
+        async fn list(&self, path: &Path, options: ListOptions) -> CoreResult<Vec<FileEntry>> {
             let full_path = self.resolve_path(path);
             let mut entries = Vec::new();
 
@@ -334,7 +335,7 @@ pub mod local {
             Ok(entries)
         }
 
-        async fn read(&self, path: &PathBuf, options: ReadOptions) -> CoreResult<Vec<u8>> {
+        async fn read(&self, path: &Path, options: ReadOptions) -> CoreResult<Vec<u8>> {
             let full_path = self.resolve_path(path);
             let mut file = tokio_fs::File::open(&full_path).await?;
 
@@ -356,7 +357,7 @@ pub mod local {
             Ok(data)
         }
 
-        async fn read_text(&self, path: &PathBuf, options: ReadOptions) -> CoreResult<String> {
+        async fn read_text(&self, path: &Path, options: ReadOptions) -> CoreResult<String> {
             let bytes = self.read(path, options).await?;
             // Try UTF-8 first, then fall back to lossy conversion
             String::from_utf8(bytes).map_err(|e| {
@@ -368,18 +369,13 @@ pub mod local {
             })
         }
 
-        async fn write(
-            &self,
-            path: &PathBuf,
-            data: &[u8],
-            options: WriteOptions,
-        ) -> CoreResult<()> {
+        async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
 
-            if options.create_parents {
-                if let Some(parent) = full_path.parent() {
-                    tokio_fs::create_dir_all(parent).await?;
-                }
+            if options.create_parents
+                && let Some(parent) = full_path.parent()
+            {
+                tokio_fs::create_dir_all(parent).await?;
             }
 
             if options.atomic {
@@ -395,14 +391,14 @@ pub mod local {
 
         async fn write_text(
             &self,
-            path: &PathBuf,
+            path: &Path,
             text: &str,
             options: WriteOptions,
         ) -> CoreResult<()> {
             self.write(path, text.as_bytes(), options).await
         }
 
-        async fn create_dir(&self, path: &PathBuf, recursive: bool) -> CoreResult<()> {
+        async fn create_dir(&self, path: &Path, recursive: bool) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
             if recursive {
                 tokio_fs::create_dir_all(&full_path).await?;
@@ -412,7 +408,7 @@ pub mod local {
             Ok(())
         }
 
-        async fn delete(&self, path: &PathBuf, recursive: bool) -> CoreResult<()> {
+        async fn delete(&self, path: &Path, recursive: bool) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
             if recursive {
                 tokio_fs::remove_dir_all(&full_path).await?;
@@ -422,7 +418,7 @@ pub mod local {
             Ok(())
         }
 
-        async fn move_item(&self, from: &PathBuf, to: &PathBuf, overwrite: bool) -> CoreResult<()> {
+        async fn move_item(&self, from: &Path, to: &Path, overwrite: bool) -> CoreResult<()> {
             let full_from = self.resolve_path(from);
             let full_to = self.resolve_path(to);
 
@@ -442,7 +438,7 @@ pub mod local {
             Ok(())
         }
 
-        async fn metadata(&self, path: &PathBuf) -> CoreResult<FileEntry> {
+        async fn metadata(&self, path: &Path) -> CoreResult<FileEntry> {
             let full_path = self.resolve_path(path);
             let metadata = tokio_fs::metadata(&full_path).await?;
             let is_dir = metadata.is_dir();
@@ -453,7 +449,7 @@ pub mod local {
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string(),
-                path: path.clone(),
+                path: path.to_path_buf(),
                 is_dir,
                 size: if is_dir { None } else { Some(metadata.len()) },
                 modified: metadata.modified().ok().map(|t| t.into()),
@@ -468,7 +464,7 @@ pub mod local {
             })
         }
 
-        async fn exists(&self, path: &PathBuf) -> CoreResult<bool> {
+        async fn exists(&self, path: &Path) -> CoreResult<bool> {
             Ok(self.resolve_path(path).exists())
         }
 
@@ -477,7 +473,7 @@ pub mod local {
             Ok(None)
         }
 
-        async fn open_in_system(&self, path: &PathBuf) -> CoreResult<()> {
+        async fn open_in_system(&self, path: &Path) -> CoreResult<()> {
             let full_path = self.resolve_path(path);
 
             // `cfg!` rather than `#[cfg]` so every platform compiles the same
@@ -500,7 +496,7 @@ pub mod local {
             Ok(())
         }
 
-        async fn watch(&self, _path: &PathBuf) -> CoreResult<Box<dyn StorageWatchStream>> {
+        async fn watch(&self, _path: &Path) -> CoreResult<Box<dyn StorageWatchStream>> {
             // Would use notify crate for real implementation
             Err(CoreError::storage("Watch not implemented yet"))
         }

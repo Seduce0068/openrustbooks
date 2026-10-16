@@ -303,7 +303,7 @@ impl AiClient for OllamaClient {
 
         let response = self
             .client
-            .post(&format!("{}/api/generate", self.base_url))
+            .post(format!("{}/api/generate", self.base_url))
             .json(&request)
             .send()
             .await
@@ -342,7 +342,7 @@ impl AiClient for OllamaClient {
 
         let response = self
             .client
-            .post(&format!("{}/api/generate", self.base_url))
+            .post(format!("{}/api/generate", self.base_url))
             .json(&request)
             .send()
             .await

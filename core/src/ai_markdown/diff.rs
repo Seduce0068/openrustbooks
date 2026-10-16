@@ -308,9 +308,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
                 }
                 DiffTagWrapper::Insert => {
                     new_line += 1;
-                    left.push_str(&format!(
-                        "<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n"
-                    ));
+                    left.push_str("<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n");
                     right.push_str(&format!(
                         "<div class=\"diff-line insert\" data-line=\"{}\"><span class=\"lineno\">{}</span><span class=\"content\">{}</span></div>\n",
                         new_line, new_line, html_escape(&line.content)
@@ -322,9 +320,7 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
                         "<div class=\"diff-line delete\" data-line=\"{}\"><span class=\"lineno\">{}</span><span class=\"content\">{}</span></div>\n",
                         old_line, old_line, html_escape(&line.content)
                     ));
-                    right.push_str(&format!(
-                        "<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n"
-                    ));
+                    right.push_str("<div class=\"diff-line empty\" data-line=\"\"><span class=\"lineno\"></span><span class=\"content\"></span></div>\n");
                 }
                 DiffTagWrapper::Replace => {
                     // Show as delete on left, insert on right
@@ -346,14 +342,16 @@ pub fn render_side_by_side(diff: &DiffResult) -> (String, String) {
     (left, right)
 }
 
-/// Escape HTML special characters
+/// Escape HTML special characters.
+///
+/// `&` must be replaced first so that entity references produced by the
+/// later replacements are not escaped a second time.
 fn html_escape(s: &str) -> String {
-    let sq: char = '\'';
-    s.replace('&', "&")
-        .replace('<', "<")
-        .replace('>', ">")
-        .replace('"', "\"")
-        .replace(sq, "'")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 /// Inline diff for small changes (word-level)
@@ -397,11 +395,11 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
     // Merge adjacent segments with same tag
     let mut merged: Vec<InlineDiffSegment> = Vec::new();
     for seg in segments {
-        if let Some(last) = merged.last_mut() {
-            if last.tag == seg.tag {
-                last.content.push_str(&seg.content);
-                continue;
-            }
+        if let Some(last) = merged.last_mut()
+            && last.tag == seg.tag
+        {
+            last.content.push_str(&seg.content);
+            continue;
         }
         merged.push(seg);
     }
@@ -414,4 +412,27 @@ pub fn inline_diff(old: &str, new: &str) -> Vec<InlineDiffSegment> {
 pub struct InlineDiffSegment {
     pub tag: DiffTagWrapper,
     pub content: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_escape_escapes_all_special_characters() {
+        assert_eq!(html_escape("&<>\"'"), "&amp;&lt;&gt;&quot;&#39;");
+    }
+
+    #[test]
+    fn html_escape_escapes_ampersand_first() {
+        // If `&` were escaped after `<`, the produced `&lt;` would become
+        // `&amp;lt;`. This guards the replacement order.
+        assert_eq!(html_escape("<"), "&lt;");
+        assert_eq!(html_escape("a & b"), "a &amp; b");
+    }
+
+    #[test]
+    fn html_escape_leaves_plain_text_unchanged() {
+        assert_eq!(html_escape("plain text 123"), "plain text 123");
+    }
 }

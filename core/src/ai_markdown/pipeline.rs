@@ -145,21 +145,18 @@ pub use crate::ai_markdown::{
 /// Streaming callback type
 pub type TokenCallback = Box<dyn FnMut(&str) + Send>;
 
+/// Callback invoked once a streaming operation completes successfully
+pub type CompleteCallback = Box<dyn FnOnce(&GenerateResult) + Send>;
+
+/// Callback invoked once a streaming operation fails
+pub type ErrorCallback = Box<dyn FnOnce(&CoreError) + Send>;
+
 /// Streaming generate options
+#[derive(Default)]
 pub struct StreamOptions {
     pub on_token: Option<TokenCallback>,
-    pub on_complete: Option<Box<dyn FnOnce(&GenerateResult) + Send>>,
-    pub on_error: Option<Box<dyn FnOnce(&CoreError) + Send>>,
-}
-
-impl Default for StreamOptions {
-    fn default() -> Self {
-        Self {
-            on_token: None,
-            on_complete: None,
-            on_error: None,
-        }
-    }
+    pub on_complete: Option<CompleteCallback>,
+    pub on_error: Option<ErrorCallback>,
 }
 
 /// Builder for AI operations

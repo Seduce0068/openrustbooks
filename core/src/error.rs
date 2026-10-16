@@ -13,7 +13,7 @@ pub enum CoreError {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[error("Configuration error: {0}")]
-    Config(#[from] figment::Error),
+    Config(#[source] Box<figment::Error>),
 
     #[error("TOML deserialization error: {0}")]
     TomlDeserialize(#[from] toml::de::Error),
@@ -38,7 +38,7 @@ pub enum CoreError {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[error("AI provider error: {0}")]
-    OpenAiError(#[from] async_openai::error::OpenAIError),
+    OpenAiError(#[source] Box<async_openai::error::OpenAIError>),
 
     #[error("Anyhow error: {0}")]
     Anyhow(#[from] anyhow::Error),
@@ -62,6 +62,22 @@ pub enum CoreError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+// Boxed variants need manual `From` impls: deriving `#[from]` would store the
+// large source error inline and inflate `CoreError` past clippy's threshold.
+#[cfg(not(target_arch = "wasm32"))]
+impl From<figment::Error> for CoreError {
+    fn from(err: figment::Error) -> Self {
+        Self::Config(Box::new(err))
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<async_openai::error::OpenAIError> for CoreError {
+    fn from(err: async_openai::error::OpenAIError) -> Self {
+        Self::OpenAiError(Box::new(err))
+    }
 }
 
 /// Result type alias for core operations

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Application configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// General application settings
     pub general: GeneralConfig,
@@ -18,19 +18,6 @@ pub struct AppConfig {
     pub editor: EditorConfig,
     /// Reader settings
     pub reader: ReaderConfig,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            ai: AiConfig::default(),
-            lint: LintConfig::default(),
-            storage: StorageConfig::default(),
-            editor: EditorConfig::default(),
-            reader: ReaderConfig::default(),
-        }
-    }
 }
 
 /// General application settings

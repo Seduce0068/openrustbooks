@@ -1,6 +1,5 @@
 //! openrustbooks-desktop: Tauri desktop application entry point.
 
-use log;
 use openrustbooks_core::{AppConfig, init};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, WindowEvent};
