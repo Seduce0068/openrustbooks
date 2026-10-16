@@ -6,6 +6,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod ai_markdown;
+pub mod archive;
 pub mod config;
 pub mod document;
 pub mod error;
@@ -15,6 +16,7 @@ pub mod wasm;
 #[cfg(target_arch = "wasm32")]
 pub use wasm::*;
 
+pub use archive::{ArchiveEntry, ArchiveLimits, ArchiveReader};
 pub use config::{AiConfig, AppConfig, LintConfig};
 pub use document::{Document, DocumentFormat, DocumentId, DocumentMetadata};
 /// Re-export commonly used types

@@ -27,6 +27,9 @@ pub enum CoreError {
     #[error("Document not found: {0}")]
     DocumentNotFound(String),
 
+    #[error("Archive error: {0}")]
+    Archive(String),
+
     #[error("Unsupported format: {0}")]
     UnsupportedFormat(String),
 
@@ -97,6 +100,11 @@ impl CoreError {
     /// Create an AI provider error
     pub fn ai_provider(msg: impl Into<String>) -> Self {
         Self::AiProvider(msg.into())
+    }
+
+    /// Create an archive error
+    pub fn archive(msg: impl Into<String>) -> Self {
+        Self::Archive(msg.into())
     }
 
     /// Create a lint error

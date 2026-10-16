@@ -25,6 +25,11 @@ similar = "2.7.0"
 futures = "0.3"
 bytes = "1.5"
 
+# ZIP アーカイブの読み取り専用閲覧。pure Rust のみを選び、wasm32 でもビルドする。
+# `deflate-flate2` 単独では flate2 のバックエンドが未指定でビルドできないため
+# `deflate-flate2-zlib-rs` (pure Rust の zlib-rs) を指定する。
+zip = { version = "9.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
 # Additional core dependencies
 url = { version = "2.5", features = ["serde"] }
 walkdir = "2.5"
