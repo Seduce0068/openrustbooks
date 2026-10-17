@@ -18,7 +18,8 @@ openrustbooks/
 │       ├── 0002-ai-markdown-pipeline.md
 │       ├── 0003-native-wasm-target-split.md
 │       ├── 0004-zip-archive-reader.md
-│       └── 0005-epub-body-reading.md
+│       ├── 0005-epub-body-reading.md
+│       └── 0006-epub-table-of-contents.md
 ├── core/                         # 共通コアライブラリ (native + wasm)
 │   ├── src/
 │   │   ├── lib.rs
@@ -27,7 +28,7 @@ openrustbooks/
 │   │   ├── io.rs                 # ストレージ抽象化 (local はネイティブ専用)
 │   │   ├── config.rs             # 設定管理
 │   │   ├── archive.rs            # ZIPアーカイブ閲覧 (native + wasm)
-│   │   ├── epub.rs               # EPUB本文の読み出し (native + wasm)
+│   │   ├── epub.rs               # EPUB本文と目次の読み出し (native + wasm)
 │   │   ├── ai_markdown/          # AI Markdownパイプライン
 │   │   │   ├── mod.rs
 │   │   │   ├── client.rs         # AIプロバイダ抽象化 (ネイティブ専用)
