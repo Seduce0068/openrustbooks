@@ -1,0 +1,63 @@
+# ローカルの 5 ゲート（fmt / check / test / clippy / wasm32）を
+# push と pull request で実行する。desktop は Linux 向けの cfg を
+# 検証するため、Tauri のビルド依存を apt で導入する。
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v7
+      - name: Linux の Tauri ビルド依存
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf
+      - name: Rust ツールチェーン
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+      - name: ビルドキャッシュ
+        uses: Swatinem/rust-cache@v2
+      - name: 整形（fmt）
+        run: cargo fmt --all -- --check
+      - name: 型チェック（check）
+        run: cargo check --all-targets --locked
+      - name: テスト（test）
+        run: cargo test --all-targets --locked
+      - name: lint（clippy）
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: wasm32（core）
+        run: >-
+          cargo check -p openrustbooks-core
+          --target wasm32-unknown-unknown --locked
+      - name: wasm32（web）
+        run: >-
+          cargo check -p openrustbooks-web
+          --target wasm32-unknown-unknown --locked

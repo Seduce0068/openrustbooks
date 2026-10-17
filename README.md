@@ -111,6 +111,21 @@ cargo tauri dev
 
 共通コアはネイティブと `wasm32-unknown-unknown` の両方でビルドできる。ネイティブ専用の依存と機能は ADR-0003 に従ってターゲット別に分離されている。
 
+### CI
+
+push（`master`）と pull request では、GitHub Actions がローカルの 5 ゲートと
+同じ検証を実行する（`.github/workflows/ci.yml`）。desktop を含む
+ワークスペース全体を Linux 向けに検証する。
+
+```bash
+cargo fmt --all -- --check
+cargo check --all-targets --locked
+cargo test --all-targets --locked
+cargo clippy --all-targets --locked -- -D warnings
+cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
+cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
+```
+
 ## ドキュメント
 
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
