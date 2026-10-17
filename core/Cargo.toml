@@ -30,6 +30,10 @@ bytes = "1.5"
 # `deflate-flate2-zlib-rs` (pure Rust の zlib-rs) を指定する。
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
+# EPUB 解析用の XML パーサ。pure Rust で wasm32 でもビルドする。
+# 既定機能は空なので、そのまま `default-features = false` で使う。
+quick-xml = { version = "0.42", default-features = false }
+
 # Additional core dependencies
 url = { version = "2.5", features = ["serde"] }
 walkdir = "2.5"

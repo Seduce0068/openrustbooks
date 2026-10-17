@@ -9,6 +9,7 @@ pub mod ai_markdown;
 pub mod archive;
 pub mod config;
 pub mod document;
+pub mod epub;
 pub mod error;
 pub mod io;
 pub mod wasm;
@@ -19,6 +20,7 @@ pub use wasm::*;
 pub use archive::{ArchiveEntry, ArchiveLimits, ArchiveReader};
 pub use config::{AiConfig, AppConfig, LintConfig};
 pub use document::{Document, DocumentFormat, DocumentId, DocumentMetadata};
+pub use epub::{EpubBook, EpubChapter, EpubMetadata};
 /// Re-export commonly used types
 pub use error::{CoreError, CoreResult};
 pub use io::{FileEntry, StorageBackend, StorageCapabilities};

@@ -4381,6 +4381,7 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "pulldown-cmark 0.12.2",
+ "quick-xml",
  "reqwest 0.12.28",
  "rumdl",
  "serde",
