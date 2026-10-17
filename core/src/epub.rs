@@ -4,10 +4,10 @@
 //! manifest・spine）→ 章本文のテキスト抽出までを載せる。ファイル I/O に
 //! 依存せず、ネイティブと `wasm32-unknown-unknown` の両方でビルドできる。
 //!
-//! `docs/requirements.md` の REQ-002（電子書籍の閲覧）のうち、本文と章の
-//! 読み出しだけを提供する。目次（nav / NCX）の解析、章タイトルの取得、
-//! 画像の扱い、`Document` 型との統合は範囲外。読み取り専用であり、EPUB の
-//! 作成・書き換え・DRM 解除は提供しない。
+//! `docs/requirements.md` の REQ-002（電子書籍の閲覧）のうち、本文・章・目次
+//! （EPUB3 の nav と EPUB2 の NCX）の読み出しを提供する。章タイトルの取得、
+//! アンカー単位の移動、画像の扱い、`Document` 型との統合は範囲外。読み取り
+//! 専用であり、EPUB の作成・書き換え・DRM 解除は提供しない。
 //!
 //! 失敗はすべて [`CoreResult`] で返し、panic しない。不正な入力は
 //! 黙って読み飛ばさず、`CoreError::Archive` / `CoreError::Validation` として
@@ -31,6 +31,17 @@ const FULL_PATH_ATTRIBUTE: &str = "full-path";
 const MODIFIED_PROPERTY: &str = "dcterms:modified";
 /// 本文抽出で内容を除外する要素のローカル名。
 const SKIPPED_ELEMENTS: [&str; 3] = ["head", "script", "style"];
+/// EPUB3 nav を目次として選ぶ `properties` のトークン。
+const NAV_PROPERTY: &str = "nav";
+/// EPUB3 nav を目次として選ぶ `epub:type` のトークン。
+const TOC_TYPE: &str = "toc";
+/// EPUB2 NCX の media-type。
+const NCX_MEDIA_TYPE: &str = "application/x-dtbncx+xml";
+/// nav の要素のローカル名。
+const NAV_ELEMENT: &str = "nav";
+/// 目次エントリ数の上限。
+const MAX_TOC_ENTRIES: usize = 10_000;
+
 /// 本文抽出で改行を挿入する要素のローカル名。
 const BLOCK_ELEMENTS: [&str; 16] = [
     "p",
@@ -87,6 +98,17 @@ pub struct EpubChapter {
     pub linear: bool,
 }
 
+/// 目次の 1 項目。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpubTocEntry {
+    /// 表示名（実体参照を戻し、空白を 1 つにまとめたもの）。
+    pub title: String,
+    /// 本文と同じ規則で解決済みのアーカイブ内パス（フラグメントは落とす）。
+    pub href: String,
+    /// 入れ子の深さ。最上位を 0 とする。
+    pub depth: usize,
+}
+
 /// ZIP バイト列・解析済み OPF・章一覧を所有する EPUB ビュー。
 ///
 /// 入力バイト列を所有するため `open` の戻り値以降は借用を持たず、内部可変性を
@@ -98,6 +120,10 @@ pub struct EpubBook {
     metadata: EpubMetadata,
     /// spine の順に並べた章。
     chapters: Vec<EpubChapter>,
+    /// 目次の情報源を選ぶために保持する manifest。
+    manifest: Vec<ManifestItem>,
+    /// 目次の `href` を解決する基準のディレクトリ（OPF の位置）。
+    base_dir: String,
 }
 
 impl EpubBook {
@@ -128,6 +154,8 @@ impl EpubBook {
             archive,
             metadata: parsed.metadata,
             chapters: parsed.chapters,
+            manifest: parsed.manifest,
+            base_dir: parsed.base_dir,
         })
     }
 
@@ -139,6 +167,40 @@ impl EpubBook {
     /// spine の順に並んだ章を返す。
     pub fn chapters(&self) -> &[EpubChapter] {
         &self.chapters
+    }
+
+    /// 目次を返す。情報源が無い場合は空。
+    ///
+    /// manifest の `properties` に `nav` を含む item の XHTML を EPUB3 nav として
+    /// 読み、無ければ media-type が `application/x-dtbncx+xml` の item を EPUB2
+    /// NCX として読む。情報源のエントリがアーカイブに無い場合も空を返す。
+    ///
+    /// 目次の XML の構文エラーは [`CoreError::Archive`]、`href` の逸脱と
+    /// エントリ数の上限超過は [`CoreError::Validation`]。
+    pub fn toc(&self) -> CoreResult<Vec<EpubTocEntry>> {
+        let nav = self
+            .manifest
+            .iter()
+            .find(|item| has_property(&item.properties, NAV_PROPERTY));
+        if let Some(item) = nav {
+            let Some(xml) = self.read_toc_source(&item.href)? else {
+                return Ok(Vec::new());
+            };
+            return parse_nav(&xml, &self.base_dir, &item.href);
+        }
+
+        let ncx = self
+            .manifest
+            .iter()
+            .find(|item| item.media_type.trim() == NCX_MEDIA_TYPE);
+        if let Some(item) = ncx {
+            let Some(xml) = self.read_toc_source(&item.href)? else {
+                return Ok(Vec::new());
+            };
+            return parse_ncx(&xml, &self.base_dir, &item.href);
+        }
+
+        Ok(Vec::new())
     }
 
     /// 章の内容をバイト列で返す。
@@ -186,6 +248,19 @@ impl EpubBook {
         }
         self.archive.read_entry(&decoded).ok()
     }
+
+    /// 目次の情報源のテキストを読む。エントリが無い場合は `None`。
+    ///
+    /// [`read_text_entry`] はエントリの欠落も [`CoreError::Archive`] にするため、
+    /// 目次の情報源では欠落を空の目次として扱えるように `read_entry_text` を
+    /// 直接使う。
+    fn read_toc_source(&self, href: &str) -> CoreResult<Option<String>> {
+        match self.archive.read_entry_text(href) {
+            Ok(text) => Ok(Some(text)),
+            Err(CoreError::DocumentNotFound(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 /// OPF の解析結果。
@@ -194,6 +269,10 @@ struct ParsedOpf {
     metadata: EpubMetadata,
     /// spine の順の章。
     chapters: Vec<EpubChapter>,
+    /// manifest の `item`（文書順）。
+    manifest: Vec<ManifestItem>,
+    /// OPF の位置（相対 `href` の基準）。
+    base_dir: String,
 }
 
 /// manifest の `item`。
@@ -204,6 +283,8 @@ struct ManifestItem {
     href: String,
     /// `media-type` の値（無い場合は空文字列）。
     media_type: String,
+    /// `properties` の値（空白区切りのトークン列。無い場合は空文字列）。
+    properties: String,
 }
 
 /// spine の `itemref`。
@@ -563,7 +644,12 @@ fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
     let metadata = build_metadata(&collected, unique_identifier, version);
     let chapters = build_chapters(&manifest, &manifest_index, &spine)?;
 
-    Ok(ParsedOpf { metadata, chapters })
+    Ok(ParsedOpf {
+        metadata,
+        chapters,
+        manifest,
+        base_dir: base_dir.to_string(),
+    })
 }
 
 /// メタデータ収集の対象になる要素かどうか。
@@ -614,6 +700,7 @@ fn push_manifest_item(
         )));
     };
     let media_type = attribute_value(element, "media-type")?.unwrap_or_default();
+    let properties = attribute_value(element, "properties")?.unwrap_or_default();
     let resolved = resolve_href(base_dir, &href)?;
 
     index.entry(id.clone()).or_insert(manifest.len());
@@ -621,6 +708,7 @@ fn push_manifest_item(
         id,
         href: resolved,
         media_type,
+        properties,
     });
     Ok(())
 }
@@ -724,6 +812,433 @@ fn build_chapters(
         });
     }
     Ok(chapters)
+}
+
+/// `properties`（空白区切りのトークン列）に指定のトークンが含まれるかどうか。
+fn has_property(properties: &str, token: &str) -> bool {
+    properties.split_whitespace().any(|value| value == token)
+}
+
+/// 目次のエントリを追加する。上限を超える場合は [`CoreError::Validation`]。
+fn push_toc_entry(entries: &mut Vec<EpubTocEntry>, entry: EpubTocEntry) -> CoreResult<()> {
+    if entries.len() >= MAX_TOC_ENTRIES {
+        return Err(CoreError::validation(format!(
+            "目次のエントリ数が上限を超えています: {MAX_TOC_ENTRIES}"
+        )));
+    }
+    entries.push(entry);
+    Ok(())
+}
+
+/// EPUB3 の nav 文書から目次を取り出す。
+fn parse_nav(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEntry>> {
+    let Some(target) = select_nav(xml, label)? else {
+        return Ok(Vec::new());
+    };
+    collect_nav_entries(xml, target, base_dir, label)
+}
+
+/// 目次として読む `<nav>` の索引（文書順、0 始まり）を選ぶ。
+///
+/// キーに `:` を含みローカル名が `type` の属性（`epub:type` など）の値に
+/// `toc` を含む最初の `<nav>` を優先し、無ければ最初の `<nav>` を使う。
+/// `<nav>` が 1 つも無い場合は `None`。
+fn select_nav(xml: &str, label: &str) -> CoreResult<Option<usize>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+
+    let mut count: usize = 0;
+    let mut first: Option<usize> = None;
+    let mut toc: Option<usize> = None;
+    let mut depth: usize = 0;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) => {
+                depth += 1;
+                if element.local_name().into_inner() == NAV_ELEMENT {
+                    if first.is_none() {
+                        first = Some(count);
+                    }
+                    if toc.is_none() && is_toc_nav(&element)? {
+                        toc = Some(count);
+                    }
+                    count += 1;
+                }
+            }
+            Ok(Event::Empty(element)) => {
+                if element.local_name().into_inner() == NAV_ELEMENT {
+                    if first.is_none() {
+                        first = Some(count);
+                    }
+                    if toc.is_none() && is_toc_nav(&element)? {
+                        toc = Some(count);
+                    }
+                    count += 1;
+                }
+            }
+            Ok(Event::End(_)) => depth = depth.saturating_sub(1),
+            Ok(Event::Eof) => {
+                if depth != 0 {
+                    return Err(CoreError::archive(format!(
+                        "{label} の要素が閉じられていません"
+                    )));
+                }
+                break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                return Err(CoreError::archive(format!(
+                    "{label} を解析できません: {err}"
+                )));
+            }
+        }
+    }
+
+    Ok(toc.or(first))
+}
+
+/// `<nav>` の接頭辞付き `type` 属性（`epub:type` など）に `toc` を含むかどうか。
+///
+/// 接頭辞の無い `type` 属性は EPUB の目次指定ではないため対象にしない。
+fn is_toc_nav(element: &BytesStart<'_>) -> CoreResult<bool> {
+    for attr in element.attributes().flatten() {
+        if !attr.key.as_ref().contains(':') {
+            continue;
+        }
+        if attr.key.local_name().into_inner() != "type" {
+            continue;
+        }
+        let value = unescape_attribute(&attr, "type")?;
+        if value.split_whitespace().any(|token| token == TOC_TYPE) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// 収集中の `<a>`。
+struct NavAnchor {
+    /// 表示名（正規化前）。
+    title: String,
+    /// `<a>` の内側で開いている要素の数。
+    nesting: usize,
+    /// 祖先 `<ol>` の数から決まる深さ。
+    depth: usize,
+    /// 解決済みのリンク先。
+    href: String,
+}
+
+/// 選んだ `<nav>` の入れ子を文書順に辿って目次を取り出す。
+///
+/// `<a href="...">` ごとに 1 エントリを作り、深さは祖先 `<ol>` の数 − 1 とする。
+/// `<a>` を持たない `<li>`（`<span>` だけの見出し）はエントリにしない。
+fn collect_nav_entries(
+    xml: &str,
+    target: usize,
+    base_dir: &str,
+    label: &str,
+) -> CoreResult<Vec<EpubTocEntry>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+
+    let mut entries: Vec<EpubTocEntry> = Vec::new();
+    let mut nav_index: usize = 0;
+    let mut in_target = false;
+    let mut nested_nav: usize = 0;
+    let mut ol_depth: usize = 0;
+    let mut anchor: Option<NavAnchor> = None;
+    let mut depth: usize = 0;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) => {
+                depth += 1;
+                let name = element.local_name().into_inner();
+                if !in_target {
+                    if name == NAV_ELEMENT {
+                        if nav_index == target {
+                            in_target = true;
+                        }
+                        nav_index += 1;
+                    }
+                    continue;
+                }
+                // 収集中の `<a>` の内側で開いた要素は 1 段として数える。
+                if let Some(state) = anchor.as_mut() {
+                    state.nesting += 1;
+                }
+                match (name, anchor.is_none()) {
+                    (NAV_ELEMENT, _) => nested_nav += 1,
+                    ("ol", true) => ol_depth += 1,
+                    ("a", true) => {
+                        let href = attribute_value(&element, "href")?.unwrap_or_default();
+                        anchor = Some(NavAnchor {
+                            title: String::new(),
+                            nesting: 0,
+                            depth: ol_depth.saturating_sub(1),
+                            href: resolve_href(base_dir, &href)?,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(element)) => {
+                if !in_target && element.local_name().into_inner() == NAV_ELEMENT {
+                    // 自己終了した `<nav>` は内容を持たない。
+                    nav_index += 1;
+                }
+            }
+            Ok(Event::End(element)) => {
+                depth = depth.saturating_sub(1);
+                let name = element.local_name().into_inner();
+                if !in_target {
+                    continue;
+                }
+                if let Some(state) = anchor.as_mut()
+                    && state.nesting > 0
+                {
+                    state.nesting -= 1;
+                    continue;
+                }
+                if let Some(state) = anchor.take() {
+                    push_toc_entry(
+                        &mut entries,
+                        EpubTocEntry {
+                            title: normalize_text(&state.title),
+                            href: state.href,
+                            depth: state.depth,
+                        },
+                    )?;
+                    continue;
+                }
+                match name {
+                    NAV_ELEMENT => {
+                        if nested_nav > 0 {
+                            nested_nav -= 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    "ol" => ol_depth = ol_depth.saturating_sub(1),
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(text)) => {
+                if let Some(state) = anchor.as_mut() {
+                    state.title.push_str(&text.into_inner());
+                }
+            }
+            Ok(Event::CData(data)) => {
+                if let Some(state) = anchor.as_mut() {
+                    state.title.push_str(&data.into_inner());
+                }
+            }
+            Ok(Event::GeneralRef(reference)) => {
+                let Some(state) = anchor.as_mut() else {
+                    continue;
+                };
+                if reference.is_char_ref() {
+                    if let Ok(Some(ch)) = reference.resolve_char_ref() {
+                        state.title.push(ch);
+                    }
+                } else if let Some(ch) = named_reference(&reference.into_inner()) {
+                    state.title.push(ch);
+                }
+            }
+            Ok(Event::Eof) => {
+                if depth != 0 {
+                    return Err(CoreError::archive(format!(
+                        "{label} の要素が閉じられていません"
+                    )));
+                }
+                break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                return Err(CoreError::archive(format!(
+                    "{label} を解析できません: {err}"
+                )));
+            }
+        }
+    }
+
+    Ok(entries)
+}
+
+/// 収集中の `navPoint`。
+struct NcxNavPoint {
+    /// 祖先 `navPoint` の数。
+    depth: usize,
+    /// `<navLabel>` の `<text>` の内容。
+    title: Option<String>,
+    /// `<content>` の `src`（解決前）。
+    href: Option<String>,
+}
+
+/// EPUB2 の NCX 文書から目次を取り出す。
+///
+/// `<navMap>` の下の入れ子 `navPoint` を文書順に辿る（`playOrder` は無視する）。
+/// `<text>` と `<content>` の両方を持つ `navPoint` だけをエントリにする。
+fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEntry>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+
+    // 確定した `navPoint`。開始タグの順（親が子より先）に並ぶ。
+    let mut points: Vec<NcxNavPoint> = Vec::new();
+    // 開いている `navPoint` の `points` 索引。
+    let mut open: Vec<usize> = Vec::new();
+    // `<navLabel>` の内側にいるかどうか。
+    let mut in_label = false;
+    // 収集中の `<text>` の内容と、その内側で開いている要素の数。
+    let mut text: Option<String> = None;
+    let mut text_nesting: usize = 0;
+    let mut depth: usize = 0;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) => {
+                depth += 1;
+                let name = element.local_name().into_inner();
+                // 収集中の `<text>` の内側で開いた要素は 1 段として数える。
+                if text.is_some() {
+                    text_nesting += 1;
+                }
+                match name {
+                    "navPoint" => {
+                        points.push(NcxNavPoint {
+                            depth: open.len(),
+                            title: None,
+                            href: None,
+                        });
+                        open.push(points.len().saturating_sub(1));
+                    }
+                    "navLabel" => in_label = true,
+                    "text" => {
+                        if in_label && text.is_none() {
+                            text = Some(String::new());
+                        }
+                    }
+                    "content" => {
+                        if let Some(&index) = open.last() {
+                            set_ncx_href(&mut points, index, &element)?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(element)) => match element.local_name().into_inner() {
+                "content" => {
+                    if let Some(&index) = open.last() {
+                        set_ncx_href(&mut points, index, &element)?;
+                    }
+                }
+                "text" => {
+                    if in_label && let Some(&index) = open.last() {
+                        set_ncx_title(&mut points, index, String::new());
+                    }
+                }
+                _ => {}
+            },
+            Ok(Event::End(element)) => {
+                depth = depth.saturating_sub(1);
+                let name = element.local_name().into_inner();
+                if text.is_some() && text_nesting > 0 {
+                    text_nesting -= 1;
+                    continue;
+                }
+                if let Some(contents) = text.take() {
+                    if let Some(&index) = open.last() {
+                        set_ncx_title(&mut points, index, contents);
+                    }
+                    continue;
+                }
+                match name {
+                    "navPoint" => {
+                        open.pop();
+                    }
+                    "navLabel" => in_label = false,
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(value)) => {
+                if let Some(contents) = text.as_mut() {
+                    contents.push_str(&value.into_inner());
+                }
+            }
+            Ok(Event::CData(value)) => {
+                if let Some(contents) = text.as_mut() {
+                    contents.push_str(&value.into_inner());
+                }
+            }
+            Ok(Event::GeneralRef(reference)) => {
+                let Some(contents) = text.as_mut() else {
+                    continue;
+                };
+                if reference.is_char_ref() {
+                    if let Ok(Some(ch)) = reference.resolve_char_ref() {
+                        contents.push(ch);
+                    }
+                } else if let Some(ch) = named_reference(&reference.into_inner()) {
+                    contents.push(ch);
+                }
+            }
+            Ok(Event::Eof) => {
+                if depth != 0 {
+                    return Err(CoreError::archive(format!(
+                        "{label} の要素が閉じられていません"
+                    )));
+                }
+                break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                return Err(CoreError::archive(format!(
+                    "{label} を解析できません: {err}"
+                )));
+            }
+        }
+    }
+
+    let mut entries: Vec<EpubTocEntry> = Vec::with_capacity(points.len());
+    for point in &points {
+        let (Some(title), Some(href)) = (&point.title, &point.href) else {
+            continue;
+        };
+        push_toc_entry(
+            &mut entries,
+            EpubTocEntry {
+                title: normalize_text(title),
+                href: resolve_href(base_dir, href)?,
+                depth: point.depth,
+            },
+        )?;
+    }
+    Ok(entries)
+}
+
+/// `<content>` の `src` を最初の値だけ `navPoint` に記録する。
+fn set_ncx_href(
+    points: &mut [NcxNavPoint],
+    index: usize,
+    element: &BytesStart<'_>,
+) -> CoreResult<()> {
+    let Some(point) = points.get_mut(index) else {
+        return Ok(());
+    };
+    if point.href.is_none() {
+        point.href = attribute_value(element, "src")?;
+    }
+    Ok(())
+}
+
+/// `<text>` の内容を最初の値だけ `navPoint` に記録する。
+fn set_ncx_title(points: &mut [NcxNavPoint], index: usize, value: String) {
+    if let Some(point) = points.get_mut(index)
+        && point.title.is_none()
+    {
+        point.title = Some(value);
+    }
 }
 
 /// XHTML から本文テキストを抽出して正規化する。
@@ -988,6 +1503,101 @@ mod tests {
     /// 章本文の期待値。
     const CH1_TEXT: &str = "T\na & b\nc <d> 0";
 
+    /// 入れ子の `<ol>` / `<li>` / `<a>` を持つ EPUB3 の nav。
+    const NAV_NESTED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>目次</title></head>
+<body>
+  <nav epub:type="toc">
+    <h1>目次</h1>
+    <ol>
+      <li><a href="ch1.xhtml">第一章 &amp; はじめに</a></li>
+      <li><span>第二部</span>
+        <ol>
+          <li><a href="ch2.xhtml#s1">第二章 1 節</a></li>
+          <li><span>見出しだけ</span></li>
+        </ol>
+      </li>
+    </ol>
+  </nav>
+</body>
+</html>
+"#;
+
+    /// `<a>` を持たない `<li>` を含む nav。
+    const NAV_SPAN_ONLY: &str = r#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+  <nav epub:type="toc">
+    <ol>
+      <li><span>見出しだけ</span></li>
+      <li><a href="ch1.xhtml">実項目</a></li>
+    </ol>
+  </nav>
+</body></html>
+"#;
+
+    /// `landmarks` が先、`toc` が後ろにある nav。
+    const NAV_LANDMARKS_FIRST: &str = r#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+  <nav epub:type="landmarks">
+    <ol><li><a href="ch1.xhtml">表紙</a></li></ol>
+  </nav>
+  <nav epub:type="toc">
+    <ol><li><a href="ch2.xhtml">目次の項目</a></li></ol>
+  </nav>
+</body></html>
+"#;
+
+    /// `epub:type` を持たない `<nav>` だけの nav。
+    const NAV_WITHOUT_TYPE: &str = r#"<html><body>
+  <nav><ol><li><a href="ch1.xhtml">唯一の nav</a></li></ol></nav>
+</body></html>
+"#;
+
+    /// 入れ子の `navPoint` を持つ EPUB2 の NCX。
+    ///
+    /// `playOrder` は文書順と逆にしてあり、内容を持たない `navPoint` も含む。
+    const NCX_NESTED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="urn:isbn:9784000000000"/></head>
+  <docTitle><text>サンプル本</text></docTitle>
+  <navMap>
+    <navPoint id="n1" playOrder="3">
+      <navLabel><text>第一章</text></navLabel>
+      <content src="ch1.xhtml"/>
+      <navPoint id="n1-1" playOrder="2">
+        <navLabel><text>第一節</text></navLabel>
+        <content src="ch2.xhtml#s1"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="n2" playOrder="1">
+      <navLabel><text>第二章</text></navLabel>
+      <content src="ch2.xhtml"/>
+    </navPoint>
+    <navPoint id="n3" playOrder="4">
+      <navLabel><text>内容の無い項目</text></navLabel>
+    </navPoint>
+  </navMap>
+</ncx>
+"#;
+
+    /// NCX だけを情報源に持つ EPUB2 相当の OPF。
+    const OPF_NCX: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"#;
+
     /// エントリを順に書き込んだ ZIP を組み立てる。
     fn write_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
@@ -1058,6 +1668,71 @@ mod tests {
         match EpubBook::open(bytes) {
             Err(err) => err,
             Ok(_) => panic!("エラーを期待したが開けた"),
+        }
+    }
+
+    /// 目次の XHTML（nav / NCX）と OPF を差し替えた EPUB を組み立てる。
+    fn epub_with_toc(nav: Option<&str>, ncx: Option<&str>, opf: &str) -> Vec<u8> {
+        let mut files: Vec<(&str, &[u8])> = vec![
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/ch2.xhtml", CH2.as_bytes()),
+        ];
+        if let Some(nav) = nav {
+            files.push(("OEBPS/nav.xhtml", nav.as_bytes()));
+        }
+        if let Some(ncx) = ncx {
+            files.push(("OEBPS/toc.ncx", ncx.as_bytes()));
+        }
+        build_epub(&files)
+    }
+
+    /// nav の XHTML を差し替えた EPUB（OPF は標準）を組み立てる。
+    fn epub_with_nav(nav: &str) -> Vec<u8> {
+        epub_with_toc(Some(nav), None, OPF)
+    }
+
+    /// `properties` を差し替えた OPF を返す。
+    fn opf_with_nav_properties(properties: &str) -> String {
+        OPF.replace(
+            "properties=\"nav\"",
+            &format!("properties=\"{properties}\""),
+        )
+    }
+
+    /// nav と NCX の両方を manifest に持つ OPF を返す。
+    fn opf_with_nav_and_ncx() -> String {
+        OPF.replace(
+            "<manifest>\n",
+            "<manifest>\n    <item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>\n",
+        )
+    }
+
+    /// `<a>` を `count` 個持つ nav を組み立てる。
+    fn nav_with_anchors(count: usize) -> String {
+        let mut nav = String::from("<html><body><nav epub:type=\"toc\"><ol>");
+        for _ in 0..count {
+            nav.push_str("<li><a href=\"ch1.xhtml\">項目</a></li>");
+        }
+        nav.push_str("</ol></nav></body></html>");
+        nav
+    }
+
+    /// 期待する目次エントリを組み立てる。
+    fn entry(title: &str, href: &str, depth: usize) -> EpubTocEntry {
+        EpubTocEntry {
+            title: title.to_string(),
+            href: href.to_string(),
+            depth,
+        }
+    }
+
+    /// `toc()` のエラーを取り出す。
+    fn toc_error(bytes: &[u8]) -> CoreError {
+        match EpubBook::open(bytes).and_then(|book| book.toc()) {
+            Err(err) => err,
+            Ok(entries) => panic!("エラーを期待したが {} 件返った", entries.len()),
         }
     }
 
@@ -1363,5 +2038,176 @@ mod tests {
     fn epub_book_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<EpubBook>();
+    }
+
+    #[test]
+    fn reads_epub3_nav_in_document_order() {
+        let bytes = epub_with_nav(NAV_NESTED);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![
+                entry("第一章 & はじめに", "OEBPS/ch1.xhtml", 0),
+                entry("第二章 1 節", "OEBPS/ch2.xhtml", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn skips_nav_items_without_anchor() {
+        let bytes = epub_with_nav(NAV_SPAN_ONLY);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // `<span>` だけの `<li>` はエントリにしない。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("実項目", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn drops_fragment_from_nav_href() {
+        let bytes = epub_with_nav(NAV_NESTED);
+        let book = EpubBook::open(&bytes).unwrap();
+        let toc = book.toc().unwrap();
+
+        // `<a href="ch2.xhtml#s1">` はフラグメントを落として章と同じパスになる。
+        assert_eq!(toc[1].href, "OEBPS/ch2.xhtml");
+        assert_eq!(toc[1].href, book.chapters()[1].href);
+    }
+
+    #[test]
+    fn prefers_nav_marked_as_toc() {
+        let bytes = epub_with_nav(NAV_LANDMARKS_FIRST);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // `landmarks` の nav ではなく `toc` の nav を使う。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("目次の項目", "OEBPS/ch2.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn falls_back_to_first_nav_without_type() {
+        let bytes = epub_with_nav(NAV_WITHOUT_TYPE);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("唯一の nav", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn treats_multi_token_properties_as_nav() {
+        let opf = opf_with_nav_properties("nav scripted");
+        let bytes = epub_with_toc(Some(NAV_NESTED), None, &opf);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.toc().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn reads_epub2_ncx_in_document_order() {
+        let bytes = epub_with_toc(None, Some(NCX_NESTED), OPF_NCX);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // `playOrder` ではなく文書順に並べ、内容の無い `navPoint` は落とす。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![
+                entry("第一章", "OEBPS/ch1.xhtml", 0),
+                entry("第一節", "OEBPS/ch2.xhtml", 1),
+                entry("第二章", "OEBPS/ch2.xhtml", 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn prefers_nav_over_ncx() {
+        let opf = opf_with_nav_and_ncx();
+        let bytes = epub_with_toc(Some(NAV_NESTED), Some(NCX_NESTED), &opf);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![
+                entry("第一章 & はじめに", "OEBPS/ch1.xhtml", 0),
+                entry("第二章 1 節", "OEBPS/ch2.xhtml", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn returns_empty_toc_without_source() {
+        // `properties` に `nav` を持たず、NCX も無い OPF。
+        let opf = opf_with_nav_properties("cover");
+        let bytes = epub_with_toc(Some(NAV_NESTED), None, &opf);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(book.toc().unwrap().is_empty());
+    }
+
+    #[test]
+    fn returns_empty_toc_when_source_entry_is_missing() {
+        // manifest には nav があるが、アーカイブに nav.xhtml が無い。
+        let bytes = epub_with_toc(None, None, OPF);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(book.toc().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_broken_nav_xml() {
+        let nav = "<html><body><nav epub:type=\"toc\"><ol><li><a href=\"ch1.xhtml\">x</li></ol></nav></body></html>";
+        assert!(matches!(
+            toc_error(&epub_with_nav(nav)),
+            CoreError::Archive(_)
+        ));
+
+        // 途中で切れた nav。
+        let truncated = "<html><body><nav epub:type=\"toc\"><ol><li><a href=\"ch1.xhtml\">x</a>";
+        assert!(matches!(
+            toc_error(&epub_with_nav(truncated)),
+            CoreError::Archive(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_broken_ncx_xml() {
+        assert!(matches!(
+            toc_error(&epub_with_toc(None, Some("<ncx><navMap>"), OPF_NCX)),
+            CoreError::Archive(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_nav_href_escaping_root() {
+        let nav = "<html><body><nav epub:type=\"toc\"><ol><li><a href=\"../../evil.xhtml\">x</a></li></ol></nav></body></html>";
+        assert!(matches!(
+            toc_error(&epub_with_nav(nav)),
+            CoreError::Validation(_)
+        ));
+
+        // 空の `href` は不正な nav として扱う。
+        let empty = "<html><body><nav epub:type=\"toc\"><ol><li><a href=\"\">x</a></li></ol></nav></body></html>";
+        assert!(matches!(
+            toc_error(&epub_with_nav(empty)),
+            CoreError::Archive(_)
+        ));
+    }
+
+    #[test]
+    fn enforces_toc_entry_limit() {
+        // 上限ちょうどは通る。
+        let ok = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES));
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.toc().unwrap().len(), MAX_TOC_ENTRIES);
+
+        // 上限を 1 つ超えると Validation。
+        let over = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES + 1));
+        assert!(matches!(toc_error(&over), CoreError::Validation(_)));
     }
 }
