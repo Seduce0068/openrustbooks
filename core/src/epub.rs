@@ -103,8 +103,11 @@ pub struct EpubChapter {
 pub struct EpubTocEntry {
     /// 表示名（実体参照を戻し、空白を 1 つにまとめたもの）。
     pub title: String,
-    /// 本文と同じ規則で解決済みのアーカイブ内パス（フラグメントは落とす）。
+    /// 本文と同じ規則で解決済みのアーカイブ内パス（フラグメントは含まない）。
     pub href: String,
+    /// 生の `href` の最初の `#` の後ろ（`#` を除き、前後の空白を除いたもの）。
+    /// 元の綴りのまま保持し、パーセント復号しない。`#` が無い・空なら `None`。
+    pub fragment: Option<String>,
     /// 入れ子の深さ。最上位を 0 とする。
     pub depth: usize,
 }
@@ -177,6 +180,10 @@ impl EpubBook {
     ///
     /// 目次の XML の構文エラーは [`CoreError::Archive`]、`href` の逸脱と
     /// エントリ数の上限超過は [`CoreError::Validation`]。
+    ///
+    /// [`EpubTocEntry::href`] はフラグメントを落としたパス、`fragment` は生の
+    /// `href` の `#` の後ろを保持する。パス部が空の項目（`href` が無い・
+    /// フラグメントのみ・空白のみ）はエラーにせず読み飛ばす。
     pub fn toc(&self) -> CoreResult<Vec<EpubTocEntry>> {
         let nav = self
             .manifest
@@ -452,6 +459,24 @@ fn opf_dir(opf_path: &str) -> &str {
         Some(index) => &opf_path[..index],
         None => "",
     }
+}
+
+/// 生の `href` / `src` を「最初の `#` の前」と「後ろ」に分ける。
+///
+/// パス部は前後の空白を除いたもの、フラグメントは `#` を除いて前後の空白を
+/// 除いたもの（空なら `None`）を返す。2 つ目以降の `#` は区切りにせず、
+/// `%XX` はそのまま残す。属性の実体参照は復号済みの文字列を渡す。
+fn split_fragment(raw: &str) -> (&str, Option<String>) {
+    let Some((path, fragment)) = raw.split_once('#') else {
+        return (raw.trim(), None);
+    };
+    let fragment = fragment.trim();
+    let fragment = if fragment.is_empty() {
+        None
+    } else {
+        Some(fragment.to_string())
+    };
+    (path.trim(), fragment)
 }
 
 /// `href` を OPF のディレクトリ基準でアーカイブ内パスへ解決する。
@@ -925,14 +950,17 @@ struct NavAnchor {
     nesting: usize,
     /// 祖先 `<ol>` の数から決まる深さ。
     depth: usize,
-    /// 解決済みのリンク先。
+    /// 解決済みのリンク先（フラグメントを含まない）。
     href: String,
+    /// 生の `href` の `#` の後ろ。
+    fragment: Option<String>,
 }
 
 /// 選んだ `<nav>` の入れ子を文書順に辿って目次を取り出す。
 ///
 /// `<a href="...">` ごとに 1 エントリを作り、深さは祖先 `<ol>` の数 − 1 とする。
-/// `<a>` を持たない `<li>`（`<span>` だけの見出し）はエントリにしない。
+/// `<a>` を持たない `<li>`（`<span>` だけの見出し）はエントリにしない。`href` が
+/// 無い、またはパス部が空の `<a>` もエントリにしない（解析は続ける）。
 fn collect_nav_entries(
     xml: &str,
     target: usize,
@@ -972,13 +1000,20 @@ fn collect_nav_entries(
                     (NAV_ELEMENT, _) => nested_nav += 1,
                     ("ol", true) => ol_depth += 1,
                     ("a", true) => {
-                        let href = attribute_value(&element, "href")?.unwrap_or_default();
-                        anchor = Some(NavAnchor {
-                            title: String::new(),
-                            nesting: 0,
-                            depth: ol_depth.saturating_sub(1),
-                            href: resolve_href(base_dir, &href)?,
-                        });
+                        // フラグメントの分割は `<a>` の開始時に 1 回だけ行う。
+                        // パス部が空の `<a>` はエントリにせず読み飛ばす。
+                        if let Some(raw) = attribute_value(&element, "href")? {
+                            let (path, fragment) = split_fragment(&raw);
+                            if !path.is_empty() {
+                                anchor = Some(NavAnchor {
+                                    title: String::new(),
+                                    nesting: 0,
+                                    depth: ol_depth.saturating_sub(1),
+                                    href: resolve_href(base_dir, path)?,
+                                    fragment,
+                                });
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -1007,6 +1042,7 @@ fn collect_nav_entries(
                         EpubTocEntry {
                             title: normalize_text(&state.title),
                             href: state.href,
+                            fragment: state.fragment,
                             depth: state.depth,
                         },
                     )?;
@@ -1072,14 +1108,17 @@ struct NcxNavPoint {
     depth: usize,
     /// `<navLabel>` の `<text>` の内容。
     title: Option<String>,
-    /// `<content>` の `src`（解決前）。
+    /// `<content>` の `src` のパス部（解決前。フラグメントを含まない）。
     href: Option<String>,
+    /// `<content>` の `src` の `#` の後ろ。
+    fragment: Option<String>,
 }
 
 /// EPUB2 の NCX 文書から目次を取り出す。
 ///
 /// `<navMap>` の下の入れ子 `navPoint` を文書順に辿る（`playOrder` は無視する）。
-/// `<text>` と `<content>` の両方を持つ `navPoint` だけをエントリにする。
+/// `<text>` と `<content>` の両方を持ち、`src` のパス部が空でない `navPoint`
+/// だけをエントリにする。
 fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEntry>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -1110,6 +1149,7 @@ fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEn
                             depth: open.len(),
                             title: None,
                             href: None,
+                            fragment: None,
                         });
                         open.push(points.len().saturating_sub(1));
                     }
@@ -1205,11 +1245,16 @@ fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEn
         let (Some(title), Some(href)) = (&point.title, &point.href) else {
             continue;
         };
+        // パス部が空の `navPoint` はエントリにせず読み飛ばす。
+        if href.is_empty() {
+            continue;
+        }
         push_toc_entry(
             &mut entries,
             EpubTocEntry {
                 title: normalize_text(title),
                 href: resolve_href(base_dir, href)?,
+                fragment: point.fragment.clone(),
                 depth: point.depth,
             },
         )?;
@@ -1217,7 +1262,7 @@ fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEn
     Ok(entries)
 }
 
-/// `<content>` の `src` を最初の値だけ `navPoint` に記録する。
+/// `<content>` の `src` をパス部とフラグメントに分けて最初の値だけ記録する。
 fn set_ncx_href(
     points: &mut [NcxNavPoint],
     index: usize,
@@ -1226,8 +1271,12 @@ fn set_ncx_href(
     let Some(point) = points.get_mut(index) else {
         return Ok(());
     };
-    if point.href.is_none() {
-        point.href = attribute_value(element, "src")?;
+    if point.href.is_none()
+        && let Some(raw) = attribute_value(element, "src")?
+    {
+        let (path, fragment) = split_fragment(&raw);
+        point.href = Some(path.to_string());
+        point.fragment = fragment;
     }
     Ok(())
 }
@@ -1552,6 +1601,32 @@ mod tests {
 </body></html>
 "#;
 
+    /// フラグメント付きと無しの `<a>` を混ぜた入れ子の nav。
+    const NAV_FRAGMENT_MIXED: &str = r##"<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="ch1.xhtml#s1">第一章</a>
+        <ol><li><a href="ch2.xhtml">第二章</a></li></ol>
+      </li>
+    </ol>
+  </nav>
+</body></html>
+"##;
+
+    /// パス部が空の `<a>` を挟む入れ子の nav。
+    const NAV_WITH_EMPTY_PATHS: &str = r##"<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="#only-fragment">位置だけ</a>
+        <ol><li><a href="ch1.xhtml">第一章</a></li></ol>
+      </li>
+      <li><a href="  ">空白だけ</a></li>
+      <li><a href="ch2.xhtml#s1">第二章</a></li>
+    </ol>
+  </nav>
+</body></html>
+"##;
+
     /// 入れ子の `navPoint` を持つ EPUB2 の NCX。
     ///
     /// `playOrder` は文書順と逆にしてあり、内容を持たない `navPoint` も含む。
@@ -1719,11 +1794,51 @@ mod tests {
         nav
     }
 
-    /// 期待する目次エントリを組み立てる。
+    /// `href` の並びから nav を組み立てる。`None` の要素は `href` 属性なし。
+    fn nav_with_hrefs(hrefs: &[Option<&str>]) -> String {
+        let mut nav = String::from("<html><body><nav epub:type=\"toc\"><ol>");
+        for href in hrefs {
+            match href {
+                Some(value) => nav.push_str(&format!("<li><a href=\"{value}\">項目</a></li>")),
+                None => nav.push_str("<li><a>項目</a></li>"),
+            }
+        }
+        nav.push_str("</ol></nav></body></html>");
+        nav
+    }
+
+    /// `src` の並びから `<navMap>` を組み立てた NCX を返す。
+    fn ncx_with_sources(sources: &[&str]) -> String {
+        let mut ncx = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\" version=\"2005-1\"><navMap>",
+        );
+        for (index, src) in sources.iter().enumerate() {
+            ncx.push_str(&format!(
+                "<navPoint id=\"n{index}\"><navLabel><text>項目{index}</text></navLabel>\
+                 <content src=\"{src}\"/></navPoint>"
+            ));
+        }
+        ncx.push_str("</navMap></ncx>");
+        ncx
+    }
+
+    /// 期待する目次エントリを組み立てる（フラグメント無し）。
     fn entry(title: &str, href: &str, depth: usize) -> EpubTocEntry {
         EpubTocEntry {
             title: title.to_string(),
             href: href.to_string(),
+            fragment: None,
+            depth,
+        }
+    }
+
+    /// フラグメント付きの期待する目次エントリを組み立てる。
+    fn entry_with_fragment(title: &str, href: &str, fragment: &str, depth: usize) -> EpubTocEntry {
+        EpubTocEntry {
+            title: title.to_string(),
+            href: href.to_string(),
+            fragment: Some(fragment.to_string()),
             depth,
         }
     }
@@ -2049,7 +2164,7 @@ mod tests {
             book.toc().unwrap(),
             vec![
                 entry("第一章 & はじめに", "OEBPS/ch1.xhtml", 0),
-                entry("第二章 1 節", "OEBPS/ch2.xhtml", 1),
+                entry_with_fragment("第二章 1 節", "OEBPS/ch2.xhtml", "s1", 1),
             ]
         );
     }
@@ -2075,6 +2190,113 @@ mod tests {
         // `<a href="ch2.xhtml#s1">` はフラグメントを落として章と同じパスになる。
         assert_eq!(toc[1].href, "OEBPS/ch2.xhtml");
         assert_eq!(toc[1].href, book.chapters()[1].href);
+        // フラグメント自体は `fragment` に保持する。
+        assert_eq!(toc[1].fragment.as_deref(), Some("s1"));
+        assert_eq!(toc[0].fragment, None);
+    }
+
+    #[test]
+    fn keeps_nav_fragment_alongside_resolved_href() {
+        let bytes = epub_with_nav(NAV_FRAGMENT_MIXED);
+        let book = EpubBook::open(&bytes).unwrap();
+        let toc = book.toc().unwrap();
+
+        assert_eq!(toc.len(), 2);
+        // フラグメント付きでも `href` は章と同じ値になる。
+        assert_eq!(toc[0].href, "OEBPS/ch1.xhtml");
+        assert_eq!(toc[0].href, book.chapters()[0].href);
+        assert_eq!(toc[0].fragment.as_deref(), Some("s1"));
+        assert_eq!(toc[0].depth, 0);
+        // フラグメント無しは `None`。
+        assert_eq!(toc[1].href, "OEBPS/ch2.xhtml");
+        assert_eq!(toc[1].fragment, None);
+        assert_eq!(toc[1].depth, 1);
+    }
+
+    #[test]
+    fn treats_empty_nav_fragment_as_none() {
+        // `#` の後ろが空なら `None`。
+        let bytes = epub_with_nav(&nav_with_hrefs(&[Some("ch1.xhtml#")]));
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("項目", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn keeps_nav_fragment_verbatim() {
+        let bytes = epub_with_nav(&nav_with_hrefs(&[
+            Some("ch1.xhtml#%E3%81%82"),
+            Some("ch2.xhtml#a#b"),
+        ]));
+        let book = EpubBook::open(&bytes).unwrap();
+        let toc = book.toc().unwrap();
+
+        // パーセントエンコードは復号しない。
+        assert_eq!(toc[0].fragment.as_deref(), Some("%E3%81%82"));
+        // 2 個目以降の `#` は区切りにしない。
+        assert_eq!(toc[1].fragment.as_deref(), Some("a#b"));
+    }
+
+    #[test]
+    fn decodes_nav_fragment_entities_and_trims_spaces() {
+        let bytes = epub_with_nav(&nav_with_hrefs(&[
+            Some("ch1.xhtml#a&amp;b"),
+            Some("ch2.xhtml# s1 "),
+        ]));
+        let book = EpubBook::open(&bytes).unwrap();
+        let toc = book.toc().unwrap();
+
+        // 属性の復号で戻った `&` をそのまま保持する。
+        assert_eq!(toc[0].fragment.as_deref(), Some("a&b"));
+        // 前後の空白は落とす。
+        assert_eq!(toc[1].fragment.as_deref(), Some("s1"));
+    }
+
+    #[test]
+    fn skips_nav_anchor_without_path() {
+        let bytes = epub_with_nav(&nav_with_hrefs(&[Some("#s1"), Some("ch1.xhtml")]));
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // フラグメントだけの `<a>` は読み飛ばし、残りのエントリは残す。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("項目", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn skips_nav_anchor_without_href() {
+        let bytes = epub_with_nav(&nav_with_hrefs(&[
+            None,
+            Some(""),
+            Some("  "),
+            Some("ch1.xhtml"),
+        ]));
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // `href` が無い・空・空白だけの `<a>` はエントリにしない。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("項目", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn keeps_depth_after_empty_path_anchor() {
+        let bytes = epub_with_nav(NAV_WITH_EMPTY_PATHS);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // パス部が空の `<a>` を挟んでも深さの規則は変わらない。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![
+                entry("第一章", "OEBPS/ch1.xhtml", 1),
+                entry_with_fragment("第二章", "OEBPS/ch2.xhtml", "s1", 0),
+            ]
+        );
     }
 
     #[test]
@@ -2119,9 +2341,36 @@ mod tests {
             book.toc().unwrap(),
             vec![
                 entry("第一章", "OEBPS/ch1.xhtml", 0),
-                entry("第一節", "OEBPS/ch2.xhtml", 1),
+                // `<content src="ch2.xhtml#s1"/>` のフラグメントを保持する。
+                entry_with_fragment("第一節", "OEBPS/ch2.xhtml", "s1", 1),
                 entry("第二章", "OEBPS/ch2.xhtml", 0),
             ]
+        );
+    }
+
+    #[test]
+    fn keeps_ncx_fragment() {
+        let ncx = ncx_with_sources(&["Text/ch1.xhtml#p1", "ch2.xhtml"]);
+        let bytes = epub_with_toc(None, Some(&ncx), OPF_NCX);
+        let book = EpubBook::open(&bytes).unwrap();
+        let toc = book.toc().unwrap();
+
+        assert_eq!(toc[0].href, "OEBPS/Text/ch1.xhtml");
+        assert_eq!(toc[0].fragment.as_deref(), Some("p1"));
+        assert_eq!(toc[1].href, "OEBPS/ch2.xhtml");
+        assert_eq!(toc[1].fragment, None);
+    }
+
+    #[test]
+    fn skips_ncx_point_without_path() {
+        let ncx = ncx_with_sources(&["#p", "ch1.xhtml"]);
+        let bytes = epub_with_toc(None, Some(&ncx), OPF_NCX);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // パス部が空の `navPoint` は読み飛ばし、残りのエントリは残す。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("項目1", "OEBPS/ch1.xhtml", 0)]
         );
     }
 
@@ -2135,7 +2384,7 @@ mod tests {
             book.toc().unwrap(),
             vec![
                 entry("第一章 & はじめに", "OEBPS/ch1.xhtml", 0),
-                entry("第二章 1 節", "OEBPS/ch2.xhtml", 1),
+                entry_with_fragment("第二章 1 節", "OEBPS/ch2.xhtml", "s1", 1),
             ]
         );
     }
@@ -2191,12 +2440,11 @@ mod tests {
             CoreError::Validation(_)
         ));
 
-        // 空の `href` は不正な nav として扱う。
+        // 空の `href` はエラーにせず読み飛ばす（契約による意図した更新）。
+        // 従来は不正な nav として `CoreError::Archive` にしていた。
         let empty = "<html><body><nav epub:type=\"toc\"><ol><li><a href=\"\">x</a></li></ol></nav></body></html>";
-        assert!(matches!(
-            toc_error(&epub_with_nav(empty)),
-            CoreError::Archive(_)
-        ));
+        let book = EpubBook::open(&epub_with_nav(empty)).unwrap();
+        assert!(book.toc().unwrap().is_empty());
     }
 
     #[test]
