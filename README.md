@@ -19,7 +19,8 @@ openrustbooks/
 │       ├── 0003-native-wasm-target-split.md
 │       ├── 0004-zip-archive-reader.md
 │       ├── 0005-epub-body-reading.md
-│       └── 0006-epub-table-of-contents.md
+│       ├── 0006-epub-table-of-contents.md
+│       └── 0007-epub-toc-fragments.md
 ├── core/                         # 共通コアライブラリ (native + wasm)
 │   ├── src/
 │   │   ├── lib.rs
