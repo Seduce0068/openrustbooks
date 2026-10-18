@@ -22,7 +22,8 @@ openrustbooks/
 │       ├── 0006-epub-table-of-contents.md
 │       ├── 0007-epub-toc-fragments.md
 │       ├── 0008-epub-cover-and-chapter-title.md
-│       └── 0009-epub-landmarks-and-page-list.md
+│       ├── 0009-epub-landmarks-and-page-list.md
+│       └── 0010-epub-wasm-bindings.md
 ├── core/                         # 共通コアライブラリ (native + wasm)
 │   ├── src/
 │   │   ├── lib.rs
@@ -39,7 +40,7 @@ openrustbooks/
 │   │   │   ├── prompt.rs         # プロンプトテンプレート
 │   │   │   ├── diff.rs           # 差分計算
 │   │   │   └── pipeline.rs       # 高レベルサービス (ネイティブ専用)
-│   │   └── wasm.rs               # Wasmバインディング
+│   │   └── wasm.rs               # Wasmバインディング（EPUB読み出し API）
 │   ├── prompts/                  # プロンプトテンプレート
 │   └── Cargo.toml
 ├── desktop/                      # Tauriデスクトップアプリ
