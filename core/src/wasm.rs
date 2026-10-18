@@ -4,6 +4,8 @@
 //! via wasm-bindgen for use in the browser version.
 
 #[cfg(target_arch = "wasm32")]
+use crate::epub::{EpubBook, EpubCoverImage, EpubTocEntry};
+#[cfg(target_arch = "wasm32")]
 use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -27,6 +29,154 @@ pub fn init() {
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
     console_log!("openrustbooks-core initialized");
+}
+
+/// EPUB 読み取り API を JavaScript に公開するラッパー。
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub struct WasmEpubBook {
+    inner: EpubBook,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl WasmEpubBook {
+    /// EPUB ZIP のバイト列から本を開く。
+    #[wasm_bindgen(constructor)]
+    pub fn new(bytes: Vec<u8>) -> Result<WasmEpubBook, JsValue> {
+        let inner =
+            EpubBook::open(&bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// spine に含まれる章の数を返す。
+    pub fn chapter_count(&self) -> usize {
+        self.inner.chapters().len()
+    }
+
+    /// 指定章のアーカイブ内パスを返す。
+    pub fn chapter_href(&self, index: u32) -> Result<String, JsValue> {
+        self.inner
+            .chapters()
+            .get(index as usize)
+            .map(|chapter| chapter.href.clone())
+            .ok_or_else(|| {
+                js_error(crate::error::CoreError::DocumentNotFound(format!(
+                    "章の index が範囲外です: {index}"
+                )))
+            })
+    }
+
+    /// 指定章の XHTML を返す。
+    pub fn chapter_html(&self, index: u32) -> Result<String, JsValue> {
+        self.inner
+            .chapter_html(index as usize)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
+    /// 指定章のプレーンテキストを返す。
+    pub fn chapter_text(&self, index: u32) -> Result<String, JsValue> {
+        self.inner
+            .chapter_text(index as usize)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
+    /// 指定章の表示名を返す。情報が無ければ `undefined`。
+    pub fn chapter_title(&self, index: u32) -> Result<Option<String>, JsValue> {
+        self.inner
+            .chapter_title(index as usize)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
+    /// 指定章から見た相対リソースをバイト列で返す。
+    pub fn chapter_resource(&self, index: u32, href: String) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .chapter_resource(index as usize, &href)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
+    /// EPUB3 nav の目次を JavaScript 値に変換して返す。
+    pub fn toc(&self) -> Result<JsValue, JsValue> {
+        let entries = self.inner.toc().map_err(js_error)?;
+        serialize_navigation(entries)
+    }
+
+    /// EPUB3 nav の landmarks を JavaScript 値に変換して返す。
+    pub fn landmarks(&self) -> Result<JsValue, JsValue> {
+        let entries = self.inner.landmarks().map_err(js_error)?;
+        serialize_navigation(entries)
+    }
+
+    /// EPUB3 nav の page-list を JavaScript 値に変換して返す。
+    pub fn page_list(&self) -> Result<JsValue, JsValue> {
+        let entries = self.inner.page_list().map_err(js_error)?;
+        serialize_navigation(entries)
+    }
+
+    /// 表紙画像の情報を JavaScript 値に変換して返す。無ければ空値。
+    pub fn cover_image(&self) -> Result<JsValue, JsValue> {
+        let cover = self.inner.cover_image().map_err(js_error)?;
+        serialize_cover(cover)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn js_error(error: crate::error::CoreError) -> JsValue {
+    JsValue::from_str(&error.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn serialize_navigation(entries: Vec<EpubTocEntry>) -> Result<JsValue, JsValue> {
+    let entries: Vec<WasmEpubTocEntry> = entries.into_iter().map(Into::into).collect();
+    serde_wasm_bindgen::to_value(&entries).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn serialize_cover(cover: Option<EpubCoverImage>) -> Result<JsValue, JsValue> {
+    let cover: Option<WasmEpubCoverImage> = cover.map(Into::into);
+    serde_wasm_bindgen::to_value(&cover).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Serialize)]
+struct WasmEpubTocEntry {
+    title: String,
+    href: String,
+    fragment: Option<String>,
+    depth: usize,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<EpubTocEntry> for WasmEpubTocEntry {
+    fn from(entry: EpubTocEntry) -> Self {
+        Self {
+            title: entry.title,
+            href: entry.href,
+            fragment: entry.fragment,
+            depth: entry.depth,
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Serialize)]
+struct WasmEpubCoverImage {
+    id: String,
+    href: String,
+    media_type: String,
+    bytes: Vec<u8>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<EpubCoverImage> for WasmEpubCoverImage {
+    fn from(cover: EpubCoverImage) -> Self {
+        Self {
+            id: cover.id,
+            href: cover.href,
+            media_type: cover.media_type,
+            bytes: cover.bytes,
+        }
+    }
 }
 
 /// Wasm-compatible document representation
