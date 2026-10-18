@@ -1,13 +1,16 @@
 //! EPUB の本文読み出し。
 //!
 //! [`ArchiveReader`] の上に、`META-INF/container.xml` → OPF（メタデータ・
-//! manifest・spine）→ 章本文のテキスト抽出までを載せる。ファイル I/O に
+//! manifest・spine）→ 章本文とリソースの読み出しまでを載せる。ファイル I/O に
 //! 依存せず、ネイティブと `wasm32-unknown-unknown` の両方でビルドできる。
 //!
 //! `docs/requirements.md` の REQ-002（電子書籍の閲覧）のうち、本文・章・目次
-//! （EPUB3 の nav と EPUB2 の NCX）の読み出しを提供する。章タイトルの取得、
-//! アンカー単位の移動、画像の扱い、`Document` 型との統合は範囲外。読み取り
-//! 専用であり、EPUB の作成・書き換え・DRM 解除は提供しない。
+//! （EPUB3 の nav と EPUB2 の NCX）の読み出しに加え、表示用の XHTML
+//! （[`EpubBook::chapter_html`]）とリソースの読み出し
+//! （[`EpubBook::chapter_resource`]）を提供する。章タイトルの取得、アンカー
+//! 単位の移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
+//! `Document` 型との統合は範囲外。読み取り専用であり、EPUB の作成・書き換え・
+//! DRM 解除は提供しない。
 //!
 //! 失敗はすべて [`CoreResult`] で返し、panic しない。不正な入力は
 //! 黙って読み飛ばさず、`CoreError::Archive` / `CoreError::Validation` として
@@ -228,16 +231,34 @@ impl EpubBook {
     /// UTF-8 と XML の構文エラーは [`CoreError::Archive`]。`head`・`script`・
     /// `style` の内側は含めず、ブロック要素と `br` で改行する。
     pub fn chapter_text(&self, index: usize) -> CoreResult<String> {
-        let href = self.chapter(index)?.href.clone();
-        let data = self.chapter_bytes(index)?;
-        let decoded = String::from_utf8(data).map_err(|err| {
-            CoreError::archive(format!("章を UTF-8 として復号できません: {href} ({err})"))
-        })?;
-        let body = match decoded.strip_prefix('\u{FEFF}') {
-            Some(stripped) => stripped.to_string(),
-            None => decoded,
-        };
+        let (href, body) = self.chapter_source(index)?;
         extract_text(&body, &href)
+    }
+
+    /// 章の XHTML を先頭の BOM を除いた UTF-8 文字列で返す。
+    ///
+    /// 内容はそのまま返し、XML 解析・タグ除去・整形はしない。範囲外の
+    /// `index` は [`CoreError::DocumentNotFound`]、読み出しと復号の失敗は
+    /// [`CoreError::Archive`]。
+    pub fn chapter_html(&self, index: usize) -> CoreResult<String> {
+        let (_, html) = self.chapter_source(index)?;
+        Ok(html)
+    }
+
+    /// 章から見た相対参照 `href` のリソースをバイト列で返す。
+    ///
+    /// 基準ディレクトリは章の `href` の所属ディレクトリ。`#` 以降の
+    /// フラグメントは落とす。範囲外の `index` と存在しないパスは
+    /// [`CoreError::DocumentNotFound`]、空のパスとスキーム付き URL・
+    /// 先頭 `/` は [`CoreError::Archive`]、ルートを越える解決は
+    /// [`CoreError::Validation`]。
+    pub fn chapter_resource(&self, index: usize, href: &str) -> CoreResult<Vec<u8>> {
+        let chapter_href = self.chapter(index)?.href.clone();
+        let path = resolve_reference(path_dir(&chapter_href), href, "章リソースの href")?;
+        match self.archive.read_entry(&path) {
+            Ok(data) => Ok(data),
+            Err(first) => self.read_decoded_entry(&path).ok_or(first),
+        }
     }
 
     /// 範囲を検証して章を取り出す。
@@ -245,6 +266,24 @@ impl EpubBook {
         self.chapters
             .get(index)
             .ok_or_else(|| CoreError::DocumentNotFound(format!("章の index が範囲外です: {index}")))
+    }
+
+    /// 章の `href` と、復号して先頭の BOM を 1 個だけ除いた本文を返す。
+    ///
+    /// 範囲検証と `%XX` の復号フォールバックは [`EpubBook::chapter_bytes`] に
+    /// 委ねる。不正な UTF-8 は [`CoreError::Archive`]。
+    fn chapter_source(&self, index: usize) -> CoreResult<(String, String)> {
+        let href = self.chapter(index)?.href.clone();
+        let data = self.chapter_bytes(index)?;
+        let decoded = String::from_utf8(data).map_err(|err| {
+            CoreError::archive(format!("章を UTF-8 として復号できません: {href} ({err})"))
+        })?;
+        // 先頭の BOM は 1 個だけ除き、2 個目以降は本文として残す。
+        let body = match decoded.strip_prefix('\u{FEFF}') {
+            Some(stripped) => stripped.to_string(),
+            None => decoded,
+        };
+        Ok((href, body))
     }
 
     /// `href` の `%XX` を復号した名前で読めたらその内容を返す。
@@ -453,10 +492,12 @@ fn normalize_container_path(raw: &str) -> CoreResult<String> {
     Ok(components.join("/"))
 }
 
-/// OPF のパスから、相対 `href` の基準となるディレクトリを返す。
-fn opf_dir(opf_path: &str) -> &str {
-    match opf_path.rfind('/') {
-        Some(index) => &opf_path[..index],
+/// パスから、相対参照の基準となる所属ディレクトリ（最後の `/` まで）を返す。
+///
+/// `/` を含まない場合はルート直下とみなして空文字列を返す。
+fn path_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(index) => &path[..index],
         None => "",
     }
 }
@@ -485,23 +526,34 @@ fn split_fragment(raw: &str) -> (&str, Option<String>) {
 /// URL と先頭 `/` は不正な OPF として [`CoreError::Archive`]、ルートを越える
 /// 解決は [`CoreError::Validation`] を返す。
 fn resolve_href(opf_dir: &str, href: &str) -> CoreResult<String> {
+    resolve_reference(opf_dir, href, "manifest の href")
+}
+
+/// 相対参照 `href` を `base_dir` 基準でアーカイブ内パスへ解決する。
+///
+/// 最初の `#` 以降（フラグメント）を落として前後の空白を除き、`.` と `..` を
+/// 字句的に解決する。空のパス・スキーム付き URL・先頭 `/` は対象の文書が
+/// 不正であるとして [`CoreError::Archive`]、ルートを越える解決は
+/// [`CoreError::Validation`] を返す。`subject` はエラーメッセージの主語
+/// （例: `manifest の href`）に使う。
+fn resolve_reference(base_dir: &str, href: &str, subject: &str) -> CoreResult<String> {
     let target = href.split('#').next().unwrap_or_default().trim();
     if target.is_empty() {
-        return Err(CoreError::archive("manifest の href が空です"));
+        return Err(CoreError::archive(format!("{subject} が空です")));
     }
     if target.starts_with('/') {
         return Err(CoreError::archive(format!(
-            "manifest の href が絶対パスです: {href:?}"
+            "{subject} が絶対パスです: {href:?}"
         )));
     }
     if has_scheme(target) {
         return Err(CoreError::archive(format!(
-            "manifest の href がスキーム付き URL です: {href:?}"
+            "{subject} がスキーム付き URL です: {href:?}"
         )));
     }
 
     let mut components: Vec<&str> = Vec::new();
-    for component in opf_dir.split('/').filter(|part| !part.is_empty()) {
+    for component in base_dir.split('/').filter(|part| !part.is_empty()) {
         components.push(component);
     }
     for component in target.split('/') {
@@ -510,7 +562,7 @@ fn resolve_href(opf_dir: &str, href: &str) -> CoreResult<String> {
             ".." => {
                 if components.pop().is_none() {
                     return Err(CoreError::validation(format!(
-                        "manifest の href がルートを越えて解決されます: {href:?}"
+                        "{subject} がルートを越えて解決されます: {href:?}"
                     )));
                 }
             }
@@ -520,7 +572,7 @@ fn resolve_href(opf_dir: &str, href: &str) -> CoreResult<String> {
 
     if components.is_empty() {
         return Err(CoreError::archive(format!(
-            "manifest の href が空のパスに解決されます: {href:?}"
+            "{subject} が空のパスに解決されます: {href:?}"
         )));
     }
     Ok(components.join("/"))
@@ -566,7 +618,7 @@ fn unescape_attribute(
 
 /// OPF を解析してメタデータと章一覧を作る。
 fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
-    let base_dir = opf_dir(opf_path);
+    let base_dir = path_dir(opf_path);
 
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -2457,5 +2509,242 @@ mod tests {
         // 上限を 1 つ超えると Validation。
         let over = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES + 1));
         assert!(matches!(toc_error(&over), CoreError::Validation(_)));
+    }
+
+    /// 章と同じディレクトリの下にあるリソースのバイト列。
+    const PIC: &[u8] = b"\x89PNG\r\n\x1a\npic";
+
+    /// 章の所属ディレクトリの隣にあるリソースのバイト列。
+    const PIC_SIBLING: &[u8] = b"\x89PNG\r\n\x1a\nsibling";
+
+    /// 1 章目のバイト列を差し替えた EPUB を組み立てる。
+    fn epub_with_chapter(data: &[u8]) -> Vec<u8> {
+        build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", OPF.as_bytes()),
+            ("OEBPS/ch1.xhtml", data),
+        ])
+    }
+
+    /// `OEBPS/<name>` にリソースを持つ EPUB を組み立てる。
+    fn epub_with_resource(name: &str, data: &[u8]) -> Vec<u8> {
+        let path = format!("OEBPS/{name}");
+        build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", OPF.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            (path.as_str(), data),
+        ])
+    }
+
+    /// 章が `OEBPS/text/` にあり、`OEBPS/text/images/pic.png` と
+    /// `OEBPS/images/pic.png` を持つ EPUB。
+    fn epub_with_subdir_chapter() -> Vec<u8> {
+        let opf = OPF.replace("href=\"ch1.xhtml\"", "href=\"text/ch1.xhtml\"");
+        build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/text/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/text/images/pic.png", PIC),
+            ("OEBPS/images/pic.png", PIC_SIBLING),
+        ])
+    }
+
+    /// 章がルート直下にある EPUB（基準ディレクトリが空の場合の検証用）。
+    fn epub_with_root_chapter() -> Vec<u8> {
+        let container = CONTAINER.replace("OEBPS/content.opf", "content.opf");
+        build_epub(&[
+            ("META-INF/container.xml", container.as_bytes()),
+            ("content.opf", OPF.as_bytes()),
+            ("ch1.xhtml", CH1.as_bytes()),
+            ("pic.png", PIC),
+        ])
+    }
+
+    /// `chapter_resource` のエラーを取り出す。
+    fn resource_error(book: &EpubBook, index: usize, href: &str) -> CoreError {
+        match book.chapter_resource(index, href) {
+            Err(err) => err,
+            Ok(data) => panic!("エラーを期待したが {} バイト返った", data.len()),
+        }
+    }
+
+    #[test]
+    fn returns_chapter_html_verbatim() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // XML 宣言・タグ・属性をそのまま返す。
+        assert_eq!(book.chapter_html(0).unwrap(), CH1);
+    }
+
+    #[test]
+    fn strips_single_leading_bom_from_chapter_html() {
+        let mut with_bom = Vec::from(&b"\xEF\xBB\xBF"[..]);
+        with_bom.extend_from_slice(CH1.as_bytes());
+        let mut with_two = Vec::from(&b"\xEF\xBB\xBF\xEF\xBB\xBF"[..]);
+        with_two.extend_from_slice(CH1.as_bytes());
+
+        let book = EpubBook::open(&epub_with_chapter(&with_bom)).unwrap();
+        assert_eq!(book.chapter_html(0).unwrap(), CH1);
+
+        // BOM は 1 個だけ除き、2 個目は本文として残す。
+        let book = EpubBook::open(&epub_with_chapter(&with_two)).unwrap();
+        assert_eq!(book.chapter_html(0).unwrap(), format!("\u{FEFF}{CH1}"));
+    }
+
+    #[test]
+    fn rejects_chapter_html_with_invalid_utf8() {
+        let bytes = epub_with_chapter(&[0xFF, 0xFE, 0x00]);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(book.chapter_html(0), Err(CoreError::Archive(_))));
+    }
+
+    #[test]
+    fn rejects_out_of_range_chapter_html() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(
+            book.chapter_html(2),
+            Err(CoreError::DocumentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn reads_resource_next_to_chapter() {
+        let bytes = epub_with_resource("pic.png", PIC);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // `OEBPS/ch1.xhtml` から見た `pic.png` は `OEBPS/pic.png`。
+        assert_eq!(book.chapter_resource(0, "pic.png").unwrap(), PIC.to_vec());
+    }
+
+    #[test]
+    fn resolves_resource_in_sub_and_parent_directories() {
+        let bytes = epub_with_subdir_chapter();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapters()[0].href, "OEBPS/text/ch1.xhtml");
+        // 所属ディレクトリの下のサブディレクトリ。
+        assert_eq!(
+            book.chapter_resource(0, "images/pic.png").unwrap(),
+            PIC.to_vec()
+        );
+        // 所属ディレクトリの親を経由した参照。
+        assert_eq!(
+            book.chapter_resource(0, "../images/pic.png").unwrap(),
+            PIC_SIBLING.to_vec()
+        );
+    }
+
+    #[test]
+    fn drops_resource_fragment() {
+        let bytes = epub_with_resource("pic.png", PIC);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.chapter_resource(0, "pic.png#frag").unwrap(),
+            PIC.to_vec()
+        );
+    }
+
+    #[test]
+    fn reads_percent_encoded_resource() {
+        let bytes = epub_with_resource("a b.png", PIC);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapter_resource(0, "a%20b.png").unwrap(), PIC.to_vec());
+    }
+
+    #[test]
+    fn rejects_resource_escaping_root() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(
+            resource_error(&book, 0, "../../evil.png"),
+            CoreError::Validation(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_resource_with_scheme_or_absolute_path() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        for href in ["https://example.com/x.png", "/x.png"] {
+            assert!(matches!(
+                resource_error(&book, 0, href),
+                CoreError::Archive(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn rejects_resource_without_path() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        for href in ["", "   ", "#frag"] {
+            assert!(matches!(
+                resource_error(&book, 0, href),
+                CoreError::Archive(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn rejects_missing_resource() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(
+            resource_error(&book, 0, "missing.png"),
+            CoreError::DocumentNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_range_chapter_resource() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(
+            resource_error(&book, 2, "pic.png"),
+            CoreError::DocumentNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn resolves_resource_for_chapter_at_root() {
+        let bytes = epub_with_root_chapter();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapters()[0].href, "ch1.xhtml");
+        assert_eq!(book.chapter_resource(0, "pic.png").unwrap(), PIC.to_vec());
+        // ルート直下の章からの親参照はルートを越える。
+        assert!(matches!(
+            resource_error(&book, 0, "../evil.png"),
+            CoreError::Validation(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_encoded_or_backslash_resource_traversal() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // バックスラッシュ区切りの親参照は読み出しの検証で拒否する。
+        assert!(matches!(
+            resource_error(&book, 0, "..\\evil.png"),
+            CoreError::Validation(_)
+        ));
+        // `%XX` 復号後の `..` も読めない（復号側の拒否は最初のエラーで報告する）。
+        assert!(matches!(
+            resource_error(&book, 0, "%2e%2e%2fevil.png"),
+            CoreError::DocumentNotFound(_)
+        ));
     }
 }
