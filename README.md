@@ -23,7 +23,8 @@ openrustbooks/
 │       ├── 0007-epub-toc-fragments.md
 │       ├── 0008-epub-cover-and-chapter-title.md
 │       ├── 0009-epub-landmarks-and-page-list.md
-│       └── 0010-epub-wasm-bindings.md
+│       ├── 0010-epub-wasm-bindings.md
+│       └── 0011-web-epub-reader.md
 ├── core/                         # 共通コアライブラリ (native + wasm)
 │   ├── src/
 │   │   ├── lib.rs
