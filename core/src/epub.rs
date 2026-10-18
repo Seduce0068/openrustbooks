@@ -7,8 +7,9 @@
 //! `docs/requirements.md` の REQ-002（電子書籍の閲覧）のうち、本文・章・目次
 //! （EPUB3 の nav と EPUB2 の NCX）の読み出しに加え、表示用の XHTML
 //! （[`EpubBook::chapter_html`]）とリソースの読み出し
-//! （[`EpubBook::chapter_resource`]）を提供する。章タイトルの取得、アンカー
-//! 単位の移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
+//! （[`EpubBook::chapter_resource`]）、表紙画像（[`EpubBook::cover_image`]）と
+//! 章の表示名（[`EpubBook::chapter_title`]）の取得を提供する。アンカー単位の
+//! 移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
 //! `Document` 型との統合は範囲外。読み取り専用であり、EPUB の作成・書き換え・
 //! DRM 解除は提供しない。
 //!
@@ -40,6 +41,14 @@ const NAV_PROPERTY: &str = "nav";
 const TOC_TYPE: &str = "toc";
 /// EPUB2 NCX の media-type。
 const NCX_MEDIA_TYPE: &str = "application/x-dtbncx+xml";
+/// 表紙画像を指す `properties` のトークン（EPUB3）。
+const COVER_IMAGE_PROPERTY: &str = "cover-image";
+/// 表紙画像の `id` を持つ `<meta>` の `name` 属性値（EPUB2）。
+const COVER_META_NAME: &str = "cover";
+/// XHTML の文書タイトルを持つ要素のローカル名。
+const TITLE_ELEMENT: &str = "title";
+/// 本文の開始を示す要素のローカル名。
+const BODY_ELEMENT: &str = "body";
 /// nav の要素のローカル名。
 const NAV_ELEMENT: &str = "nav";
 /// 目次エントリ数の上限。
@@ -101,6 +110,21 @@ pub struct EpubChapter {
     pub linear: bool,
 }
 
+/// 表紙画像。
+///
+/// 画像のバイト列まで含む。デコード・縮小・URL の書き換えは行わない。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpubCoverImage {
+    /// manifest の `id`。
+    pub id: String,
+    /// OPF の位置を基準に解決済みの、アーカイブ内パス。
+    pub href: String,
+    /// manifest の `media-type`（そのままの値。未宣言なら空文字列）。
+    pub media_type: String,
+    /// 画像のバイト列。
+    pub bytes: Vec<u8>,
+}
+
 /// 目次の 1 項目。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EpubTocEntry {
@@ -130,6 +154,8 @@ pub struct EpubBook {
     manifest: Vec<ManifestItem>,
     /// 目次の `href` を解決する基準のディレクトリ（OPF の位置）。
     base_dir: String,
+    /// `<meta name="cover">` が指す表紙画像の `id`（EPUB2）。
+    cover_id: Option<String>,
 }
 
 impl EpubBook {
@@ -162,6 +188,7 @@ impl EpubBook {
             chapters: parsed.chapters,
             manifest: parsed.manifest,
             base_dir: parsed.base_dir,
+            cover_id: parsed.cover_id,
         })
     }
 
@@ -261,11 +288,82 @@ impl EpubBook {
         }
     }
 
+    /// 章の表示名を返す。情報源が無い場合は `None`。
+    ///
+    /// 目次（[`EpubBook::toc`]）で `href` が一致する最初のエントリの表示名を
+    /// 優先し、一致するエントリが無ければ章の XHTML の `<head>` の `<title>` を
+    /// 使う。実体参照は戻し、前後の空白と連続する空白はまとめる。
+    ///
+    /// 範囲外の `index` は [`CoreError::DocumentNotFound`]。目次または章の
+    /// 読み出し・解析の失敗は [`CoreError::Archive`] / [`CoreError::Validation`]
+    /// としてそのまま報告し、`<title>` へは落とさない（目次が壊れている本で
+    /// 別の名前を返さないため）。呼び出しごとに目次を解析し直し、必要なら章を
+    /// 読み直す（[`EpubBook::toc`] と同じ方針で、内部にキャッシュしない）。
+    pub fn chapter_title(&self, index: usize) -> CoreResult<Option<String>> {
+        let href = self.chapter(index)?.href.clone();
+        if let Some(title) = self.toc_title(&href)? {
+            return Ok(Some(title));
+        }
+        let html = self.chapter_html(index)?;
+        extract_title(&html, &href)
+    }
+
+    /// 表紙画像を返す。表紙の宣言が無い場合は `None`。
+    ///
+    /// manifest の `properties` に `cover-image` を含む item（EPUB3）を優先し、
+    /// 無ければ `<meta name="cover">` の `content` が指す `id` の item（EPUB2）
+    /// を使う。EPUB3 の宣言がある場合は EPUB2 へは落ちない。`media-type` が
+    /// `image/` 以外と明示されている item と、宣言されたエントリがアーカイブに
+    /// 無い場合は表紙なしとして `None` を返す（表紙は補助情報であり、無いことで
+    /// 本文の読み出しを妨げない）。それ以外の読み出しの失敗は
+    /// [`CoreError::Archive`] / [`CoreError::Validation`] として報告する。
+    pub fn cover_image(&self) -> CoreResult<Option<EpubCoverImage>> {
+        let item = self
+            .manifest
+            .iter()
+            .find(|item| has_property(&item.properties, COVER_IMAGE_PROPERTY))
+            .or_else(|| {
+                let id = self.cover_id.as_deref()?;
+                self.manifest.iter().find(|item| item.id == id)
+            });
+        let Some(item) = item else {
+            return Ok(None);
+        };
+        if !is_image_media_type(&item.media_type) {
+            return Ok(None);
+        }
+        let bytes = match self.archive.read_entry(&item.href) {
+            Ok(data) => data,
+            // エントリが無い場合は `%XX` を復号した名前でも試す
+            // （`chapter_bytes` と同じフォールバック）。それでも無ければ表紙なし。
+            Err(CoreError::DocumentNotFound(_)) => match self.read_decoded_entry(&item.href) {
+                Some(data) => data,
+                None => return Ok(None),
+            },
+            Err(err) => return Err(err),
+        };
+        Ok(Some(EpubCoverImage {
+            id: item.id.clone(),
+            href: item.href.clone(),
+            media_type: item.media_type.clone(),
+            bytes,
+        }))
+    }
+
     /// 範囲を検証して章を取り出す。
     fn chapter(&self, index: usize) -> CoreResult<&EpubChapter> {
         self.chapters
             .get(index)
             .ok_or_else(|| CoreError::DocumentNotFound(format!("章の index が範囲外です: {index}")))
+    }
+
+    /// 目次で `href` が一致する最初の表示名（空でない）を返す。
+    fn toc_title(&self, href: &str) -> CoreResult<Option<String>> {
+        Ok(self
+            .toc()?
+            .into_iter()
+            .find(|entry| entry.href == href && !entry.title.is_empty())
+            .map(|entry| entry.title))
     }
 
     /// 章の `href` と、復号して先頭の BOM を 1 個だけ除いた本文を返す。
@@ -319,6 +417,8 @@ struct ParsedOpf {
     manifest: Vec<ManifestItem>,
     /// OPF の位置（相対 `href` の基準）。
     base_dir: String,
+    /// `<meta name="cover">` が指す表紙画像の `id`。
+    cover_id: Option<String>,
 }
 
 /// manifest の `item`。
@@ -630,6 +730,7 @@ fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
     let mut manifest: Vec<ManifestItem> = Vec::new();
     let mut manifest_index: HashMap<String, usize> = HashMap::new();
     let mut spine: Vec<SpineRef> = Vec::new();
+    let mut cover_id: Option<String> = None;
     let mut depth: usize = 0;
 
     loop {
@@ -645,6 +746,7 @@ fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
                         push_manifest_item(&element, base_dir, &mut manifest, &mut manifest_index)?;
                     }
                     "itemref" => push_spine_ref(&element, &mut spine)?,
+                    "meta" if cover_id.is_none() => cover_id = cover_meta_id(&element)?,
                     _ => {}
                 }
                 if let Some(field) = metadata_field(name, &element)? {
@@ -663,6 +765,7 @@ fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
                         push_manifest_item(&element, base_dir, &mut manifest, &mut manifest_index)?;
                     }
                     "itemref" => push_spine_ref(&element, &mut spine)?,
+                    "meta" if cover_id.is_none() => cover_id = cover_meta_id(&element)?,
                     _ => {}
                 }
             }
@@ -726,7 +829,24 @@ fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
         chapters,
         manifest,
         base_dir: base_dir.to_string(),
+        cover_id,
     })
+}
+
+/// `<meta name="cover">` の `content`（表紙画像の manifest の `id`）を返す。
+///
+/// EPUB2 の表紙指定。`name` 属性を持たない `<meta>`（`property` による
+/// メタデータ）と、`content` が空の `<meta>` は `None`。
+fn cover_meta_id(element: &BytesStart<'_>) -> CoreResult<Option<String>> {
+    let Some(name) = attribute_value(element, "name")? else {
+        return Ok(None);
+    };
+    if !name.trim().eq_ignore_ascii_case(COVER_META_NAME) {
+        return Ok(None);
+    }
+    Ok(attribute_value(element, "content")?
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty()))
 }
 
 /// メタデータ収集の対象になる要素かどうか。
@@ -894,6 +1014,15 @@ fn build_chapters(
 /// `properties`（空白区切りのトークン列）に指定のトークンが含まれるかどうか。
 fn has_property(properties: &str, token: &str) -> bool {
     properties.split_whitespace().any(|value| value == token)
+}
+
+/// 表紙に使える画像の media-type かどうか。
+///
+/// `image/` 以外と明示されている item は表紙にしない（表紙ページの XHTML を
+/// 指す `id` を返さないため）。未宣言（空文字列）は判定材料が無いため許容する。
+fn is_image_media_type(media_type: &str) -> bool {
+    let value = media_type.trim();
+    value.is_empty() || value.to_ascii_lowercase().starts_with("image/")
 }
 
 /// 目次のエントリを追加する。上限を超える場合は [`CoreError::Validation`]。
@@ -1340,6 +1469,99 @@ fn set_ncx_title(points: &mut [NcxNavPoint], index: usize, value: String) {
     {
         point.title = Some(value);
     }
+}
+
+/// XHTML の `<head>` の最初の `<title>` の内容を正規化して返す。無ければ `None`。
+///
+/// 実体参照は定義済みの 5 つと数値参照だけを文字に戻す（本文抽出と同じ規則）。
+/// 空白だけの `<title>` は情報が無いものとして `None` にする。`<body>` に入った
+/// 後に現れる `<title>`（インライン SVG のアクセシブル名など）は章の表示名では
+/// ないため対象にしない。要素が閉じられていない・解析できない場合は
+/// [`CoreError::Archive`]。
+fn extract_title(xml: &str, label: &str) -> CoreResult<Option<String>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+
+    // 収集中の `<title>` の内容。`None` なら未収集または収集済み。
+    let mut text: Option<String> = None;
+    // 収集中の `<title>` の内側で開いている要素の数。
+    let mut nesting: usize = 0;
+    // `<body>` に入ったかどうか。
+    let mut in_body = false;
+    let mut depth: usize = 0;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) => {
+                depth += 1;
+                if text.is_some() {
+                    nesting += 1;
+                    continue;
+                }
+                match element.local_name().into_inner() {
+                    BODY_ELEMENT => in_body = true,
+                    TITLE_ELEMENT if !in_body => text = Some(String::new()),
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(element)) => {
+                // 自己終了した `<title/>` は内容を持たない。
+                if text.is_none() && !in_body && element.local_name().into_inner() == TITLE_ELEMENT
+                {
+                    return Ok(None);
+                }
+            }
+            Ok(Event::End(_)) => {
+                depth = depth.saturating_sub(1);
+                if text.is_some() && nesting > 0 {
+                    nesting -= 1;
+                    continue;
+                }
+                if let Some(contents) = text.take() {
+                    let title = normalize_text(&contents);
+                    return Ok(if title.is_empty() { None } else { Some(title) });
+                }
+            }
+            Ok(Event::Text(value)) => {
+                if let Some(contents) = text.as_mut() {
+                    contents.push_str(&value.into_inner());
+                }
+            }
+            Ok(Event::CData(value)) => {
+                if let Some(contents) = text.as_mut() {
+                    contents.push_str(&value.into_inner());
+                }
+            }
+            Ok(Event::GeneralRef(reference)) => {
+                let Some(contents) = text.as_mut() else {
+                    continue;
+                };
+                if reference.is_char_ref() {
+                    if let Ok(Some(ch)) = reference.resolve_char_ref() {
+                        contents.push(ch);
+                    }
+                } else if let Some(ch) = named_reference(&reference.into_inner()) {
+                    contents.push(ch);
+                }
+            }
+            Ok(Event::Eof) => {
+                if depth != 0 {
+                    return Err(CoreError::archive(format!(
+                        "{label} の要素が閉じられていません"
+                    )));
+                }
+                break;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                return Err(CoreError::archive(format!(
+                    "{label} を解析できません: {err}"
+                )));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// XHTML から本文テキストを抽出して正規化する。
@@ -2746,5 +2968,345 @@ mod tests {
             resource_error(&book, 0, "%2e%2e%2fevil.png"),
             CoreError::DocumentNotFound(_)
         ));
+    }
+
+    /// 表紙画像のバイト列。
+    const COVER: &[u8] = b"\x89PNG\r\n\x1a\ncover";
+
+    /// 表紙を EPUB3 の `properties="cover-image"` で宣言する OPF。
+    ///
+    /// EPUB2 の `<meta name="cover">` も併記し、EPUB3 の宣言を優先することを
+    /// 確認できるようにする。
+    const OPF_COVER3: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+    <meta name="cover" content="meta-cover"/>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="meta-cover" href="meta.png" media-type="image/png"/>
+    <item id="prop-cover" href="images/cover.png" media-type="image/png" properties="cover-image"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"#;
+
+    /// 表紙を EPUB2 の `<meta name="cover">` で宣言する OPF。
+    const OPF_COVER2: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+    <meta name="cover" content="cover-img"/>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="cover-img" href="cover.jpg" media-type="image/jpeg"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"#;
+
+    /// 表紙が画像ではない item を指す OPF。
+    const OPF_COVER_PAGE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+    <meta name="cover" content="cover-page"/>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"#;
+
+    /// 表紙の `href` がパーセントエンコードされた OPF。
+    const OPF_COVER_ENCODED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+    <meta name="cover" content="cover-img"/>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="cover-img" href="cover%20img.png" media-type="image/png"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"#;
+
+    /// OPF と追加エントリから EPUB を組み立てる（章は標準の 2 つ）。
+    fn epub_with_opf_and_files(opf: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut files: Vec<(&str, &[u8])> = vec![
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/ch2.xhtml", CH2.as_bytes()),
+        ];
+        files.extend_from_slice(extra);
+        build_epub(&files)
+    }
+
+    /// 非対応の圧縮方式として扱われるコード（既知の方式と重ならない値）。
+    const UNSUPPORTED_COMPRESSION: u16 = 99;
+
+    /// 指定エントリの圧縮方式だけを書き換えた ZIP を返す。
+    ///
+    /// 一覧の走査は通り、そのエントリの読み出しだけが失敗するアーカイブを作る
+    /// ために使う。ローカルファイルヘッダーとセントラルディレクトリの両方を
+    /// 書き換えないと整合しないため、両方を探して同じ値にする。
+    fn patch_compression_method(zip: &[u8], name: &str, method: u16) -> Vec<u8> {
+        let mut bytes = zip.to_vec();
+        let name = name.as_bytes();
+        for (signature, name_offset, method_offset) in
+            [(b"PK\x03\x04", 30, 8), (b"PK\x01\x02", 46, 10)]
+        {
+            let at = find_compression_method(&bytes, signature, name_offset, method_offset, name);
+            bytes[at..at + 2].copy_from_slice(&method.to_le_bytes());
+        }
+        bytes
+    }
+
+    /// `name` を持つヘッダーの圧縮方式の位置を返す（テスト専用）。
+    ///
+    /// `name_offset` は署名の先頭からファイル名まで、`method_offset` は署名の
+    /// 先頭から圧縮方式までの距離。見つからない場合はテストの前提が崩れて
+    /// いるため panic する。
+    fn find_compression_method(
+        zip: &[u8],
+        signature: &[u8; 4],
+        name_offset: usize,
+        method_offset: usize,
+        name: &[u8],
+    ) -> usize {
+        for start in 0..zip.len().saturating_sub(4) {
+            if &zip[start..start + 4] != signature {
+                continue;
+            }
+            let name_start = start + name_offset;
+            if zip.get(name_start..name_start + name.len()) == Some(name) {
+                let at = start + method_offset;
+                assert!(at + 2 <= zip.len(), "ヘッダーが途中で切れています");
+                return at;
+            }
+        }
+        panic!("ZIP のヘッダーが見つかりません");
+    }
+
+    /// 1 章目を差し替えた EPUB を組み立てる（目次と `<title>` の検証用）。
+    fn epub_with_chapter_and_opf(chapter: &str, opf: &str) -> Vec<u8> {
+        build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/ch1.xhtml", chapter.as_bytes()),
+            ("OEBPS/ch2.xhtml", CH2.as_bytes()),
+        ])
+    }
+
+    /// 目次の情報源を持たない OPF を返す。
+    fn opf_without_toc() -> String {
+        opf_with_nav_properties("cover")
+    }
+
+    #[test]
+    fn reads_cover_image_from_epub3_properties() {
+        let bytes = epub_with_opf_and_files(OPF_COVER3, &[("OEBPS/images/cover.png", COVER)]);
+        let book = EpubBook::open(&bytes).unwrap();
+        let cover = book.cover_image().unwrap().unwrap();
+
+        // EPUB3 の `properties` を優先する（`meta` は別の item を指している）。
+        assert_eq!(cover.id, "prop-cover");
+        assert_eq!(cover.href, "OEBPS/images/cover.png");
+        assert_eq!(cover.media_type, "image/png");
+        assert_eq!(cover.bytes, COVER.to_vec());
+    }
+
+    #[test]
+    fn reads_cover_image_from_epub2_meta() {
+        let bytes = epub_with_opf_and_files(OPF_COVER2, &[("OEBPS/cover.jpg", COVER)]);
+        let book = EpubBook::open(&bytes).unwrap();
+        let cover = book.cover_image().unwrap().unwrap();
+
+        assert_eq!(cover.id, "cover-img");
+        assert_eq!(cover.href, "OEBPS/cover.jpg");
+        assert_eq!(cover.media_type, "image/jpeg");
+        assert_eq!(cover.bytes, COVER.to_vec());
+    }
+
+    #[test]
+    fn returns_none_without_cover_declaration() {
+        // `properties="nav"` を差し替えた OPF は表紙を宣言していない。
+        let bytes = epub_with_toc(None, None, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(book.cover_image().unwrap().is_none());
+    }
+
+    #[test]
+    fn returns_none_when_cover_id_is_unknown() {
+        // 標準の OPF は `cover-image` を指すが、その id の item が無い。
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(book.cover_image().unwrap().is_none());
+    }
+
+    #[test]
+    fn returns_none_when_cover_entry_is_missing() {
+        // 宣言はあるがアーカイブにエントリが無い場合は表紙なしとする。
+        let bytes = epub_with_opf_and_files(OPF_COVER2, &[]);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(book.cover_image().unwrap().is_none());
+    }
+
+    #[test]
+    fn ignores_cover_item_that_is_not_an_image() {
+        let bytes = epub_with_opf_and_files(
+            OPF_COVER_PAGE,
+            &[("OEBPS/cover.xhtml", b"<html><body>cover</body></html>")],
+        );
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // 表紙ページ（XHTML）を指す `id` は画像ではないため表紙にしない。
+        assert!(book.cover_image().unwrap().is_none());
+    }
+
+    #[test]
+    fn reads_percent_encoded_cover_href() {
+        let bytes = epub_with_opf_and_files(OPF_COVER_ENCODED, &[("OEBPS/cover img.png", COVER)]);
+        let book = EpubBook::open(&bytes).unwrap();
+        let cover = book.cover_image().unwrap().unwrap();
+
+        // `href` は元の綴りのまま、バイト列は復号した名前で読む。
+        assert_eq!(cover.href, "OEBPS/cover%20img.png");
+        assert_eq!(cover.bytes, COVER.to_vec());
+    }
+
+    #[test]
+    fn reads_chapter_title_from_toc() {
+        let bytes = epub_with_nav(NAV_NESTED);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // 目次の表示名を章と `href` で対応付けて返す（章の `<title>` より優先）。
+        assert_eq!(
+            book.chapter_title(0).unwrap().as_deref(),
+            Some("第一章 & はじめに")
+        );
+        assert_eq!(
+            book.chapter_title(1).unwrap().as_deref(),
+            Some("第二章 1 節")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_chapter_document_title() {
+        // 目次の情報源を持たない EPUB では章の `<title>` を使う。
+        let bytes = epub_with_toc(None, None, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(
+            book.chapter_title(0).unwrap().as_deref(),
+            Some("Head Title")
+        );
+        // `<title>` を持たない章は `None`。
+        assert_eq!(book.chapter_title(1).unwrap(), None);
+    }
+
+    #[test]
+    fn normalizes_chapter_document_title() {
+        let chapter = "<html><head><title>  第一章 &amp; 序 &#x3042;  </title></head>\
+                       <body><p>x</p></body></html>";
+        let bytes = epub_with_chapter_and_opf(chapter, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // 実体参照を戻し、連続する空白をまとめて前後を落とす。
+        assert_eq!(
+            book.chapter_title(0).unwrap().as_deref(),
+            Some("第一章 & 序 あ")
+        );
+    }
+
+    #[test]
+    fn treats_empty_document_title_as_none() {
+        let chapter = "<html><head><title/></head><body><p>x</p></body></html>";
+        let bytes = epub_with_chapter_and_opf(chapter, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapter_title(0).unwrap(), None);
+    }
+
+    #[test]
+    fn rejects_out_of_range_chapter_title() {
+        let bytes = sample_epub();
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(
+            book.chapter_title(9),
+            Err(CoreError::DocumentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_chapter_title_when_document_is_broken() {
+        // 目次が無く、`<title>` も持たないまま要素が閉じられていない章。
+        let chapter = "<html><body><p>x</body></html>";
+        let bytes = epub_with_chapter_and_opf(chapter, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(matches!(book.chapter_title(0), Err(CoreError::Archive(_))));
+    }
+
+    #[test]
+    fn ignores_titles_outside_the_document_head() {
+        // `<head>` に `<title>` を持たず、本文のインライン SVG にだけ持つ章。
+        let chapter = "<html><head></head><body><svg><title>図</title></svg><p>x</p></body></html>";
+        let bytes = epub_with_chapter_and_opf(chapter, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapter_title(0).unwrap(), None);
+    }
+
+    #[test]
+    fn prefers_head_title_over_inline_svg_title() {
+        let chapter = "<html><head><title>章の名前</title></head>\
+                       <body><svg><title>図</title></svg><p>x</p></body></html>";
+        let bytes = epub_with_chapter_and_opf(chapter, &opf_without_toc());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapter_title(0).unwrap().as_deref(), Some("章の名前"));
+    }
+
+    #[test]
+    fn reports_cover_errors_other_than_a_missing_entry() {
+        // 表紙エントリの圧縮方式だけを非対応の値に書き換えた EPUB を組み立てる。
+        let bytes = epub_with_opf_and_files(OPF_COVER2, &[("OEBPS/cover.jpg", COVER)]);
+        let broken = patch_compression_method(&bytes, "OEBPS/cover.jpg", UNSUPPORTED_COMPRESSION);
+        let book = EpubBook::open(&broken).unwrap();
+
+        // エントリの欠落は表紙なしにするが、読み出しの失敗は報告する。
+        assert!(matches!(book.cover_image(), Err(CoreError::Archive(_))));
     }
 }
