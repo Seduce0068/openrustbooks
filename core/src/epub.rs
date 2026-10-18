@@ -8,8 +8,9 @@
 //! （EPUB3 の nav と EPUB2 の NCX）の読み出しに加え、表示用の XHTML
 //! （[`EpubBook::chapter_html`]）とリソースの読み出し
 //! （[`EpubBook::chapter_resource`]）、表紙画像（[`EpubBook::cover_image`]）と
-//! 章の表示名（[`EpubBook::chapter_title`]）の取得を提供する。アンカー単位の
-//! 移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
+//! 章の表示名（[`EpubBook::chapter_title`]）、landmarks と page-list
+//! （[`EpubBook::landmarks`]、[`EpubBook::page_list`]）の取得を提供する。
+//! アンカー単位の移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
 //! `Document` 型との統合は範囲外。読み取り専用であり、EPUB の作成・書き換え・
 //! DRM 解除は提供しない。
 //!
@@ -39,6 +40,10 @@ const SKIPPED_ELEMENTS: [&str; 3] = ["head", "script", "style"];
 const NAV_PROPERTY: &str = "nav";
 /// EPUB3 nav を目次として選ぶ `epub:type` のトークン。
 const TOC_TYPE: &str = "toc";
+/// EPUB3 nav の landmarks 種別。
+const LANDMARKS_TYPE: &str = "landmarks";
+/// EPUB3 nav の page-list 種別。
+const PAGE_LIST_TYPE: &str = "page-list";
 /// EPUB2 NCX の media-type。
 const NCX_MEDIA_TYPE: &str = "application/x-dtbncx+xml";
 /// 表紙画像を指す `properties` のトークン（EPUB3）。
@@ -240,6 +245,22 @@ impl EpubBook {
         Ok(Vec::new())
     }
 
+    /// EPUB3 nav の landmarks を返す。情報源が無い場合は空。
+    ///
+    /// エントリの `href`・`fragment`・`depth` は [`EpubBook::toc`] と同じ規則で
+    /// 解決する。目次の nav が無い場合も landmarks 用 nav を検索する。
+    pub fn landmarks(&self) -> CoreResult<Vec<EpubTocEntry>> {
+        self.navigation_list(LANDMARKS_TYPE)
+    }
+
+    /// EPUB3 nav の page-list を返す。情報源が無い場合は空。
+    ///
+    /// エントリの `href`・`fragment`・`depth` は [`EpubBook::toc`] と同じ規則で
+    /// 解決する。目次の nav が無い場合も page-list 用 nav を検索する。
+    pub fn page_list(&self) -> CoreResult<Vec<EpubTocEntry>> {
+        self.navigation_list(PAGE_LIST_TYPE)
+    }
+
     /// 章の内容をバイト列で返す。
     ///
     /// 範囲外の `index` は [`CoreError::DocumentNotFound`]。`href` のエントリが
@@ -404,6 +425,24 @@ impl EpubBook {
             Err(CoreError::DocumentNotFound(_)) => Ok(None),
             Err(err) => Err(err),
         }
+    }
+
+    /// EPUB3 nav 文書から指定された種類の navigation list を読む。
+    fn navigation_list(&self, navigation_type: &str) -> CoreResult<Vec<EpubTocEntry>> {
+        let Some(item) = self
+            .manifest
+            .iter()
+            .find(|item| has_property(&item.properties, NAV_PROPERTY))
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(xml) = self.read_toc_source(&item.href)? else {
+            return Ok(Vec::new());
+        };
+        let Some(target) = select_nav_type(&xml, &item.href, navigation_type)? else {
+            return Ok(Vec::new());
+        };
+        collect_nav_entries(&xml, target, &self.base_dir, &item.href)
     }
 }
 
@@ -1050,6 +1089,21 @@ fn parse_nav(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEn
 /// `toc` を含む最初の `<nav>` を優先し、無ければ最初の `<nav>` を使う。
 /// `<nav>` が 1 つも無い場合は `None`。
 fn select_nav(xml: &str, label: &str) -> CoreResult<Option<usize>> {
+    select_nav_matching(xml, label, TOC_TYPE, true)
+}
+
+/// 指定された EPUB type を持つ `<nav>` の索引を選ぶ。
+fn select_nav_type(xml: &str, label: &str, navigation_type: &str) -> CoreResult<Option<usize>> {
+    select_nav_matching(xml, label, navigation_type, false)
+}
+
+/// 指定された EPUB type の `<nav>` を選び、必要なら最初の nav にフォールバックする。
+fn select_nav_matching(
+    xml: &str,
+    label: &str,
+    navigation_type: &str,
+    fallback_to_first: bool,
+) -> CoreResult<Option<usize>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
 
@@ -1066,7 +1120,7 @@ fn select_nav(xml: &str, label: &str) -> CoreResult<Option<usize>> {
                     if first.is_none() {
                         first = Some(count);
                     }
-                    if toc.is_none() && is_toc_nav(&element)? {
+                    if toc.is_none() && has_epub_type(&element, navigation_type)? {
                         toc = Some(count);
                     }
                     count += 1;
@@ -1077,7 +1131,7 @@ fn select_nav(xml: &str, label: &str) -> CoreResult<Option<usize>> {
                     if first.is_none() {
                         first = Some(count);
                     }
-                    if toc.is_none() && is_toc_nav(&element)? {
+                    if toc.is_none() && has_epub_type(&element, navigation_type)? {
                         toc = Some(count);
                     }
                     count += 1;
@@ -1101,13 +1155,13 @@ fn select_nav(xml: &str, label: &str) -> CoreResult<Option<usize>> {
         }
     }
 
-    Ok(toc.or(first))
+    Ok(toc.or_else(|| fallback_to_first.then_some(first).flatten()))
 }
 
-/// `<nav>` の接頭辞付き `type` 属性（`epub:type` など）に `toc` を含むかどうか。
+/// `<nav>` の接頭辞付き `type` 属性（`epub:type` など）に指定値があるかどうか。
 ///
-/// 接頭辞の無い `type` 属性は EPUB の目次指定ではないため対象にしない。
-fn is_toc_nav(element: &BytesStart<'_>) -> CoreResult<bool> {
+/// 接頭辞の無い `type` 属性は EPUB navigation 指定ではないため対象にしない。
+fn has_epub_type(element: &BytesStart<'_>, expected: &str) -> CoreResult<bool> {
     for attr in element.attributes().flatten() {
         if !attr.key.as_ref().contains(':') {
             continue;
@@ -1116,7 +1170,7 @@ fn is_toc_nav(element: &BytesStart<'_>) -> CoreResult<bool> {
             continue;
         }
         let value = unescape_attribute(&attr, "type")?;
-        if value.split_whitespace().any(|token| token == TOC_TYPE) {
+        if value.split_whitespace().any(|token| token == expected) {
             return Ok(true);
         }
     }
@@ -2731,6 +2785,63 @@ mod tests {
         // 上限を 1 つ超えると Validation。
         let over = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES + 1));
         assert!(matches!(toc_error(&over), CoreError::Validation(_)));
+    }
+
+    #[test]
+    fn reads_landmarks_and_page_list_from_typed_navs() {
+        let nav = r#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+          <nav epub:type="toc"><ol><li><a href="ch1.xhtml">Contents</a></li></ol></nav>
+          <nav epub:type="landmarks"><ol>
+            <li><a epub:type="cover" href="ch1.xhtml#cover">Cover</a></li>
+            <li><a epub:type="bodymatter" href="ch2.xhtml">Start</a>
+              <ol><li><a epub:type="index" href="ch2.xhtml#idx">Index</a></li></ol>
+            </li>
+          </ol></nav>
+          <nav epub:type="page-list"><ol>
+            <li><a href="ch1.xhtml#page1">1</a></li>
+            <li><a href="ch2.xhtml#page2">2</a></li>
+          </ol></nav>
+        </body></html>"#;
+        let book = EpubBook::open(&epub_with_nav(nav)).unwrap();
+
+        assert_eq!(
+            book.landmarks().unwrap(),
+            vec![
+                entry_with_fragment("Cover", "OEBPS/ch1.xhtml", "cover", 0),
+                entry("Start", "OEBPS/ch2.xhtml", 0),
+                entry_with_fragment("Index", "OEBPS/ch2.xhtml", "idx", 1),
+            ]
+        );
+        assert_eq!(
+            book.page_list().unwrap(),
+            vec![
+                entry_with_fragment("1", "OEBPS/ch1.xhtml", "page1", 0),
+                entry_with_fragment("2", "OEBPS/ch2.xhtml", "page2", 0),
+            ]
+        );
+        // 通常の目次選択も従来どおり toc 型を優先する。
+        assert_eq!(
+            book.toc().unwrap(),
+            vec![entry("Contents", "OEBPS/ch1.xhtml", 0)]
+        );
+    }
+
+    #[test]
+    fn returns_empty_navigation_lists_when_their_navs_are_missing() {
+        let book = EpubBook::open(&epub_with_nav(NAV_NESTED)).unwrap();
+
+        assert!(book.landmarks().unwrap().is_empty());
+        assert!(book.page_list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_invalid_href_in_landmarks() {
+        let nav = r#"<html><body>
+          <nav epub:type="landmarks"><ol><li><a href="../../escape">x</a></li></ol></nav>
+        </body></html>"#;
+        let book = EpubBook::open(&epub_with_nav(nav)).unwrap();
+
+        assert!(matches!(book.landmarks(), Err(CoreError::Validation(_))));
     }
 
     /// 章と同じディレクトリの下にあるリソースのバイト列。
