@@ -55,10 +55,10 @@ impl WasmEpubBook {
     }
 
     /// 指定章のアーカイブ内パスを返す。
-    pub fn chapter_href(&self, index: u32) -> Result<String, JsValue> {
+    pub fn chapter_href(&self, index: usize) -> Result<String, JsValue> {
         self.inner
             .chapters()
-            .get(index as usize)
+            .get(index)
             .map(|chapter| chapter.href.clone())
             .ok_or_else(|| {
                 js_error(crate::error::CoreError::DocumentNotFound(format!(
@@ -68,30 +68,30 @@ impl WasmEpubBook {
     }
 
     /// 指定章の XHTML を返す。
-    pub fn chapter_html(&self, index: u32) -> Result<String, JsValue> {
+    pub fn chapter_html(&self, index: usize) -> Result<String, JsValue> {
         self.inner
-            .chapter_html(index as usize)
+            .chapter_html(index)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     /// 指定章のプレーンテキストを返す。
-    pub fn chapter_text(&self, index: u32) -> Result<String, JsValue> {
+    pub fn chapter_text(&self, index: usize) -> Result<String, JsValue> {
         self.inner
-            .chapter_text(index as usize)
+            .chapter_text(index)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     /// 指定章の表示名を返す。情報が無ければ `undefined`。
-    pub fn chapter_title(&self, index: u32) -> Result<Option<String>, JsValue> {
+    pub fn chapter_title(&self, index: usize) -> Result<Option<String>, JsValue> {
         self.inner
-            .chapter_title(index as usize)
+            .chapter_title(index)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     /// 指定章から見た相対リソースをバイト列で返す。
-    pub fn chapter_resource(&self, index: u32, href: String) -> Result<Vec<u8>, JsValue> {
+    pub fn chapter_resource(&self, index: usize, href: String) -> Result<Vec<u8>, JsValue> {
         self.inner
-            .chapter_resource(index as usize, &href)
+            .chapter_resource(index, &href)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 

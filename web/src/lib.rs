@@ -8,6 +8,8 @@ use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::hooks::use_params_map;
 use leptos_router::path;
+#[cfg(target_arch = "wasm32")]
+use openrustbooks_core::WasmEpubBook;
 use openrustbooks_core::init;
 use wasm_bindgen::prelude::*;
 
@@ -222,26 +224,208 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
 }
 
 /// Reader component
+#[cfg(target_arch = "wasm32")]
+#[component]
+fn Reader(doc_id: Signal<String>) -> impl IntoView {
+    use js_sys::Uint8Array;
+    use serde::Deserialize;
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::{JsFuture, spawn_local};
+    use web_sys::{Event, HtmlInputElement};
+
+    #[derive(Deserialize)]
+    struct TocEntry {
+        title: String,
+        href: String,
+        depth: usize,
+    }
+
+    let book = Rc::new(RefCell::new(None::<WasmEpubBook>));
+    let (chapters, set_chapters) = signal(Vec::<(usize, String)>::new());
+    let (current, set_current) = signal(0_usize);
+    let (content, set_content) = signal(String::new());
+    let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
+
+    let load_chapter = {
+        let book = Rc::clone(&book);
+        Rc::new(move |index: usize| {
+            let result = book
+                .borrow()
+                .as_ref()
+                .ok_or_else(|| String::from("No EPUB is open."))
+                .and_then(|book| {
+                    book.chapter_text(index)
+                        .map_err(|error| format!("{error:?}"))
+                });
+            match result {
+                Ok(text) => {
+                    set_current.set(index);
+                    set_content.set(text);
+                    set_status.set(String::new());
+                }
+                Err(error) => set_status.set(error),
+            }
+        })
+    };
+
+    let on_file_change = {
+        let book = Rc::clone(&book);
+        move |event: Event| {
+            let Some(input) = event
+                .target()
+                .and_then(|target| target.dyn_into::<HtmlInputElement>().ok())
+            else {
+                set_status.set("Unable to read the file input.".to_string());
+                return;
+            };
+            let Some(file) = input.files().and_then(|files| files.item(0)) else {
+                return;
+            };
+            set_status.set(format!("Opening {}…", file.name()));
+            set_content.set(String::new());
+            set_chapters.set(Vec::new());
+            *book.borrow_mut() = None;
+
+            let book = Rc::clone(&book);
+            spawn_local(async move {
+                let buffer = match JsFuture::from(file.array_buffer()).await {
+                    Ok(buffer) => buffer,
+                    Err(error) => {
+                        set_status.set(format!("File read failed: {error:?}"));
+                        return;
+                    }
+                };
+                let bytes = Uint8Array::new(&buffer).to_vec();
+                let opened = match WasmEpubBook::new(bytes) {
+                    Ok(opened) => opened,
+                    Err(error) => {
+                        set_status.set(format!("EPUB open failed: {error:?}"));
+                        return;
+                    }
+                };
+
+                let count = opened.chapter_count();
+                if count == 0 {
+                    set_status.set("This EPUB has no readable chapters.".to_string());
+                    return;
+                }
+                let mut spine = Vec::with_capacity(count);
+                for index in 0..count {
+                    match opened.chapter_href(index) {
+                        Ok(href) => spine.push((index, href)),
+                        Err(error) => {
+                            set_status.set(format!("Chapter list failed: {error:?}"));
+                            return;
+                        }
+                    }
+                }
+
+                let toc = opened
+                    .toc()
+                    .ok()
+                    .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
+                    .unwrap_or_default();
+                let mut toc_titles = HashMap::new();
+                for entry in toc {
+                    let indent = "　".repeat(entry.depth.min(8));
+                    toc_titles
+                        .entry(entry.href)
+                        .or_insert_with(|| format!("{indent}{}", entry.title));
+                }
+                let options: Vec<(usize, String)> = spine
+                    .into_iter()
+                    .map(|(index, href)| {
+                        let title = toc_titles.remove(&href).unwrap_or(href);
+                        (index, title)
+                    })
+                    .collect();
+
+                match opened.chapter_text(0) {
+                    Ok(text) => {
+                        set_current.set(0);
+                        set_content.set(text);
+                        set_chapters.set(options);
+                        set_status.set(String::new());
+                        *book.borrow_mut() = Some(opened);
+                    }
+                    Err(error) => set_status.set(format!("Chapter read failed: {error:?}")),
+                }
+            });
+        }
+    };
+
+    let on_select = {
+        let load_chapter = Rc::clone(&load_chapter);
+        move |event: Event| {
+            if let Some(input) = event
+                .target()
+                .and_then(|target| target.dyn_into::<HtmlInputElement>().ok())
+                && let Ok(index) = input.value().parse::<usize>()
+            {
+                load_chapter(index);
+            }
+        }
+    };
+    let on_previous = {
+        let load_chapter = Rc::clone(&load_chapter);
+        move |_| {
+            let index = current.get();
+            if index > 0 {
+                load_chapter(index - 1);
+            }
+        }
+    };
+    let on_next = {
+        let load_chapter = Rc::clone(&load_chapter);
+        let chapters = chapters;
+        move |_| {
+            let index = current.get();
+            if chapters.get().iter().any(|(chapter, _)| *chapter > index) {
+                load_chapter(index + 1);
+            }
+        }
+    };
+
+    view! {
+        <div class="reader-container" data-doc-id=move || doc_id.get()>
+            <div class="reader-toolbar">
+                <label class="btn btn-primary" for="epub-file">"Open EPUB"</label>
+                <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" on:change=on_file_change/>
+                <button class="btn" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
+                <select class="reader-chapter-select" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
+                    <For
+                        each=move || chapters.get()
+                        key=|(index, _)| *index
+                        children=move |(index, title)| view! {
+                            <option value=index.to_string() prop:selected=move || current.get() == index>
+                                {title}
+                            </option>
+                        }
+                    />
+                </select>
+                <button class="btn" on:click=on_next disabled=move || {
+                    let index = current.get();
+                    !chapters.get().iter().any(|(chapter, _)| *chapter > index)
+                }>
+                    "▶"
+                </button>
+            </div>
+            <p class="reader-status" role="status">{move || status.get()}</p>
+            <div class="reader-content">
+                <pre class="document-content reader-text">{move || content.get()}</pre>
+            </div>
+        </div>
+    }
+}
+
+/// ネイティブの型検査用 Reader。実際のファイル読込は Wasm ターゲット専用。
+#[cfg(not(target_arch = "wasm32"))]
 #[component]
 fn Reader(doc_id: Signal<String>) -> impl IntoView {
     view! {
         <div class="reader-container" data-doc-id=move || doc_id.get()>
-            <div class="reader-toolbar">
-                <button class="btn">"◀"</button>
-                <button class="btn">"▶"</button>
-                <input type="range" class="font-size-slider" min="12" max="24" step="1" value="16"/>
-                <select class="theme-select">
-                    <option value="light">"Light"</option>
-                    <option value="dark">"Dark"</option>
-                    <option value="sepia">"Sepia"</option>
-                </select>
-                <button class="btn">"Vertical"</button>
-            </div>
-            <div class="reader-content">
-                <div class="document-content">
-                    <p>"Document content would be rendered here"</p>
-                </div>
-            </div>
+            <p>"EPUB reading is available in the browser build."</p>
         </div>
     }
 }
