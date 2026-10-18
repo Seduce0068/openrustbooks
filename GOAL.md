@@ -1,121 +1,142 @@
 # Goal
 
-`openrustbooks-core` の EPUB 目次に、フラグメント（文書内アンカー）の保持を追加する。
-`EpubTocEntry` に `fragment` を足し、nav / NCX の `href` から `#...` を取り出して
-保持する。読み取り専用・新規依存なし・ネイティブと wasm32 の両方でビルドできること。
+`openrustbooks-core` の EPUB に、章の表示に使う読み出しを追加する。
+`EpubBook::chapter_html`（章の XHTML を文字列で返す）と
+`EpubBook::chapter_resource`（章から見た相対参照でリソースを読む）を足す。
+読み取り専用・新規依存なし・ネイティブと wasm32 の両方でビルドできること。
 
 ## Scope
 
 ### 背景
 
-- ADR-0006 は目次を平坦なリストで返すことを決め、フラグメント（`#fragment`）を
-  落とすと決めた。理由は `href` を本文の章と一致させ、UI が突き合わせられるように
-  するためだった。
-- 実際の EPUB には `ch.xhtml#section-3` のように文書内の位置を指す目次・見出しが
-  ある。リーダーの「目次・ページ・章を移動できる」検証条件には章内の位置への
-  移動が含まれる。そこでフラグメントを第 2 のフィールドとして保持し、`href` の
-  一致規則は変えない。
-- 本作業はフラグメントの保持まで。UI への接続、実際のスクロール移動、
-  章タイトルの取得は範囲外。
+- `docs/requirements.md` のリーダー検証条件は「対応サンプルを開き、
+  目次・ページ・章を移動できる」。core は章のバイト列（`chapter_bytes`）と
+  平文テキスト（`chapter_text`）までを読める（ADR-0005）が、UI が章を
+  描画するには、章の XHTML そのものと、章が参照する画像・CSS などの
+  リソースを読む API が要る。
+- 表示は UI（WebView / iframe）が行う。core はサニタイズ、URL の書き換え、
+  画像のデコードを行わず、XHTML とリソースのバイト列を返すところまで。
+- 本作業は core の読み出しまで。UI への接続、サニタイズ、リソース URL の
+  書き換え、表紙や章タイトルの取得は範囲外。
 
 ### 成果物
 
-- `core/src/epub.rs`: 変更（`EpubTocEntry.fragment`、nav / NCX の解析で
-  フラグメントを分割して保持、パス部が空の href の扱い）
-- `core/src/lib.rs`: 変更不要（`EpubTocEntry` は既に公開・再エクスポート済み）
+- `core/src/epub.rs`: 変更（`chapter_html`・`chapter_resource`、相対参照解決の
+  共通ヘルパーの切り出し、モジュール doc の更新）
+- `core/src/lib.rs`: 変更不要（`EpubBook` は既に公開済み）
 - 新しい依存は追加しない。
 
 ### 公開 API（変更点のみ。その他の名前とシグネチャを変えない）
 
 ```rust
-pub struct EpubTocEntry {
-    /// 表示名（実体参照を戻し、空白を 1 つにまとめたもの）。
-    pub title: String,
-    /// 本文と同じ規則で解決済みのアーカイブ内パス（従来どおりフラグメントを含まない）。
-    pub href: String,
-    /// 生の href の最初の `#` の後ろ（`#` を除き、前後の空白を除いたもの）。
-    /// 元の綴りのまま保持し、パーセント復号しない。`#` が無い・空なら None。
-    pub fragment: Option<String>,
-    /// 入れ子の深さ。最上位を 0 とする。
-    pub depth: usize,
-}
-
 impl EpubBook {
-    /// 目次を返す。情報源が無い場合は空。
-    pub fn toc(&self) -> CoreResult<Vec<EpubTocEntry>>;
+    /// 章の XHTML を先頭の BOM を除いた UTF-8 文字列で返す。
+    ///
+    /// 内容はそのまま返し、XML 解析・タグ除去・整形はしない。範囲外の
+    /// `index` は [`CoreError::DocumentNotFound`]、読み出しと復号の失敗は
+    /// [`CoreError::Archive`]。
+    pub fn chapter_html(&self, index: usize) -> CoreResult<String>;
+
+    /// 章から見た相対参照 `href` のリソースをバイト列で返す。
+    ///
+    /// 基準ディレクトリは章の `href` の所属ディレクトリ。`#` 以降の
+    /// フラグメントは落とす。範囲外の `index` と存在しないパスは
+    /// [`CoreError::DocumentNotFound`]、空のパスとスキーム付き URL・
+    /// 先頭 `/` は [`CoreError::Archive`]、ルートを越える解決は
+    /// [`CoreError::Validation`]。
+    pub fn chapter_resource(&self, index: usize, href: &str) -> CoreResult<Vec<u8>>;
 }
 ```
 
-`derive`（`Debug`・`Clone`・`PartialEq`・`Eq`）は変えない。
-`EpubChapter`・`EpubMetadata`・`EpubBook` の他の API は変えない。
-
 ### 設計上の必須事項
 
-1. フラグメントの取り出し:
-   - 生の `href` / `src` を「最初の `#` の前」と「後ろ」に分ける。
-   - 後ろの部分は前後の空白（trim）を除いたもの。空なら `None`。
-   - 内部の `#` は区切りにしない（`#a#b` のフラグメントは `a#b`）。
-   - パーセントエンコードはそのまま保持する（`#%E3%81%82` は `%E3%81%82`）。
-   - XML の実体参照は属性の復号で戻った後の文字列を扱う
-     （`#a&amp;b` のフラグメントは `a&b`）。
-2. パス部が空の href はエントリにしない（エラーにしない）:
-   - 対象: `href` 属性が無い、`href=""`、`href="  "`、`href="#x"`（フラグメントのみ）。
-   - 該当する `<a>` / `navPoint` は読み飛ばし、残りのエントリの解析は続ける
-     （目次全体を失敗させない）。
-   - これは従来の挙動（空の `href` は `CoreError::Archive`）の変更であり、
-     本契約による意図した更新である。`resolve_href` 自体は変更しない
-     （空パスでは引き続きエラーを返し、manifest の検証はそのまま）。
-3. nav（EPUB3）:
-   - `<a href="ch1.xhtml#s1">` は `href == "OEBPS/ch1.xhtml"`、
-     `fragment == Some("s1")`。
-   - フラグメント無しの `<a href="ch1.xhtml">` は `fragment == None`。
-   - フラグメントの分割は `<a>` の開始時に 1 回行う。
-4. NCX（EPUB2）:
-   - `<content src="Text/ch1.xhtml#p1"/>` は解決済みパスと `fragment == Some("p1")`。
-   - `<text>` や `<content>` が無い `navPoint` はエントリにしない（従来どおり）。
-5. 既存の挙動を変えない:
-   - `title`・`href`・`depth` の規則は従来どおり。既存の 52 テストがすべて通る。
-     テストは `fragment` フィールド追加に伴う期待値の追加のみ許可する
-     （アサーションの意味を変えない）。
-   - 逸脱したパス（`../../evil.xhtml#x`）は従来どおり `CoreError::Validation`。
-   - 情報源が無い・エントリが無い場合は従来どおり空。
-   - エントリ数が 10000 を超えたら `CoreError::Validation`（従来どおり。
-     読み飛ばした `<a>` は数えない）。
-6. 分割規則は 1 か所のヘルパーに置き、nav と NCX で共有する
-   （同じ規則を二重実装しない）。`NavAnchor`・`NcxNavPoint`・`EpubTocEntry` の
-   3 構造体に `fragment: Option<String>` を足す。
-7. 変更範囲は `core/src/epub.rs` を基本とする。`lib.rs` は変更不要。
-   `cargo fmt` が整形する範囲は許容する。`archive.rs`・`error.rs`・`docs/`・
-   `desktop/`・`web/`・`Cargo.toml` を変更しない。
+1. `chapter_html`:
+   - 手順は `chapter_bytes(index)` と同じ（範囲検証、`%XX` 復号フォールバック）。
+   - 復号後、先頭に BOM (`\u{FEFF}`) があれば 1 個だけ除く。
+   - それ以外は文字列をそのまま返す。
+   - 不正な UTF-8 は `CoreError::Archive`。メッセージは既存の `chapter_text`
+     の復号エラーに準ずる（対象の href を含める）。
+   - 復号と BOM 除去は `chapter_text` と 1 か所に共有する（例: 非公開
+     ヘルパーに切り出し、`chapter_text` がそれを呼ぶ形にする）。
+     `chapter_text` の挙動とエラーを変えない。
+2. `chapter_resource`:
+   - 章の `href` から所属ディレクトリを出す（最後の `/` まで。`opf_dir` と
+     同じ規則）。
+   - `href` は最初の `#` 以降を落とし、前後の空白を除く（`split_fragment` の
+     パス部と同じ規則）。
+   - パス部が空 → `CoreError::Archive`。
+   - スキーム付き URL・先頭 `/` → `CoreError::Archive`。
+   - `.` と `..` を字句的に解決。ルートを越える → `CoreError::Validation`。
+   - 解決したパスを `ArchiveReader::read_entry` で読む。失敗したら `%XX` を
+     復号した名前で再試行する（`chapter_bytes` と同じフォールバック）。
+     それも失敗したら最初のエラーを返す（存在しないパスは
+     `CoreError::DocumentNotFound`）。
+   - 返すのはリソース自体のバイト列のみ。
+3. 相対参照の解決規則は 1 か所にまとめ、二重実装しない:
+   - `fn resolve_reference(base_dir: &str, href: &str, subject: &str) -> CoreResult<String>`
+     を切り出し、既存の `resolve_href` は
+     `resolve_reference(opf_dir, href, "manifest の href")` を呼ぶ形にする。
+   - メッセージは `"{subject} が空です"` のように組み立て、manifest の
+     既存メッセージ（例: `manifest の href が空です`）を変えない。
+   - `chapter_resource` は
+     `resolve_reference(章の所属ディレクトリ, href, "章リソースの href")` を使う。
+   - 既存の `resolve_href` のエラー種別（`Archive` / `Validation`）と
+     メッセージを変えない。
+4. 既存の挙動を変えない:
+   - `metadata`・`chapters`・`toc`・`chapter_bytes`・`chapter_text` の
+     シグネチャと挙動は従来どおり。既存の 61 テストがすべて通る。
+   - 逸脱したパスの `Validation`、空パスの `Archive`、存在しない章の
+     `DocumentNotFound` は従来どおり。
+   - 新しい上限やリミットは追加しない。
+5. ファイル先頭のモジュール doc（`//!`）を新 API に合わせて更新する:
+   - 提供するものに「表示用の XHTML（`chapter_html`）とリソースの読み出し
+     （`chapter_resource`）」を加える。
+   - 範囲外の記述から画像の扱いを外し、「画像のデコード・表示、リソース URL
+     の書き換え、サニタイズ」に直す（文言は簡潔な日本語で）。
+6. 変更範囲は `core/src/epub.rs` に限る。`lib.rs` は変更不要。
 
-### 実装時に効く実測済みの注意（`quick-xml` 0.42）
+### 実装時に効く実測済みの注意
 
-- 要素名・属性名は `local_name()` の `&str` 比較。`b"..."` のバイト列比較は不可。
-- 属性値の復号は `normalized_value(XmlVersion::Implicit1_0)`。既存の
-  `attribute_value` / `unescape_attribute` を再利用する。
-- テキストは reader が復号済み。`&amp;` などは `Event::GeneralRef` に来るので
-  `named_reference` で戻す（既存の `collect_anchor_title` 系を変えない）。
-- nav の `<a>` は開始で `NavAnchor` を作り、終了で確定する。空パスの `<a>` は
-  `NavAnchor` を作らない（その場合の既存の終了処理は変更不要）。
-- NCX は `points` を走査してエントリを確定する。パス空の `navPoint` は
-  その走査で `continue` する。
+- テストは `mod tests` の既存ヘルパー `build_epub`・`sample_epub` を使い、
+  外部ファイルを使わない。`mimetype` は `build_epub` が先頭に付ける。
+- `sample_epub()` の章は `OEBPS/ch1.xhtml`・`OEBPS/ch2.xhtml`。章の所属
+  ディレクトリは `OEBPS`。
+- `%XX` 復号は既存の `percent_decode`（`read_decoded_entry` が使用。`%` が
+  無い場合と復号結果が不正な UTF-8 の場合は `None`）。
+- 読み出しの核は `ArchiveReader::read_entry`。存在しないパスは
+  `CoreError::DocumentNotFound` を返す。
+- `split_fragment` は nav / NCX と共有済みの既存ヘルパー。
+- `chapter(index)` は範囲外で `CoreError::DocumentNotFound` を返す既存
+  ヘルパー。
+- サブディレクトリの親参照テストは、OPF の章 `href` を `text/ch1.xhtml` に
+  した EPUB（`build_epub` で container・OPF・`OEBPS/text/ch1.xhtml`・
+  `OEBPS/images/pic.png` を書く）で確認できる。
+- clippy は `-D warnings`。プロダクションコードで `unwrap()` / `expect()` /
+  `panic!` / `todo!` を使わない。`unsafe` を使わない。
+- `cargo fmt` の整形範囲は許容する。
 
 ### 必須テスト（`core/src/epub.rs` の `mod tests`、外部ファイルを使わない）
 
-1. nav: `ch1.xhtml#s1` で `fragment == Some("s1")` かつ `href` が章と同じ値
-   （2 階層の一方にフラグメント、他方に無しを混ぜる）。
-2. nav: フラグメント無しで `None`。
-3. nav: `ch1.xhtml#`（`#` の後ろが空）で `None`。
-4. nav: `#s1`（パスのみ空）はエントリにならず、他のエントリは残る。
-5. nav: `href` 無し・`href=""`・`href="  "` はエントリにならない。
-6. nav: `#%E3%81%82` は `Some("%E3%81%82")`（復号しない）。
-7. nav: `ch1.xhtml#a#b` は `Some("a#b")`。
-8. nav: `ch1.xhtml#a&amp;b` は `Some("a&b")`、`ch1.xhtml# s1 ` は `Some("s1")`。
-9. NCX: `Text/ch1.xhtml#p1` は `Some("p1")`。
-10. NCX: `#p` はエントリにならず、他のエントリは残る。
-11. 既存の 52 テストが引き続き通る（`cargo test` の件数が減らない）。
-12. パス部が空の `<a>` を挟んでも、後続のエントリの `depth` が従来の規則
-    （最上位 = 0）のままである。
+1. `chapter_html(0)` が `CH1` と完全に一致する（XML 宣言・タグ・属性を保持）。
+2. `chapter_html` が先頭の BOM を 1 個だけ除く（BOM 付きの章を持つ EPUB）。
+3. `chapter_html` は不正な UTF-8 の章で `CoreError::Archive`。
+4. `chapter_html` は範囲外の `index` で `CoreError::DocumentNotFound`。
+5. `chapter_resource` が同じディレクトリの `pic.png` を読める
+   （`OEBPS/ch1.xhtml` から `pic.png` → `OEBPS/pic.png`）。
+6. `chapter_resource` がサブディレクトリ (`images/pic.png`) と
+   親ディレクトリ (`../images/pic.png`、`OEBPS/text/ch1.xhtml` から) を
+   解決できる。
+7. `chapter_resource` はフラグメント付き (`pic.png#frag`) でも読める。
+8. `chapter_resource` は `a%20b.png` の `%XX` 復号フォールバックで
+   エントリ `a b.png` を読める。
+9. `chapter_resource` はルートを越える `../../evil.png` で
+   `CoreError::Validation`。
+10. `chapter_resource` はスキーム付き URL（`https://example.com/x.png`）と
+    先頭 `/`（`/x.png`）で `CoreError::Archive`。
+11. `chapter_resource` は空・空白のみ・`#frag` のみで `CoreError::Archive`。
+12. `chapter_resource` は存在しないパスで `CoreError::DocumentNotFound`。
+13. `chapter_resource` は範囲外の `index` で `CoreError::DocumentNotFound`。
+14. 既存の 61 テストが引き続き通る（`cargo test` の件数が減らない）。
 
 ## Acceptance criteria
 
@@ -127,18 +148,20 @@ impl EpubBook {
   - `cargo test --all-targets`
   - `cargo clippy --all-targets -- -D warnings`
   - `cargo check -p openrustbooks-core --target wasm32-unknown-unknown`
+  - `cargo check -p openrustbooks-web --target wasm32-unknown-unknown`
 
 ## Constraints
 
 - 読み取り専用。EPUB の作成・書き換えは作らない。
-- UI への接続、実際のスクロール移動、章タイトルの `EpubChapter` への埋め込み、
-  画像の扱い、`landmarks` / `page-list` は範囲外。
+- UI への接続、サニタイズ、リソース URL の書き換え、表紙・章タイトルの
+  取得、`landmarks` / `page-list` は範囲外。
 - `desktop/` と `web/` を変更しない。`core` 内で完結させる。
 - 無関係なリファクタリング、無関係なファイルの変更をしない。
-- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を使わない。
-  `unsafe` を使わない。
+- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
+  使わない。`unsafe` を使わない。
 - 新しい依存を追加しない。
 - ネットワークアクセスを必要とするテストを書かない。
 - コメントと doc コメントは日本語で簡潔に書く。
 - リモートリポジトリへ push しない。
-- `goal_loop.rs`、`GOAL.md`、`.opencode/agents/verifier.md` を書き換えない。
+- `goal_loop_hardened.rs`、`GOAL.md`、`.opencode/agents/verifier.md` を
+  書き換えない。
