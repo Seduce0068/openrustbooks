@@ -4,16 +4,16 @@ use crate::{
     CoreError, CoreResult,
     config::{AiConfig, OllamaConfig, OpenAiConfig},
 };
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-    CreateChatCompletionRequest,
+    ChatCompletionResponseStream, CreateChatCompletionRequest,
 };
 use async_openai::{Client, config::OpenAIConfig};
 use async_trait::async_trait;
 use futures::StreamExt;
 use std::pin::Pin;
 use std::sync::Arc;
-use tiktoken_rs::{CoreBPE, get_bpe_from_model};
+use tiktoken_rs::{CoreBPE, bpe_for_model, cl100k_base_singleton};
 
 /// Trait for AI clients
 #[async_trait]
@@ -100,7 +100,7 @@ pub async fn create_client(config: &AiConfig) -> CoreResult<Arc<dyn AiClient + S
 pub struct OpenAiClient {
     client: Client<OpenAIConfig>,
     model: String,
-    tokenizer: CoreBPE,
+    tokenizer: &'static CoreBPE,
 }
 
 impl OpenAiClient {
@@ -111,7 +111,7 @@ impl OpenAiClient {
             .with_org_id(config.organization.as_deref().unwrap_or(""));
 
         let client = Client::with_config(openai_config);
-        let tokenizer = get_bpe_from_model(&config.model)?;
+        let tokenizer = bpe_for_model(&config.model)?;
 
         Ok(Self {
             client,
@@ -226,7 +226,7 @@ impl AiClient for OpenAiClient {
 
 /// OpenAI token stream
 struct OpenAiTokenStream {
-    stream: async_openai::types::ChatCompletionResponseStream,
+    stream: ChatCompletionResponseStream,
     buffer: String,
 }
 
@@ -245,7 +245,7 @@ impl TokenStream for OpenAiTokenStream {
             if let Some(choice) = chunk.choices.first() {
                 if let Some(delta) = &choice.delta.content {
                     self.buffer.push_str(delta);
-                    return Ok(Some(delta.clone()));
+                    return Ok(Some(delta.to_string()));
                 }
                 if choice.finish_reason.is_some() {
                     return Ok(None);
@@ -265,13 +265,13 @@ pub struct OllamaClient {
     client: reqwest::Client,
     base_url: String,
     model: String,
-    tokenizer: CoreBPE,
+    tokenizer: &'static CoreBPE,
 }
 
 impl OllamaClient {
     pub async fn new(config: &OllamaConfig) -> CoreResult<Self> {
         let client = reqwest::Client::new();
-        let tokenizer = get_bpe_from_model("cl100k_base")?; // Approximation
+        let tokenizer = cl100k_base_singleton(); // Approximation
 
         Ok(Self {
             client,

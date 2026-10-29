@@ -85,7 +85,7 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
-                        let line_content = &diff.old_slices()[old_start + i];
+                        let line_content = diff.old_slice(old_start + i).unwrap_or_default();
                         old_line_num += 1;
                         new_line_num += 1;
                         hunk_old_lines += 1;
@@ -109,7 +109,7 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
-                        let line_content = &diff.new_slices()[new_start + i];
+                        let line_content = diff.new_slice(new_start + i).unwrap_or_default();
                         new_line_num += 1;
                         hunk_new_lines += 1;
                         stats.additions += 1;
@@ -132,7 +132,7 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
-                        let line_content = &diff.old_slices()[old_start + i];
+                        let line_content = diff.old_slice(old_start + i).unwrap_or_default();
                         old_line_num += 1;
                         hunk_old_lines += 1;
                         stats.deletions += 1;
@@ -158,7 +158,7 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                             hunk_new_start = new_line_num + 1;
                             first = false;
                         }
-                        let line_content = &diff.old_slices()[old_start + i];
+                        let line_content = diff.old_slice(old_start + i).unwrap_or_default();
                         old_line_num += 1;
                         hunk_old_lines += 1;
                         stats.deletions += 1;
@@ -179,7 +179,10 @@ pub fn compute(old: &str, new: &str) -> DiffResult {
                             tag: DiffTagWrapper::Insert,
                             old_line_number: None,
                             new_line_number: Some(new_line_num),
-                            content: diff.new_slices()[new_start + i].to_string(),
+                            content: diff
+                                .new_slice(new_start + i)
+                                .unwrap_or_default()
+                                .to_string(),
                         });
                     }
                     stats.modifications += 1;
