@@ -265,7 +265,7 @@ pub fn extract_front_matter(
     for (i, line) in lines.iter().enumerate().skip(1) {
         if *line == "---" || *line == "..." {
             let front_matter_str = lines[1..i].join("\n");
-            if let Ok(value) = serde_yaml::from_str(&front_matter_str) {
+            if let Ok(value) = serde_norway::from_str(&front_matter_str) {
                 let body = lines[i + 1..].join("\n");
                 return (Some(value), body);
             }
