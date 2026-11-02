@@ -94,9 +94,13 @@ EPUB の章 XHTML を許可リスト方式でサニタイズし、画像を Blob
 
 - `core` のサニタイズ 10 テスト（script、イベントハンドラ、埋め込み、
   フォーム、style、外部画像、javascript:、表、ID、ラッパー除去）。
-- `cargo test -p openrustbooks-core` は 105 件成功。
-- `cargo check -p openrustbooks-web --target wasm32-unknown-unknown` 成功。
-- 5 ゲートと `trunk build` の結果は実装コミットで確認する。
+- `cargo test --all-targets --locked` は 105 件成功。
+- `cargo fmt --all -- --check`、`cargo check --all-targets --locked`、
+  `cargo clippy --all-targets --locked -- -D warnings` が成功。
+- `cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked` と
+  `cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked` が成功。
+- `wasm-bindgen-cli 0.2.129` と `trunk 0.22.1` を使った
+  `trunk build --dist <一時出力先>` が成功。
 
 ## 未決定
 
