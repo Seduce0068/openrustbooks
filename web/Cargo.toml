@@ -27,6 +27,8 @@ web-sys = { version = "0.3", features = [
     "HtmlSpanElement", "HtmlAnchorElement", "HtmlTableElement",
     "HtmlTableRowElement", "HtmlTableCellElement", "HtmlHeadElement",
     "HtmlBodyElement", "HtmlScriptElement", "HtmlStyleElement",
+    "HtmlImageElement", "NodeList", "DomParser", "SupportedType",
+    "BlobPropertyBag",
     "Event", "MouseEvent", "KeyboardEvent", "InputEvent",
     "DragEvent", "FocusEvent", "ClipboardEvent", "SubmitEvent",
     "Storage", "History",

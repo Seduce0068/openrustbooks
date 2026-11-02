@@ -293,6 +293,16 @@
             font: inherit;
         }
 
+        .reader-chapter-title {
+            margin-left: auto;
+            min-width: 0;
+            overflow: hidden;
+            color: var(--color-muted);
+            font-size: 0.875rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .reader-status {
             min-height: 1.6em;
             padding: 0 var(--spacing-md);
@@ -300,10 +310,74 @@
             font-size: 0.875rem;
         }
 
+        .reader-body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .reader-sidebar {
+            flex: 0 0 180px;
+            padding: var(--spacing-md);
+            overflow-y: auto;
+            border-right: 1px solid var(--color-border);
+        }
+
+        .reader-cover {
+            width: 100%;
+            max-height: 240px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            object-fit: contain;
+        }
+
         .reader-content {
             flex: 1;
+            min-width: 0;
             overflow-y: auto;
             padding: var(--spacing-xl);
+        }
+
+        .reader-html {
+            max-width: 800px;
+            margin: 0 auto;
+            overflow-wrap: anywhere;
+            font-size: 1.125rem;
+            line-height: 1.8;
+        }
+
+        .reader-html img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .reader-html table {
+            margin: var(--spacing-md) 0;
+            border-collapse: collapse;
+        }
+
+        .reader-html th,
+        .reader-html td {
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border: 1px solid var(--color-border);
+        }
+
+        .reader-html blockquote {
+            margin: var(--spacing-md) 0;
+            padding-left: var(--spacing-md);
+            border-left: 4px solid var(--color-border);
+            color: var(--color-muted);
+        }
+
+        .reader-html pre {
+            padding: var(--spacing-md);
+            overflow-x: auto;
+            background: var(--color-secondary);
+            border-radius: var(--radius-md);
+        }
+
+        .reader-html a {
+            color: var(--color-primary);
         }
 
         .document-content {
@@ -311,12 +385,6 @@
             margin: 0 auto;
             font-size: 1.125rem;
             line-height: 1.8;
-        }
-
-        .reader-text {
-            overflow-wrap: anywhere;
-            white-space: pre-wrap;
-            font-family: var(--font-sans);
         }
 
         .document-content h1, .document-content h2, .document-content h3 {
@@ -399,6 +467,20 @@
             .app-header {
                 flex-direction: column;
                 gap: var(--spacing-sm);
+            }
+
+            .reader-body {
+                flex-direction: column;
+            }
+
+            .reader-sidebar {
+                flex: none;
+                border-right: none;
+                border-bottom: 1px solid var(--color-border);
+            }
+
+            .reader-cover {
+                max-height: 160px;
             }
         }
     </style>
