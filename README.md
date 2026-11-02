@@ -34,6 +34,7 @@ openrustbooks/
 │   │   ├── config.rs             # 設定管理
 │   │   ├── archive.rs            # ZIPアーカイブ閲覧 (native + wasm)
 │   │   ├── epub.rs               # EPUB本文・目次・表紙・ナビゲーションの読み出し (native + wasm)
+│   │   ├── sanitize.rs           # EPUB XHTML の許可リストサニタイズ (native + wasm)
 │   │   ├── ai_markdown/          # AI Markdownパイプライン
 │   │   │   ├── mod.rs
 │   │   │   ├── client.rs         # AIプロバイダ抽象化 (ネイティブ専用)
@@ -68,27 +69,30 @@ openrustbooks/
 | レイヤー | 技術 |
 |----------|------|
 | **共通コア** | Rust 2024, `rumdl` (markdownlint互換), `async-openai`, `tiktoken-rs` |
-| **デスクトップ** | Tauri 2.0 (OS WebView / wry) |
-| **Web** | Leptos 0.7 (CSR), Wasm |
+| **デスクトップ** | Tauri 2.12 (OS WebView / wry) |
+| **Web** | Leptos 0.8 (CSR), Wasm |
 | **Markdown処理** | `pulldown-cmark`, `comrak`, `rumdl` (Wasm対応) |
 | **AI/LLM** | OpenAI API互換, Ollama (ローカル) |
 | **設定** | `figment` (TOML + 環境変数) |
 | **ストレージ** | ローカルFS, Google Drive (予定) |
 
-## 主な機能 (設計段階)
+## 主な機能
 
-- **ドキュメント閲覧**: EPUB, ZIP, PDF, TXT, Markdown
-- **テキスト編集**: TXT, Markdown (CodeMirror 6ベース)
-- **AI支援**: Markdown生成・修正・リファクタリング + `rumdl`品質保証
+- **EPUB 閲覧 (Web, 実装済み)**: 章 HTML の許可リストサニタイズ表示、
+  画像・表紙の Blob URL 表示、目次・章移動、章内アンカー移動
+- **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
+- **テキスト編集 (設計段階)**: TXT, Markdown (CodeMirror 6ベース)
+- **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +
+  `rumdl`品質保証
 - **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
-- **フォルダ操作**: 既存フォルダ直接参照, インポート不要
-- **クラウド連携**: Google Drive (手動保存から開始)
+- **フォルダ操作 (設計段階)**: 既存フォルダ直接参照, インポート不要
+- **クラウド連携 (設計段階)**: Google Drive (手動保存から開始)
 
 ## 開発セットアップ
 
 ### 前提条件
 
-- Rust 1.85+ (2024 edition)
+- Rust 1.94+ (2024 edition)。`rumdl` の MSRV に合わせる
 - Trunk (`cargo install trunk`, または各ディストリビューションのパッケージ)
 - `wasm32-unknown-unknown` ターゲット (`rustup target add wasm32-unknown-unknown`)
 - `wasm-bindgen` CLI (Trunk は通常自動取得する。取得できない環境では
@@ -99,8 +103,8 @@ openrustbooks/
 
 ```bash
 # ワークスペース全体 (ネイティブ)
-cargo check --workspace
-cargo test --workspace
+cargo check --all-targets --locked
+cargo test --all-targets --locked
 
 # ブラウザ版 (Trunk が Wasm をビルドし web/dist に出力する)
 cd web
@@ -141,6 +145,15 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 - [ADR-0001: OS WebView採用](docs/decisions/0001-use-system-webview.md)
 - [ADR-0002: AI Markdownパイプライン](docs/decisions/0002-ai-markdown-pipeline.md)
 - [ADR-0003: Native/Wasm ターゲット分離](docs/decisions/0003-native-wasm-target-split.md)
+- [ADR-0004: ZIPアーカイブ閲覧](docs/decisions/0004-zip-archive-reader.md)
+- [ADR-0005: EPUB本文の読み出し](docs/decisions/0005-epub-body-reading.md)
+- [ADR-0006: EPUB目次の読み出し](docs/decisions/0006-epub-table-of-contents.md)
+- [ADR-0007: EPUB目次フラグメント](docs/decisions/0007-epub-toc-fragments.md)
+- [ADR-0008: EPUB表紙と章タイトル](docs/decisions/0008-epub-cover-and-chapter-title.md)
+- [ADR-0009: EPUB landmarksとpage-list](docs/decisions/0009-epub-landmarks-and-page-list.md)
+- [ADR-0010: EPUB読み出しAPIのWasm公開](docs/decisions/0010-epub-wasm-bindings.md)
+- [ADR-0011: Web版EPUBテキストリーダー](docs/decisions/0011-web-epub-reader.md)
+- [ADR-0012: EPUB HTMLのサニタイズ表示](docs/decisions/0012-epub-html-display.md)
 
 ## ライセンス
 
