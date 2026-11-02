@@ -12,6 +12,7 @@ pub mod document;
 pub mod epub;
 pub mod error;
 pub mod io;
+pub mod sanitize;
 pub mod wasm;
 
 #[cfg(target_arch = "wasm32")]
@@ -24,6 +25,7 @@ pub use epub::{EpubBook, EpubChapter, EpubCoverImage, EpubMetadata, EpubTocEntry
 /// Re-export commonly used types
 pub use error::{CoreError, CoreResult};
 pub use io::{FileEntry, StorageBackend, StorageCapabilities};
+pub use sanitize::sanitize_epub_html;
 
 /// Initialize the core library (logging, panic hook for Wasm, etc.)
 pub fn init() {
