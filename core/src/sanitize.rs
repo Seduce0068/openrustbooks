@@ -146,7 +146,10 @@ pub fn sanitize_epub_html(html: &str) -> String {
 /// (`//host/...`) は外部参照として拒否する。
 fn is_local_reference(value: &str) -> bool {
     let value = value.trim();
-    !value.is_empty() && !value.starts_with("//") && !has_url_scheme(value)
+    !value.is_empty()
+        && !value.starts_with('/')
+        && !value.starts_with("//")
+        && !has_url_scheme(value)
 }
 
 /// 値がスキーム付き URL か判定する。
@@ -247,9 +250,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_and_absolute_image_sources() {
+    fn rejects_empty_and_root_relative_image_sources() {
         let sanitized = sanitize_epub_html(r#"<img src="/x.png" alt="x">"#);
-        assert!(sanitized.contains(r#"src="/x.png""#));
+        assert!(!sanitized.contains("src="));
         let sanitized = sanitize_epub_html(r#"<img src="" alt="x">"#);
         assert!(!sanitized.contains("src="));
     }
