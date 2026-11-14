@@ -325,6 +325,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     use wasm_bindgen_futures::{JsFuture, spawn_local};
     use web_sys::{Event, HtmlInputElement};
 
+    /// 読み込む EPUB のサイズ上限（core の `ArchiveLimits::max_total_size` と同じ）。
+    const MAX_EPUB_FILE_MIB: u64 = 256;
+    const MAX_EPUB_FILE_BYTES: f64 = MAX_EPUB_FILE_MIB as f64 * 1024.0 * 1024.0;
+
     #[derive(Deserialize)]
     struct TocEntry {
         title: String,
@@ -399,6 +403,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             let Some(file) = input.files().and_then(|files| files.item(0)) else {
                 return;
             };
+            if file.size() > MAX_EPUB_FILE_BYTES {
+                set_status.set(format!(
+                    "This EPUB is too large (limit: {MAX_EPUB_FILE_MIB} MiB)."
+                ));
+                return;
+            }
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
@@ -576,7 +586,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             || href.starts_with("mailto:")
         {
             if let Some(window) = web_sys::window() {
-                let _ = window.open_with_url_and_target(&href, "_blank");
+                let _ = window.open_with_url_and_target_and_features(
+                    &href,
+                    "_blank",
+                    "noopener,noreferrer",
+                );
             }
         }
     };
