@@ -491,6 +491,16 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     /// 読み込む EPUB のサイズ上限（core の `ArchiveLimits::max_total_size` と同じ）。
     const MAX_EPUB_FILE_MIB: u64 = 256;
     const MAX_EPUB_FILE_BYTES: f64 = MAX_EPUB_FILE_MIB as f64 * 1024.0 * 1024.0;
+    /// 移動履歴の上限。
+    const HISTORY_LIMIT: usize = 50;
+
+    /// 移動履歴の 1 エントリ。
+    #[derive(Clone)]
+    struct HistoryEntry {
+        chapter_index: usize,
+        fragment: Option<String>,
+        scroll_top: i32,
+    }
 
     #[derive(Deserialize)]
     struct TocEntry {
@@ -520,6 +530,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let object_urls = Rc::new(RefCell::new(Vec::<String>::new()));
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
     let position_key_state = Rc::new(RefCell::new(None::<String>));
+    let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
+    let history_index = Rc::new(Cell::new(0_usize));
+    let (history_state, set_history_state) = signal((0_usize, 0_usize));
+    let can_back = Memo::new(move |_| history_state.get().1 > 0);
+    let can_forward = Memo::new(move |_| {
+        let (len, index) = history_state.get();
+        index + 1 < len
+    });
     let (chapters, set_chapters) = signal(Vec::<(usize, String, Option<String>)>::new());
     let (current, set_current) = signal(0_usize);
     let (content, set_content) = signal(String::new());
@@ -563,12 +581,115 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         })
     };
 
+    // 履歴の件数と現在位置を UI 用の signal に反映する。
+    let sync_history = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        Rc::new(move || {
+            set_history_state.set((history.borrow().len(), history_index.get()));
+        })
+    };
+
+    // 章を移動し、履歴に積む。
+    let navigate_to: Rc<dyn Fn(usize, Option<String>)> = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
+        let render_chapter = Rc::clone(&render_chapter);
+        Rc::new(move |index, fragment| {
+            let current_index = history_index.get();
+            {
+                let mut entries = history.borrow_mut();
+                // 移動前の位置を現在エントリへ記録する。
+                if let Some(entry) = entries.get_mut(current_index)
+                    && entry.chapter_index == current.get()
+                {
+                    entry.fragment = None;
+                    entry.scroll_top = content_scroll_top();
+                }
+                // 戻った後に新しい移動をしたら、進む方向は捨てる。
+                entries.truncate(current_index + 1);
+                entries.push(HistoryEntry {
+                    chapter_index: index,
+                    fragment: fragment.clone(),
+                    scroll_top: 0,
+                });
+                if entries.len() > HISTORY_LIMIT {
+                    let overflow = entries.len() - HISTORY_LIMIT;
+                    entries.drain(0..overflow);
+                }
+                history_index.set(entries.len() - 1);
+            }
+            sync_history();
+            render_chapter(index, fragment, None);
+        })
+    };
+
+    let on_history_back = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
+        let render_chapter = Rc::clone(&render_chapter);
+        move |_| {
+            let index = history_index.get();
+            if index == 0 {
+                return;
+            }
+            // 移動前の位置を現在エントリへ記録する。
+            if let Some(entry) = history.borrow_mut().get_mut(index)
+                && entry.chapter_index == current.get()
+            {
+                entry.fragment = None;
+                entry.scroll_top = content_scroll_top();
+            }
+            let new_index = index - 1;
+            let entry = history.borrow().get(new_index).cloned();
+            let Some(entry) = entry else {
+                return;
+            };
+            history_index.set(new_index);
+            sync_history();
+            render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
+        }
+    };
+
+    let on_history_forward = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
+        let render_chapter = Rc::clone(&render_chapter);
+        move |_| {
+            let index = history_index.get();
+            let len = history.borrow().len();
+            if index + 1 >= len {
+                return;
+            }
+            if let Some(entry) = history.borrow_mut().get_mut(index)
+                && entry.chapter_index == current.get()
+            {
+                entry.fragment = None;
+                entry.scroll_top = content_scroll_top();
+            }
+            let new_index = index + 1;
+            let entry = history.borrow().get(new_index).cloned();
+            let Some(entry) = entry else {
+                return;
+            };
+            history_index.set(new_index);
+            sync_history();
+            render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
+        }
+    };
+
     let on_file_change = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
         let cover_url_state = Rc::clone(&cover_url_state);
         let position_key_state = Rc::clone(&position_key_state);
         let render_chapter = Rc::clone(&render_chapter);
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
         move |event: Event| {
             let Some(input) = event
                 .target()
@@ -588,6 +709,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
             let key = position_key(&file);
             *position_key_state.borrow_mut() = Some(key.clone());
+            // 別の本を開いたら履歴をリセットする。
+            *history.borrow_mut() = Vec::new();
+            history_index.set(0);
+            sync_history();
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
@@ -603,6 +728,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             let book = Rc::clone(&book);
             let cover_url_state = Rc::clone(&cover_url_state);
             let render_chapter = Rc::clone(&render_chapter);
+            let history = Rc::clone(&history);
+            let history_index = Rc::clone(&history_index);
+            let sync_history = Rc::clone(&sync_history);
             spawn_local(async move {
                 let buffer = match JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => buffer,
@@ -683,6 +811,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     })
                     .unwrap_or((0, None, 0));
 
+                *history.borrow_mut() = vec![HistoryEntry {
+                    chapter_index: start_index,
+                    fragment: start_fragment.clone(),
+                    scroll_top: start_scroll,
+                }];
+                history_index.set(0);
+                sync_history();
+
                 *book.borrow_mut() = Some(opened);
                 set_chapters.set(options);
                 render_chapter(start_index, start_fragment, Some(start_scroll));
@@ -691,7 +827,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     };
 
     let on_select = {
-        let render_chapter = Rc::clone(&render_chapter);
+        let navigate_to = Rc::clone(&navigate_to);
         move |event: Event| {
             if let Some(input) = event
                 .target()
@@ -703,12 +839,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index, fragment, None);
+                navigate_to(index, fragment);
             }
         }
     };
     let on_previous = {
-        let render_chapter = Rc::clone(&render_chapter);
+        let navigate_to = Rc::clone(&navigate_to);
         move |_| {
             let index = current.get();
             if index > 0 {
@@ -717,12 +853,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index - 1)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index - 1, fragment, None);
+                navigate_to(index - 1, fragment);
             }
         }
     };
     let on_next = {
-        let render_chapter = Rc::clone(&render_chapter);
+        let navigate_to = Rc::clone(&navigate_to);
         move |_| {
             let index = current.get();
             if chapters
@@ -735,13 +871,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index + 1)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index + 1, fragment, None);
+                navigate_to(index + 1, fragment);
             }
         }
     };
     let on_content_click = {
         let book = Rc::clone(&book);
-        let render_chapter = Rc::clone(&render_chapter);
+        let navigate_to = Rc::clone(&navigate_to);
         let position_key = Rc::clone(&position_key_state);
         move |event: web_sys::MouseEvent| {
             let Some(target) = event
@@ -822,7 +958,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     );
                 }
             } else {
-                render_chapter(link.chapter_index, link.fragment, None);
+                navigate_to(link.chapter_index, link.fragment);
             }
         }
     };
@@ -882,6 +1018,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             <div class="reader-toolbar">
                 <label class="btn btn-primary" for="epub-file">"Open EPUB"</label>
                 <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" on:change=on_file_change/>
+                <button id="reader-back" class="btn" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
+                <button id="reader-forward" class="btn" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
                 <button class="btn" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
                 <select class="reader-chapter-select" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
