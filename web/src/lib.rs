@@ -254,26 +254,94 @@ fn scroll_content_to_top() {
     element.set_scroll_top(0);
 }
 
-/// 次の描画フレームでフラグメントへスクロールする。
-///
-/// 本文の更新は非同期に DOM へ反映されるため、更新直後に
-/// `getElementById` を呼ぶと対象が見つからないことがある。
+/// 本文の現在のスクロール位置を返す。
 #[cfg(target_arch = "wasm32")]
-fn scroll_to_fragment_after_render(fragment: String) {
+fn content_scroll_top() -> i32 {
     let Some(window) = web_sys::window() else {
-        return;
+        return 0;
     };
-    let callback = Closure::once_into_js(move || scroll_to_fragment(&fragment));
-    let _ = window.request_animation_frame(callback.unchecked_ref());
+    let Some(document) = window.document() else {
+        return 0;
+    };
+    let Ok(Some(element)) = document.query_selector(".reader-content") else {
+        return 0;
+    };
+    element.scroll_top()
 }
 
-/// 次の描画フレームで本文の先頭へスクロールする。
+/// 本文のスクロール位置を設定する。
 #[cfg(target_arch = "wasm32")]
-fn scroll_content_to_top_after_render() {
+fn set_content_scroll_top(offset: i32) {
     let Some(window) = web_sys::window() else {
         return;
     };
-    let callback = Closure::once_into_js(scroll_content_to_top);
+    let Some(document) = window.document() else {
+        return;
+    };
+    let Ok(Some(element)) = document.query_selector(".reader-content") else {
+        return;
+    };
+    element.set_scroll_top(offset);
+}
+
+/// 次の描画フレームで位置を適用し、実際の位置を保存する。
+///
+/// 本文の更新は非同期に DOM へ反映されるため、更新直後に
+/// `getElementById` やスクロール位置の設定を行うと対象が古いことがある。
+/// スクロール位置はレイアウトが終わるまで反映されないことがあるため、
+/// 数フレームまで再試行する。
+#[cfg(target_arch = "wasm32")]
+fn apply_position_after_render(
+    chapter_index: usize,
+    fragment: Option<String>,
+    scroll_top: Option<i32>,
+    position_key: SharedPositionKey,
+) {
+    apply_position_frame(chapter_index, fragment, scroll_top, position_key, 0);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn apply_position_frame(
+    chapter_index: usize,
+    fragment: Option<String>,
+    scroll_top: Option<i32>,
+    position_key: SharedPositionKey,
+    attempt: u32,
+) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let callback = Closure::once_into_js(move || {
+        match fragment.as_deref() {
+            Some(fragment) => scroll_to_fragment(fragment),
+            None => match scroll_top {
+                Some(offset) if offset > 0 => set_content_scroll_top(offset),
+                _ => scroll_content_to_top(),
+            },
+        }
+        let actual = content_scroll_top();
+        let wanted = scroll_top.unwrap_or(0);
+        if fragment.is_none() && wanted > 0 && actual < wanted && attempt < 3 {
+            apply_position_frame(
+                chapter_index,
+                fragment,
+                scroll_top,
+                position_key,
+                attempt + 1,
+            );
+            return;
+        }
+        if let Some(key) = position_key.borrow().as_ref() {
+            save_position(
+                key,
+                &SavedPosition {
+                    chapter_index,
+                    fragment,
+                    scroll_top: actual,
+                },
+            );
+        }
+    });
     let _ = window.request_animation_frame(callback.unchecked_ref());
 }
 
@@ -356,6 +424,10 @@ fn resolve_images(
 #[cfg(target_arch = "wasm32")]
 const POSITION_KEY_PREFIX: &str = "openrustbooks:position:";
 
+/// 読書位置のキーを複数のコールバックで共有するための型。
+#[cfg(target_arch = "wasm32")]
+type SharedPositionKey = std::rc::Rc<std::cell::RefCell<Option<String>>>;
+
 /// localStorage に保存する読書位置。
 #[cfg(target_arch = "wasm32")]
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -363,6 +435,9 @@ struct SavedPosition {
     #[serde(rename = "chapterIndex")]
     chapter_index: usize,
     fragment: Option<String>,
+    /// 章内のスクロール位置（px）。旧形式の保存値には無いので 0 とする。
+    #[serde(rename = "scrollTop", default)]
+    scroll_top: i32,
 }
 
 /// EPUB ファイルから読書位置のキーを作る。
@@ -404,7 +479,11 @@ fn save_position(key: &str, position: &SavedPosition) {
 fn Reader(doc_id: Signal<String>) -> impl IntoView {
     use js_sys::Uint8Array;
     use serde::Deserialize;
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{
+        cell::{Cell, RefCell},
+        collections::HashMap,
+        rc::Rc,
+    };
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::{JsFuture, spawn_local};
     use web_sys::{Event, HtmlInputElement};
@@ -447,11 +526,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
     let (cover_url, set_cover_url) = signal(None::<String>);
 
-    let render_chapter: Rc<dyn Fn(usize, Option<String>)> = {
+    let render_chapter: Rc<dyn Fn(usize, Option<String>, Option<i32>)> = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
         let position_key = Rc::clone(&position_key_state);
-        Rc::new(move |index, fragment| {
+        Rc::new(move |index, fragment, scroll_top| {
             let result = book
                 .borrow()
                 .as_ref()
@@ -472,19 +551,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_current.set(index);
                     set_content.set(html);
                     set_status.set(String::new());
-                    if let Some(key) = position_key.borrow().as_ref() {
-                        save_position(
-                            key,
-                            &SavedPosition {
-                                chapter_index: index,
-                                fragment: fragment.clone(),
-                            },
-                        );
-                    }
-                    match fragment {
-                        Some(fragment) => scroll_to_fragment_after_render(fragment),
-                        None => scroll_content_to_top_after_render(),
-                    }
+                    apply_position_after_render(
+                        index,
+                        fragment,
+                        scroll_top,
+                        Rc::clone(&position_key),
+                    );
                 }
                 Err(error) => set_status.set(error),
             }
@@ -601,13 +673,19 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }
 
                 let saved = load_position(&key).filter(|position| position.chapter_index < count);
-                let (start_index, start_fragment) = saved
-                    .map(|position| (position.chapter_index, position.fragment))
-                    .unwrap_or((0, None));
+                let (start_index, start_fragment, start_scroll) = saved
+                    .map(|position| {
+                        (
+                            position.chapter_index,
+                            position.fragment,
+                            position.scroll_top,
+                        )
+                    })
+                    .unwrap_or((0, None, 0));
 
                 *book.borrow_mut() = Some(opened);
                 set_chapters.set(options);
-                render_chapter(start_index, start_fragment);
+                render_chapter(start_index, start_fragment, Some(start_scroll));
             });
         }
     };
@@ -625,7 +703,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index, fragment);
+                render_chapter(index, fragment, None);
             }
         }
     };
@@ -639,7 +717,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index - 1)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index - 1, fragment);
+                render_chapter(index - 1, fragment, None);
             }
         }
     };
@@ -657,7 +735,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .iter()
                     .find(|(chapter, _, _)| *chapter == index + 1)
                     .and_then(|(_, _, fragment)| fragment.clone());
-                render_chapter(index + 1, fragment);
+                render_chapter(index + 1, fragment, None);
             }
         }
     };
@@ -687,6 +765,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         &SavedPosition {
                             chapter_index: current.get(),
                             fragment: Some(fragment.to_string()),
+                            scroll_top: content_scroll_top(),
                         },
                     );
                 }
@@ -738,14 +817,57 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         &SavedPosition {
                             chapter_index: link.chapter_index,
                             fragment: saved_fragment,
+                            scroll_top: content_scroll_top(),
                         },
                     );
                 }
             } else {
-                render_chapter(link.chapter_index, link.fragment);
+                render_chapter(link.chapter_index, link.fragment, None);
             }
         }
     };
+    // スクロール位置は 200ms のデバウンスで保存する。
+    let scroll_save_timer = Rc::new(Cell::new(None::<i32>));
+    let on_scroll = {
+        let position_key = Rc::clone(&position_key_state);
+        let scroll_save_timer = Rc::clone(&scroll_save_timer);
+        move |_event: web_sys::Event| {
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            if let Some(handle) = scroll_save_timer.take() {
+                window.clear_timeout_with_handle(handle);
+            }
+            let position_key = Rc::clone(&position_key);
+            let timer = Rc::clone(&scroll_save_timer);
+            let chapter_index = current.get();
+            let callback = Closure::once_into_js(move || {
+                timer.set(None);
+                // 章が切り替わった後の遅延保存は書き込まない。
+                if current.get() != chapter_index {
+                    return;
+                }
+                let scroll_top = content_scroll_top();
+                if let Some(key) = position_key.borrow().as_ref() {
+                    save_position(
+                        key,
+                        &SavedPosition {
+                            chapter_index,
+                            fragment: None,
+                            scroll_top,
+                        },
+                    );
+                }
+            });
+            if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                callback.unchecked_ref(),
+                200,
+            ) {
+                scroll_save_timer.set(Some(handle));
+            }
+        }
+    };
+
     let current_title = Memo::new(move |_| {
         chapters
             .get()
@@ -787,7 +909,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
                     </aside>
                 </Show>
-                <div class="reader-content" on:click=on_content_click>
+                <div class="reader-content" on:click=on_content_click on:scroll=on_scroll>
                     <div class="document-content reader-html" inner_html=move || content.get()></div>
                 </div>
             </div>
