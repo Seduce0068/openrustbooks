@@ -215,6 +215,38 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
     return False
 
 
+async def open_sample(cdp: Cdp) -> bool:
+    """サンプル EPUB をファイル入力にセットして change を発火する。"""
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#epub-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id == 0:
+        return False
+    await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(SAMPLE)]})
+    await cdp.evaluate(
+        "document.querySelector('#epub-file').dispatchEvent(new Event('change', {bubbles: true}))"
+    )
+    return True
+
+
+async def reload_reader(cdp: Cdp) -> bool:
+    """ページを再読み込みし、Reader のマウントを待つ。"""
+    await cdp.send("Page.reload", {"ignoreCache": True})
+    return await wait_until(cdp, "document.querySelector('.reader-container') !== null")
+
+
+async def saved_position(cdp: Cdp):
+    """localStorage に保存された読書位置を返す。"""
+    return await cdp.evaluate(
+        "(() => {"
+        " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
+        " if (!key) return null;"
+        " return JSON.parse(localStorage.getItem(key));"
+        " })()"
+    )
+
+
 async def run_checks(cdp: Cdp) -> int:
     checker = Checker()
 
@@ -228,16 +260,9 @@ async def run_checks(cdp: Cdp) -> int:
     if not mounted:
         return finish(checker)
 
-    # ファイルをセットして change を発火する。
-    document = await cdp.send("DOM.getDocument", {"depth": -1})
-    root_id = document["result"]["root"]["nodeId"]
-    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#epub-file"})
-    node_id = node["result"]["nodeId"]
-    checker.check("EPUB のファイル入力を取得できる", node_id != 0, f"(nodeId={node_id})")
-    await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(SAMPLE)]})
-    await cdp.evaluate(
-        "document.querySelector('#epub-file').dispatchEvent(new Event('change', {bubbles: true}))"
-    )
+    # 前回の実行で残った保存値を消してから、ファイルをセットする。
+    await cdp.evaluate("localStorage.clear()")
+    checker.check("EPUB のファイル入力を操作できる", await open_sample(cdp))
 
     opened = await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
@@ -343,6 +368,74 @@ async def run_checks(cdp: Cdp) -> int:
             "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
         ),
     )
+
+    # 読書位置の保存と復元。
+    saved = await saved_position(cdp)
+    checker.check("読書位置が localStorage に保存される", saved is not None)
+    checker.check(
+        "保存する値は章とフラグメントだけ",
+        saved is not None and sorted(saved.keys()) == ["chapterIndex", "fragment"],
+        f"(saved={saved!r})",
+    )
+
+    await cdp.evaluate("document.querySelector('#to-ch2').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    saved = await saved_position(cdp)
+    checker.equal("章の移動で位置が保存される", saved.get("chapterIndex") if saved else None, 1)
+
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    restored = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("リロード後に移動した章が復元される", bool(restored))
+    checker.equal(
+        "復元後の章選択",
+        await cdp.evaluate("document.querySelector('.reader-chapter-select')?.value"),
+        "1",
+    )
+
+    await cdp.evaluate("document.querySelector('#back').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await cdp.evaluate("document.querySelector('#to-ch2-part').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
+    )
+    saved = await saved_position(cdp)
+    checker.equal(
+        "フラグメントも位置として保存される",
+        saved.get("fragment") if saved else None,
+        "part",
+    )
+
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    restored_fragment = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
+    )
+    scrolled = await wait_until(
+        cdp, "document.querySelector('.reader-content')?.scrollTop > 0", timeout=5
+    )
+    checker.check("フラグメント付きの位置が復元される", bool(restored_fragment))
+    checker.check("復元時にフラグメントへスクロールする", scrolled)
+
+    # 範囲外の保存値は先頭の章にフォールバックする。
+    await cdp.evaluate(
+        "(() => {"
+        " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
+        " localStorage.setItem(key, JSON.stringify({chapterIndex: 999, fragment: null}));"
+        " })()"
+    )
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    fallback = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    checker.check("範囲外の保存値では先頭の章になる", bool(fallback))
 
     return finish(checker)
 
