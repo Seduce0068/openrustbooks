@@ -45,4 +45,4 @@ cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 ```
 
-CI は `onoderakeita/workflows/rust-gates.yml@v1` に委譲している。
+CI は `Seduce0068/workflows/rust-gates.yml@v1` に委譲している。

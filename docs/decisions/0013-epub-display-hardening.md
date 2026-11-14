@@ -92,7 +92,7 @@ ADR-0012 は章 XHTML の許可リストサニタイズと画像の Blob URL 表
   `cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked` が成功。
 - `wasm-bindgen-cli 0.2.129` と `trunk 0.22.1` を使った
   `trunk build --offline --dist <一時出力先>` が成功。
-- CI は push 時に `onoderakeita/workflows/rust-gates.yml@v1` で検証される。
+- CI は push 時に `Seduce0068/workflows/rust-gates.yml@v1` で検証される。
 
 ## 未決定
 

@@ -124,7 +124,7 @@ cargo tauri dev
 
 push（`master`）と pull request では、GitHub Actions がローカルの 5 ゲートと
 同じ検証を実行する。検証本体は個人リポジトリ共通の再利用ワークフロー
-（`onoderakeita/workflows` の `rust-gates.yml`、タグ `v1`）に委譲しており、
+（`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）に委譲しており、
 `.github/workflows/ci.yml` は Tauri のビルド依存と wasm32 ゲートを渡す
 呼び出し側になっている。desktop を含むワークスペース全体を Linux 向けに
 検証する。
