@@ -352,6 +352,52 @@ fn resolve_images(
     Ok((body.inner_html(), urls))
 }
 
+/// 読書位置を保存する localStorage のキーの接頭辞。
+#[cfg(target_arch = "wasm32")]
+const POSITION_KEY_PREFIX: &str = "openrustbooks:position:";
+
+/// localStorage に保存する読書位置。
+#[cfg(target_arch = "wasm32")]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+struct SavedPosition {
+    #[serde(rename = "chapterIndex")]
+    chapter_index: usize,
+    fragment: Option<String>,
+}
+
+/// EPUB ファイルから読書位置のキーを作る。
+#[cfg(target_arch = "wasm32")]
+fn position_key(file: &web_sys::File) -> String {
+    format!(
+        "{POSITION_KEY_PREFIX}{}:{}:{}",
+        file.name(),
+        file.size(),
+        file.last_modified()
+    )
+}
+
+/// 保存された読書位置を読む。localStorage が使えない場合は `None`。
+#[cfg(target_arch = "wasm32")]
+fn load_position(key: &str) -> Option<SavedPosition> {
+    let storage = web_sys::window()?.local_storage().ok()??;
+    let raw = storage.get_item(key).ok()??;
+    serde_json::from_str(&raw).ok()
+}
+
+/// 読書位置を保存する。localStorage が使えない場合は何もしない。
+#[cfg(target_arch = "wasm32")]
+fn save_position(key: &str, position: &SavedPosition) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return;
+    };
+    if let Ok(raw) = serde_json::to_string(position) {
+        let _ = storage.set_item(key, &raw);
+    }
+}
+
 /// Reader component
 #[cfg(target_arch = "wasm32")]
 #[component]
@@ -394,6 +440,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let book = Rc::new(RefCell::new(None::<WasmEpubBook>));
     let object_urls = Rc::new(RefCell::new(Vec::<String>::new()));
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
+    let position_key_state = Rc::new(RefCell::new(None::<String>));
     let (chapters, set_chapters) = signal(Vec::<(usize, String, Option<String>)>::new());
     let (current, set_current) = signal(0_usize);
     let (content, set_content) = signal(String::new());
@@ -403,6 +450,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let render_chapter: Rc<dyn Fn(usize, Option<String>)> = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
+        let position_key = Rc::clone(&position_key_state);
         Rc::new(move |index, fragment| {
             let result = book
                 .borrow()
@@ -424,6 +472,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_current.set(index);
                     set_content.set(html);
                     set_status.set(String::new());
+                    if let Some(key) = position_key.borrow().as_ref() {
+                        save_position(
+                            key,
+                            &SavedPosition {
+                                chapter_index: index,
+                                fragment: fragment.clone(),
+                            },
+                        );
+                    }
                     match fragment {
                         Some(fragment) => scroll_to_fragment_after_render(fragment),
                         None => scroll_content_to_top_after_render(),
@@ -438,6 +495,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
         let cover_url_state = Rc::clone(&cover_url_state);
+        let position_key_state = Rc::clone(&position_key_state);
+        let render_chapter = Rc::clone(&render_chapter);
         move |event: Event| {
             let Some(input) = event
                 .target()
@@ -455,6 +514,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 ));
                 return;
             }
+            let key = position_key(&file);
+            *position_key_state.borrow_mut() = Some(key.clone());
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
@@ -468,8 +529,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_cover_url.set(None);
 
             let book = Rc::clone(&book);
-            let object_urls = Rc::clone(&object_urls);
             let cover_url_state = Rc::clone(&cover_url_state);
+            let render_chapter = Rc::clone(&render_chapter);
             spawn_local(async move {
                 let buffer = match JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => buffer,
@@ -539,25 +600,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_cover_url.set(Some(url));
                 }
 
-                match opened.chapter_html(0) {
-                    Ok(html) => {
-                        let safe = sanitize_epub_html(&html);
-                        match resolve_images(&opened, 0, &safe) {
-                            Ok((html, urls)) => {
-                                *object_urls.borrow_mut() = urls;
-                                set_current.set(0);
-                                set_content.set(html);
-                                set_chapters.set(options);
-                                set_status.set(String::new());
-                                *book.borrow_mut() = Some(opened);
-                            }
-                            Err(error) => {
-                                set_status.set(format!("Chapter read failed: {error:?}"));
-                            }
-                        }
-                    }
-                    Err(error) => set_status.set(format!("Chapter read failed: {error:?}")),
-                }
+                let saved = load_position(&key).filter(|position| position.chapter_index < count);
+                let (start_index, start_fragment) = saved
+                    .map(|position| (position.chapter_index, position.fragment))
+                    .unwrap_or((0, None));
+
+                *book.borrow_mut() = Some(opened);
+                set_chapters.set(options);
+                render_chapter(start_index, start_fragment);
             });
         }
     };
@@ -614,6 +664,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_content_click = {
         let book = Rc::clone(&book);
         let render_chapter = Rc::clone(&render_chapter);
+        let position_key = Rc::clone(&position_key_state);
         move |event: web_sys::MouseEvent| {
             let Some(target) = event
                 .target()
@@ -630,6 +681,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             event.prevent_default();
             if let Some(fragment) = href.strip_prefix('#') {
                 scroll_to_fragment(fragment);
+                if let Some(key) = position_key.borrow().as_ref() {
+                    save_position(
+                        key,
+                        &SavedPosition {
+                            chapter_index: current.get(),
+                            fragment: Some(fragment.to_string()),
+                        },
+                    );
+                }
                 return;
             }
             if href.starts_with("http://")
@@ -667,9 +727,19 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             if link.chapter_index == current.get() {
+                let saved_fragment = link.fragment.clone();
                 match link.fragment {
                     Some(fragment) => scroll_to_fragment(&fragment),
                     None => scroll_content_to_top(),
+                }
+                if let Some(key) = position_key.borrow().as_ref() {
+                    save_position(
+                        key,
+                        &SavedPosition {
+                            chapter_index: link.chapter_index,
+                            fragment: saved_fragment,
+                        },
+                    );
                 }
             } else {
                 render_chapter(link.chapter_index, link.fragment);
