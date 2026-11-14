@@ -254,6 +254,29 @@ fn scroll_content_to_top() {
     element.set_scroll_top(0);
 }
 
+/// 次の描画フレームでフラグメントへスクロールする。
+///
+/// 本文の更新は非同期に DOM へ反映されるため、更新直後に
+/// `getElementById` を呼ぶと対象が見つからないことがある。
+#[cfg(target_arch = "wasm32")]
+fn scroll_to_fragment_after_render(fragment: String) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let callback = Closure::once_into_js(move || scroll_to_fragment(&fragment));
+    let _ = window.request_animation_frame(callback.unchecked_ref());
+}
+
+/// 次の描画フレームで本文の先頭へスクロールする。
+#[cfg(target_arch = "wasm32")]
+fn scroll_content_to_top_after_render() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let callback = Closure::once_into_js(scroll_content_to_top);
+    let _ = window.request_animation_frame(callback.unchecked_ref());
+}
+
 /// 画像の拡張子から MIME タイプを推定する。
 #[cfg(target_arch = "wasm32")]
 fn mime_for_path(path: &str) -> &'static str {
@@ -402,8 +425,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_content.set(html);
                     set_status.set(String::new());
                     match fragment {
-                        Some(fragment) => scroll_to_fragment(&fragment),
-                        None => scroll_content_to_top(),
+                        Some(fragment) => scroll_to_fragment_after_render(fragment),
+                        None => scroll_content_to_top_after_render(),
                     }
                 }
                 Err(error) => set_status.set(error),
