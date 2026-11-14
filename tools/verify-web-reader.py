@@ -505,6 +505,79 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("旧形式の保存値でも章が復元される", bool(legacy))
 
+    # 移動履歴（戻る・進む）。
+    checker.check(
+        "開いた直後は Back が disabled",
+        await cdp.evaluate("document.querySelector('#reader-back')?.disabled === true"),
+    )
+    checker.check(
+        "開いた直後は Forward が disabled",
+        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
+    )
+
+    await cdp.evaluate("document.querySelector('.reader-content').scrollTop = 150")
+    await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('#back').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.2)
+    checker.check(
+        "章を移動すると Back が有効になる",
+        await cdp.evaluate("document.querySelector('#reader-back')?.disabled === false"),
+    )
+
+    await cdp.evaluate("document.querySelector('#reader-back').click()")
+    restored_chapter = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("Back で前の章へ戻る", bool(restored_chapter))
+    checker.equal(
+        "Back で戻った章の選択",
+        await cdp.evaluate("document.querySelector('.reader-chapter-select')?.value"),
+        "1",
+    )
+    back_scrolled = await wait_until(
+        cdp, "document.querySelector('.reader-content')?.scrollTop > 100", timeout=5
+    )
+    checker.check("Back でスクロール位置が復元される", back_scrolled)
+    checker.check(
+        "Back 後は Forward が有効になる",
+        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === false"),
+    )
+
+    await cdp.evaluate("document.querySelector('#reader-forward').click()")
+    forward_chapter = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    checker.check("Forward で元の章へ進む", bool(forward_chapter))
+
+    # 戻った後に新しい移動をすると Forward は捨てられる。
+    await cdp.evaluate("document.querySelector('#to-ch2').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.2)
+    checker.check(
+        "新しい移動で Forward が disabled になる",
+        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
+    )
+
+    # 本を開き直すと履歴がリセットされる。
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.2)
+    checker.check(
+        "開き直すと Back が disabled になる",
+        reopened and await cdp.evaluate("document.querySelector('#reader-back')?.disabled === true"),
+    )
+    checker.check(
+        "開き直すと Forward が disabled になる",
+        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
+    )
+
     return finish(checker)
 
 
