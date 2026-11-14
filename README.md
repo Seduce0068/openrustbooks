@@ -139,6 +139,17 @@ cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 ```
 
+### 手動の E2E 検証
+
+Web 版リーダーの表示と移動は、ヘッドレス Chrome を使った
+`tools/verify-web-reader.py` で確認できる。Python 3.10 以降（`websockets`）と
+Chrome/Chromium が必要で、サンプル EPUB は一時ディレクトリに生成する。
+
+```bash
+cd web && trunk build --dist dist
+cd .. && python3 tools/verify-web-reader.py --dist web/dist
+```
+
 ## ドキュメント
 
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
