@@ -247,6 +247,17 @@ async def saved_position(cdp: Cdp):
     )
 
 
+async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
+    """保存された読書位置が条件を満たすまで待つ。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        saved = await saved_position(cdp)
+        if saved is not None and predicate(saved):
+            return saved
+        await asyncio.sleep(0.1)
+    return None
+
+
 async def run_checks(cdp: Cdp) -> int:
     checker = Checker()
 
@@ -373,8 +384,9 @@ async def run_checks(cdp: Cdp) -> int:
     saved = await saved_position(cdp)
     checker.check("読書位置が localStorage に保存される", saved is not None)
     checker.check(
-        "保存する値は章とフラグメントだけ",
-        saved is not None and sorted(saved.keys()) == ["chapterIndex", "fragment"],
+        "保存する値は章・フラグメント・スクロール位置だけ",
+        saved is not None
+        and sorted(saved.keys()) == ["chapterIndex", "fragment", "scrollTop"],
         f"(saved={saved!r})",
     )
 
@@ -382,7 +394,7 @@ async def run_checks(cdp: Cdp) -> int:
     await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
     )
-    saved = await saved_position(cdp)
+    saved = await wait_saved(cdp, lambda position: position.get("chapterIndex") == 1)
     checker.equal("章の移動で位置が保存される", saved.get("chapterIndex") if saved else None, 1)
 
     await reload_reader(cdp)
@@ -402,10 +414,10 @@ async def run_checks(cdp: Cdp) -> int:
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
     )
     await cdp.evaluate("document.querySelector('#to-ch2-part').click()")
+    saved = await wait_saved(cdp, lambda position: position.get("fragment") == "part")
     await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
     )
-    saved = await saved_position(cdp)
     checker.equal(
         "フラグメントも位置として保存される",
         saved.get("fragment") if saved else None,
@@ -436,6 +448,62 @@ async def run_checks(cdp: Cdp) -> int:
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
     )
     checker.check("範囲外の保存値では先頭の章になる", bool(fallback))
+
+    # 章内のスクロール位置の保存と復元。
+    await cdp.evaluate("document.querySelector('#to-ch2').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    # 描画後のスクロール適用（先頭へ戻す）が終わるのを待ってからスクロールする。
+    await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('.reader-content').scrollTop = 400")
+    saved = await wait_saved(cdp, lambda position: position.get("scrollTop", 0) > 0)
+    checker.check(
+        "スクロール位置が保存される",
+        saved is not None and saved.get("scrollTop", 0) > 0,
+        f"(saved={saved!r})",
+    )
+
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    restored_scroll = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-content')?.scrollTop > 300", timeout=5
+    )
+    checker.check("リロード後にスクロール位置が復元される", bool(restored_scroll))
+    restored_top = await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? 0")
+    expected_top = saved.get("scrollTop", 0) if saved else 0
+    checker.check(
+        "復元後のスクロール位置が保存値と一致する",
+        abs(restored_top - expected_top) <= 2,
+        f"(restored={restored_top}, saved={expected_top})",
+    )
+
+    # 章を切り替えると先頭に戻る。
+    await cdp.evaluate("document.querySelector('#back').click()")
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.3)
+    saved = await saved_position(cdp)
+    checker.equal("章の切り替えで保存値が先頭になる", saved.get("scrollTop") if saved else None, 0)
+    checker.check(
+        "章の切り替えでスクロール位置が先頭になる",
+        (await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? -1")) == 0,
+    )
+
+    # scrollTop の無い旧形式の保存値でも章は復元される。
+    await cdp.evaluate(
+        "(() => {"
+        " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
+        " localStorage.setItem(key, JSON.stringify({chapterIndex: 1, fragment: null}));"
+        " })()"
+    )
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    legacy = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("旧形式の保存値でも章が復元される", bool(legacy))
 
     return finish(checker)
 
