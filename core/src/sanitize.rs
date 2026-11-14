@@ -143,13 +143,39 @@ pub fn sanitize_epub_html(html: &str) -> String {
 /// 画像として表示してよい参照か判定する。
 ///
 /// 相対パスだけを許可する。スキーム付き URL とプロトコル相対 URL
-/// (`//host/...`) は外部参照として拒否する。
+/// (`//host/...`) は外部参照として拒否する。判定の前に
+/// [`normalize_reference`] でブラウザの URL 正規化に合わせる。
 fn is_local_reference(value: &str) -> bool {
-    let value = value.trim();
+    let value = normalize_reference(value);
     !value.is_empty()
         && !value.starts_with('/')
-        && !value.starts_with("//")
-        && !has_url_scheme(value)
+        && !value.chars().any(char::is_control)
+        && !has_url_scheme(&value)
+}
+
+/// 参照をブラウザが URL を解釈する前の正規化に合わせる。
+///
+/// 前後の C0 制御文字と空白を除き、残るタブ・LF・CR を除き、
+/// バックスラッシュを `/` に読み替える。特殊スキームの URL では
+/// バックスラッシュが `/` として扱われるため、`\\host` のような
+/// プロトコル相対 URL の抜け道を塞ぐ。
+fn normalize_reference(value: &str) -> Cow<'_, str> {
+    let trimmed = value.trim_matches(|character: char| character <= ' ');
+    if !trimmed
+        .chars()
+        .any(|character| matches!(character, '\t' | '\n' | '\r' | '\\'))
+    {
+        return Cow::Borrowed(trimmed);
+    }
+    let mut normalized = String::with_capacity(trimmed.len());
+    for character in trimmed.chars() {
+        match character {
+            '\t' | '\n' | '\r' => {}
+            '\\' => normalized.push('/'),
+            other => normalized.push(other),
+        }
+    }
+    Cow::Owned(normalized)
 }
 
 /// 値がスキーム付き URL か判定する。
@@ -255,5 +281,93 @@ mod tests {
         assert!(!sanitized.contains("src="));
         let sanitized = sanitize_epub_html(r#"<img src="" alt="x">"#);
         assert!(!sanitized.contains("src="));
+    }
+
+    #[test]
+    fn rejects_backslash_protocol_relative_image_sources() {
+        for src in [
+            r"\\evil.com/x.png",
+            r"\/evil.com/x.png",
+            r"/\evil.com/x.png",
+            r"\evil.com/x.png",
+        ] {
+            let sanitized = sanitize_epub_html(&format!(r#"<img src="{src}" alt="x">"#));
+            assert!(!sanitized.contains("src="), "kept external src: {src}");
+        }
+    }
+
+    #[test]
+    fn rejects_entity_encoded_backslash_image_sources() {
+        let sanitized = sanitize_epub_html(r#"<img src="&#92;&#92;evil.com/x.png" alt="x">"#);
+        assert!(!sanitized.contains("src="));
+    }
+
+    #[test]
+    fn rejects_schemes_with_embedded_whitespace() {
+        for src in [
+            "java\tscript:alert(1)",
+            "java\nscript:alert(1)",
+            "java\rscript:alert(1)",
+        ] {
+            let sanitized = sanitize_epub_html(&format!(r#"<img src="{src}" alt="x">"#));
+            assert!(!sanitized.contains("src="), "kept scheme: {src:?}");
+        }
+        let sanitized = sanitize_epub_html(r#"<img src="java&#9;script:alert(1)" alt="x">"#);
+        assert!(!sanitized.contains("src="));
+    }
+
+    #[test]
+    fn rejects_protocol_relative_hidden_by_control_characters() {
+        for src in ["\u{1}\u{1}//evil.com/x.png", "\u{1}\\/evil.com/x.png"] {
+            let sanitized = sanitize_epub_html(&format!(r#"<img src="{src}" alt="x">"#));
+            assert!(!sanitized.contains("src="), "kept external src: {src:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_non_http_schemes_in_image_sources() {
+        for src in [
+            "DATA:image/png;base64,AAAA",
+            "blob:https://example.com/id",
+            "vbscript:msgbox(1)",
+            "file:///etc/passwd",
+        ] {
+            let sanitized = sanitize_epub_html(&format!(r#"<img src="{src}" alt="x">"#));
+            assert!(!sanitized.contains("src="), "kept scheme: {src}");
+        }
+    }
+
+    #[test]
+    fn removes_srcset_and_keeps_relative_source() {
+        let sanitized =
+            sanitize_epub_html(r#"<img src="x.png" srcset="https://evil.com/x 1x" alt="x">"#);
+        assert!(!sanitized.contains("srcset"));
+        assert!(sanitized.contains(r#"src="x.png""#));
+    }
+
+    #[test]
+    fn removes_scriptable_containers() {
+        for html in [
+            r#"<svg><script>alert(1)</script></svg>"#,
+            r#"<template><img src="x" onerror="alert(1)"></template>"#,
+            r#"<noscript><img src="x" onerror="alert(1)"></noscript>"#,
+            r#"<iframe srcdoc="<script>alert(1)</script>"></iframe>"#,
+        ] {
+            let sanitized = sanitize_epub_html(html);
+            assert!(
+                !sanitized.contains("script"),
+                "kept script: {html} -> {sanitized}"
+            );
+            assert!(
+                !sanitized.contains("onerror"),
+                "kept handler: {html} -> {sanitized}"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_relative_source_with_backslash_separator() {
+        let sanitized = sanitize_epub_html(r#"<img src="images\pic.png" alt="x">"#);
+        assert!(sanitized.contains(r#"src="images\pic.png""#));
     }
 }
