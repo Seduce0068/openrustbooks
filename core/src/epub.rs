@@ -9,10 +9,11 @@
 //! （[`EpubBook::chapter_html`]）とリソースの読み出し
 //! （[`EpubBook::chapter_resource`]）、表紙画像（[`EpubBook::cover_image`]）と
 //! 章の表示名（[`EpubBook::chapter_title`]）、landmarks と page-list
-//! （[`EpubBook::landmarks`]、[`EpubBook::page_list`]）の取得を提供する。
-//! アンカー単位の移動、画像のデコード・表示、リソース URL の書き換え、サニタイズ、
-//! `Document` 型との統合は範囲外。読み取り専用であり、EPUB の作成・書き換え・
-//! DRM 解除は提供しない。
+//! （[`EpubBook::landmarks`]、[`EpubBook::page_list`]）、本文内の相対リンクの
+//! 解決（[`EpubBook::resolve_chapter_link`]）の取得を提供する。
+//! 表示位置のスクロール、画像のデコード・表示、リソース URL の書き換え、
+//! サニタイズ、`Document` 型との統合は範囲外。読み取り専用であり、EPUB の
+//! 作成・書き換え・DRM 解除は提供しない。
 //!
 //! 失敗はすべて [`CoreResult`] で返し、panic しない。不正な入力は
 //! 黙って読み飛ばさず、`CoreError::Archive` / `CoreError::Validation` として
@@ -113,6 +114,18 @@ pub struct EpubChapter {
     pub media_type: String,
     /// `itemref` の `linear` 属性。既定は `true`。
     pub linear: bool,
+}
+
+/// 本文内の相対リンクの解決結果。
+///
+/// 同じ本の spine にある章へのリンクだけを表す。外部リンクや本の外を指す
+/// リンクは [`EpubBook::resolve_chapter_link`] が `None` を返す。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChapterLink {
+    /// 移動先の spine の index。
+    pub chapter_index: usize,
+    /// 移動先のフラグメント（`#` の後ろ）。無ければ `None`。
+    pub fragment: Option<String>,
 }
 
 /// 表紙画像。
@@ -307,6 +320,51 @@ impl EpubBook {
             Ok(data) => Ok(data),
             Err(first) => self.read_decoded_entry(&path).ok_or(first),
         }
+    }
+
+    /// 章 `index` の本文にある相対リンク `href` を、同じ本の章へ解決する。
+    ///
+    /// `#fragment` だけのリンクは同じ章を返す。スキーム付き URL・先頭 `/`・
+    /// 空のリンク・spine に無いパス・ルートを越える参照は `None` を返し、
+    /// 外部や本の外へは移動しない（fail-closed）。範囲外の `index` は
+    /// [`CoreError::DocumentNotFound`]。`%XX` は復号して比較する。
+    pub fn resolve_chapter_link(
+        &self,
+        index: usize,
+        href: &str,
+    ) -> CoreResult<Option<ChapterLink>> {
+        let chapter_href = self.chapter(index)?.href.clone();
+        let (path, fragment) = split_fragment(href);
+        if path.is_empty() {
+            return Ok(fragment.map(|fragment| ChapterLink {
+                chapter_index: index,
+                fragment: Some(fragment),
+            }));
+        }
+        if path.starts_with('/') || has_scheme(path) {
+            return Ok(None);
+        }
+        let Ok(target) = resolve_reference(path_dir(&chapter_href), path, "章リンクの href")
+        else {
+            return Ok(None);
+        };
+        let Some(chapter_index) = self.chapter_index_for_path(&target) else {
+            return Ok(None);
+        };
+        Ok(Some(ChapterLink {
+            chapter_index,
+            fragment,
+        }))
+    }
+
+    /// アーカイブ内パスに対応する章の index を返す。
+    ///
+    /// spine の `href` と比較するとき、`%XX` を復号した形でも一致を調べる。
+    fn chapter_index_for_path(&self, target: &str) -> Option<usize> {
+        let target = normalized_chapter_path(target);
+        self.chapters
+            .iter()
+            .position(|chapter| normalized_chapter_path(&chapter.href) == target)
     }
 
     /// 章の表示名を返す。情報源が無い場合は `None`。
@@ -1775,6 +1833,13 @@ fn percent_decode(name: &str) -> Option<String> {
     }
 
     String::from_utf8(decoded).ok()
+}
+
+/// 章の `href` を比較するための正規化したパスを返す。
+///
+/// `%XX` を復号した形にする。復号できなければ生の値をそのまま使う。
+fn normalized_chapter_path(path: &str) -> String {
+    percent_decode(path).unwrap_or_else(|| path.to_string())
 }
 
 /// 16 進 1 桁を数値にする。
@@ -3419,5 +3484,123 @@ mod tests {
 
         // エントリの欠落は表紙なしにするが、読み出しの失敗は報告する。
         assert!(matches!(book.cover_image(), Err(CoreError::Archive(_))));
+    }
+
+    #[test]
+    fn resolves_links_to_another_chapter() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+
+        assert_eq!(
+            book.resolve_chapter_link(0, "ch2.xhtml").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: None,
+            })
+        );
+        // 同じ章を指すリンクも解決する。
+        assert_eq!(
+            book.resolve_chapter_link(0, "ch1.xhtml").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 0,
+                fragment: None,
+            })
+        );
+    }
+
+    #[test]
+    fn resolves_links_with_fragments() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+
+        assert_eq!(
+            book.resolve_chapter_link(0, "ch2.xhtml#part").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: Some(String::from("part")),
+            })
+        );
+        // フラグメントだけのリンクは同じ章を指す。
+        assert_eq!(
+            book.resolve_chapter_link(0, " #part ").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 0,
+                fragment: Some(String::from("part")),
+            })
+        );
+    }
+
+    #[test]
+    fn resolves_parent_directory_links_from_a_subdirectory_chapter() {
+        let opf = OPF
+            .replace("href=\"ch1.xhtml\"", "href=\"text/ch1.xhtml\"")
+            .replace("href=\"ch2.xhtml\"", "href=\"text/ch2.xhtml\"");
+        let bytes = build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/text/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/text/ch2.xhtml", CH2.as_bytes()),
+        ]);
+        let book = EpubBook::open(&bytes).unwrap();
+        assert_eq!(book.chapters()[1].href, "OEBPS/text/ch2.xhtml");
+
+        assert_eq!(
+            book.resolve_chapter_link(0, "../text/ch2.xhtml").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: None,
+            })
+        );
+    }
+
+    #[test]
+    fn resolves_percent_encoded_chapter_links() {
+        // 章の実体は空白入りの名前で、リンクは `%20` で書かれている。
+        let opf = OPF.replace("href=\"ch2.xhtml\"", "href=\"ch 2.xhtml\"");
+        let bytes = build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/ch 2.xhtml", CH2.as_bytes()),
+        ]);
+        let book = EpubBook::open(&bytes).unwrap();
+        assert_eq!(book.chapters()[1].href, "OEBPS/ch 2.xhtml");
+
+        assert_eq!(
+            book.resolve_chapter_link(0, "ch%202.xhtml").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: None,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_links_outside_the_book() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+
+        for href in [
+            "",
+            "#",
+            "https://example.com/ch2.xhtml",
+            "/ch2.xhtml",
+            "../../evil.xhtml",
+            "other.xhtml",
+            "ch2.xhtml?query",
+        ] {
+            assert_eq!(
+                book.resolve_chapter_link(0, href).unwrap(),
+                None,
+                "unexpected link: {href:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn reports_out_of_range_index_for_chapter_links() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+
+        assert!(matches!(
+            book.resolve_chapter_link(9, "ch2.xhtml"),
+            Err(CoreError::DocumentNotFound(_))
+        ));
     }
 }

@@ -21,7 +21,7 @@ pub use wasm::*;
 pub use archive::{ArchiveEntry, ArchiveLimits, ArchiveReader};
 pub use config::{AiConfig, AppConfig, LintConfig};
 pub use document::{Document, DocumentFormat, DocumentId, DocumentMetadata};
-pub use epub::{EpubBook, EpubChapter, EpubCoverImage, EpubMetadata, EpubTocEntry};
+pub use epub::{ChapterLink, EpubBook, EpubChapter, EpubCoverImage, EpubMetadata, EpubTocEntry};
 /// Re-export commonly used types
 pub use error::{CoreError, CoreResult};
 pub use io::{FileEntry, StorageBackend, StorageCapabilities};

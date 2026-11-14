@@ -4,7 +4,7 @@
 //! via wasm-bindgen for use in the browser version.
 
 #[cfg(target_arch = "wasm32")]
-use crate::epub::{EpubBook, EpubCoverImage, EpubTocEntry};
+use crate::epub::{ChapterLink, EpubBook, EpubCoverImage, EpubTocEntry};
 #[cfg(target_arch = "wasm32")]
 use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
@@ -95,6 +95,18 @@ impl WasmEpubBook {
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
+    /// 章内の相対リンクを同じ本の章へ解決する。
+    ///
+    /// 解決できた場合は `{ chapterIndex, fragment }`、移動しない場合は
+    /// `null` を返す。
+    pub fn resolve_chapter_link(&self, index: usize, href: String) -> Result<JsValue, JsValue> {
+        let link = self
+            .inner
+            .resolve_chapter_link(index, &href)
+            .map_err(js_error)?;
+        serialize_chapter_link(link)
+    }
+
     /// EPUB3 nav の目次を JavaScript 値に変換して返す。
     pub fn toc(&self) -> Result<JsValue, JsValue> {
         let entries = self.inner.toc().map_err(js_error)?;
@@ -135,6 +147,26 @@ fn serialize_navigation(entries: Vec<EpubTocEntry>) -> Result<JsValue, JsValue> 
 fn serialize_cover(cover: Option<EpubCoverImage>) -> Result<JsValue, JsValue> {
     let cover: Option<WasmEpubCoverImage> = cover.map(Into::into);
     serde_wasm_bindgen::to_value(&cover).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn serialize_chapter_link(link: Option<ChapterLink>) -> Result<JsValue, JsValue> {
+    let Some(link) = link else {
+        return Ok(JsValue::NULL);
+    };
+    serde_wasm_bindgen::to_value(&WasmChapterLink {
+        chapter_index: link.chapter_index,
+        fragment: link.fragment,
+    })
+    .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmChapterLink {
+    chapter_index: usize,
+    fragment: Option<String>,
 }
 
 #[cfg(target_arch = "wasm32")]
