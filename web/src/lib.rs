@@ -239,6 +239,21 @@ fn scroll_to_fragment(fragment: &str) {
     element.scroll_into_view();
 }
 
+/// 本文のスクロール位置を先頭に戻す。
+#[cfg(target_arch = "wasm32")]
+fn scroll_content_to_top() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
+    let Ok(Some(element)) = document.query_selector(".reader-content") else {
+        return;
+    };
+    element.set_scroll_top(0);
+}
+
 /// 画像の拡張子から MIME タイプを推定する。
 #[cfg(target_arch = "wasm32")]
 fn mime_for_path(path: &str) -> &'static str {
@@ -337,6 +352,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         depth: usize,
     }
 
+    #[derive(Deserialize)]
+    struct ChapterLink {
+        #[serde(rename = "chapterIndex")]
+        chapter_index: usize,
+        fragment: Option<String>,
+    }
+
     #[allow(dead_code)]
     #[derive(Deserialize)]
     struct CoverImage {
@@ -379,8 +401,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_current.set(index);
                     set_content.set(html);
                     set_status.set(String::new());
-                    if let Some(fragment) = fragment {
-                        scroll_to_fragment(&fragment);
+                    match fragment {
+                        Some(fragment) => scroll_to_fragment(&fragment),
+                        None => scroll_content_to_top(),
                     }
                 }
                 Err(error) => set_status.set(error),
@@ -565,32 +588,68 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
         }
     };
-    let on_content_click = move |event: web_sys::MouseEvent| {
-        let Some(target) = event
-            .target()
-            .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
-        else {
-            return;
-        };
-        let Ok(Some(anchor)) = target.closest("a") else {
-            return;
-        };
-        let Some(href) = anchor.get_attribute("href") else {
-            return;
-        };
-        event.prevent_default();
-        if let Some(fragment) = href.strip_prefix('#') {
-            scroll_to_fragment(fragment);
-        } else if href.starts_with("http://")
-            || href.starts_with("https://")
-            || href.starts_with("mailto:")
-        {
-            if let Some(window) = web_sys::window() {
-                let _ = window.open_with_url_and_target_and_features(
-                    &href,
-                    "_blank",
-                    "noopener,noreferrer",
-                );
+    let on_content_click = {
+        let book = Rc::clone(&book);
+        let render_chapter = Rc::clone(&render_chapter);
+        move |event: web_sys::MouseEvent| {
+            let Some(target) = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+            else {
+                return;
+            };
+            let Ok(Some(anchor)) = target.closest("a") else {
+                return;
+            };
+            let Some(href) = anchor.get_attribute("href") else {
+                return;
+            };
+            event.prevent_default();
+            if let Some(fragment) = href.strip_prefix('#') {
+                scroll_to_fragment(fragment);
+                return;
+            }
+            if href.starts_with("http://")
+                || href.starts_with("https://")
+                || href.starts_with("mailto:")
+            {
+                if let Some(window) = web_sys::window() {
+                    let _ = window.open_with_url_and_target_and_features(
+                        &href,
+                        "_blank",
+                        "noopener,noreferrer",
+                    );
+                }
+                return;
+            }
+            let resolved = {
+                let book = book.borrow();
+                let Some(book) = book.as_ref() else {
+                    return;
+                };
+                book.resolve_chapter_link(current.get(), href)
+            };
+            let link = match resolved {
+                Ok(value) if !value.is_null() => {
+                    serde_wasm_bindgen::from_value::<ChapterLink>(value).ok()
+                }
+                Ok(_) => None,
+                Err(error) => {
+                    set_status.set(format!("Link resolution failed: {error:?}"));
+                    return;
+                }
+            };
+            let Some(link) = link else {
+                set_status.set("This link cannot be opened.".to_string());
+                return;
+            };
+            if link.chapter_index == current.get() {
+                match link.fragment {
+                    Some(fragment) => scroll_to_fragment(&fragment),
+                    None => scroll_content_to_top(),
+                }
+            } else {
+                render_chapter(link.chapter_index, link.fragment);
             }
         }
     };
