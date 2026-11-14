@@ -58,7 +58,8 @@ core には章の `href` を基準にした `resolve_reference` と spine の章
 4. 解決できないリンクは移動せず、状態メッセージを表示する。
 
 章を切り替えたときは本文のスクロール位置を先頭へ戻す。フラグメント指定時は
-その位置へスクロールする。
+その位置へスクロールする。本文の更新は非同期に DOM へ反映されるため、
+スクロールは次の描画フレーム（`requestAnimationFrame`）で行う。
 
 ## 選択肢と根拠
 
@@ -87,6 +88,11 @@ core には章の `href` を基準にした `resolve_reference` と spine の章
 - `cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked` と
   `cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked` が成功。
 - `trunk build --offline --dist <一時出力先>` が成功。
+- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` で Web ビルドを検証
+  （19 項目）。章の表示、サニタイズ（`script`・イベントハンドラ・
+  `javascript:`・外部画像）、Blob URL の画像、目次、章タイトル、相対リンクの
+  章移動、フラグメント付き移動のスクロール、解決できないリンクの状態表示を
+  確認した。
 - CI（`Seduce0068/workflows/rust-gates.yml@v1`）が成功する。
 
 ## 未決定
