@@ -79,7 +79,8 @@ openrustbooks/
 ## 主な機能
 
 - **EPUB 閲覧 (Web, 実装済み)**: 章 HTML の許可リストサニタイズ表示、
-  画像・表紙の Blob URL 表示、目次・章移動、章内アンカー移動
+  画像・表紙の Blob URL 表示、目次・章移動、章内アンカー移動、
+  本文内の相対リンクによる章移動
 - **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
 - **テキスト編集 (設計段階)**: TXT, Markdown (CodeMirror 6ベース)
 - **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +
