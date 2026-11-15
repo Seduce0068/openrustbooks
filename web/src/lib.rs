@@ -338,6 +338,7 @@ fn apply_position_frame(
                     chapter_index,
                     fragment,
                     scroll_top: actual,
+                    saved_at: 0.0,
                 },
             );
         }
@@ -424,6 +425,18 @@ fn resolve_images(
 #[cfg(target_arch = "wasm32")]
 const POSITION_KEY_PREFIX: &str = "openrustbooks:position:";
 
+/// 保持する読書位置の最大件数。
+#[cfg(target_arch = "wasm32")]
+const POSITION_LIMIT: usize = 40;
+
+/// 読書位置の寿命（日）。
+#[cfg(target_arch = "wasm32")]
+const POSITION_MAX_AGE_DAYS: f64 = 90.0;
+
+/// 容量超過時に残す件数。
+#[cfg(target_arch = "wasm32")]
+const POSITION_MIN_KEEP: usize = 10;
+
 /// 読書位置のキーを複数のコールバックで共有するための型。
 #[cfg(target_arch = "wasm32")]
 type SharedPositionKey = std::rc::Rc<std::cell::RefCell<Option<String>>>;
@@ -438,6 +451,9 @@ struct SavedPosition {
     /// 章内のスクロール位置（px）。旧形式の保存値には無いので 0 とする。
     #[serde(rename = "scrollTop", default)]
     scroll_top: i32,
+    /// 保存した時刻（Unix ミリ秒）。旧形式の保存値には無いので 0 とする。
+    #[serde(rename = "savedAt", default)]
+    saved_at: f64,
 }
 
 /// EPUB ファイルから読書位置のキーを作る。
@@ -459,7 +475,100 @@ fn load_position(key: &str) -> Option<SavedPosition> {
     serde_json::from_str(&raw).ok()
 }
 
+/// 現在時刻（Unix ミリ秒）を返す。
+#[cfg(target_arch = "wasm32")]
+fn now_millis() -> f64 {
+    js_sys::Date::now()
+}
+
+/// `openrustbooks:position:` のキーと保存時刻（Unix ミリ秒）を列挙する。
+#[cfg(target_arch = "wasm32")]
+fn list_positions(storage: &web_sys::Storage) -> Vec<(String, f64)> {
+    let Ok(length) = storage.length() else {
+        return Vec::new();
+    };
+    let mut entries = Vec::new();
+    for index in 0..length {
+        let Ok(Some(key)) = storage.key(index) else {
+            continue;
+        };
+        if !key.starts_with(POSITION_KEY_PREFIX) {
+            continue;
+        }
+        let saved_at = storage
+            .get_item(&key)
+            .ok()
+            .flatten()
+            .and_then(|raw| serde_json::from_str::<SavedPosition>(&raw).ok())
+            .map(|position| position.saved_at)
+            .unwrap_or(0.0);
+        entries.push((key, saved_at));
+    }
+    entries
+}
+
+/// 保存時刻の新しい順に並べ替える（`savedAt` が 0 の旧形式は最も古い扱い）。
+#[cfg(target_arch = "wasm32")]
+fn sort_newest_first(entries: &mut [(String, f64)]) {
+    entries.sort_by(|left, right| {
+        let left_time = if left.1 > 0.0 {
+            left.1
+        } else {
+            f64::NEG_INFINITY
+        };
+        let right_time = if right.1 > 0.0 {
+            right.1
+        } else {
+            f64::NEG_INFINITY
+        };
+        right_time
+            .partial_cmp(&left_time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+/// 読書位置を掃除する。
+///
+/// 寿命（90 日）を過ぎたエントリを削除し、件数が上限（40）を超えていれば
+/// 古い順に削除する。`keep` に渡したキー（現在開いている本）は必ず残す。
+/// 読書位置以外のキーには触らない。
+#[cfg(target_arch = "wasm32")]
+fn prune_positions(storage: &web_sys::Storage, keep: &str) {
+    let cutoff = now_millis() - POSITION_MAX_AGE_DAYS * 24.0 * 60.0 * 60.0 * 1000.0;
+    for (key, saved_at) in list_positions(storage) {
+        if key == keep {
+            continue;
+        }
+        // `savedAt` が 0 の旧形式は寿命判定の対象にしない（件数上限で扱う）。
+        if saved_at > 0.0 && saved_at < cutoff {
+            let _ = storage.remove_item(&key);
+        }
+    }
+
+    let remaining = list_positions(storage);
+    if remaining.len() <= POSITION_LIMIT {
+        return;
+    }
+    let has_current = remaining.iter().any(|(key, _)| key == keep);
+    let budget = if has_current {
+        POSITION_LIMIT.saturating_sub(1)
+    } else {
+        POSITION_LIMIT
+    };
+    let mut others: Vec<(String, f64)> = remaining
+        .into_iter()
+        .filter(|(key, _)| key != keep)
+        .collect();
+    sort_newest_first(&mut others);
+    for (key, _) in others.into_iter().skip(budget) {
+        let _ = storage.remove_item(&key);
+    }
+}
+
 /// 読書位置を保存する。localStorage が使えない場合は何もしない。
+///
+/// 保存のたびに古いエントリを掃除する。容量超過で失敗した場合は件数を
+/// 減らして再試行し、それでも失敗したら諦めて読書を妨げない。
 #[cfg(target_arch = "wasm32")]
 fn save_position(key: &str, position: &SavedPosition) {
     let Some(window) = web_sys::window() else {
@@ -468,8 +577,31 @@ fn save_position(key: &str, position: &SavedPosition) {
     let Ok(Some(storage)) = window.local_storage() else {
         return;
     };
-    if let Ok(raw) = serde_json::to_string(position) {
-        let _ = storage.set_item(key, &raw);
+    let position = SavedPosition {
+        saved_at: now_millis(),
+        ..position.clone()
+    };
+    let Ok(raw) = serde_json::to_string(&position) else {
+        return;
+    };
+    if storage.set_item(key, &raw).is_ok() {
+        prune_positions(&storage, key);
+        return;
+    }
+
+    // 容量超過。古い順に減らして再試行する。
+    for keep in [POSITION_MIN_KEEP, 1] {
+        let mut entries: Vec<(String, f64)> = list_positions(&storage)
+            .into_iter()
+            .filter(|(entry_key, _)| entry_key != key)
+            .collect();
+        sort_newest_first(&mut entries);
+        for (old_key, _) in entries.into_iter().skip(keep) {
+            let _ = storage.remove_item(&old_key);
+        }
+        if storage.set_item(key, &raw).is_ok() {
+            return;
+        }
     }
 }
 
@@ -966,10 +1098,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_select = {
         let navigate_to = Rc::clone(&navigate_to);
         move |event: Event| {
-            if let Some(input) = event
+            if let Some(select) = event
                 .target()
-                .and_then(|target| target.dyn_into::<HtmlInputElement>().ok())
-                && let Ok(index) = input.value().parse::<usize>()
+                .and_then(|target| target.dyn_into::<web_sys::HtmlSelectElement>().ok())
+                && let Ok(index) = select.value().parse::<usize>()
             {
                 let fragment = chapters
                     .get()
@@ -1039,6 +1171,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             chapter_index: current.get(),
                             fragment: Some(fragment.to_string()),
                             scroll_top: content_scroll_top(),
+                            saved_at: 0.0,
                         },
                     );
                 }
@@ -1091,6 +1224,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             chapter_index: link.chapter_index,
                             fragment: saved_fragment,
                             scroll_top: content_scroll_top(),
+                            saved_at: 0.0,
                         },
                     );
                 }
@@ -1128,6 +1262,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             chapter_index,
                             fragment: None,
                             scroll_top,
+                            saved_at: 0.0,
                         },
                     );
                 }
