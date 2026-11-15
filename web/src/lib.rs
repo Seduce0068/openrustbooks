@@ -329,121 +329,76 @@ fn set_content_scroll_top(offset: i32) {
 /// `getElementById` やスクロール位置の設定を行うと対象が古いことがある。
 /// スクロール位置はレイアウトが終わるまで反映されないことがあるため、
 /// 数フレームまで再試行する。
+/// 位置の適用に必要な状態。再試行の間で共有するため `Clone` を持つ。
 #[cfg(target_arch = "wasm32")]
-fn apply_position_after_render(
+#[derive(Clone)]
+struct PositionApplyCtx {
     chapter_index: usize,
     fragment: Option<String>,
     scroll_top: Option<i32>,
     expected_images: usize,
     position_key: SharedPositionKey,
-    applying_position: std::rc::Rc<std::cell::Cell<bool>>,
+    /// 位置の適用中フラグ。適用中のスクロール保存を抑制する。
+    applying: std::rc::Rc<std::cell::Cell<bool>>,
+    /// 位置の適用を完了した時刻。適用直後のスクロール保存を抑制する。
     last_apply_time: std::rc::Rc<std::cell::Cell<f64>>,
-) {
-    let deadline = now_millis() + IMAGE_SETTLE_MS;
-    apply_position_frame(
-        chapter_index,
-        fragment,
-        scroll_top,
-        expected_images,
-        position_key,
-        applying_position,
-        last_apply_time,
-        0,
-        deadline,
-    );
 }
 
 #[cfg(target_arch = "wasm32")]
-fn apply_position_frame(
-    chapter_index: usize,
-    fragment: Option<String>,
-    scroll_top: Option<i32>,
-    expected_images: usize,
-    position_key: SharedPositionKey,
-    applying_position: std::rc::Rc<std::cell::Cell<bool>>,
-    last_apply_time: std::rc::Rc<std::cell::Cell<f64>>,
-    attempt: u32,
-    deadline: f64,
-) {
+fn apply_position_after_render(ctx: PositionApplyCtx) {
+    let deadline = now_millis() + IMAGE_SETTLE_MS;
+    apply_position_frame(ctx, 0, deadline);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
     let Some(window) = web_sys::window() else {
         return;
     };
     // 画像の読み込みで本文の高さが変わると、同じ scrollTop が別の内容を指す。
     // 画像が DOM に現れて確定するまで（上限付きで）位置の適用を待つ。
-    if !images_settled(expected_images) && now_millis() < deadline {
+    if !images_settled(ctx.expected_images) && now_millis() < deadline {
+        let next = ctx.clone();
         let callback = Closure::once_into_js(move || {
-            apply_position_frame(
-                chapter_index,
-                fragment,
-                scroll_top,
-                expected_images,
-                position_key,
-                applying_position,
-                last_apply_time,
-                attempt,
-                deadline,
-            );
+            apply_position_frame(next, attempt, deadline);
         });
-        let _ = window.request_animation_frame(callback.unchecked_ref());
+        let _ = window
+            .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0);
         return;
     }
     let callback = Closure::once_into_js(move || {
-        if let Some(window) = web_sys::window() {
-            let _ = js_sys::Reflect::set(
-                &window,
-                &JsValue::from_str("__apply_ran"),
-                &JsValue::from_bool(true),
-            );
-        }
-        match fragment.as_deref() {
+        match ctx.fragment.as_deref() {
             Some(fragment) => scroll_to_fragment(fragment),
-            None => match scroll_top {
+            None => match ctx.scroll_top {
                 Some(offset) if offset > 0 => set_content_scroll_top(offset),
                 _ => scroll_content_to_top(),
             },
         }
         let actual = content_scroll_top();
-        let wanted = scroll_top.unwrap_or(0);
+        let wanted = ctx.scroll_top.unwrap_or(0);
         // 要求した位置に届いていない場合は再試行する。スクロール位置は
         // レイアウトが終わるまで反映されないことがあるため。
-        if fragment.is_none() && actual != wanted && attempt < 3 {
-            apply_position_frame(
-                chapter_index,
-                fragment,
-                scroll_top,
-                expected_images,
-                position_key,
-                applying_position,
-                last_apply_time,
-                attempt + 1,
-                deadline,
-            );
+        if ctx.fragment.is_none() && actual != wanted && attempt < 3 {
+            apply_position_frame(ctx.clone(), attempt + 1, deadline);
             return;
         }
         // フラグメント移動のときだけ、適用後の位置を保存する。
         // None の場合は render_chapter で既に保存済み。
-        if fragment.is_some() {
-            if let Some(key) = position_key.borrow().as_ref() {
-                save_position(
-                    key,
-                    &SavedPosition {
-                        chapter_index,
-                        fragment,
-                        scroll_top: actual,
-                        saved_at: 0.0,
-                    },
-                );
-            }
-        }
-        last_apply_time.set(now_millis());
-        if let Some(window) = web_sys::window() {
-            let _ = js_sys::Reflect::set(
-                &window,
-                &JsValue::from_str("__last_apply_time"),
-                &JsValue::from_f64(last_apply_time.get()),
+        if ctx.fragment.is_some()
+            && let Some(key) = ctx.position_key.borrow().as_ref()
+        {
+            save_position(
+                key,
+                &SavedPosition {
+                    chapter_index: ctx.chapter_index,
+                    fragment: ctx.fragment.clone(),
+                    scroll_top: actual,
+                    saved_at: 0.0,
+                },
             );
         }
-        applying_position.set(false);
+        ctx.last_apply_time.set(now_millis());
+        ctx.applying.set(false);
     });
     let _ =
         window.set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0);
@@ -1187,6 +1142,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         index + 1 < len
     });
     let (chapters, set_chapters) = signal(Vec::<(usize, String, Option<String>)>::new());
+    // spine の href を章インデックス順に保持する（landmarks / page-list の解決用）。
+    let (chapter_hrefs, set_chapter_hrefs) = signal(Vec::<String>::new());
     let (landmarks, set_landmarks) = signal(Vec::<TocEntry>::new());
     let (landmark_options, set_landmark_options) = signal(Vec::<(usize, String)>::new());
     let (page_list, set_page_list) = signal(Vec::<TocEntry>::new());
@@ -1253,28 +1210,28 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     set_content.set(html);
                     set_status.set(String::new());
                     // 位置を意図した値で即座に保存する（DOM の更新を待たない）。
-                    if fragment.is_none() {
-                        if let Some(key) = position_key.borrow().as_ref() {
-                            save_position(
-                                key,
-                                &SavedPosition {
-                                    chapter_index: index,
-                                    fragment: None,
-                                    scroll_top: scroll_top.unwrap_or(0),
-                                    saved_at: 0.0,
-                                },
-                            );
-                        }
+                    if fragment.is_none()
+                        && let Some(key) = position_key.borrow().as_ref()
+                    {
+                        save_position(
+                            key,
+                            &SavedPosition {
+                                chapter_index: index,
+                                fragment: None,
+                                scroll_top: scroll_top.unwrap_or(0),
+                                saved_at: 0.0,
+                            },
+                        );
                     }
-                    apply_position_after_render(
-                        index,
+                    apply_position_after_render(PositionApplyCtx {
+                        chapter_index: index,
                         fragment,
                         scroll_top,
                         expected_images,
-                        Rc::clone(&position_key),
-                        Rc::clone(&applying_position),
-                        Rc::clone(&last_apply_time),
-                    );
+                        position_key: Rc::clone(&position_key),
+                        applying: Rc::clone(&applying_position),
+                        last_apply_time: Rc::clone(&last_apply_time),
+                    });
                 }
                 Err(error) => set_status.set(error),
             }
@@ -1438,6 +1395,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
+            set_chapter_hrefs.set(Vec::new());
             set_landmarks.set(Vec::new());
             set_landmark_options.set(Vec::new());
             set_page_list.set(Vec::new());
@@ -1502,11 +1460,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         entry.depth,
                     ));
                 }
+                let hrefs: Vec<String> = spine.iter().map(|(_, href)| href.clone()).collect();
                 let options: Vec<(usize, String, Option<String>)> = spine
                     .into_iter()
                     .map(|(index, href)| {
                         let (title, fragment, depth) =
-                            toc_entries.remove(&href).unwrap_or((href, None, 0));
+                            toc_entries.remove(&href).unwrap_or((href.clone(), None, 0));
                         let indent = "　".repeat(depth.min(8));
                         (index, format!("{indent}{title}"), fragment)
                     })
@@ -1581,6 +1540,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
                 *book.borrow_mut() = Some(opened);
                 set_chapters.set(options);
+                set_chapter_hrefs.set(hrefs);
                 set_landmarks.set(landmarks.clone());
                 let lopts: Vec<(usize, String)> = landmarks
                     .iter()
@@ -1699,7 +1659,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
     let on_landmark_select = {
         let navigate_to = Rc::clone(&navigate_to);
-        let landmarks = landmarks;
         move |event: web_sys::Event| {
             let Some(select) = event
                 .target()
@@ -1715,11 +1674,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             let path = entry.href.split('#').next().unwrap_or(&entry.href);
-            let target_index = chapters
-                .get()
-                .iter()
-                .find(|(_, href, _)| href == path)
-                .map(|(index, _, _)| *index);
+            let target_index = chapter_hrefs.get().iter().position(|href| {
+                href.rsplit('/').next().unwrap_or(href) == path.rsplit('/').next().unwrap_or(path)
+            });
             if let Some(target_index) = target_index {
                 navigate_to(target_index, entry.fragment);
             }
@@ -1728,7 +1685,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
     let on_page_go = {
         let navigate_to = Rc::clone(&navigate_to);
-        let page_list = page_list;
         move |_| {
             let Some(window) = web_sys::window() else {
                 return;
@@ -1753,11 +1709,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             let path = entry.href.split('#').next().unwrap_or(&entry.href);
-            let target_index = chapters
-                .get()
-                .iter()
-                .find(|(_, href, _)| href == path)
-                .map(|(index, _, _)| *index);
+            let target_index = chapter_hrefs.get().iter().position(|href| {
+                href.rsplit('/').next().unwrap_or(href) == path.rsplit('/').next().unwrap_or(path)
+            });
             if let Some(target_index) = target_index {
                 navigate_to(target_index, entry.fragment);
             } else {
