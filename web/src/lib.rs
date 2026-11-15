@@ -707,6 +707,9 @@ struct ReaderSettings {
     line_height: usize,
     #[serde(default)]
     dark: bool,
+    /// OS の prefers-color-scheme に追従するか。
+    #[serde(rename = "followSystem", default)]
+    follow_system: bool,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -726,6 +729,7 @@ impl Default for ReaderSettings {
             font_scale: DEFAULT_FONT_SCALE,
             line_height: DEFAULT_LINE_HEIGHT,
             dark: false,
+            follow_system: false,
         }
     }
 }
@@ -746,6 +750,7 @@ impl ReaderSettings {
                 DEFAULT_LINE_HEIGHT
             },
             dark: self.dark,
+            follow_system: self.follow_system,
         }
     }
 }
@@ -797,6 +802,21 @@ fn apply_dark_class(dark: bool) {
         let _ = element.class_list().add_1("dark");
     } else {
         let _ = element.class_list().remove_1("dark");
+    }
+}
+
+/// OS の prefers-color-scheme: dark を検知する。
+#[cfg(target_arch = "wasm32")]
+fn system_prefers_dark() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(mq) = window.match_media("(prefers-color-scheme: dark)") else {
+        return false;
+    };
+    match mq {
+        Some(mq) => mq.matches(),
+        None => false,
     }
 }
 
@@ -1010,6 +1030,10 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
                 .get("dark")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            follow_system: settings
+                .get("followSystem")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         }
         .normalized();
         save_settings(&merged);
@@ -1209,10 +1233,35 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (font_scale, set_font_scale) = signal(initial_settings.font_scale);
     let (line_height, set_line_height) = signal(initial_settings.line_height);
     let (dark, set_dark) = signal(initial_settings.dark);
+    let (follow_system, set_follow_system) = signal(initial_settings.follow_system);
+    // OS の prefers-color-scheme の現在値。OS 側の変更で更新する。
+    let (system_dark, set_system_dark) = signal(system_prefers_dark());
+    // 実際に適用するダーク表示。follow_system が true なら OS の設定に追従する。
+    let effective_dark = Memo::new(move |_| {
+        if follow_system.get() {
+            system_dark.get()
+        } else {
+            dark.get()
+        }
+    });
     // ダーク表示をアプリ全体（<html>）へ反映する。
     Effect::new(move || {
-        apply_dark_class(dark.get());
+        apply_dark_class(effective_dark.get());
     });
+
+    // OS の prefers-color-scheme が変わったら、follow_system が true の
+    // ときだけダーク表示を更新する。
+    if let Some(window) = web_sys::window()
+        && let Ok(Some(mq)) = window.match_media("(prefers-color-scheme: dark)")
+    {
+        let set_system_dark = set_system_dark;
+        let callback = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            set_system_dark.set(system_prefers_dark());
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = mq.add_event_listener_with_callback("change", callback.as_ref().unchecked_ref());
+        // Closure をリークしないよう保持する（ページ寿命まで）。
+        callback.forget();
+    }
 
     let scroll_save_timer = Rc::new(Cell::new(None::<i32>));
     // 位置適用中はスクロール保存のデバウンスを無効にする。
@@ -1956,6 +2005,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             font_scale: font_scale.get(),
             line_height: line_height.get(),
             dark: dark.get(),
+            follow_system: follow_system.get(),
         });
     });
     let font_smaller_action: Rc<dyn Fn()> = {
@@ -1975,7 +2025,23 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let dark_action: Rc<dyn Fn()> = {
         let persist = Rc::clone(&persist_settings);
         Rc::new(move || {
+            // 手動で切り替えたら OS 追従は解除する。
+            if follow_system.get() {
+                set_follow_system.set(false);
+            }
             set_dark.set(!dark.get());
+            persist();
+        })
+    };
+    let dark_auto_action: Rc<dyn Fn()> = {
+        let persist = Rc::clone(&persist_settings);
+        Rc::new(move || {
+            let next = !follow_system.get();
+            set_follow_system.set(next);
+            if next {
+                // 自動に切り替えたら、現在の OS 設定を反映する。
+                set_system_dark.set(system_prefers_dark());
+            }
             persist();
         })
     };
@@ -1997,6 +2063,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_toggle_dark = {
         let action = Rc::clone(&dark_action);
         move |_| action()
+    };
+    let on_dark_auto = {
+        let action = Rc::clone(&dark_auto_action);
+        move |_: web_sys::MouseEvent| action()
     };
     let on_clear_data = move |_| {
         let removed = clear_reading_positions();
@@ -2134,7 +2204,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     view! {
         <div
             class="reader-container"
-            class:reader-dark=move || dark.get()
+            class:reader-dark=move || effective_dark.get()
             class:reader-font-0=move || font_scale.get() == 0
             class:reader-font-1=move || font_scale.get() == 1
             class:reader-font-2=move || font_scale.get() == 2
@@ -2152,6 +2222,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-font-larger" class="btn" title="Larger text" aria-label="Larger text" aria-keyshortcuts="+" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
                 <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
                 <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
+                <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
                 <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
                 <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>
