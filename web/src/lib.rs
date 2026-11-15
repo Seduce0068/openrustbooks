@@ -933,6 +933,96 @@ fn import_positions(raw: &str) -> Result<usize, String> {
     Ok(imported)
 }
 
+/// 履歴を保存する localStorage のキーの接頭辞。
+#[cfg(target_arch = "wasm32")]
+const HISTORY_KEY_PREFIX: &str = "openrustbooks:history:";
+
+/// 履歴の 1 エントリを JSON に変換するための構造体。
+#[cfg(target_arch = "wasm32")]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+struct SavedHistoryEntry {
+    #[serde(rename = "chapterIndex")]
+    chapter_index: usize,
+    fragment: Option<String>,
+    #[serde(rename = "scrollTop", default)]
+    scroll_top: i32,
+}
+
+/// 履歴全体を JSON に変換するための構造体。
+#[cfg(target_arch = "wasm32")]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+struct SavedHistory {
+    entries: Vec<SavedHistoryEntry>,
+    index: usize,
+}
+
+/// 履歴のキーを作る。
+#[cfg(target_arch = "wasm32")]
+fn history_key(file: &web_sys::File) -> String {
+    format!(
+        "{HISTORY_KEY_PREFIX}{}:{}:{}",
+        file.name(),
+        file.size(),
+        file.last_modified()
+    )
+}
+
+/// 保存された履歴を読む。localStorage が使えない・壊れている場合は `None`。
+#[cfg(target_arch = "wasm32")]
+fn load_history(key: &str, chapter_count: usize) -> Option<SavedHistory> {
+    let storage = web_sys::window()?.local_storage().ok()??;
+    let raw = storage.get_item(key).ok()??;
+    let saved: SavedHistory = serde_json::from_str(&raw).ok()?;
+    if saved.index >= saved.entries.len() {
+        return None;
+    }
+    if saved
+        .entries
+        .iter()
+        .any(|entry| entry.chapter_index >= chapter_count)
+    {
+        return None;
+    }
+    Some(saved)
+}
+
+/// 履歴を保存する。localStorage が使えない場合は何もしない。
+#[cfg(target_arch = "wasm32")]
+fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
+    if history.len() <= 1 {
+        return;
+    }
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return;
+    };
+    let saved = SavedHistory {
+        entries: history
+            .iter()
+            .map(|entry| SavedHistoryEntry {
+                chapter_index: entry.chapter_index,
+                fragment: entry.fragment.clone(),
+                scroll_top: entry.scroll_top,
+            })
+            .collect(),
+        index,
+    };
+    if let Ok(raw) = serde_json::to_string(&saved) {
+        let _ = storage.set_item(key, &raw);
+    }
+}
+
+/// 移動履歴の 1 エントリ。
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone)]
+struct HistoryEntry {
+    chapter_index: usize,
+    fragment: Option<String>,
+    scroll_top: i32,
+}
+
 /// Reader component
 #[cfg(target_arch = "wasm32")]
 #[component]
@@ -953,14 +1043,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     const MAX_EPUB_FILE_BYTES: f64 = MAX_EPUB_FILE_MIB as f64 * 1024.0 * 1024.0;
     /// 移動履歴の上限。
     const HISTORY_LIMIT: usize = 50;
-
-    /// 移動履歴の 1 エントリ。
-    #[derive(Clone)]
-    struct HistoryEntry {
-        chapter_index: usize,
-        fragment: Option<String>,
-        scroll_top: i32,
-    }
 
     #[derive(Deserialize)]
     struct TocEntry {
@@ -990,6 +1072,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let object_urls = Rc::new(RefCell::new(Vec::<String>::new()));
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
     let position_key_state = Rc::new(RefCell::new(None::<String>));
+    let history_key_state = Rc::new(RefCell::new(None::<String>));
     // 現在の章で適用中のフラグメント。スクロール保存で消さないために保持する。
     let current_fragment = Rc::new(RefCell::new(None::<String>));
     let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
@@ -1071,6 +1154,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
+        let history_key_state = Rc::clone(&history_key_state);
         Rc::new(move |index, fragment| {
             let current_index = history_index.get();
             {
@@ -1096,6 +1180,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 history_index.set(entries.len() - 1);
             }
             sync_history();
+            if let Some(key) = history_key_state.borrow().as_ref() {
+                save_history(key, &history.borrow(), history_index.get());
+            }
             render_chapter(index, fragment, None);
         })
     };
@@ -1105,6 +1192,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
+        let history_key_state = Rc::clone(&history_key_state);
         Rc::new(move || {
             let index = history_index.get();
             if index == 0 {
@@ -1124,6 +1212,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             };
             history_index.set(new_index);
             sync_history();
+            if let Some(key) = history_key_state.borrow().as_ref() {
+                save_history(key, &history.borrow(), history_index.get());
+            }
             render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
         })
     };
@@ -1133,6 +1224,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
+        let history_key_state = Rc::clone(&history_key_state);
         Rc::new(move || {
             let index = history_index.get();
             let len = history.borrow().len();
@@ -1152,6 +1244,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             };
             history_index.set(new_index);
             sync_history();
+            if let Some(key) = history_key_state.borrow().as_ref() {
+                save_history(key, &history.borrow(), history_index.get());
+            }
             render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
         })
     };
@@ -1169,6 +1264,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let object_urls = Rc::clone(&object_urls);
         let cover_url_state = Rc::clone(&cover_url_state);
         let position_key_state = Rc::clone(&position_key_state);
+        let history_key_state = Rc::clone(&history_key_state);
         let render_chapter = Rc::clone(&render_chapter);
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
@@ -1196,6 +1292,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             *history.borrow_mut() = Vec::new();
             history_index.set(0);
             sync_history();
+            *history_key_state.borrow_mut() = Some(history_key(&file));
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
@@ -1294,12 +1391,35 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     })
                     .unwrap_or((0, None, 0));
 
-                *history.borrow_mut() = vec![HistoryEntry {
-                    chapter_index: start_index,
-                    fragment: start_fragment.clone(),
-                    scroll_top: start_scroll,
-                }];
-                history_index.set(0);
+                let restored_history = load_history(&history_key(&file), count)
+                    .map(|saved| {
+                        (
+                            saved
+                                .entries
+                                .into_iter()
+                                .map(|entry| HistoryEntry {
+                                    chapter_index: entry.chapter_index,
+                                    fragment: entry.fragment,
+                                    scroll_top: entry.scroll_top,
+                                })
+                                .collect::<Vec<_>>(),
+                            saved.index,
+                        )
+                    })
+                    .filter(|(entries, index)| *index < entries.len() && entries.len() > 1);
+                let (history_entries, history_idx) = restored_history.unwrap_or_else(|| {
+                    (
+                        vec![HistoryEntry {
+                            chapter_index: start_index,
+                            fragment: start_fragment.clone(),
+                            scroll_top: start_scroll,
+                        }],
+                        0,
+                    )
+                });
+
+                *history.borrow_mut() = history_entries;
+                history_index.set(history_idx);
                 sync_history();
 
                 *book.borrow_mut() = Some(opened);
