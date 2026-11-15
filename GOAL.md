@@ -1,43 +1,49 @@
 # Goal
 
-Web 版 EPUB リーダーの本文画像に `decoding="async"` を付与し、
-デコードを非同期化して本文の描画をブロックしない。
+Web 版 EPUB リーダーの履歴一覧から、選択中のエントリを個別に削除できるようにする。
 
 ## Scope
 
 ### 背景
 
-ADR-0020 までで画像の読み込み完了を待ってから位置を適用しているが、
-画像のデコードはメインスレッドをブロックする。`loading="lazy"` は
-`images_settled` が `complete` を待つため位置補正と相性が悪く、
-これまで先送りされていた（ADR-0020 の未決定「画像の遅延読み込み
-（`loading="lazy"`）と位置補正の併用」）。
+ADR-0031 までで履歴の全消去（クリア）はできるが、任意の 1 件だけを消す手段が
+無い（ADR-0029・ADR-0031 の未決定「履歴エントリの個別削除」）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`resolve_images` で `decoding="async"` を付与）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0034-async-image-decoding.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（履歴の個別削除ボタンと処理）
+- `tools/verify-web-reader.py`: 変更（個別削除の E2E 検証を追加）
+- `docs/decisions/0035-history-delete-entry.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 画像の非同期デコード:
-   - `resolve_images` で `src` を Blob URL に差し替える各画像に
-     `decoding="async"` を設定する。
-   - `loading="lazy"` は付けない（`images_settled` が `complete` を
-     待つため位置補正が壊れる。ADR-0020 の判断を維持する）。
-2. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 129 項目、読書位置、画像の位置補正、
-     履歴、表示設定、掃除、キーボード操作、タッチ操作、landmarks、
-     page-list、履歴一覧、履歴クリア、エクスポート・インポート、
-     マージ、カラースキーム追従を変えない。
+1. 個別削除:
+   - ツールバーに `<button id="reader-history-delete">` を置く。
+   - クリックで**現在選択中の履歴エントリ**（`history_index` が指すもの）を
+     履歴から削除する。
+   - 削除後も表示中の章・スクロール位置は変えない（再描画しない）。
+   - 削除後の `history_index` は次のとおり調整する。
+     - 削除した位置より後ろにエントリがある場合は同じインデックス
+       （次のエントリが繰り上がる）。
+     - 削除した位置が最後の場合は 1 つ前のインデックス。
+   - localStorage の当該本の履歴キーも更新する。
+   - 履歴が 1 件のときは disabled にする（履歴を空にしない）。
+2. ARIA:
+   - ボタンに `aria-label="Delete history entry"` を付ける。
+3. 既存の挙動を変えない:
+   - 既存の 119 テスト、E2E 131 項目、読書位置、履歴、表示設定、掃除、
+     キーボード操作、タッチ操作、landmarks、page-list、履歴一覧、
+     履歴クリア、エクスポート・インポート、マージ、カラースキーム追従、
+     画像の非同期デコードを変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - 本文の画像に `decoding="async"` が付いている。
-- 既存の 119 テストと E2E 129 項目が通る。
+  - 履歴 3 件の状態で削除を押すと 2 件になる。
+  - 削除後も表示中の章は変わらない。
+  - 履歴が 1 件のときは削除ボタンが disabled。
+- 既存の 119 テストと E2E 131 項目が通る。
 
 ## Acceptance criteria
 
@@ -55,7 +61,7 @@ ADR-0020 までで画像の読み込み完了を待ってから位置を適用�
 
 ## Constraints
 
-- 新規依存を追加しない。保存先は localStorage。外部送信を追加しない。
+- 新規依存を追加しない。保存先は localStorage とメモリ。外部送信を追加しない。
 - `desktop/` を変更しない。
 - プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
   使わない。`unsafe` を使わない。
