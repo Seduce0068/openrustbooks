@@ -1,45 +1,43 @@
 # Goal
 
-Web 版 EPUB リーダーのダーク表示を OS の prefers-color-scheme に追従させる。
+Web 版 EPUB リーダーの本文画像に `decoding="async"` を付与し、
+デコードを非同期化して本文の描画をブロックしない。
 
 ## Scope
 
 ### 背景
 
-ADR-0018・ADR-0023 まででダーク表示は手動トグルのみ。OS の
-prefers-color-scheme: dark を検知して自動でダーク表示に切り替える手段が無い
-（ADR-0018・ADR-0023 の未決定「テーマの自動切替（prefers-color-scheme）」）。
+ADR-0020 までで画像の読み込み完了を待ってから位置を適用しているが、
+画像のデコードはメインスレッドをブロックする。`loading="lazy"` は
+`images_settled` が `complete` を待つため位置補正と相性が悪く、
+これまで先送りされていた（ADR-0020 の未決定「画像の遅延読み込み
+（`loading="lazy"`）と位置補正の併用」）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（prefers-color-scheme の検知と自動切替）
-- `web/index.html`: 変更（色スキームのメタタグ）
-- `tools/verify-web-reader.py`: 変更（自動切替の E2E 検証を追加）
-- `docs/decisions/0033-prefers-color-scheme.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（`resolve_images` で `decoding="async"` を付与）
+- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
+- `docs/decisions/0034-async-image-decoding.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 自動切替:
-   - ダーク表示が「自動」（auto）の状態を追加する。
-   - OS の prefers-color-scheme: dark を検知して、自動モードのときは
-     ダーク表示にする。
-   - OS の設定が変わったときにリアルタイムで追従する。
-   - ユーザーが手動でダーク/ライトを選んだときは自動モードを解除する。
-2. 設定の永続化:
-   - 自動/手動の選択を localStorage に保存する。
-   - 再読み込み後も選択が復元される。
-3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 123 項目、読書位置、履歴、表示設定、掃除、
-     キーボード操作、タッチ操作、landmarks、page-list、履歴一覧、
-     履歴クリア、エクスポート・インポート、マージを変えない。
+1. 画像の非同期デコード:
+   - `resolve_images` で `src` を Blob URL に差し替える各画像に
+     `decoding="async"` を設定する。
+   - `loading="lazy"` は付けない（`images_settled` が `complete` を
+     待つため位置補正が壊れる。ADR-0020 の判断を維持する）。
+2. 既存の挙動を変えない:
+   - 既存の 119 テスト、E2E 129 項目、読書位置、画像の位置補正、
+     履歴、表示設定、掃除、キーボード操作、タッチ操作、landmarks、
+     page-list、履歴一覧、履歴クリア、エクスポート・インポート、
+     マージ、カラースキーム追従を変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - ダーク表示の自動切替が設定できる。
-  - 設定の保存と復元が動作する。
-- 既存の 119 テストと E2E 123 項目が通る。
+  - 本文の画像に `decoding="async"` が付いている。
+- 既存の 119 テストと E2E 129 項目が通る。
 
 ## Acceptance criteria
 
