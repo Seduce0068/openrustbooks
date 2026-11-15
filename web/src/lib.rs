@@ -464,6 +464,10 @@ fn resolve_images(
         match book.chapter_resource(index, src.clone()) {
             Ok(bytes) => match object_url_for(&bytes, &src) {
                 Ok(url) => {
+                    // デコードを非同期にして本文の描画をブロックしない。
+                    // `loading="lazy"` は付けない（位置補正が `complete` を
+                    // 待つため、画面外の画像が永久に未完了になる）。
+                    let _ = image.set_attribute("decoding", "async");
                     image.set_attribute("src", &url)?;
                     urls.push(url);
                 }
