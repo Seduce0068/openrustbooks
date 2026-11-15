@@ -1534,6 +1534,68 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("クリア後も表示中の章は変わらない", text_kept is True)
 
+    # インポートのマージ。既存の savedAt が新しい場合は上書きしない。
+    await cdp.evaluate(
+        "(() => {"
+        " const now = Date.now();"
+        " localStorage.setItem('openrustbooks:position:merge-test',"
+        "  JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 555, savedAt: now}));"
+        " localStorage.removeItem('openrustbooks:position:merge-new');"
+        " })()"
+    )
+    merge_payload = {
+        "positions": {
+            "openrustbooks:position:merge-test": {
+                "chapterIndex": 1,
+                "fragment": None,
+                "scrollTop": 111,
+                "savedAt": 1000,
+            },
+            "openrustbooks:position:merge-new": {
+                "chapterIndex": 0,
+                "fragment": None,
+                "scrollTop": 222,
+                "savedAt": 1000,
+            },
+        },
+        "settings": {"fontScale": 1, "lineHeight": 2, "dark": False},
+    }
+    merge_path = SAMPLE.parent / "merge-positions.json"
+    merge_path.write_text(_json.dumps(merge_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(merge_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+        )
+        kept = await cdp.evaluate(
+            "JSON.parse(localStorage.getItem('openrustbooks:position:merge-test'))"
+        )
+        checker.check(
+            "既存の savedAt が新しい位置は上書きされない",
+            kept is not None and kept.get("scrollTop") == 555,
+            f"(kept={kept!r})",
+        )
+        imported_new = await cdp.evaluate(
+            "JSON.parse(localStorage.getItem('openrustbooks:position:merge-new'))"
+        )
+        checker.check(
+            "既存キーが無い位置は取り込まれる",
+            imported_new is not None and imported_new.get("scrollTop") == 222,
+            f"(new={imported_new!r})",
+        )
+        # 後続のテストに影響しないよう片付ける。
+        await cdp.evaluate(
+            "localStorage.removeItem('openrustbooks:position:merge-test');"
+            "localStorage.removeItem('openrustbooks:position:merge-new')"
+        )
+
     return finish(checker)
 
 
