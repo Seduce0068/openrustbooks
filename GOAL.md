@@ -1,46 +1,43 @@
 # Goal
 
-Web 版のエクスポート・インポートに移動履歴を含める。
+Web 版 EPUB リーダーに移動履歴の全消去（クリア）を追加する。
 
 ## Scope
 
 ### 背景
 
-ADR-0026 まででエクスポート形式は `{ positions, settings }`。履歴は
-ADR-0024 で localStorage に永続化されているが、バックアップの対象に
-含まれない（ADR-0026・ADR-0029 の未決定「履歴のエクスポート・インポート
-への含有」）。
+ADR-0029 までで履歴一覧から任意の位置へジャンプできるが、履歴を消す手段が
+無い（ADR-0029 の未決定「履歴エントリの削除（個別削除・全消去）」）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（エクスポート・インポートの形式拡張）
-- `tools/verify-web-reader.py`: 変更（履歴のエクスポート・インポートの E2E 検証を追加）
-- `docs/decisions/0030-history-export-import.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（履歴クリアボタンと処理）
+- `tools/verify-web-reader.py`: 変更（履歴クリアの E2E 検証を追加）
+- `docs/decisions/0031-history-clear.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. エクスポート:
-   - 出力 JSON に `history` を追加する。
-     `{ "positions": {...}, "settings": {...}, "history": { "<履歴キー>": { "entries": [...], "index": n }, ... } }`
-   - `history` には `openrustbooks:history:` で始まる全キーを含める。
-   - 値は既存の `SavedHistory`（entries / index）と同じ形にする。
-2. インポート:
-   - `history` キーがあれば各履歴を取り込む。
-     - 値が `SavedHistory` として読めるものだけ取り込む（fail-closed）。
-   - `history` が無い形式（旧形式）でも従来どおり positions / settings だけ
-     取り込む。
-   - 取り込んだ履歴件数を状態メッセージに含める。
+1. 履歴クリア:
+   - ツールバーに `<button id="reader-history-clear">` を置く。
+   - クリックで開いている本の履歴を消す。
+   - 消した後は履歴に現在位置 1 件だけを残す（戻る・進むは不可になる）。
+   - localStorage の当該本の履歴キーも更新する（現在位置のみの履歴）。
+   - 履歴が 1 件のときは disabled にする。
+2. ARIA:
+   - ボタンに `aria-label="Clear history"` を付ける。
 3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 114 項目、読書位置、履歴、表示設定、掃除、
-     キーボード操作、タッチ操作、landmarks、page-list、履歴一覧を変えない。
+   - 既存の 119 テスト、E2E 116 項目、読書位置、履歴、表示設定、掃除、
+     キーボード操作、タッチ操作、landmarks、page-list、履歴一覧、
+     エクスポート・インポートを変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - エクスポート JSON に `history` が含まれる。
-  - 新形式のインポートで履歴が復元される。
-- 既存の 119 テストと E2E 114 項目が通る。
+  - 章を 2 回移動して履歴 3 件の状態でクリアを押すと、履歴が 1 件になり、
+    Back ボタンが disabled になる。
+  - クリア後も表示中の章は変わらない。
+- 既存の 119 テストと E2E 116 項目が通る。
 
 ## Acceptance criteria
 
@@ -58,8 +55,7 @@ ADR-0024 で localStorage に永続化されているが、バックアップの
 
 ## Constraints
 
-- 新規依存を追加しない。保存先は localStorage とブラウザのダウンロード。
-  外部送信を追加しない。
+- 新規依存を追加しない。保存先は localStorage とメモリ。外部送信を追加しない。
 - `desktop/` を変更しない。
 - プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
   使わない。`unsafe` を使わない。
