@@ -1136,6 +1136,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
     let history_index = Rc::new(Cell::new(0_usize));
     let (history_state, set_history_state) = signal((0_usize, 0_usize));
+    // 履歴一覧の UI 用。(履歴インデックス, 章インデックス, フラグメント)。
+    let (history_entries, set_history_entries) =
+        signal(Vec::<(usize, usize, Option<String>)>::new());
     let can_back = Memo::new(move |_| history_state.get().1 > 0);
     let can_forward = Memo::new(move |_| {
         let (len, index) = history_state.get();
@@ -1244,6 +1247,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let history_index = Rc::clone(&history_index);
         Rc::new(move || {
             set_history_state.set((history.borrow().len(), history_index.get()));
+            let entries: Vec<(usize, usize, Option<String>)> = history
+                .borrow()
+                .iter()
+                .enumerate()
+                .map(|(index, entry)| (index, entry.chapter_index, entry.fragment.clone()))
+                .collect();
+            set_history_entries.set(entries);
         })
     };
 
@@ -1286,29 +1296,26 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         })
     };
 
-    let back_action: Rc<dyn Fn()> = {
+    // 指定した履歴インデックスへジャンプする。戻る・進む・一覧選択で使う。
+    let jump_to_history: Rc<dyn Fn(usize)> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
         let history_key_state = Rc::clone(&history_key_state);
-        Rc::new(move || {
-            let index = history_index.get();
-            if index == 0 {
-                return;
-            }
-            // 移動前の位置を現在エントリへ記録する。
-            if let Some(entry) = history.borrow_mut().get_mut(index)
-                && entry.chapter_index == current.get()
-            {
-                entry.fragment = None;
-                entry.scroll_top = content_scroll_top();
-            }
-            let new_index = index - 1;
+        Rc::new(move |new_index| {
             let entry = history.borrow().get(new_index).cloned();
             let Some(entry) = entry else {
                 return;
             };
+            let index = history_index.get();
+            // 移動前の位置を現在エントリへ記録する。
+            if let Some(previous) = history.borrow_mut().get_mut(index)
+                && previous.chapter_index == current.get()
+            {
+                previous.fragment = None;
+                previous.scroll_top = content_scroll_top();
+            }
             history_index.set(new_index);
             sync_history();
             if let Some(key) = history_key_state.borrow().as_ref() {
@@ -1318,37 +1325,31 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         })
     };
 
+    let back_action: Rc<dyn Fn()> = {
+        let history_index = Rc::clone(&history_index);
+        let jump_to_history = Rc::clone(&jump_to_history);
+        Rc::new(move || {
+            let index = history_index.get();
+            if index == 0 {
+                return;
+            }
+            jump_to_history(index - 1);
+        })
+    };
+
     let forward_action: Rc<dyn Fn()> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
-        let sync_history = Rc::clone(&sync_history);
-        let render_chapter = Rc::clone(&render_chapter);
-        let history_key_state = Rc::clone(&history_key_state);
+        let jump_to_history = Rc::clone(&jump_to_history);
         Rc::new(move || {
             let index = history_index.get();
-            let len = history.borrow().len();
-            if index + 1 >= len {
+            if index + 1 >= history.borrow().len() {
                 return;
             }
-            if let Some(entry) = history.borrow_mut().get_mut(index)
-                && entry.chapter_index == current.get()
-            {
-                entry.fragment = None;
-                entry.scroll_top = content_scroll_top();
-            }
-            let new_index = index + 1;
-            let entry = history.borrow().get(new_index).cloned();
-            let Some(entry) = entry else {
-                return;
-            };
-            history_index.set(new_index);
-            sync_history();
-            if let Some(key) = history_key_state.borrow().as_ref() {
-                save_history(key, &history.borrow(), history_index.get());
-            }
-            render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
+            jump_to_history(index + 1);
         })
     };
+
     let on_history_back = {
         let back_action = Rc::clone(&back_action);
         move |_| back_action()
@@ -1356,6 +1357,21 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_history_forward = {
         let forward_action = Rc::clone(&forward_action);
         move |_| forward_action()
+    };
+    let on_history_select = {
+        let jump_to_history = Rc::clone(&jump_to_history);
+        move |event: web_sys::Event| {
+            let Some(select) = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::HtmlSelectElement>().ok())
+            else {
+                return;
+            };
+            let Ok(new_index) = select.value().parse::<usize>() else {
+                return;
+            };
+            jump_to_history(new_index);
+        }
     };
 
     let on_file_change = {
@@ -2066,6 +2082,28 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" on:change=on_import_change/>
                 <button id="reader-back" class="btn" aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
                 <button id="reader-forward" class="btn" aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
+                <select id="reader-history" class="reader-chapter-select" aria-label="History" on:change=on_history_select prop:disabled=move || history_state.get().0 <= 1>
+                    <For
+                        each=move || history_entries.get()
+                        key=|(index, chapter_index, fragment)| (*index, *chapter_index, fragment.clone())
+                        children=move |(index, chapter_index, fragment)| {
+                            let label = chapters
+                                .get()
+                                .get(chapter_index)
+                                .map(|(_, title, _)| title.trim_start().to_string())
+                                .unwrap_or_else(|| format!("Chapter {}", chapter_index + 1));
+                            let label = match fragment {
+                                Some(fragment) => format!("{label}#{fragment}"),
+                                None => label,
+                            };
+                            view! {
+                                <option value=index.to_string() prop:selected=move || history_state.get().1 == index>
+                                    {label}
+                                </option>
+                            }
+                        }
+                    />
+                </select>
                 <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
                 <select id="reader-chapter-select" class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
