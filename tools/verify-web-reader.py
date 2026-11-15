@@ -1055,6 +1055,91 @@ async def run_checks(cdp: Cdp) -> int:
         await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
     )
 
+    # 読書位置のエクスポート・インポート。
+    # まず章 1 に移動して位置を保存する。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.4)
+    # Export ボタンが存在する。
+    checker.check(
+        "Export ボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-export') !== null"),
+    )
+    # Import ボタンが存在する。
+    checker.check(
+        "Import ボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-import') !== null"),
+    )
+
+    # インポート: positions JSON を直接 localStorage に書き込んでから
+    # Import 経由で同じ値が取り込まれることを確認する。
+    # まず現在の位置をクリアして、インポート用の JSON を作る。
+    import json as _json
+    payload = {
+        "openrustbooks:position:sample.epub:1:1": {
+            "chapterIndex": 0,
+            "fragment": None,
+            "scrollTop": 123,
+            "savedAt": 0,
+        }
+    }
+    import_path = SAMPLE.parent / "positions.json"
+    import_path.write_text(_json.dumps(payload), encoding="utf-8")
+    print("IMPORT FILE CONTENT:", import_path.read_text())
+
+    # Import ファイル入力をセットして change を発火する。
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    checker.check("Import 用のファイル入力が存在する", node_id != 0)
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(import_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        imported = await wait_until(
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+        )
+        checker.check("インポート後に状態メッセージが出る", imported)
+        await asyncio.sleep(1.0)
+        imported_value = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:position:sample.epub:1:1')"
+        )
+        checker.check(
+            "インポートで読書位置が取り込まれる",
+            imported_value is not None and "123" in str(imported_value),
+            f"(value={imported_value!r})",
+        )
+
+    # 不正な JSON では何も取り込まず、状態メッセージが出る。
+    bad_path = SAMPLE.parent / "bad.json"
+    bad_path.write_text("{not json", encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(bad_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        await asyncio.sleep(0.5)
+        bad_status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
+        checker.check(
+            "不正な JSON ではエラーが表示される",
+            "解析" in bad_status or "失敗" in bad_status or "not" in bad_status.lower(),
+            f"(status={bad_status!r})",
+        )
+
+    # インポート後も表示設定は残る。
+    checker.check(
+        "インポート後も表示設定は残る",
+        await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
+    )
+
     return finish(checker)
 
 
