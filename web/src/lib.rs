@@ -779,6 +779,25 @@ fn save_settings(settings: &ReaderSettings) {
     }
 }
 
+/// `<html>` に dark クラスを付け外しする。
+#[cfg(target_arch = "wasm32")]
+fn apply_dark_class(dark: bool) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
+    let Some(element) = document.document_element() else {
+        return;
+    };
+    if dark {
+        let _ = element.class_list().add_1("dark");
+    } else {
+        let _ = element.class_list().remove_1("dark");
+    }
+}
+
 /// 保存した読書位置をすべて削除し、削除した件数を返す。
 #[cfg(target_arch = "wasm32")]
 fn clear_reading_positions() -> usize {
@@ -990,6 +1009,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (font_scale, set_font_scale) = signal(initial_settings.font_scale);
     let (line_height, set_line_height) = signal(initial_settings.line_height);
     let (dark, set_dark) = signal(initial_settings.dark);
+    // ダーク表示をアプリ全体（<html>）へ反映する。
+    Effect::new(move || {
+        apply_dark_class(dark.get());
+    });
 
     let render_chapter: Rc<dyn Fn(usize, Option<String>, Option<i32>)> = {
         let book = Rc::clone(&book);
