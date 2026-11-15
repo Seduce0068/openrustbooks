@@ -473,6 +473,139 @@ fn save_position(key: &str, position: &SavedPosition) {
     }
 }
 
+/// 表示設定の localStorage キー。
+#[cfg(target_arch = "wasm32")]
+const SETTINGS_KEY: &str = "openrustbooks:settings";
+
+/// 文字サイズの段階（rem）。
+#[cfg(target_arch = "wasm32")]
+const FONT_SCALES: [f64; 5] = [1.0, 1.125, 1.25, 1.5, 1.75];
+
+/// 行間の段階。
+#[cfg(target_arch = "wasm32")]
+const LINE_HEIGHTS: [f64; 3] = [1.5, 1.8, 2.1];
+
+/// 既定の文字サイズの段階。
+#[cfg(target_arch = "wasm32")]
+const DEFAULT_FONT_SCALE: usize = 1;
+
+/// 既定の行間の段階。
+#[cfg(target_arch = "wasm32")]
+const DEFAULT_LINE_HEIGHT: usize = 1;
+
+/// リーダーの表示設定。
+#[cfg(target_arch = "wasm32")]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, PartialEq)]
+struct ReaderSettings {
+    #[serde(rename = "fontScale", default = "default_font_scale")]
+    font_scale: usize,
+    #[serde(rename = "lineHeight", default = "default_line_height")]
+    line_height: usize,
+    #[serde(default)]
+    dark: bool,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn default_font_scale() -> usize {
+    DEFAULT_FONT_SCALE
+}
+
+#[cfg(target_arch = "wasm32")]
+fn default_line_height() -> usize {
+    DEFAULT_LINE_HEIGHT
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Default for ReaderSettings {
+    fn default() -> Self {
+        Self {
+            font_scale: DEFAULT_FONT_SCALE,
+            line_height: DEFAULT_LINE_HEIGHT,
+            dark: false,
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ReaderSettings {
+    /// 範囲外の値を既定へ戻す。
+    fn normalized(self) -> Self {
+        Self {
+            font_scale: if self.font_scale < FONT_SCALES.len() {
+                self.font_scale
+            } else {
+                DEFAULT_FONT_SCALE
+            },
+            line_height: if self.line_height < LINE_HEIGHTS.len() {
+                self.line_height
+            } else {
+                DEFAULT_LINE_HEIGHT
+            },
+            dark: self.dark,
+        }
+    }
+}
+
+/// 表示設定を読み込む。localStorage が使えない・壊れている場合は既定。
+#[cfg(target_arch = "wasm32")]
+fn load_settings() -> ReaderSettings {
+    let Some(window) = web_sys::window() else {
+        return ReaderSettings::default();
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return ReaderSettings::default();
+    };
+    let Ok(Some(raw)) = storage.get_item(SETTINGS_KEY) else {
+        return ReaderSettings::default();
+    };
+    serde_json::from_str::<ReaderSettings>(&raw)
+        .map(ReaderSettings::normalized)
+        .unwrap_or_default()
+}
+
+/// 表示設定を保存する。localStorage が使えない場合は何もしない。
+#[cfg(target_arch = "wasm32")]
+fn save_settings(settings: &ReaderSettings) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return;
+    };
+    if let Ok(raw) = serde_json::to_string(settings) {
+        let _ = storage.set_item(SETTINGS_KEY, &raw);
+    }
+}
+
+/// 保存した読書位置をすべて削除し、削除した件数を返す。
+#[cfg(target_arch = "wasm32")]
+fn clear_reading_positions() -> usize {
+    let Some(window) = web_sys::window() else {
+        return 0;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return 0;
+    };
+    let Ok(length) = storage.length() else {
+        return 0;
+    };
+    let mut keys = Vec::new();
+    for index in 0..length {
+        if let Ok(Some(key)) = storage.key(index)
+            && key.starts_with(POSITION_KEY_PREFIX)
+        {
+            keys.push(key);
+        }
+    }
+    let mut removed = 0;
+    for key in keys {
+        if storage.remove_item(&key).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 /// Reader component
 #[cfg(target_arch = "wasm32")]
 #[component]
@@ -543,6 +676,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
     let (cover_url, set_cover_url) = signal(None::<String>);
+    let initial_settings = load_settings();
+    let (font_scale, set_font_scale) = signal(initial_settings.font_scale);
+    let (line_height, set_line_height) = signal(initial_settings.line_height);
+    let (dark, set_dark) = signal(initial_settings.dark);
 
     let render_chapter: Rc<dyn Fn(usize, Option<String>, Option<i32>)> = {
         let book = Rc::clone(&book);
@@ -1004,6 +1141,48 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         }
     };
 
+    let persist_settings = Rc::new(move || {
+        save_settings(&ReaderSettings {
+            font_scale: font_scale.get(),
+            line_height: line_height.get(),
+            dark: dark.get(),
+        });
+    });
+    let on_font_smaller = {
+        let persist = Rc::clone(&persist_settings);
+        move |_| {
+            set_font_scale.set(font_scale.get().saturating_sub(1));
+            persist();
+        }
+    };
+    let on_font_larger = {
+        let persist = Rc::clone(&persist_settings);
+        move |_| {
+            set_font_scale.set((font_scale.get() + 1).min(FONT_SCALES.len() - 1));
+            persist();
+        }
+    };
+    let on_line_spacing = {
+        let persist = Rc::clone(&persist_settings);
+        move |_| {
+            set_line_height.set((line_height.get() + 1) % LINE_HEIGHTS.len());
+            persist();
+        }
+    };
+    let on_toggle_dark = {
+        let persist = Rc::clone(&persist_settings);
+        move |_| {
+            set_dark.set(!dark.get());
+            persist();
+        }
+    };
+    let on_clear_data = move |_| {
+        let removed = clear_reading_positions();
+        set_status.set(format!("Removed {removed} saved reading positions."));
+    };
+    // view マクロ内の比較で `>` を使わないよう、条件を外で計算する。
+    let font_larger_disabled = Memo::new(move |_| font_scale.get() + 1 >= FONT_SCALES.len());
+
     let current_title = Memo::new(move |_| {
         chapters
             .get()
@@ -1014,10 +1193,27 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     });
 
     view! {
-        <div class="reader-container" data-doc-id=move || doc_id.get()>
+        <div
+            class="reader-container"
+            class:reader-dark=move || dark.get()
+            class:reader-font-0=move || font_scale.get() == 0
+            class:reader-font-1=move || font_scale.get() == 1
+            class:reader-font-2=move || font_scale.get() == 2
+            class:reader-font-3=move || font_scale.get() == 3
+            class:reader-font-4=move || font_scale.get() == 4
+            class:reader-line-0=move || line_height.get() == 0
+            class:reader-line-1=move || line_height.get() == 1
+            class:reader-line-2=move || line_height.get() == 2
+            data-doc-id=move || doc_id.get()
+        >
             <div class="reader-toolbar">
                 <label class="btn btn-primary" for="epub-file">"Open EPUB"</label>
                 <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" on:change=on_file_change/>
+                <button id="reader-font-smaller" class="btn" title="Smaller text" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
+                <button id="reader-font-larger" class="btn" title="Larger text" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
+                <button id="reader-line-spacing" class="btn" title="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
+                <button id="reader-theme" class="btn" title="Toggle dark mode" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
+                <button id="reader-clear-data" class="btn" title="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
                 <button id="reader-back" class="btn" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
                 <button id="reader-forward" class="btn" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
                 <button class="btn" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>

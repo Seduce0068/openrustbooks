@@ -342,8 +342,41 @@
             max-width: 800px;
             margin: 0 auto;
             overflow-wrap: anywhere;
-            font-size: 1.125rem;
-            line-height: 1.8;
+            font-size: var(--reader-font-size, 1.125rem);
+            line-height: var(--reader-line-height, 1.8);
+        }
+
+        .reader-container.reader-font-0 { --reader-font-size: 1rem; }
+        .reader-container.reader-font-1 { --reader-font-size: 1.125rem; }
+        .reader-container.reader-font-2 { --reader-font-size: 1.25rem; }
+        .reader-container.reader-font-3 { --reader-font-size: 1.5rem; }
+        .reader-container.reader-font-4 { --reader-font-size: 1.75rem; }
+
+        .reader-container.reader-line-0 { --reader-line-height: 1.5; }
+        .reader-container.reader-line-1 { --reader-line-height: 1.8; }
+        .reader-container.reader-line-2 { --reader-line-height: 2.1; }
+
+        .reader-container.reader-dark .reader-content {
+            background: #1e1e1e;
+            color: #e6e6e6;
+        }
+
+        .reader-container.reader-dark .reader-html a {
+            color: #8ab4f8;
+        }
+
+        .reader-container.reader-dark .reader-html th,
+        .reader-container.reader-dark .reader-html td {
+            border-color: #444;
+        }
+
+        .reader-container.reader-dark .reader-html blockquote {
+            border-color: #444;
+            color: #b0b0b0;
+        }
+
+        .reader-container.reader-dark .reader-html pre {
+            background: #2a2a2a;
         }
 
         .reader-html img {
@@ -383,8 +416,8 @@
         .document-content {
             max-width: 800px;
             margin: 0 auto;
-            font-size: 1.125rem;
-            line-height: 1.8;
+            font-size: var(--reader-font-size, 1.125rem);
+            line-height: var(--reader-line-height, 1.8);
         }
 
         .document-content h1, .document-content h2, .document-content h3 {
