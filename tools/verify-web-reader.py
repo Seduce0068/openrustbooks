@@ -86,6 +86,11 @@ NAV = """<?xml version="1.0" encoding="utf-8"?>
 <li><a href="ch2.xhtml#part">Chapter Two</a></li>
 </ol>
 </nav>
+<nav epub:type="landmarks">
+<ol>
+<li><a epub:type="bodymatter" href="ch2.xhtml">Start Reading</a></li>
+</ol>
+</nav>
 </body>
 </html>
 """
@@ -320,7 +325,7 @@ async def select_chapter(cdp: Cdp, index: int) -> None:
     """章の選択を切り替えて保存を発生させる。"""
     await cdp.evaluate(
         "(() => {"
-        " const select = document.querySelector('.reader-chapter-select');"
+        " const select = document.querySelector('#reader-chapter-select');"
         f" select.value = '{index}';"
         " select.dispatchEvent(new Event('change', {bubbles: true}));"
         " })()"
@@ -398,7 +403,7 @@ async def run_checks(cdp: Cdp) -> int:
     # 目次と章タイトル。
     checker.equal(
         "目次の項目数",
-        await cdp.evaluate("document.querySelectorAll('.reader-chapter-select option').length"),
+        await cdp.evaluate("document.querySelectorAll('#reader-chapter-select option').length"),
         2,
     )
     checker.equal(
@@ -415,7 +420,7 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("相対リンクで第 2 章へ移動する", moved)
     checker.equal(
         "移動後の章選択",
-        await cdp.evaluate("document.querySelector('.reader-chapter-select')?.value"),
+        await cdp.evaluate("document.querySelector('#reader-chapter-select')?.value"),
         "1",
     )
     checker.equal(
@@ -489,7 +494,7 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("リロード後に移動した章が復元される", bool(restored))
     checker.equal(
         "復元後の章選択",
-        await cdp.evaluate("document.querySelector('.reader-chapter-select')?.value"),
+        await cdp.evaluate("document.querySelector('#reader-chapter-select')?.value"),
         "1",
     )
 
@@ -638,7 +643,7 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("Back で前の章へ戻る", bool(restored_chapter))
     checker.equal(
         "Back で戻った章の選択",
-        await cdp.evaluate("document.querySelector('.reader-chapter-select')?.value"),
+        await cdp.evaluate("document.querySelector('#reader-chapter-select')?.value"),
         "1",
     )
     back_scrolled = await wait_until(
@@ -880,7 +885,7 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check(
         "章選択に aria-label が付く",
         await cdp.evaluate(
-            "document.querySelector('.reader-chapter-select')?.getAttribute('aria-label') === 'Chapter'"
+            "document.querySelector('#reader-chapter-select')?.getAttribute('aria-label') === 'Chapter'"
         ),
     )
 
@@ -1306,6 +1311,29 @@ async def run_checks(cdp: Cdp) -> int:
             "localStorage.getItem('openrustbooks:position:sample.epub:9:9')"
         )
         checker.check("旧形式の JSON もインポートできる", old_value is not None and "9" in str(old_value))
+
+    # Landmarks。
+    checker.check(
+        "Landmarks ドロップダウンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-landmarks') !== null"),
+    )
+    landmarks_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-landmarks option').length"
+    )
+    checker.check("Landmarks が読み込まれている", landmarks_count > 1, f"(count={landmarks_count})")
+
+    # Landmarks から本文開始へ移動する。
+    await cdp.evaluate(
+        "(() => {"
+        " const select = document.querySelector('#reader-landmarks');"
+        " select.value = '0';"
+        " select.dispatchEvent(new Event('change', {bubbles: true}));"
+        " })()"
+    )
+    moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')", timeout=5
+    )
+    checker.check("Landmarks の選択で章が移動する", moved)
 
     return finish(checker)
 
