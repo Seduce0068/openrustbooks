@@ -1417,6 +1417,27 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             jump_to_history(new_index);
         }
     };
+    let on_history_clear = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
+        let history_key_state = Rc::clone(&history_key_state);
+        let current_fragment = Rc::clone(&current_fragment);
+        move |_| {
+            // 現在位置だけを残して履歴を消す。
+            let entry = HistoryEntry {
+                chapter_index: current.get(),
+                fragment: current_fragment.borrow().clone(),
+                scroll_top: content_scroll_top(),
+            };
+            *history.borrow_mut() = vec![entry];
+            history_index.set(0);
+            sync_history();
+            if let Some(key) = history_key_state.borrow().as_ref() {
+                save_history(key, &history.borrow(), history_index.get());
+            }
+        }
+    };
 
     let on_file_change = {
         let book = Rc::clone(&book);
@@ -2174,6 +2195,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
+                <button id="reader-history-clear" class="btn" aria-label="Clear history" title="Clear navigation history" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"Clear"</button>
                 <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="Page" placeholder="Page" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
                 <button id="reader-page-go" class="btn" aria-label="Go to page" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"Go"</button>
                 <button class="btn" aria-label="Next chapter" aria-keyshortcuts="]" on:click=on_next disabled=move || {
