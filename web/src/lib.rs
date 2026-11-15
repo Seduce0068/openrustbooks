@@ -862,6 +862,29 @@ fn export_positions() -> usize {
         .flatten()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
 
+    // 移動履歴も含める。値は localStorage から取得した JSON をそのまま使う。
+    let mut history = serde_json::Map::new();
+    for index in 0..length {
+        let Ok(Some(key)) = storage.key(index) else {
+            continue;
+        };
+        if !key.starts_with(HISTORY_KEY_PREFIX) {
+            continue;
+        }
+        if let Ok(Some(value)) = storage.get_item(&key) {
+            // 値が SavedHistory として読めるものだけ含める。
+            match serde_json::from_str::<SavedHistory>(&value) {
+                Ok(_) => match serde_json::from_str::<serde_json::Value>(&value) {
+                    Ok(json) => {
+                        history.insert(key, json);
+                    }
+                    Err(_) => continue,
+                },
+                Err(_) => continue,
+            }
+        }
+    }
+
     let mut root = serde_json::Map::new();
     root.insert(
         "positions".to_string(),
@@ -871,6 +894,7 @@ fn export_positions() -> usize {
         "settings".to_string(),
         settings.unwrap_or(serde_json::Value::Null),
     );
+    root.insert("history".to_string(), serde_json::Value::Object(history));
 
     let Ok(raw) = serde_json::to_string_pretty(&root) else {
         return 0;
@@ -910,9 +934,9 @@ fn export_positions() -> usize {
     count
 }
 
-/// JSON 文字列を検証して取り込む。取り込んだ件数を返す。不正なら 0。
+/// JSON 文字列を検証して取り込む。(読書位置の件数, 履歴の件数) を返す。
 #[cfg(target_arch = "wasm32")]
-fn import_positions(raw: &str) -> Result<usize, String> {
+fn import_positions(raw: &str) -> Result<(usize, usize), String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Err("JSON の解析に失敗しました".to_string());
     };
@@ -984,10 +1008,30 @@ fn import_positions(raw: &str) -> Result<usize, String> {
         save_settings(&merged);
     }
 
-    if imported == 0 && positions.is_empty() && settings.is_none() {
+    // 移動履歴の取り込み。値が SavedHistory として読めるものだけ書き込む。
+    let mut imported_history = 0_usize;
+    if let Some(serde_json::Value::Object(history)) = map.get("history") {
+        for (key, value) in history {
+            if !key.starts_with(HISTORY_KEY_PREFIX) {
+                continue;
+            }
+            let text = match serde_json::to_string(value) {
+                Ok(text) => text,
+                Err(_) => continue,
+            };
+            if serde_json::from_str::<SavedHistory>(&text).is_err() {
+                continue;
+            }
+            if storage.set_item(key, &text).is_ok() {
+                imported_history += 1;
+            }
+        }
+    }
+
+    if imported == 0 && imported_history == 0 && positions.is_empty() && settings.is_none() {
         return Err("取り込めるデータがありませんでした".to_string());
     }
-    Ok(imported)
+    Ok((imported, imported_history))
 }
 
 /// 履歴を保存する localStorage のキーの接頭辞。
@@ -1968,7 +2012,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             match import_positions(&raw) {
-                Ok(count) => set_status.set(format!("Imported {count} reading positions.")),
+                Ok((count, history_count)) => {
+                    set_status.set(format!(
+                        "Imported {count} reading positions and {history_count} histories."
+                    ));
+                }
                 Err(error) => set_status.set(error),
             }
         });
