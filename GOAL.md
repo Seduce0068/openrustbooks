@@ -1,43 +1,45 @@
 # Goal
 
-Web 版 EPUB リーダーに landmarks（表紙・本文開始など）の移動 UI を追加する。
+Web 版 EPUB リーダーに page-list（ページ番号）による移動 UI を追加する。
 
 ## Scope
 
 ### 背景
 
-core は `landmarks()` と `page_list()` を公開しているが、Web UI は目次しか
-使っておらず、landmarks の位置へ直接移動できない（ADR-0009・ADR-0010 の未決定
-「landmarks / page-list の活用」）。
+core は `page_list()` を公開しているが、Web UI は使っていない
+（ADR-0009・ADR-0027 の未決定「page-list の活用（ページ番号での移動 UI）」）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（landmarks ドロップダウンと移動）
-- `tools/verify-web-reader.py`: 変更（landmarks の E2E 検証を追加、サンプル EPUB に landmarks を追加）
-- `docs/decisions/0027-landmarks-ui.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（ページ番号入力と移動）
+- `tools/verify-web-reader.py`: 変更（page-list の E2E 検証を追加、サンプル EPUB に page-list を追加）
+- `docs/decisions/0028-page-list-navigation.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. landmarks ドロップダウン:
-   - ツールバーに `<select id="reader-landmarks">` を置く。
-   - `WasmEpubBook::landmarks()` で取得し、各エントリの title をラベルに使う。
-   - landmarks が空のときは disabled にする。
-   - 選択を変えると、その landmark の章へ移動し、フラグメントがあれば
-     スクロールする。
+1. ページ移動 UI:
+   - ツールバーにページ番号入力（`<input id="reader-page-input">`）と移動
+     ボタン（`<button id="reader-page-go">`）を置く。
+   - `WasmEpubBook::page_list()` で取得する。
+   - 入力したページ番号に一致する entry を探し、その章へ移動し、
+     フラグメントがあればスクロールする。
+   - 一致する entry が無い場合は状態メッセージで報告する。
+   - page-list が空のときは入力とボタンを disabled にする。
 2. ARIA:
-   - ドロップダウンに `aria-label="Landmarks"` を付ける。
+   - 入力に `aria-label="Page"` を付ける。
 3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 103 項目、読書位置、履歴、表示設定、掃除、
-     キーボード操作、タッチ操作を変えない。
+   - 既存の 119 テスト、E2E 106 項目、読書位置、履歴、表示設定、掃除、
+     キーボード操作、タッチ操作、landmarks を変えない。
 
 ### 必須テスト
 
-- `tools/verify-web-reader.py` のサンプル EPUB に landmarks を追加する。
+- `tools/verify-web-reader.py` のサンプル EPUB に page-list を追加する。
 - `tools/verify-web-reader.py` に追加する。
-  - landmarks ドロップダウンが存在する。
-  - landmarks が空でないとき、選択で章が移動する。
-- 既存の 119 テストと E2E 103 項目が通る。
+  - ページ入力が存在する。
+  - ページ番号を入力して移動すると、該当章へ移動する。
+  - 存在しないページ番号では状態メッセージが出る。
+- 既存の 119 テストと E2E 106 項目が通る。
 
 ## Acceptance criteria
 
