@@ -839,7 +839,7 @@ fn export_positions() -> usize {
     let Ok(length) = storage.length() else {
         return 0;
     };
-    let mut map = serde_json::Map::new();
+    let mut positions = serde_json::Map::new();
     for index in 0..length {
         let Ok(Some(key)) = storage.key(index) else {
             continue;
@@ -848,11 +848,29 @@ fn export_positions() -> usize {
             continue;
         }
         if let Ok(Some(value)) = storage.get_item(&key) {
-            map.insert(key, serde_json::Value::String(value));
+            positions.insert(key, serde_json::Value::String(value));
         }
     }
-    let count = map.len();
-    let Ok(raw) = serde_json::to_string_pretty(&map) else {
+    let count = positions.len();
+
+    // 表示設定も含める。
+    let settings = storage
+        .get_item(SETTINGS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+
+    let mut root = serde_json::Map::new();
+    root.insert(
+        "positions".to_string(),
+        serde_json::Value::Object(positions),
+    );
+    root.insert(
+        "settings".to_string(),
+        settings.unwrap_or(serde_json::Value::Null),
+    );
+
+    let Ok(raw) = serde_json::to_string_pretty(&root) else {
         return 0;
     };
     // Blob を作ってダウンロードリンクをクリックする。
@@ -905,8 +923,21 @@ fn import_positions(raw: &str) -> Result<usize, String> {
     let Ok(Some(storage)) = window.local_storage() else {
         return Err("localStorage が使えません".to_string());
     };
+    // 新形式: { positions: {...}, settings: {...} }
+    // 旧形式: { position_key: value, ... }
+    let (positions, settings) = if map.contains_key("positions") || map.contains_key("settings") {
+        let positions = match map.get("positions") {
+            Some(serde_json::Value::Object(map)) => map.clone(),
+            _ => serde_json::Map::new(),
+        };
+        let settings = map.get("settings").cloned();
+        (positions, settings)
+    } else {
+        (map.clone(), None)
+    };
+
     let mut imported = 0_usize;
-    for (key, value) in &map {
+    for (key, value) in &positions {
         if !key.starts_with(POSITION_KEY_PREFIX) {
             continue;
         }
@@ -927,8 +958,32 @@ fn import_positions(raw: &str) -> Result<usize, String> {
             imported += 1;
         }
     }
-    if imported == 0 && !map.is_empty() {
-        return Err("取り込める読書位置がありませんでした".to_string());
+
+    // 表示設定の取り込み。
+    let settings_obj = settings.clone();
+    if let Some(serde_json::Value::Object(settings)) = settings_obj {
+        let merged = ReaderSettings {
+            font_scale: settings
+                .get("fontScale")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or_else(|| load_settings().font_scale),
+            line_height: settings
+                .get("lineHeight")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or_else(|| load_settings().line_height),
+            dark: settings
+                .get("dark")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        }
+        .normalized();
+        save_settings(&merged);
+    }
+
+    if imported == 0 && positions.is_empty() && settings.is_none() {
+        return Err("取り込めるデータがありませんでした".to_string());
     }
     Ok(imported)
 }
