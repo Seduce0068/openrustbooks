@@ -1,61 +1,52 @@
 # Goal
 
-Web 版 EPUB リーダーにキーボード操作を追加し、リーダーの主要な操作を
-スクリーンリーダーへ伝える（ARIA）。
+Web 版 EPUB リーダーで、保存した読書位置を JSON として書き出し・読み込み
+できるようにする。
 
 ## Scope
 
 ### 背景
 
-`docs/requirements.md` の品質要件に「日本語IME、タッチ操作、キーボード操作を
-検証する」があるが、リーダーはボタンのクリックと目次の選択だけで操作でき、
-キーボードだけでは章を移動できない。また、アイコンだけのボタン（`◀` `▶`）や
-本文領域にアクセシブルな名前が無く、読み上げで用途が分からない。
+ADR-0019 までで読書位置を localStorage に保存・掃除するようにしたが、
+バックアップや別ブラウザへの移行の手段が無い（ADR-0019 の未決定「読書位置の
+エクスポート・インポート」）。ブラウザ内で完結する JSON の書き出し・
+読み込みを追加する。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（キーボード操作、ARIA 属性、ハンドラの共通化）
-- `tools/verify-web-reader.py`: 変更（キーボードと ARIA の E2E 検証を追加）
-- `docs/decisions/0021-keyboard-and-aria.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（エクスポート・インポートのボタンと処理）
+- `tools/verify-web-reader.py`: 変更（エクスポート・インポートの E2E 検証を追加）
+- `docs/decisions/0022-position-export-import.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. キーボード操作（window の keydown を監視する）:
-   - `]` → 次の章、`[` → 前の章。
-   - `Alt+ArrowLeft` → 戻る、`Alt+ArrowRight` → 進む。
-   - `+` / `=` → 文字サイズを大きく、`-` / `_` → 小さく。
-   - `d` → ダーク表示の切り替え。
-   - フォーカスが `input`・`select`・`textarea` にあるときは無視する
-     （目次選択中の文字入力を奪わない）。
-   - `Ctrl` / `Meta` 併用時は無視する（ブラウザのショートカットを奪わない）。
-   - 処理したキーは `prevent_default` する（`[`/`]` などでページが
-     スクロールしないようにする）。
-   - リーダーを離れるときにリスナーを解除する（`on_cleanup`）。
-2. ARIA:
-   - アイコンだけのボタンに `aria-label` を付ける（`◀` `▶`、`A-` `A+` など）。
-   - 状態メッセージに `aria-live="polite"` を付ける。
-   - 本文領域を `role="region"`・`aria-label`・`tabindex="0"` にし、
-     キーボードでフォーカスしてスクロールできるようにする。
-   - 章の選択に `aria-label` を付ける。
-   - キー操作に対応するボタンへ `aria-keyshortcuts` を付ける。
+1. エクスポート:
+   - `Export` ボタンで `openrustbooks:position:` で始まる全キーを
+     `{ key: value }` の JSON オブジェクトにまとめ、
+     `openrustbooks-positions.json` としてダウンロードする。
+   - ダウンロードは `<a download>` と `URL.createObjectURL` を使う。
+   - 削除されたキー（掃除済み）は含まれない。
+2. インポート:
+   - `Import` ボタン（`<input type="file" accept=".json">`）で JSON を読み込む。
+   - 形式が `{ key: value }` のオブジェクトで、キーが
+     `openrustbooks:position:` で始まるものだけを取り込む。
+   - 既存のキーは上書きする。
+   - 取り込んだ件数を状態メッセージに表示する。
+   - 形式が不正な場合は状態メッセージで報告し、何も取り込まない。
+   - `openrustbooks:settings` はインポートの対象にしない。
 3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 73 項目、読書位置、履歴、表示設定、掃除を変えない。
-   - ボタンの見た目と `id` を変えない（E2E が参照する）。
+   - 既存の 119 テスト、E2E 86 項目、読書位置、履歴、表示設定、掃除、
+     キーボード操作を変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - `]` で次の章へ進み、`[` で前の章へ戻る。
-  - `Alt+ArrowLeft` で履歴を戻り、`Alt+ArrowRight` で進む。
-  - `+` で文字サイズが上がり、`-` で下がる。
-  - `d` でダーク表示が切り替わる。
-  - 目次の `select` にフォーカスがあるときは `d` が効かない。
-  - `Ctrl` 併用時はキー操作が起きない。
-  - `#reader-font-larger` に `aria-keyshortcuts` が付く。
-  - 本文領域に `role`・`aria-label`・`tabindex` が付く。
-  - 状態メッセージに `aria-live` が付く。
-- 既存の 119 テストと E2E 73 項目が通る。
+  - `Export` でダウンロードが発生し、内容が `{ key: value }` である。
+  - `Import` で JSON を読み込み、読書位置が復元される。
+  - 不正な JSON では何も取り込まず、状態メッセージが出る。
+  - インポート後も表示設定は残る。
+- 既存の 119 テストと E2E 86 項目が通る。
 
 ## Acceptance criteria
 
@@ -73,8 +64,8 @@ Web 版 EPUB リーダーにキーボード操作を追加し、リーダーの�
 
 ## Constraints
 
-- 新規依存を追加しない。既存の `web-sys` 機能の範囲で実装する。
-- 外部送信を追加しない。
+- 新規依存を追加しない。保存先は localStorage とブラウザのダウンロード。
+  外部送信を追加しない。
 - `desktop/` を変更しない。
 - プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
   使わない。`unsafe` を使わない。
