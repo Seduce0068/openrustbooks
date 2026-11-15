@@ -1213,12 +1213,19 @@ async def run_checks(cdp: Cdp) -> int:
     # まず現在の位置をクリアして、インポート用の JSON を作る。
     import json as _json
     payload = {
-        "openrustbooks:position:sample.epub:1:1": {
-            "chapterIndex": 0,
-            "fragment": None,
-            "scrollTop": 123,
-            "savedAt": 0,
-        }
+        "positions": {
+            "openrustbooks:position:sample.epub:1:1": {
+                "chapterIndex": 0,
+                "fragment": None,
+                "scrollTop": 123,
+                "savedAt": 0,
+            }
+        },
+        "settings": {
+            "fontScale": 2,
+            "lineHeight": 2,
+            "dark": True,
+        },
     }
     import_path = SAMPLE.parent / "positions.json"
     import_path.write_text(_json.dumps(payload), encoding="utf-8")
@@ -1242,6 +1249,10 @@ async def run_checks(cdp: Cdp) -> int:
         await asyncio.sleep(1.0)
         imported_value = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:position:sample.epub:1:1')"
+        )
+        checker.check(
+            "新形式のインポートで表示設定が復元される",
+            await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
         )
         checker.check(
             "インポートで読書位置が取り込まれる",
@@ -1274,6 +1285,27 @@ async def run_checks(cdp: Cdp) -> int:
         "インポート後も表示設定は残る",
         await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
     )
+
+    # 旧形式（トップレベルに position キーが並ぶ）もインポートできる。
+    old_payload = {"openrustbooks:position:sample.epub:9:9": {
+        "chapterIndex": 1, "fragment": None, "scrollTop": 9, "savedAt": 0
+    }}
+    old_path = SAMPLE.parent / "old-positions.json"
+    old_path.write_text(_json.dumps(old_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(old_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        await asyncio.sleep(0.5)
+        old_value = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:position:sample.epub:9:9')"
+        )
+        checker.check("旧形式の JSON もインポートできる", old_value is not None and "9" in str(old_value))
 
     return finish(checker)
 
