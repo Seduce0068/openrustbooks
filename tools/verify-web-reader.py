@@ -67,6 +67,7 @@ CH2 = f"""<?xml version="1.0" encoding="utf-8"?>
 <h1 id="start">Chapter Two</h1>
 <p>Second chapter text.</p>
 {FILLER}
+<img id="tall" src="images/tall.png" alt="tall"/>
 <h2 id="part">Part Two</h2>
 <p>Part two text.</p>
 <p><a id="back" href="ch1.xhtml">Back to chapter one</a></p>
@@ -102,6 +103,7 @@ OPF = """<?xml version="1.0" encoding="UTF-8"?>
     <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="pic" href="images/pic.png" media-type="image/png"/>
+    <item id="tall" href="images/tall.png" media-type="image/png"/>
   </manifest>
   <spine>
     <itemref idref="ch1"/>
@@ -123,6 +125,39 @@ PNG = base64.b64decode(
 )
 
 
+def tall_png(width: int = 3000, height: int = 4000) -> bytes:
+    """指定サイズのノイズ PNG を組み立てる（レイアウトずれ検証用）。
+
+    単色だと展開・デコードが速すぎて画像読み込み待ちの効果を判別できないため、
+    圧縮の効きにくいノイズを使う。
+    """
+    import random
+    import struct
+    import zlib
+
+    rng = random.Random(20261115)
+    row = bytearray()
+    for _ in range(width):
+        row += bytes((rng.randrange(256), rng.randrange(256), rng.randrange(256)))
+    raw = b"".join(b"\x00" + bytes(row) for _ in range(height))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        )
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw, 6))
+        + chunk(b"IEND", b"")
+    )
+
+
 def build_sample() -> None:
     SAMPLE.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(SAMPLE, "w") as z:
@@ -137,6 +172,9 @@ def build_sample() -> None:
         z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/ch2.xhtml", CH2, compress_type=zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr(
+            "OEBPS/images/tall.png", tall_png(), compress_type=zipfile.ZIP_DEFLATED
+        )
 
 
 class SpaHandler(SimpleHTTPRequestHandler):
@@ -465,6 +503,14 @@ async def run_checks(cdp: Cdp) -> int:
         saved.get("fragment") if saved else None,
         "part",
     )
+    # スクロールのデバウンス保存がフラグメントを消さない。
+    await asyncio.sleep(0.6)
+    stable = await saved_position(cdp)
+    checker.equal(
+        "スクロール保存後もフラグメントが残る",
+        stable.get("fragment") if stable else None,
+        "part",
+    )
 
     await reload_reader(cdp)
     reopened = await open_sample(cdp)
@@ -632,6 +678,95 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check(
         "開き直すと Forward が disabled になる",
         await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
+    )
+
+    # 画像のレイアウトずれ補正。
+    # 画像の後ろにある #part の位置を基準に確かめる。
+    await set_sample_position(cdp, "{chapterIndex: 1, fragment: null, scrollTop: 0}")
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
+    )
+    await asyncio.sleep(0.8)
+    tall_loaded = await cdp.evaluate(
+        "document.querySelector('#tall')?.naturalHeight === 4000"
+    )
+    checker.check("縦長画像が読み込まれる", bool(tall_loaded))
+
+    # 画像より後ろの見出しへスクロールし、その位置を保存する。
+    await cdp.evaluate(
+        "(() => {"
+        " const content = document.querySelector('.reader-content');"
+        " const part = document.querySelector('#part');"
+        " content.scrollTop = part.offsetTop;"
+        " })()"
+    )
+    before = await wait_saved(
+        cdp, lambda position: position.get("scrollTop", 0) > 0
+    )
+    checker.check("画像を含む章でもスクロール位置が保存される", before is not None)
+    marker_before = await cdp.evaluate(
+        "(() => {"
+        " const content = document.querySelector('.reader-content');"
+        " const part = document.querySelector('#part');"
+        " return part.getBoundingClientRect().top - content.getBoundingClientRect().top;"
+        " })()"
+    )
+    saved_top = before.get("scrollTop", 0) if before else 0
+
+    await reload_reader(cdp)
+    # 復元時の最初のスクロールが、画像の読み込み完了後に行われるかを記録する。
+    await cdp.evaluate(
+        "(() => {"
+        " window.__scrollOrder = {attempts: []};"
+        " document.addEventListener('scroll', (event) => {"
+        "  const target = event.target;"
+        "  if (!target || target.scrollTop === undefined) return;"
+        "  if (window.__scrollOrder.attempts.length > 20) return;"
+        "  const image = document.querySelector('#tall');"
+        "  window.__scrollOrder.attempts.push({top: target.scrollTop,"
+        "   complete: image ? image.complete : null, t: performance.now()});"
+        " }, true);"
+        " const mark = () => { const image = document.querySelector('#tall');"
+        "  if (image && !image.dataset.orderMarked) { image.dataset.orderMarked = '1';"
+        "   const loaded = () => { window.__scrollOrder.loaded = performance.now(); };"
+        "   if (image.complete) loaded(); else image.addEventListener('load', loaded, {once: true}); } };"
+        " window.__scrollOrderTimer = setInterval(mark, 5);"
+        " })()"
+    )
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
+    )
+    # 画像の読み込みが終わるまで待ってから位置を比べる。
+    await wait_until(cdp, "document.querySelector('#tall')?.naturalHeight === 4000", timeout=10)
+    await asyncio.sleep(0.8)
+    order = await cdp.evaluate("window.__scrollOrder")
+    attempts = (order or {}).get("attempts") or []
+    attempts = [entry for entry in attempts if entry.get("top", 0) > 0]
+    checker.check(
+        "位置の適用は画像の読み込み完了を待つ",
+        bool(attempts) and all(entry.get("complete") is True for entry in attempts),
+        f"(attempts={attempts!r})",
+    )
+    marker_after = await cdp.evaluate(
+        "(() => {"
+        " const content = document.querySelector('.reader-content');"
+        " const part = document.querySelector('#part');"
+        " return part.getBoundingClientRect().top - content.getBoundingClientRect().top;"
+        " })()"
+    )
+    restored_top = await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? 0")
+    checker.check(
+        "画像読み込み後も復元位置が同じ内容を指す",
+        abs(marker_after - marker_before) <= 30,
+        f"(before={marker_before}, after={marker_after}, saved={saved_top}, restored={restored_top})",
+    )
+    checker.check(
+        "画像を含む章でもスクロール位置が復元される",
+        abs(restored_top - saved_top) <= 30,
+        f"(saved={saved_top}, restored={restored_top})",
     )
 
     # 表示設定。
