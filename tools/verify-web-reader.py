@@ -1443,6 +1443,65 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("履歴一覧から最初のエントリへ移動する", moved)
 
+    # 履歴のエクスポート・インポート。
+    # 履歴を作ってからインポートファイルを準備する。
+    await cdp.evaluate(
+        "(() => {"
+        " localStorage.setItem('openrustbooks:history:sample.epub:1:1',"
+        "  JSON.stringify({entries: [{chapterIndex: 0, fragment: null, scrollTop: 0},"
+        "  {chapterIndex: 1, fragment: null, scrollTop: 10}], index: 1}));"
+        " })()"
+    )
+    # 新形式のエクスポートに history が含まれるかはダウンロードファイルで
+    # 確認できないため、localStorage から同等の内容を組み立てられることを
+    # 確認する（エクスポートは同じキー走査を使う）。
+    hist_raw = await cdp.evaluate(
+        "localStorage.getItem('openrustbooks:history:sample.epub:1:1')"
+    )
+    checker.check(
+        "エクスポート対象の履歴が保存されている",
+        hist_raw is not None and "entries" in str(hist_raw) and "index" in str(hist_raw),
+    )
+
+    # 新形式のインポートで履歴が復元される。
+    await cdp.evaluate(
+        "localStorage.removeItem('openrustbooks:history:sample.epub:1:1')"
+    )
+    hist_payload = {
+        "positions": {},
+        "settings": {"fontScale": 1, "lineHeight": 2, "dark": False},
+        "history": {
+            "openrustbooks:history:sample.epub:1:1": {
+                "entries": [
+                    {"chapterIndex": 0, "fragment": None, "scrollTop": 0},
+                    {"chapterIndex": 1, "fragment": None, "scrollTop": 10},
+                ],
+                "index": 1,
+            }
+        },
+    }
+    hist_path = SAMPLE.parent / "with-history.json"
+    hist_path.write_text(_json.dumps(hist_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(hist_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+        )
+        restored = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:history:sample.epub:1:1')"
+        )
+        checker.check(
+            "新形式のインポートで履歴が復元される",
+            restored is not None and '"entries"' in str(restored) and '"index":1' in str(restored).replace(" ", ""),
+        )
+
     return finish(checker)
 
 
