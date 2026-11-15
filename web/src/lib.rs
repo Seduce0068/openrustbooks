@@ -1073,6 +1073,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
     let position_key_state = Rc::new(RefCell::new(None::<String>));
     let history_key_state = Rc::new(RefCell::new(None::<String>));
+    let touch_start = Rc::new(Cell::new(None::<(f64, f64)>));
     // 現在の章で適用中のフラグメント。スクロール保存で消さないために保持する。
     let current_fragment = Rc::new(RefCell::new(None::<String>));
     let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
@@ -1487,6 +1488,51 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let next_action = Rc::clone(&next_action);
         move |_| next_action()
     };
+    let touch_start = Rc::clone(&touch_start);
+    let on_touch_start = {
+        let touch_start = Rc::clone(&touch_start);
+        move |event: web_sys::TouchEvent| {
+            if event.touches().length() != 1 {
+                touch_start.set(None);
+                return;
+            }
+            if let Some(touch) = event.touches().get(0) {
+                touch_start.set(Some((touch.client_x() as f64, touch.client_y() as f64)));
+            }
+        }
+    };
+    let on_touch_end = {
+        let touch_start = Rc::clone(&touch_start);
+        let prev_action = Rc::clone(&prev_action);
+        let next_action = Rc::clone(&next_action);
+        move |event: web_sys::TouchEvent| {
+            let Some((start_x, start_y)) = touch_start.get() else {
+                return;
+            };
+            touch_start.set(None);
+            if event.changed_touches().length() == 0 {
+                return;
+            }
+            let Some(touch) = event.changed_touches().get(0) else {
+                return;
+            };
+            let dx = touch.client_x() as f64 - start_x;
+            let dy = touch.client_y() as f64 - start_y;
+            // 縦移動が大きい場合はスクロールとみなして無視する。
+            if dy.abs() >= 30.0 {
+                return;
+            }
+            if dx.abs() < 50.0 {
+                return;
+            }
+            if dx < 0.0 {
+                next_action();
+            } else {
+                prev_action();
+            }
+        }
+    };
+
     let on_content_click = {
         let book = Rc::clone(&book);
         let navigate_to = Rc::clone(&navigate_to);
@@ -1852,7 +1898,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
                     </aside>
                 </Show>
-                <div class="reader-content" role="region" aria-label="Chapter content" tabindex="0" on:click=on_content_click on:scroll=on_scroll>
+                <div class="reader-content" role="region" aria-label="Chapter content" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
                     <div class="document-content reader-html" inner_html=move || content.get()></div>
                 </div>
             </div>
