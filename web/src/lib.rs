@@ -808,6 +808,112 @@ fn clear_reading_positions() -> usize {
     removed
 }
 
+/// 読書位置を JSON としてダウンロードする。
+#[cfg(target_arch = "wasm32")]
+fn export_positions() -> usize {
+    let Some(window) = web_sys::window() else {
+        return 0;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return 0;
+    };
+    let Ok(length) = storage.length() else {
+        return 0;
+    };
+    let mut map = serde_json::Map::new();
+    for index in 0..length {
+        let Ok(Some(key)) = storage.key(index) else {
+            continue;
+        };
+        if !key.starts_with(POSITION_KEY_PREFIX) {
+            continue;
+        }
+        if let Ok(Some(value)) = storage.get_item(&key) {
+            map.insert(key, serde_json::Value::String(value));
+        }
+    }
+    let count = map.len();
+    let Ok(raw) = serde_json::to_string_pretty(&map) else {
+        return 0;
+    };
+    // Blob を作ってダウンロードリンクをクリックする。
+    let parts = js_sys::Array::new();
+    parts.push(&JsValue::from_str(&raw));
+    let options = web_sys::BlobPropertyBag::new();
+    options.set_type("application/json");
+    let Ok(blob) = web_sys::Blob::new_with_str_sequence_and_options(parts.as_ref(), &options)
+    else {
+        return 0;
+    };
+    let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) else {
+        return 0;
+    };
+    let Some(document) = window.document() else {
+        let _ = web_sys::Url::revoke_object_url(&url);
+        return 0;
+    };
+    let Ok(anchor) = document.create_element("a") else {
+        let _ = web_sys::Url::revoke_object_url(&url);
+        return 0;
+    };
+    let _ = anchor.set_attribute("href", &url);
+    let _ = anchor.set_attribute("download", "openrustbooks-positions.json");
+    if let Some(element) = anchor.dyn_ref::<web_sys::HtmlElement>() {
+        element.click();
+    }
+    // 少し待ってから URL を解放する。
+    let url_for_cleanup = url.clone();
+    let callback = Closure::once_into_js(move || {
+        let _ = web_sys::Url::revoke_object_url(&url_for_cleanup);
+    });
+    let _ = window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 1000);
+    count
+}
+
+/// JSON 文字列を検証して取り込む。取り込んだ件数を返す。不正なら 0。
+#[cfg(target_arch = "wasm32")]
+fn import_positions(raw: &str) -> Result<usize, String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Err("JSON の解析に失敗しました".to_string());
+    };
+    let serde_json::Value::Object(map) = value else {
+        return Err("JSON はオブジェクトである必要があります".to_string());
+    };
+    let Some(window) = web_sys::window() else {
+        return Err("window が取得できません".to_string());
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return Err("localStorage が使えません".to_string());
+    };
+    let mut imported = 0_usize;
+    for (key, value) in &map {
+        if !key.starts_with(POSITION_KEY_PREFIX) {
+            continue;
+        }
+        // 値は文字列でもオブジェクトでも受け付ける。
+        let text = match value {
+            serde_json::Value::String(text) => text.clone(),
+            serde_json::Value::Object(_) => match serde_json::to_string(value) {
+                Ok(text) => text,
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+        // 値が SavedPosition として読めるか確認する。
+        if serde_json::from_str::<SavedPosition>(&text).is_err() {
+            continue;
+        }
+        if storage.set_item(&key, &text).is_ok() {
+            imported += 1;
+        }
+    }
+    if imported == 0 && !map.is_empty() {
+        return Err("取り込める読書位置がありませんでした".to_string());
+    }
+    Ok(imported)
+}
+
 /// Reader component
 #[cfg(target_arch = "wasm32")]
 #[component]
@@ -1424,6 +1530,49 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let removed = clear_reading_positions();
         set_status.set(format!("Removed {removed} saved reading positions."));
     };
+    let on_export = move |_: web_sys::MouseEvent| {
+        let exported = export_positions();
+        if exported == 0 {
+            set_status.set("No saved reading positions to export.".to_string());
+        } else {
+            set_status.set(format!("Exported {exported} reading positions."));
+        }
+    };
+    let on_import_click = move |_: web_sys::MouseEvent| {
+        if let Some(window) = web_sys::window()
+            && let Some(document) = window.document()
+            && let Ok(Some(element)) = document.query_selector("#reader-import-file")
+            && let Ok(input) = element.dyn_into::<web_sys::HtmlInputElement>()
+        {
+            input.click();
+        }
+    };
+    let on_import_change = move |event: web_sys::Event| {
+        let Some(input) = event
+            .target()
+            .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
+        else {
+            return;
+        };
+        let Some(file) = input.files().and_then(|files| files.item(0)) else {
+            return;
+        };
+        let file_clone = file.clone();
+        spawn_local(async move {
+            let Ok(buffer) = JsFuture::from(file_clone.text()).await else {
+                set_status.set("Failed to read the import file.".to_string());
+                return;
+            };
+            let Some(raw) = buffer.as_string() else {
+                set_status.set("Failed to read the import file.".to_string());
+                return;
+            };
+            match import_positions(&raw) {
+                Ok(count) => set_status.set(format!("Imported {count} reading positions.")),
+                Err(error) => set_status.set(error),
+            }
+        });
+    };
     // view マクロ内の比較で `>` を使わないよう、条件を外で計算する。
     let font_larger_disabled = Memo::new(move |_| font_scale.get() + 1 >= FONT_SCALES.len());
 
@@ -1528,6 +1677,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
                 <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
+                <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
+                <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>
+                <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" on:change=on_import_change/>
                 <button id="reader-back" class="btn" aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
                 <button id="reader-forward" class="btn" aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
                 <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
