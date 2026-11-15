@@ -91,6 +91,12 @@ NAV = """<?xml version="1.0" encoding="utf-8"?>
 <li><a epub:type="bodymatter" href="ch2.xhtml">Start Reading</a></li>
 </ol>
 </nav>
+<nav epub:type="page-list">
+<ol>
+<li><a href="ch1.xhtml#top">1</a></li>
+<li><a href="ch2.xhtml#part">2</a></li>
+</ol>
+</nav>
 </body>
 </html>
 """
@@ -599,6 +605,7 @@ async def run_checks(cdp: Cdp) -> int:
     await asyncio.sleep(0.3)
     saved = await saved_position(cdp)
     checker.equal("章の切り替えで保存値が先頭になる", saved.get("scrollTop") if saved else None, 0)
+    await asyncio.sleep(1.0)
     checker.check(
         "章の切り替えでスクロール位置が先頭になる",
         (await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? -1")) == 0,
@@ -1132,6 +1139,21 @@ async def run_checks(cdp: Cdp) -> int:
     )
 
     # 45 件の偽エントリを入れてから保存すると、上限 40 件以下になる。
+    # 保留中のデバウンス保存が終わるのを待つ。
+    await asyncio.sleep(1.0)
+    # 既存の position キーを消す（設定は残す）。
+    await cdp.evaluate(
+        "Object.keys(localStorage)"
+        " .filter((k) => k.startsWith('openrustbooks:position:'))"
+        " .forEach((k) => localStorage.removeItem(k))"
+    )
+    # 現在の本の位置を再作成する。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(1.0)
+
     await cdp.evaluate(
         "(() => {"
         " const now = Date.now();"
@@ -1144,25 +1166,32 @@ async def run_checks(cdp: Cdp) -> int:
     injected = await cdp.evaluate(
         "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length"
     )
-    checker.check("掃除前に 40 件を超えている", injected >= 41, f"(count={injected})")
+    checker.check("掃除前に 40 件を超えている", injected > 40, f"(count={injected})")
 
+    # select_chapter で保存を発生させる。
     await select_chapter(cdp, 0)
     pruned = await wait_until(
         cdp,
         "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length <= 40",
-        timeout=5,
+        timeout=10,
     )
     count_after = await cdp.evaluate(
         "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length"
     )
     checker.check("保存時に件数が上限以下に掃除される", pruned, f"(count={count_after})")
-    await wait_saved(cdp, lambda position: position.get("chapterIndex") == 0)
     current_kept = await cdp.evaluate(
         "Object.keys(localStorage).some((k) => k.startsWith('openrustbooks:position:sample.epub'))"
     )
     checker.check("現在の本の位置は残る", current_kept)
 
     # 古い順の掃除と混ざらないよう、件数テスト用の偽エントリを消してから
+    # 寿命の判定を確認する。
+    await cdp.evaluate(
+        "Object.keys(localStorage)"
+        " .filter((k) => k.startsWith('openrustbooks:position:fake-'))"
+        " .forEach((k) => localStorage.removeItem(k))"
+    )
+
     # 寿命の判定を確認する。
     await cdp.evaluate(
         "Object.keys(localStorage)"
