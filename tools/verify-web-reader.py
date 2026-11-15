@@ -1502,6 +1502,38 @@ async def run_checks(cdp: Cdp) -> int:
             restored is not None and '"entries"' in str(restored) and '"index":1' in str(restored).replace(" ", ""),
         )
 
+    # 履歴のクリア。
+    checker.check(
+        "履歴クリアボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-history-clear') !== null"),
+    )
+
+    # 履歴 3 件の状態を作る（直前の履歴テストの状態を利用）。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.5)
+    before_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("クリア前に履歴が 2 件以上", before_count >= 2, f"(count={before_count})")
+
+    await cdp.evaluate("document.querySelector('#reader-history-clear').click()")
+    await asyncio.sleep(0.5)
+    after_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("クリア後に履歴が 1 件になる", after_count == 1, f"(count={after_count})")
+    back_disabled = await cdp.evaluate(
+        "document.querySelector('#reader-back')?.disabled"
+    )
+    checker.check("クリア後に Back ボタンが disabled になる", back_disabled is True)
+    text_kept = await cdp.evaluate(
+        "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("クリア後も表示中の章は変わらない", text_kept is True)
+
     return finish(checker)
 
 
