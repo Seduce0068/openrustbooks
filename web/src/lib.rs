@@ -977,7 +977,14 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
             _ => continue,
         };
         // 値が SavedPosition として読めるか確認する。
-        if serde_json::from_str::<SavedPosition>(&text).is_err() {
+        let Ok(incoming) = serde_json::from_str::<SavedPosition>(&text) else {
+            continue;
+        };
+        // 既存の値が新しい場合は上書きしない（マージ）。
+        if let Ok(Some(existing_raw)) = storage.get_item(key)
+            && let Ok(existing) = serde_json::from_str::<SavedPosition>(&existing_raw)
+            && existing.saved_at >= incoming.saved_at
+        {
             continue;
         }
         if storage.set_item(&key, &text).is_ok() {
