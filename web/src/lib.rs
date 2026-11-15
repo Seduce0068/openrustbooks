@@ -254,6 +254,45 @@ fn scroll_content_to_top() {
     element.set_scroll_top(0);
 }
 
+/// 画像の読み込み待ちの上限（ミリ秒）。
+#[cfg(target_arch = "wasm32")]
+const IMAGE_SETTLE_MS: f64 = 2000.0;
+
+/// 本文の画像が DOM に現れ、すべて読み込みを終えたか判定する。
+///
+/// `expected` は設定した HTML に含まれる `img` の数。本文の更新は非同期に
+/// DOM へ反映されるため、数が揃うまでは未確定として扱う。`src` が無い画像
+/// （解決できず除去したもの）は待たない。
+#[cfg(target_arch = "wasm32")]
+fn images_settled(expected: usize) -> bool {
+    let Some(window) = web_sys::window() else {
+        return true;
+    };
+    let Some(document) = window.document() else {
+        return true;
+    };
+    let Ok(images) = document.query_selector_all(".reader-html img") else {
+        return expected == 0;
+    };
+    let mut with_source = 0_usize;
+    for index in 0..images.length() {
+        let Some(node) = images.get(index) else {
+            continue;
+        };
+        let Ok(image) = node.dyn_into::<web_sys::HtmlImageElement>() else {
+            continue;
+        };
+        if image.get_attribute("src").is_none() {
+            continue;
+        }
+        with_source += 1;
+        if !image.complete() {
+            return false;
+        }
+    }
+    with_source >= expected
+}
+
 /// 本文の現在のスクロール位置を返す。
 #[cfg(target_arch = "wasm32")]
 fn content_scroll_top() -> i32 {
@@ -295,9 +334,19 @@ fn apply_position_after_render(
     chapter_index: usize,
     fragment: Option<String>,
     scroll_top: Option<i32>,
+    expected_images: usize,
     position_key: SharedPositionKey,
 ) {
-    apply_position_frame(chapter_index, fragment, scroll_top, position_key, 0);
+    let deadline = now_millis() + IMAGE_SETTLE_MS;
+    apply_position_frame(
+        chapter_index,
+        fragment,
+        scroll_top,
+        expected_images,
+        position_key,
+        0,
+        deadline,
+    );
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -305,12 +354,31 @@ fn apply_position_frame(
     chapter_index: usize,
     fragment: Option<String>,
     scroll_top: Option<i32>,
+    expected_images: usize,
     position_key: SharedPositionKey,
     attempt: u32,
+    deadline: f64,
 ) {
     let Some(window) = web_sys::window() else {
         return;
     };
+    // 画像の読み込みで本文の高さが変わると、同じ scrollTop が別の内容を指す。
+    // 画像が DOM に現れて確定するまで（上限付きで）位置の適用を待つ。
+    if !images_settled(expected_images) && now_millis() < deadline {
+        let callback = Closure::once_into_js(move || {
+            apply_position_frame(
+                chapter_index,
+                fragment,
+                scroll_top,
+                expected_images,
+                position_key,
+                attempt,
+                deadline,
+            );
+        });
+        let _ = window.request_animation_frame(callback.unchecked_ref());
+        return;
+    }
     let callback = Closure::once_into_js(move || {
         match fragment.as_deref() {
             Some(fragment) => scroll_to_fragment(fragment),
@@ -326,8 +394,10 @@ fn apply_position_frame(
                 chapter_index,
                 fragment,
                 scroll_top,
+                expected_images,
                 position_key,
                 attempt + 1,
+                deadline,
             );
             return;
         }
@@ -795,6 +865,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let object_urls = Rc::new(RefCell::new(Vec::<String>::new()));
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
     let position_key_state = Rc::new(RefCell::new(None::<String>));
+    // 現在の章で適用中のフラグメント。スクロール保存で消さないために保持する。
+    let current_fragment = Rc::new(RefCell::new(None::<String>));
     let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
     let history_index = Rc::new(Cell::new(0_usize));
     let (history_state, set_history_state) = signal((0_usize, 0_usize));
@@ -817,7 +889,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
         let position_key = Rc::clone(&position_key_state);
+        let current_fragment = Rc::clone(&current_fragment);
         Rc::new(move |index, fragment, scroll_top| {
+            *current_fragment.borrow_mut() = fragment.clone();
             let result = book
                 .borrow()
                 .as_ref()
@@ -835,6 +909,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         let _ = web_sys::Url::revoke_object_url(&url);
                     }
                     *object_urls.borrow_mut() = urls;
+                    // `set_content` は html を move するため、先に画像数を数える。
+                    let expected_images = html.matches("<img").count();
                     set_current.set(index);
                     set_content.set(html);
                     set_status.set(String::new());
@@ -842,6 +918,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         index,
                         fragment,
                         scroll_top,
+                        expected_images,
                         Rc::clone(&position_key),
                     );
                 }
@@ -1247,6 +1324,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
             let position_key = Rc::clone(&position_key);
             let timer = Rc::clone(&scroll_save_timer);
+            let current_fragment = Rc::clone(&current_fragment);
             let chapter_index = current.get();
             let callback = Closure::once_into_js(move || {
                 timer.set(None);
@@ -1255,12 +1333,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     return;
                 }
                 let scroll_top = content_scroll_top();
+                // 適用中のフラグメントを消さずに位置だけ更新する。
+                let fragment = current_fragment.borrow().clone();
                 if let Some(key) = position_key.borrow().as_ref() {
                     save_position(
                         key,
                         &SavedPosition {
                             chapter_index,
-                            fragment: None,
+                            fragment,
                             scroll_top,
                             saved_at: 0.0,
                         },
