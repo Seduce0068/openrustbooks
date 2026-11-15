@@ -1099,7 +1099,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     /// 移動履歴の上限。
     const HISTORY_LIMIT: usize = 50;
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Clone)]
     struct TocEntry {
         title: String,
         href: String,
@@ -1140,6 +1140,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         index + 1 < len
     });
     let (chapters, set_chapters) = signal(Vec::<(usize, String, Option<String>)>::new());
+    let (landmarks, set_landmarks) = signal(Vec::<TocEntry>::new());
+    let (landmark_options, set_landmark_options) = signal(Vec::<(usize, String)>::new());
     let (current, set_current) = signal(0_usize);
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
@@ -1352,6 +1354,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
+            set_landmarks.set(Vec::new());
+            set_landmark_options.set(Vec::new());
             *book.borrow_mut() = None;
             for url in object_urls.borrow_mut().drain(..) {
                 let _ = web_sys::Url::revoke_object_url(&url);
@@ -1423,6 +1427,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     })
                     .collect();
 
+                let landmarks = opened
+                    .landmarks()
+                    .ok()
+                    .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
+                    .unwrap_or_default();
+
                 let cover = opened
                     .cover_image()
                     .ok()
@@ -1480,6 +1490,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
                 *book.borrow_mut() = Some(opened);
                 set_chapters.set(options);
+                set_landmarks.set(landmarks.clone());
+                let lopts: Vec<(usize, String)> = landmarks
+                    .iter()
+                    .enumerate()
+                    .map(|(index, entry)| (index, entry.title.clone()))
+                    .collect();
+                set_landmark_options.set(lopts);
                 render_chapter(start_index, start_fragment, Some(start_scroll));
             });
         }
@@ -1584,6 +1601,35 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 next_action();
             } else {
                 prev_action();
+            }
+        }
+    };
+
+    let on_landmark_select = {
+        let navigate_to = Rc::clone(&navigate_to);
+        let landmarks = landmarks;
+        move |event: web_sys::Event| {
+            let Some(select) = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::HtmlSelectElement>().ok())
+            else {
+                return;
+            };
+            let Ok(index) = select.value().parse::<usize>() else {
+                return;
+            };
+            let entry = landmarks.get().get(index).cloned();
+            let Some(entry) = entry else {
+                return;
+            };
+            let path = entry.href.split('#').next().unwrap_or(&entry.href);
+            let target_index = chapters
+                .get()
+                .iter()
+                .find(|(_, href, _)| href == path)
+                .map(|(index, _, _)| *index);
+            if let Some(target_index) = target_index {
+                navigate_to(target_index, entry.fragment);
             }
         }
     };
@@ -1927,7 +1973,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-back" class="btn" aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
                 <button id="reader-forward" class="btn" aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
                 <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
-                <select class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
+                <select id="reader-chapter-select" class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
                         each=move || chapters.get()
                         key=|(index, _, _)| *index
@@ -1935,6 +1981,16 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             <option value=index.to_string() prop:selected=move || current.get() == index>
                                 {title}
                             </option>
+                        }
+                    />
+                </select>
+                <select id="reader-landmarks" class="reader-chapter-select" aria-label="Landmarks" on:change=on_landmark_select prop:disabled=move || landmark_options.get().is_empty()>
+                    <option value="" disabled selected>"Landmarks"</option>
+                    <For
+                        each=move || landmark_options.get()
+                        key=|(index, _)| *index
+                        children=move |(index, label)| view! {
+                            <option value=index.to_string()>{label.clone()}</option>
                         }
                     />
                 </select>
