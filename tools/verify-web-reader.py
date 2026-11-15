@@ -1596,6 +1596,56 @@ async def run_checks(cdp: Cdp) -> int:
             "localStorage.removeItem('openrustbooks:position:merge-new')"
         )
 
+    # OS のカラースキーム追従。
+    checker.check(
+        "カラースキーム追従ボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-theme-auto') !== null"),
+    )
+    # エミュレーションで OS をダークにする。
+    await cdp.send(
+        "Emulation.setEmulatedMedia",
+        {"features": [{"name": "prefers-color-scheme", "value": "dark"}]},
+    )
+    await cdp.evaluate("document.querySelector('#reader-theme-auto').click()")
+    await asyncio.sleep(0.5)
+    auto_pressed = await cdp.evaluate(
+        "document.querySelector('#reader-theme-auto')?.getAttribute('aria-pressed')"
+    )
+    checker.check("追従ボタンが押下状態になる", auto_pressed == "true")
+    follows_dark = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark') === true"
+    )
+    checker.check("OS がダークなら追従してダーク表示になる", follows_dark)
+
+    # 設定が保存される。
+    saved_follow = await cdp.evaluate(
+        "(() => { const s = JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}');"
+        " return s.followSystem === true; })()"
+    )
+    checker.check("追従の選択が保存される", saved_follow)
+
+    # OS をライトに切り替えるとリアルタイムで追従する。
+    await cdp.send(
+        "Emulation.setEmulatedMedia",
+        {"features": [{"name": "prefers-color-scheme", "value": "light"}]},
+    )
+    await asyncio.sleep(0.5)
+    follows_light = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark') === false"
+    )
+    checker.check("OS がライトなら追従してライト表示になる", follows_light)
+
+    # 手動トグルで追従が解除される。
+    await cdp.evaluate("document.querySelector('#reader-theme').click()")
+    await asyncio.sleep(0.5)
+    manual_pressed = await cdp.evaluate(
+        "document.querySelector('#reader-theme-auto')?.getAttribute('aria-pressed')"
+    )
+    checker.check("手動切替で追従が解除される", manual_pressed == "false")
+
+    # エミュレーションを戻す。
+    await cdp.send("Emulation.setEmulatedMedia", {"features": []})
+
     return finish(checker)
 
 
