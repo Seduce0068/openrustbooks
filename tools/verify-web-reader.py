@@ -1389,6 +1389,60 @@ async def run_checks(cdp: Cdp) -> int:
     status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent || ''")
     checker.check("存在しないページ番号では状態メッセージが出る", "not found" in status.lower() or "見つかりません" in status)
 
+    # 履歴一覧。
+    checker.check(
+        "履歴一覧が存在する",
+        await cdp.evaluate("document.querySelector('#reader-history') !== null"),
+    )
+
+    # 前のテストで履歴が蓄積しているため、履歴キーを消してリロードしてから
+    # 蓄積を確認する。
+    await cdp.evaluate(
+        "Object.keys(localStorage)"
+        " .filter((k) => k.startsWith('openrustbooks:history:') || k.startsWith('openrustbooks:position:'))"
+        " .forEach((k) => localStorage.removeItem(k))"
+    )
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.5)
+    before_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("リロード直後の履歴は 1 件", before_count == 1, f"(count={before_count}, reopened={reopened})")
+
+    # 章を 2 回移動して履歴を 3 件にする。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.5)
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.5)
+    history_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("履歴一覧に 3 件入る", history_count == 3, f"(count={history_count})")
+
+    # 一覧から最初のエントリを選ぶと最初の章へ移動する。
+    await cdp.evaluate(
+        "(() => {"
+        " const select = document.querySelector('#reader-history');"
+        " select.value = '0';"
+        " select.dispatchEvent(new Event('change', {bubbles: true}));"
+        " })()"
+    )
+    await asyncio.sleep(0.5)
+    moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')", timeout=5
+    )
+    checker.check("履歴一覧から最初のエントリへ移動する", moved)
+
     return finish(checker)
 
 
