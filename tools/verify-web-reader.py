@@ -359,6 +359,10 @@ async def run_checks(cdp: Cdp) -> int:
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
     )
     checker.check("EPUB を開いて第 1 章を表示する", opened)
+    checker.check(
+        "保存された履歴が無いときは Back が disabled",
+        await cdp.evaluate("document.querySelector('#reader-back')?.disabled === true"),
+    )
     if not opened:
         print("status:", await cdp.evaluate("document.querySelector('.reader-status')?.textContent"))
         return finish(checker)
@@ -608,14 +612,12 @@ async def run_checks(cdp: Cdp) -> int:
     await asyncio.sleep(0.3)
 
     # 移動履歴（戻る・進む）。
-    checker.check(
-        "開いた直後は Back が disabled",
-        await cdp.evaluate("document.querySelector('#reader-back')?.disabled === true"),
+    # 履歴が無い状態は最初のオープンで確認済み。ここでは機能を確認する。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
     )
-    checker.check(
-        "開いた直後は Forward が disabled",
-        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
-    )
+    await asyncio.sleep(0.3)
 
     await cdp.evaluate("document.querySelector('.reader-content').scrollTop = 150")
     await asyncio.sleep(0.3)
@@ -665,20 +667,22 @@ async def run_checks(cdp: Cdp) -> int:
         await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
     )
 
-    # 本を開き直すと履歴がリセットされる。
+    # 本を開き直すと履歴が復元される。
     reopened = await open_sample(cdp)
-    await wait_until(
+    restored = reopened and await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
     )
-    await asyncio.sleep(0.2)
+    checker.check("開き直すと章が復元される", bool(restored))
     checker.check(
-        "開き直すと Back が disabled になる",
-        reopened and await cdp.evaluate("document.querySelector('#reader-back')?.disabled === true"),
+        "開き直すと Back が有効になる",
+        reopened and await cdp.evaluate("document.querySelector('#reader-back')?.disabled === false"),
     )
-    checker.check(
-        "開き直すと Forward が disabled になる",
-        await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
+    # 復元した履歴で Back が動く。
+    await cdp.evaluate("document.querySelector('#reader-back').click()")
+    back_after_reload = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')", timeout=3
     )
+    checker.check("復元した履歴で Back が動く", bool(back_after_reload))
 
     # 画像のレイアウトずれ補正。
     # 画像の後ろにある #part の位置を基準に確かめる。
@@ -1043,7 +1047,7 @@ async def run_checks(cdp: Cdp) -> int:
     injected = await cdp.evaluate(
         "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length"
     )
-    checker.check("掃除前に 40 件を超えている", injected > 40, f"(count={injected})")
+    checker.check("掃除前に 40 件を超えている", injected >= 41, f"(count={injected})")
 
     await select_chapter(cdp, 0)
     pruned = await wait_until(
