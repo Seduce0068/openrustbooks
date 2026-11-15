@@ -1364,6 +1364,31 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("Landmarks の選択で章が移動する", moved)
 
+    # Page-list。
+    checker.check(
+        "Page 入力が存在する",
+        await cdp.evaluate("document.querySelector('#reader-page-input') !== null"),
+    )
+    checker.check(
+        "Page 移動ボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-page-go') !== null"),
+    )
+
+    # ページ番号を入力して移動する。
+    await cdp.evaluate("document.querySelector('#reader-page-input').value = '2'")
+    await cdp.evaluate("document.querySelector('#reader-page-go').click()")
+    moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')", timeout=5
+    )
+    checker.check("Page-list の選択で章が移動する", moved)
+
+    # 存在しないページ番号では状態メッセージが出る。
+    await cdp.evaluate("document.querySelector('#reader-page-input').value = '999'")
+    await cdp.evaluate("document.querySelector('#reader-page-go').click()")
+    await asyncio.sleep(0.5)
+    status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent || ''")
+    checker.check("存在しないページ番号では状態メッセージが出る", "not found" in status.lower() or "見つかりません" in status)
+
     return finish(checker)
 
 
