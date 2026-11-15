@@ -505,6 +505,9 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("旧形式の保存値でも章が復元される", bool(legacy))
 
+    # 復元直後の描画後スクロールが終わるのを待ってから操作する。
+    await asyncio.sleep(0.3)
+
     # 移動履歴（戻る・進む）。
     checker.check(
         "開いた直後は Back が disabled",
@@ -577,6 +580,82 @@ async def run_checks(cdp: Cdp) -> int:
         "開き直すと Forward が disabled になる",
         await cdp.evaluate("document.querySelector('#reader-forward')?.disabled === true"),
     )
+
+    # 表示設定。
+    default_font = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    checker.equal("既定の文字サイズ", default_font, "18px")
+
+    await cdp.evaluate("document.querySelector('#reader-font-larger').click()")
+    enlarged = await wait_until(
+        cdp,
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize === '20px'",
+    )
+    checker.check("A+ で文字サイズが上がる", enlarged)
+    settings = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') ?? 'null')"
+    )
+    checker.equal("文字サイズが保存される", settings.get("fontScale") if settings else None, 2)
+
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    persisted_font = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    checker.equal("リロード後も文字サイズが維持される", persisted_font, "20px")
+
+    await cdp.evaluate("document.querySelector('#reader-line-spacing').click()")
+    line_spacing = await wait_until(
+        cdp,
+        "parseFloat(getComputedStyle(document.querySelector('.reader-html')).lineHeight) > 40",
+    )
+    checker.check("行間ボタンで行間が変わる", line_spacing)
+    settings = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') ?? 'null')"
+    )
+    checker.equal("行間が保存される", settings.get("lineHeight") if settings else None, 2)
+
+    await cdp.evaluate("document.querySelector('#reader-theme').click()")
+    dark = await wait_until(
+        cdp,
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark') === true",
+    )
+    checker.check("ダーク表示に切り替わる", dark)
+    settings = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') ?? 'null')"
+    )
+    checker.equal("ダーク表示が保存される", settings.get("dark") if settings else None, True)
+
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    persisted_dark = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark') === true"
+    )
+    checker.check("リロード後もダーク表示が維持される", persisted_dark)
+
+    # 読書データの削除。
+    position_keys = await cdp.evaluate(
+        "Object.keys(localStorage).filter((key) => key.startsWith('openrustbooks:position:')).length"
+    )
+    checker.check("削除前に読書位置が保存されている", position_keys > 0)
+    removed_keys = await cdp.evaluate(
+        "(() => { document.querySelector('#reader-clear-data').click();"
+        " return Object.keys(localStorage).filter((key) => key.startsWith('openrustbooks:position:')).length; })()"
+    )
+    checker.equal("Clear data で読書位置が削除される", removed_keys, 0)
+    checker.check(
+        "Clear data で表示設定は残る",
+        await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
+    )
+    status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
+    checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
 
     return finish(checker)
 
