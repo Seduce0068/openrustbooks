@@ -845,6 +845,139 @@ async def run_checks(cdp: Cdp) -> int:
     status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
     checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
 
+    # ARIA 属性。
+    checker.check(
+        "A- ボタンに aria-label と aria-keyshortcuts が付く",
+        await cdp.evaluate(
+            "document.querySelector('#reader-font-smaller')?.getAttribute('aria-label') === 'Smaller text'"
+            " && document.querySelector('#reader-font-smaller')?.getAttribute('aria-keyshortcuts') === '-'"
+        ),
+    )
+    checker.check(
+        "A+ ボタンに aria-keyshortcuts が付く",
+        await cdp.evaluate(
+            "document.querySelector('#reader-font-larger')?.getAttribute('aria-keyshortcuts') === '+'"
+        ),
+    )
+    checker.check(
+        "本文領域に role・aria-label・tabindex が付く",
+        await cdp.evaluate(
+            "document.querySelector('.reader-content')?.getAttribute('role') === 'region'"
+            " && document.querySelector('.reader-content')?.getAttribute('aria-label') === 'Chapter content'"
+            " && document.querySelector('.reader-content')?.getAttribute('tabindex') === '0'"
+        ),
+    )
+    checker.check(
+        "状態メッセージに aria-live が付く",
+        await cdp.evaluate(
+            "document.querySelector('.reader-status')?.getAttribute('aria-live') === 'polite'"
+        ),
+    )
+    checker.check(
+        "章選択に aria-label が付く",
+        await cdp.evaluate(
+            "document.querySelector('.reader-chapter-select')?.getAttribute('aria-label') === 'Chapter'"
+        ),
+    )
+
+    # キーボード操作。
+    async def key(key: str, *, alt: bool = False, ctrl: bool = False) -> None:
+        await cdp.evaluate(
+            "(() => {"
+            " const event = new KeyboardEvent('keydown', {"
+            f"  key: {__import__('json').dumps(key)}, bubbles: true, cancelable: true,"
+            f"  altKey: {str(alt).lower()}, ctrlKey: {str(ctrl).lower()}, metaKey: false"
+            " });"
+            " window.dispatchEvent(event);"
+            " })()"
+        )
+        await asyncio.sleep(0.3)
+
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await key("]")
+    moved_next = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("] で次の章へ進む", moved_next)
+    await key("[")
+    moved_prev = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    checker.check("[ で前の章へ戻る", moved_prev)
+
+    await key("+")
+    font_after_plus = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    checker.check("+ で文字サイズが上がる", font_after_plus in ("20px", "22.5px", "24px", "27px", "31.5px"))
+    await key("-")
+    await asyncio.sleep(0.2)
+
+    # ダーク表示を一度オフにしてから d でオンになることを確認する。
+    if await cdp.evaluate("document.querySelector('.reader-container')?.classList.contains('reader-dark')"):
+        await key("d")
+        await asyncio.sleep(0.3)
+    before_dark = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    await key("d")
+    dark_after_d = await wait_until(
+        cdp, "document.querySelector('.reader-container')?.classList.contains('reader-dark') !== " + str(before_dark).lower(), timeout=2
+    )
+    checker.check("d でダーク表示が切り替わる", dark_after_d)
+    await key("d")
+    await asyncio.sleep(0.2)
+
+    # 目次の select にフォーカスがあるときは d が効かない。
+    await cdp.evaluate("document.querySelector('.reader-chapter-select').focus()")
+    before_dark = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    await key("d")
+    await asyncio.sleep(0.2)
+    after_dark = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    checker.check("select にフォーカス中は d が効かない", before_dark == after_dark)
+
+    # Ctrl 併用時はキー操作が起きない。
+    await cdp.evaluate("document.querySelector('.reader-content').focus()")
+    before_font = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    await key("+", ctrl=True)
+    await asyncio.sleep(0.2)
+    after_font = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    checker.check("Ctrl 併用ではキー操作が起きない", before_font == after_font)
+
+    # Alt+ArrowLeft / Alt+ArrowRight で履歴を移動できる。
+    # 履歴に back エントリを作るため、まず章 0 に戻してから章 1 へ移動する。
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.3)
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    await asyncio.sleep(0.3)
+    await key("ArrowLeft", alt=True)
+    back_moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')", timeout=3
+    )
+    checker.check("Alt+ArrowLeft で戻る", back_moved)
+    await key("ArrowRight", alt=True)
+    forward_moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')", timeout=3
+    )
+    checker.check("Alt+ArrowRight で進む", forward_moved)
+
     # 読書位置の保存時刻と掃除。
     await open_sample(cdp)
     await wait_until(
