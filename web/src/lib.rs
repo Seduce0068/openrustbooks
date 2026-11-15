@@ -971,12 +971,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         })
     };
 
-    let on_history_back = {
+    let back_action: Rc<dyn Fn()> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
-        move |_| {
+        Rc::new(move || {
             let index = history_index.get();
             if index == 0 {
                 return;
@@ -996,15 +996,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             history_index.set(new_index);
             sync_history();
             render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
-        }
+        })
     };
 
-    let on_history_forward = {
+    let forward_action: Rc<dyn Fn()> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let render_chapter = Rc::clone(&render_chapter);
-        move |_| {
+        Rc::new(move || {
             let index = history_index.get();
             let len = history.borrow().len();
             if index + 1 >= len {
@@ -1024,7 +1024,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             history_index.set(new_index);
             sync_history();
             render_chapter(entry.chapter_index, entry.fragment, Some(entry.scroll_top));
-        }
+        })
+    };
+    let on_history_back = {
+        let back_action = Rc::clone(&back_action);
+        move |_| back_action()
+    };
+    let on_history_forward = {
+        let forward_action = Rc::clone(&forward_action);
+        move |_| forward_action()
     };
 
     let on_file_change = {
@@ -1189,9 +1197,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
         }
     };
-    let on_previous = {
+    // 前後の章へ移動する。ボタンとキーボードの両方から使う。
+    let prev_action: Rc<dyn Fn()> = {
         let navigate_to = Rc::clone(&navigate_to);
-        move |_| {
+        Rc::new(move || {
             let index = current.get();
             if index > 0 {
                 let fragment = chapters
@@ -1201,11 +1210,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .and_then(|(_, _, fragment)| fragment.clone());
                 navigate_to(index - 1, fragment);
             }
-        }
+        })
     };
-    let on_next = {
+    let next_action: Rc<dyn Fn()> = {
         let navigate_to = Rc::clone(&navigate_to);
-        move |_| {
+        Rc::new(move || {
             let index = current.get();
             if chapters
                 .get()
@@ -1219,7 +1228,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .and_then(|(_, _, fragment)| fragment.clone());
                 navigate_to(index + 1, fragment);
             }
-        }
+        })
+    };
+    let on_previous = {
+        let prev_action = Rc::clone(&prev_action);
+        move |_| prev_action()
+    };
+    let on_next = {
+        let next_action = Rc::clone(&next_action);
+        move |_| next_action()
     };
     let on_content_click = {
         let book = Rc::clone(&book);
@@ -1363,19 +1380,34 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             dark: dark.get(),
         });
     });
-    let on_font_smaller = {
+    let font_smaller_action: Rc<dyn Fn()> = {
         let persist = Rc::clone(&persist_settings);
-        move |_| {
+        Rc::new(move || {
             set_font_scale.set(font_scale.get().saturating_sub(1));
             persist();
-        }
+        })
     };
-    let on_font_larger = {
+    let font_larger_action: Rc<dyn Fn()> = {
         let persist = Rc::clone(&persist_settings);
-        move |_| {
+        Rc::new(move || {
             set_font_scale.set((font_scale.get() + 1).min(FONT_SCALES.len() - 1));
             persist();
-        }
+        })
+    };
+    let dark_action: Rc<dyn Fn()> = {
+        let persist = Rc::clone(&persist_settings);
+        Rc::new(move || {
+            set_dark.set(!dark.get());
+            persist();
+        })
+    };
+    let on_font_smaller = {
+        let action = Rc::clone(&font_smaller_action);
+        move |_| action()
+    };
+    let on_font_larger = {
+        let action = Rc::clone(&font_larger_action);
+        move |_| action()
     };
     let on_line_spacing = {
         let persist = Rc::clone(&persist_settings);
@@ -1385,11 +1417,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         }
     };
     let on_toggle_dark = {
-        let persist = Rc::clone(&persist_settings);
-        move |_| {
-            set_dark.set(!dark.get());
-            persist();
-        }
+        let action = Rc::clone(&dark_action);
+        move |_| action()
     };
     let on_clear_data = move |_| {
         let removed = clear_reading_positions();
@@ -1397,6 +1426,76 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     };
     // view マクロ内の比較で `>` を使わないよう、条件を外で計算する。
     let font_larger_disabled = Memo::new(move |_| font_scale.get() + 1 >= FONT_SCALES.len());
+
+    // キーボード操作。フォーカスが入力欄にあるときは無視する。
+    let key_handler = {
+        let prev_action = Rc::clone(&prev_action);
+        let next_action = Rc::clone(&next_action);
+        let back_action = Rc::clone(&back_action);
+        let forward_action = Rc::clone(&forward_action);
+        let font_smaller_action = Rc::clone(&font_smaller_action);
+        let font_larger_action = Rc::clone(&font_larger_action);
+        let dark_action = Rc::clone(&dark_action);
+        move |event: web_sys::KeyboardEvent| {
+            // Ctrl / Meta 併用はブラウザのショートカットを奪わない。
+            if event.ctrl_key() || event.meta_key() {
+                return;
+            }
+            // Alt は ArrowLeft / ArrowRight の章の戻る・進むにだけ使う。
+            if event.alt_key() && event.key() != "ArrowLeft" && event.key() != "ArrowRight" {
+                return;
+            }
+            // フォーカスが入力欄にあるときはキーを奪わない。
+            if let Some(active) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.active_element())
+            {
+                let tag = active.tag_name().to_ascii_lowercase();
+                if tag == "input" || tag == "select" || tag == "textarea" {
+                    return;
+                }
+            }
+            let key = event.key();
+            let handled = match key.as_str() {
+                "]" => {
+                    next_action();
+                    true
+                }
+                "[" => {
+                    prev_action();
+                    true
+                }
+                "+" | "=" => {
+                    font_larger_action();
+                    true
+                }
+                "-" | "_" => {
+                    font_smaller_action();
+                    true
+                }
+                "d" => {
+                    dark_action();
+                    true
+                }
+                "ArrowLeft" if event.alt_key() => {
+                    back_action();
+                    true
+                }
+                "ArrowRight" if event.alt_key() => {
+                    forward_action();
+                    true
+                }
+                _ => false,
+            };
+            if handled {
+                event.prevent_default();
+            }
+        }
+    };
+    let key_listener = window_event_listener(leptos::ev::keydown, key_handler);
+    on_cleanup(move || {
+        key_listener.remove();
+    });
 
     let current_title = Memo::new(move |_| {
         chapters
@@ -1424,15 +1523,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             <div class="reader-toolbar">
                 <label class="btn btn-primary" for="epub-file">"Open EPUB"</label>
                 <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" on:change=on_file_change/>
-                <button id="reader-font-smaller" class="btn" title="Smaller text" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
-                <button id="reader-font-larger" class="btn" title="Larger text" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
-                <button id="reader-line-spacing" class="btn" title="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
-                <button id="reader-theme" class="btn" title="Toggle dark mode" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
-                <button id="reader-clear-data" class="btn" title="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
-                <button id="reader-back" class="btn" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
-                <button id="reader-forward" class="btn" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
-                <button class="btn" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
-                <select class="reader-chapter-select" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
+                <button id="reader-font-smaller" class="btn" title="Smaller text" aria-label="Smaller text" aria-keyshortcuts="-" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
+                <button id="reader-font-larger" class="btn" title="Larger text" aria-label="Larger text" aria-keyshortcuts="+" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
+                <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
+                <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
+                <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
+                <button id="reader-back" class="btn" aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
+                <button id="reader-forward" class="btn" aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
+                <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
+                <select class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
                         each=move || chapters.get()
                         key=|(index, _, _)| *index
@@ -1443,7 +1542,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
-                <button class="btn" on:click=on_next disabled=move || {
+                <button class="btn" aria-label="Next chapter" aria-keyshortcuts="]" on:click=on_next disabled=move || {
                     let index = current.get();
                     !chapters.get().iter().any(|(chapter, _, _)| *chapter > index)
                 }>
@@ -1451,14 +1550,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 </button>
                 <span class="reader-chapter-title">{move || current_title.get()}</span>
             </div>
-            <p class="reader-status" role="status">{move || status.get()}</p>
+            <p class="reader-status" role="status" aria-live="polite">{move || status.get()}</p>
             <div class="reader-body">
                 <Show when=move || cover_url.get().is_some()>
                     <aside class="reader-sidebar">
                         <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
                     </aside>
                 </Show>
-                <div class="reader-content" on:click=on_content_click on:scroll=on_scroll>
+                <div class="reader-content" role="region" aria-label="Chapter content" tabindex="0" on:click=on_content_click on:scroll=on_scroll>
                     <div class="document-content reader-html" inner_html=move || content.get()></div>
                 </div>
             </div>
