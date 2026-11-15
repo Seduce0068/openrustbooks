@@ -1646,6 +1646,29 @@ async def run_checks(cdp: Cdp) -> int:
     # エミュレーションを戻す。
     await cdp.send("Emulation.setEmulatedMedia", {"features": []})
 
+    # 本文画像は非同期デコードを指定し、loading="lazy" は付けない。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
+    )
+    await asyncio.sleep(0.8)
+    decoding_attrs = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('.reader-html img[src]')).map((img) => img.getAttribute('decoding'))"
+    )
+    checker.check(
+        "本文画像に decoding=\"async\" が付いている",
+        len(decoding_attrs) > 0 and all(attr == "async" for attr in decoding_attrs),
+        f"(attrs={decoding_attrs!r})",
+    )
+    lazy_attrs = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('.reader-html img[src]')).map((img) => img.getAttribute('loading'))"
+    )
+    checker.check(
+        "本文画像に loading=\"lazy\" は付いていない",
+        all(attr is None for attr in lazy_attrs),
+        f"(attrs={lazy_attrs!r})",
+    )
+
     return finish(checker)
 
 
