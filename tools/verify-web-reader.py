@@ -231,8 +231,15 @@ async def open_sample(cdp: Cdp) -> bool:
 
 
 async def reload_reader(cdp: Cdp) -> bool:
-    """ページを再読み込みし、Reader のマウントを待つ。"""
+    """ページを再読み込みし、Reader のマウントを待つ。
+
+    再読み込みの完了前に古い文書を操作しないよう、文書ごとの印を置いて
+    それが消えるまで待つ。
+    """
+    await cdp.evaluate("window.__orb_reload_marker = true")
     await cdp.send("Page.reload", {"ignoreCache": True})
+    await wait_until(cdp, "window.__orb_reload_marker === undefined", timeout=15)
+    await wait_until(cdp, "document.readyState === 'complete'", timeout=15)
     return await wait_until(cdp, "document.querySelector('.reader-container') !== null")
 
 
@@ -243,6 +250,41 @@ async def saved_position(cdp: Cdp):
         " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
         " if (!key) return null;"
         " return JSON.parse(localStorage.getItem(key));"
+        " })()"
+    )
+
+
+async def set_sample_position(cdp: Cdp, payload: str) -> None:
+    """サンプル本の読書位置を直接書き換える。
+
+    保存はスクロールのデバウンスでも走るため、保留中の書き込みが済むのを
+    待ってから書き、書き込めたことを確認する。
+    """
+    await asyncio.sleep(0.4)
+    expression = (
+        "(() => {"
+        " const keys = Object.keys(localStorage);"
+        " const key = keys.find((k) => k.startsWith('openrustbooks:position:sample.epub'))"
+        "   ?? keys.find((k) => k.startsWith('openrustbooks:position:'));"
+        " if (!key) return false;"
+        f" const value = JSON.stringify({payload});"
+        " localStorage.setItem(key, value);"
+        " return localStorage.getItem(key) === value;"
+        " })()"
+    )
+    for _ in range(5):
+        if await cdp.evaluate(expression):
+            return
+        await asyncio.sleep(0.2)
+
+
+async def select_chapter(cdp: Cdp, index: int) -> None:
+    """章の選択を切り替えて保存を発生させる。"""
+    await cdp.evaluate(
+        "(() => {"
+        " const select = document.querySelector('.reader-chapter-select');"
+        f" select.value = '{index}';"
+        " select.dispatchEvent(new Event('change', {bubbles: true}));"
         " })()"
     )
 
@@ -384,9 +426,9 @@ async def run_checks(cdp: Cdp) -> int:
     saved = await saved_position(cdp)
     checker.check("読書位置が localStorage に保存される", saved is not None)
     checker.check(
-        "保存する値は章・フラグメント・スクロール位置だけ",
+        "保存する値は章・フラグメント・スクロール位置・保存時刻だけ",
         saved is not None
-        and sorted(saved.keys()) == ["chapterIndex", "fragment", "scrollTop"],
+        and sorted(saved.keys()) == ["chapterIndex", "fragment", "savedAt", "scrollTop"],
         f"(saved={saved!r})",
     )
 
@@ -436,18 +478,34 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("復元時にフラグメントへスクロールする", scrolled)
 
     # 範囲外の保存値は先頭の章にフォールバックする。
-    await cdp.evaluate(
-        "(() => {"
-        " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
-        " localStorage.setItem(key, JSON.stringify({chapterIndex: 999, fragment: null}));"
-        " })()"
-    )
+    # 保存値は章の切り替えで上書きされるため、上書き後にページを再読み込みする。
+    await set_sample_position(cdp, "{chapterIndex: 999, fragment: null}")
     await reload_reader(cdp)
     reopened = await open_sample(cdp)
     fallback = reopened and await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
     )
     checker.check("範囲外の保存値では先頭の章になる", bool(fallback))
+
+    # 旧形式（`savedAt` なし）の保存値でも章が復元される。
+    await set_sample_position(cdp, "{chapterIndex: 1, fragment: null}")
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    legacy_restored = reopened and await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("savedAt の無い旧形式でも章が復元される", bool(legacy_restored))
+
+    # 目次の選択そのもので章を移動できる。
+    await select_chapter(cdp, 1)
+    dropdown_moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    checker.check("目次の選択で章を移動できる", dropdown_moved)
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
 
     # 章内のスクロール位置の保存と復元。
     await cdp.evaluate("document.querySelector('#to-ch2').click()")
@@ -492,12 +550,7 @@ async def run_checks(cdp: Cdp) -> int:
     )
 
     # scrollTop の無い旧形式の保存値でも章は復元される。
-    await cdp.evaluate(
-        "(() => {"
-        " const key = Object.keys(localStorage).find((k) => k.startsWith('openrustbooks:position:'));"
-        " localStorage.setItem(key, JSON.stringify({chapterIndex: 1, fragment: null}));"
-        " })()"
-    )
+    await set_sample_position(cdp, "{chapterIndex: 1, fragment: null}")
     await reload_reader(cdp)
     reopened = await open_sample(cdp)
     legacy = reopened and await wait_until(
@@ -656,6 +709,83 @@ async def run_checks(cdp: Cdp) -> int:
     )
     status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
     checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
+
+    # 読書位置の保存時刻と掃除。
+    await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    saved = await wait_saved(cdp, lambda position: position.get("savedAt", 0) > 0)
+    now_ms = await cdp.evaluate("Date.now()")
+    checker.check(
+        "保存値に保存時刻が入る",
+        saved is not None and abs(saved.get("savedAt", 0) - now_ms) < 120000,
+        f"(saved={saved!r}, now={now_ms})",
+    )
+
+    # 45 件の偽エントリを入れてから保存すると、上限 40 件以下になる。
+    await cdp.evaluate(
+        "(() => {"
+        " const now = Date.now();"
+        " for (let i = 0; i < 45; i += 1) {"
+        "  localStorage.setItem('openrustbooks:position:fake-' + i,"
+        "   JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 0, savedAt: now - i * 60000}));"
+        " }"
+        " })()"
+    )
+    injected = await cdp.evaluate(
+        "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length"
+    )
+    checker.check("掃除前に 40 件を超えている", injected > 40, f"(count={injected})")
+
+    await select_chapter(cdp, 0)
+    pruned = await wait_until(
+        cdp,
+        "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length <= 40",
+        timeout=5,
+    )
+    count_after = await cdp.evaluate(
+        "Object.keys(localStorage).filter((k) => k.startsWith('openrustbooks:position:')).length"
+    )
+    checker.check("保存時に件数が上限以下に掃除される", pruned, f"(count={count_after})")
+    await wait_saved(cdp, lambda position: position.get("chapterIndex") == 0)
+    current_kept = await cdp.evaluate(
+        "Object.keys(localStorage).some((k) => k.startsWith('openrustbooks:position:sample.epub'))"
+    )
+    checker.check("現在の本の位置は残る", current_kept)
+
+    # 古い順の掃除と混ざらないよう、件数テスト用の偽エントリを消してから
+    # 寿命の判定を確認する。
+    await cdp.evaluate(
+        "Object.keys(localStorage)"
+        " .filter((k) => k.startsWith('openrustbooks:position:fake-'))"
+        " .forEach((k) => localStorage.removeItem(k))"
+    )
+    await cdp.evaluate(
+        "(() => {"
+        " const old = Date.now() - 91 * 24 * 60 * 60 * 1000;"
+        " const recent = Date.now() - 5 * 24 * 60 * 60 * 1000;"
+        " localStorage.setItem('openrustbooks:position:aged-old',"
+        "  JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 0, savedAt: old}));"
+        " localStorage.setItem('openrustbooks:position:aged-recent',"
+        "  JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 0, savedAt: recent}));"
+        " })()"
+    )
+    await select_chapter(cdp, 1)
+    removed_old = await wait_until(
+        cdp, "localStorage.getItem('openrustbooks:position:aged-old') === null", timeout=5
+    )
+    checker.check("90 日より古い位置は削除される", removed_old)
+    checker.check(
+        "90 日以内の位置は残る",
+        await cdp.evaluate("localStorage.getItem('openrustbooks:position:aged-recent') !== null"),
+    )
+
+    # 表示設定は掃除の対象にならない。
+    checker.check(
+        "掃除しても表示設定は残る",
+        await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
+    )
 
     return finish(checker)
 
