@@ -1021,6 +1021,98 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("Light で dark クラスが外れる", bool(html_light))
 
+    # タッチ操作（スワイプ）。
+    async def swipe(dx: int, dy: int = 0, touches: int = 1) -> None:
+        await cdp.evaluate(
+            "(() => {"
+            " const target = document.querySelector('.reader-content');"
+            " const rect = target.getBoundingClientRect();"
+            " const startX = rect.left + rect.width / 2;"
+            " const startY = rect.top + rect.height / 2;"
+            " const makeTouch = (x, y) => new Touch({"
+            "  identifier: 0, target, clientX: x, clientY: y, pageX: x, pageY: y"
+            " });"
+            " let touchesList = [makeTouch(startX, startY)];"
+            " if (arguments[2] > 1) touchesList.push(makeTouch(startX + 10, startY + 10));"
+            " const startEvent = new TouchEvent('touchstart', {"
+            "  touches: touchesList, targetTouches: touchesList, changedTouches: touchesList, bubbles: true, cancelable: true"
+            " });"
+            " target.dispatchEvent(startEvent);"
+            " const endX = startX + arguments[0];"
+            " const endY = startY + arguments[1];"
+            " const endTouches = [makeTouch(endX, endY)];"
+            " const endEvent = new TouchEvent('touchend', {"
+            "  touches: [], targetTouches: [], changedTouches: endTouches, bubbles: true, cancelable: true"
+            " });"
+            " target.dispatchEvent(endEvent);"
+            " })()",
+            # pass dx, dy, touches via separate eval is not possible; inline them
+        )
+        # Re-dispatch with actual dx/dy/touches embedded.
+        await cdp.evaluate(
+            "(() => {"
+            f" const dx = {dx}; const dy = {dy}; const nTouches = {touches};"
+            " const target = document.querySelector('.reader-content');"
+            " const rect = target.getBoundingClientRect();"
+            " const startX = rect.left + rect.width / 2;"
+            " const startY = rect.top + rect.height / 2;"
+            " const makeTouch = (x, y, id) => new Touch({"
+            "  identifier: id, target, clientX: x, clientY: y, pageX: x, pageY: y"
+            " });"
+            " const startTouches = [];"
+            " for (let i = 0; i < nTouches; i += 1) startTouches.push(makeTouch(startX + i * 5, startY + i * 5, i));"
+            " target.dispatchEvent(new TouchEvent('touchstart', {"
+            "  touches: startTouches, targetTouches: startTouches, changedTouches: startTouches, bubbles: true, cancelable: true"
+            " }));"
+            " const endTouches = [makeTouch(startX + dx, startY + dy, 0)];"
+            " target.dispatchEvent(new TouchEvent('touchend', {"
+            "  touches: [], targetTouches: [], changedTouches: endTouches, bubbles: true, cancelable: true"
+            " }));"
+            " })()"
+        )
+        await asyncio.sleep(0.4)
+
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await swipe(-60, 0)
+    swiped_next = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')", timeout=3
+    )
+    checker.check("左スワイプで次の章へ進む", swiped_next)
+
+    await swipe(60, 0)
+    swiped_prev = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')", timeout=3
+    )
+    checker.check("右スワイプで前の章へ戻る", swiped_prev)
+
+    # 縦移動が大きい場合は章が変わらない。
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.3)
+    await swipe(-60, 80)
+    await asyncio.sleep(0.3)
+    checker.check(
+        "縦移動が大きいスワイプでは章が変わらない",
+        await cdp.evaluate(
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+        ),
+    )
+
+    # マルチタッチでは章が変わらない。
+    await swipe(-60, 0, touches=2)
+    await asyncio.sleep(0.3)
+    checker.check(
+        "マルチタッチでは章が変わらない",
+        await cdp.evaluate(
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+        ),
+    )
+
     # 読書位置の保存時刻と掃除。
     await open_sample(cdp)
     await wait_until(
