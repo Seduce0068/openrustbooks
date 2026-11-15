@@ -978,6 +978,45 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("Alt+ArrowRight で進む", forward_moved)
 
+    # アプリ全体のテーマ。
+    # ダークを一度オフにしてからオンにする。
+    if await cdp.evaluate("document.documentElement.classList.contains('dark')"):
+        await cdp.evaluate("document.querySelector('#reader-theme').click()")
+        await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('#reader-theme').click()")
+    await asyncio.sleep(0.3)
+    html_dark = await wait_until(
+        cdp, "document.documentElement.classList.contains('dark') === true", timeout=3
+    )
+    checker.check("Dark で <html> に dark クラスが付く", html_dark)
+    toolbar_bg = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-toolbar')).backgroundColor"
+    )
+    checker.check(
+        "ダーク時にツールバーの背景がダークになる",
+        "15, 23, 42" in toolbar_bg or "rgb(15, 23, 42)" in toolbar_bg or "1e293b" in toolbar_bg.lower() or "30, 41, 59" in toolbar_bg,
+        f"(bg={toolbar_bg!r})",
+    )
+
+    # リロード後も dark クラスが維持される。
+    await reload_reader(cdp)
+    reopened = await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')"
+    )
+    persisted_dark = await cdp.evaluate(
+        "document.documentElement.classList.contains('dark')"
+    )
+    checker.check("リロード後も dark クラスが維持される", bool(persisted_dark))
+
+    # Light で dark クラスが外れる。
+    await cdp.evaluate("document.querySelector('#reader-theme').click()")
+    await asyncio.sleep(0.3)
+    html_light = await cdp.evaluate(
+        "!document.documentElement.classList.contains('dark')"
+    )
+    checker.check("Light で dark クラスが外れる", bool(html_light))
+
     # 読書位置の保存時刻と掃除。
     await open_sample(cdp)
     await wait_until(
