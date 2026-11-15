@@ -1,52 +1,50 @@
 # Goal
 
-Web 版 EPUB リーダーで、保存した読書位置を JSON として書き出し・読み込み
-できるようにする。
+リーダーのダーク表示トグルをアプリ全体（ツールバー・一覧画面を含む）に
+拡張する。
 
 ## Scope
 
 ### 背景
 
-ADR-0019 までで読書位置を localStorage に保存・掃除するようにしたが、
-バックアップや別ブラウザへの移行の手段が無い（ADR-0019 の未決定「読書位置の
-エクスポート・インポート」）。ブラウザ内で完結する JSON の書き出し・
-読み込みを追加する。
+ADR-0018 まででダーク表示は `.reader-content` にしか適用されず、ツールバー
+や一覧画面はライトのままだった（ADR-0018 の未決定「アプリ全体のテーマ
+（ツールバー・一覧画面を含む）」）。手動トグルを `<html>` のクラスへ反映し、
+CSS 変数を切り替える。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（エクスポート・インポートのボタンと処理）
-- `tools/verify-web-reader.py`: 変更（エクスポート・インポートの E2E 検証を追加）
-- `docs/decisions/0022-position-export-import.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（`<html>` へのクラス反映）
+- `web/index.html`: 変更（`.dark` クラスで CSS 変数を切り替える）
+- `tools/verify-web-reader.py`: 変更（全体テーマの E2E 検証を追加）
+- `docs/decisions/0023-app-wide-theme.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. エクスポート:
-   - `Export` ボタンで `openrustbooks:position:` で始まる全キーを
-     `{ key: value }` の JSON オブジェクトにまとめ、
-     `openrustbooks-positions.json` としてダウンロードする。
-   - ダウンロードは `<a download>` と `URL.createObjectURL` を使う。
-   - 削除されたキー（掃除済み）は含まれない。
-2. インポート:
-   - `Import` ボタン（`<input type="file" accept=".json">`）で JSON を読み込む。
-   - 形式が `{ key: value }` のオブジェクトで、キーが
-     `openrustbooks:position:` で始まるものだけを取り込む。
-   - 既存のキーは上書きする。
-   - 取り込んだ件数を状態メッセージに表示する。
-   - 形式が不正な場合は状態メッセージで報告し、何も取り込まない。
-   - `openrustbooks:settings` はインポートの対象にしない。
+1. トグル:
+   - `Dark` / `Light` ボタンで `<html>` に `dark` クラスを付け外しする。
+   - 設定は localStorage `openrustbooks:settings` の `dark` に保存する
+     （既存）。
+   - 起動時に保存値を読んで `<html>` のクラスへ反映する。
+   - `prefers-color-scheme: dark` の既定は維持する（手動トグルが無い場合）。
+2. CSS:
+   - `html.dark` で `--color-bg` / `--color-fg` / `--color-muted` /
+     `--color-border` / `--color-primary` / `--color-secondary` をダーク値へ
+     上書きする。
+   - `.reader-content` の個別ダークスタイルは `html.dark` に統合する。
 3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 86 項目、読書位置、履歴、表示設定、掃除、
+   - 既存の 119 テスト、E2E 93 項目、読書位置、履歴、表示設定、掃除、
      キーボード操作を変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - `Export` でダウンロードが発生し、内容が `{ key: value }` である。
-  - `Import` で JSON を読み込み、読書位置が復元される。
-  - 不正な JSON では何も取り込まず、状態メッセージが出る。
-  - インポート後も表示設定は残る。
-- 既存の 119 テストと E2E 86 項目が通る。
+  - `Dark` で `<html>` に `dark` クラスが付く。
+  - リロード後も `dark` クラスが維持される。
+  - `Light` で `dark` クラスが外れる。
+  - ダーク時にツールバーの背景がダークになる。
+- 既存の 119 テストと E2E 93 項目が通る。
 
 ## Acceptance criteria
 
@@ -64,8 +62,7 @@ ADR-0019 までで読書位置を localStorage に保存・掃除するように
 
 ## Constraints
 
-- 新規依存を追加しない。保存先は localStorage とブラウザのダウンロード。
-  外部送信を追加しない。
+- 新規依存を追加しない。保存先は localStorage のみ。外部送信を追加しない。
 - `desktop/` を変更しない。
 - プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
   使わない。`unsafe` を使わない。
