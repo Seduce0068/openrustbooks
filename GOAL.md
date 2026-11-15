@@ -1,44 +1,42 @@
 # Goal
 
-Web 版 EPUB リーダーに移動履歴の一覧 UI を追加する。
+Web 版 EPUB リーダーに landmarks（表紙・本文開始など）の移動 UI を追加する。
 
 ## Scope
 
 ### 背景
 
-ADR-0017・ADR-0024 までで移動履歴はメモリと localStorage に保持され、
-戻る・進むボタンで移動できるが、過去の位置へ直接ジャンプする手段が無い
-（ADR-0017 の未決定「履歴一覧の UI」）。
+core は `landmarks()` と `page_list()` を公開しているが、Web UI は目次しか
+使っておらず、landmarks の位置へ直接移動できない（ADR-0009・ADR-0010 の未決定
+「landmarks / page-list の活用」）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（履歴一覧のドロップダウンとジャンプ）
-- `tools/verify-web-reader.py`: 変更（履歴一覧の E2E 検証を追加）
-- `docs/decisions/0026-history-list-ui.md`: 追加（決定と検証の記録）
+- `web/src/lib.rs`: 変更（landmarks ドロップダウンと移動）
+- `tools/verify-web-reader.py`: 変更（landmarks の E2E 検証を追加）
+- `docs/decisions/0027-landmarks-ui.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 履歴一覧:
-   - ツールバーに履歴のドロップダウン（`<select id="reader-history">`）を置く。
-   - 各エントリのラベルは「章のタイトル + フラグメント」（フラグメントが
-     無い場合は章のタイトルだけ）。
-   - 現在位置のエントリが選択状態になる。
-   - 選択を変えると、その履歴エントリの章・フラグメント・スクロール位置へ
-     移動する（履歴の現在位置も更新する）。
-   - 履歴が 1 件以下のときは disabled にする。
+1. landmarks ドロップダウン:
+   - ツールバーに `<select id="reader-landmarks">` を置く。
+   - `WasmEpubBook::landmarks()` で取得し、各エントリの title をラベルに使う。
+   - landmarks が空のときは disabled にする。
+   - 選択を変えると、その landmark の章へ移動し、フラグメントがあれば
+     スクロールする（`resolve_chapter_link` 相当の解決を使う）。
 2. ARIA:
-   - ドロップダウンに `aria-label="History"` を付ける。
+   - ドロップダウンに `aria-label="Landmarks"` を付ける。
 3. 既存の挙動を変えない:
    - 既存の 119 テスト、E2E 104 項目、読書位置、履歴、表示設定、掃除、
      キーボード操作、タッチ操作を変えない。
 
 ### 必須テスト
 
+- `tools/verify-web-reader.py` のサンプル EPUB に landmarks を追加する。
 - `tools/verify-web-reader.py` に追加する。
-  - 章を 2 回移動すると履歴一覧に 3 件入る。
-  - 一覧から最初のエントリを選ぶと最初の章へ移動する。
-  - 一覧から選んだ後も Back / Forward が正しく動く。
+  - landmarks ドロップダウンが存在する。
+  - landmarks が空でないとき、選択で章が移動する。
 - 既存の 119 テストと E2E 104 項目が通る。
 
 ## Acceptance criteria
