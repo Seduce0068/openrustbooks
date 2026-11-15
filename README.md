@@ -85,7 +85,7 @@ openrustbooks/
   保存データの削除と保持期間・件数上限による自動掃除、
   画像読み込み後の位置ずれ補正、キーボード操作と ARIA 属性、
   読書位置のエクスポート・インポート（表示設定を含む）、アプリ全体のダークテーマ、
-  landmarks の移動 UI、
+  landmarks の移動 UI、page-list によるページ移動、
   移動履歴の永続化、タッチ操作（スワイプ）
 - **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
 - **テキスト編集 (設計段階)**: TXT, Markdown (CodeMirror 6ベース)
