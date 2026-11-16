@@ -87,6 +87,7 @@ CH2 = f"""<?xml version="1.0" encoding="utf-8"?>
 <img id="evil-svg" src="images/evil.svg" alt="evil svg"/>
 <h2 id="part">Part Two</h2>
 <p>Part two text.</p>
+<p><a id="to-start" href="#start">Back to top of chapter two</a></p>
 <p><a id="back" href="ch1.xhtml">Back to chapter one</a></p>
 </body>
 </html>
@@ -2132,6 +2133,52 @@ async def run_checks(cdp: Cdp) -> int:
                 restored["position"] is not None,
             )
     shutil.rmtree(download_dir, ignore_errors=True)
+
+    # 同一章内のフラグメント移動も履歴に記録される。
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')",
+        timeout=5,
+    )
+    await asyncio.sleep(0.5)
+    before_anchor = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    await cdp.evaluate(
+        "document.querySelector('#part').scrollIntoView()"
+    )
+    await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('#to-start').click()")
+    await asyncio.sleep(0.8)
+    after_anchor = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check(
+        "同一章のフラグメント移動で履歴が 1 件増える",
+        after_anchor == before_anchor + 1,
+        f"(before={before_anchor}, after={after_anchor})",
+    )
+    back_enabled = await cdp.evaluate(
+        "document.querySelector('#reader-back')?.disabled === false"
+    )
+    checker.check("同一章のフラグメント移動後に戻れる", back_enabled is True)
+    # 戻ると #part 付近へ戻る。
+    await cdp.evaluate("document.querySelector('#reader-back').click()")
+    await asyncio.sleep(1.0)
+    restored_scroll = await cdp.evaluate(
+        "document.querySelector('.reader-content')?.scrollTop ?? 0"
+    )
+    checker.check(
+        "戻るでフラグメント移動前の位置へ戻る",
+        restored_scroll > 0,
+        f"(scrollTop={restored_scroll})",
+    )
 
     return finish(checker)
 
