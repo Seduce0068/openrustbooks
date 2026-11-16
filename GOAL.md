@@ -1,37 +1,35 @@
 # Goal
 
-wasm で EPUB を開くときのアーカイブバイト列の二重コピーを解消する。
+フラグメントスクロールの retry を強化し、残るフレークを解消する。
 
 ## Scope
 
 ### 背景
 
-ADR-0013 の未決定「読み込み時のメモリコピー（`ArrayBuffer`・`Vec`・
-`ArchiveReader` の複製）」。調査の結果、`WasmEpubBook::new` が
-`Vec<u8>` を受け取った後、`EpubBook::open(&bytes)` →
-`ArchiveReader::with_limits(bytes, ...)` が `bytes.to_vec()` で
-アーカイブ全体を二重にコピーしている（256 MiB の EPUB なら 256 MiB の
-余分なコピー）。
+ADR-0046 で `scrollIntoView()` から明示的な `scrollTop` 設定に変更し、
+10 回連続成功を確認した。しかしその後も約 1/10 の頻度で
+「フラグメント付きリンクで移動先へスクロールする」が `scrollTop=0` で
+失敗する。現状の retry は 3 回・`setTimeout(0)` のみで、画像のレイアウトが
+確定する前に retry が使い切られている。
 
 ### 成果物
 
-- `core/src/archive.rs`: 変更（所有権を受け取る `from_owned` を追加）
-- `core/src/epub.rs`: 変更（`open_owned` を追加）
-- `core/src/wasm.rs`: 変更（`WasmEpubBook::new` で `open_owned` を使う）
-- `docs/decisions/0051-owned-epub-open.md`: 追加
+- `web/src/lib.rs`: 変更（retry 回数と間隔）
+- `docs/decisions/0052-fragment-retry-hardening.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 最適化:
-   - `ArchiveReader::from_owned(bytes: Vec<u8>, limits)` を追加し、
-     既存の `with_limits` はこれを呼ぶ形にする（挙動は同一）。
-   - `EpubBook::open_owned(bytes: Vec<u8>)` を追加し、
-     `WasmEpubBook::new` はこれを使う（1 回のコピーを削減）。
+1. retry の強化:
+   - フラグメント移動で `scrollTop` が 0 のままの場合、16ms（1 フレーム
+     相当）間隔で最大 12 回まで再試行する。
+   - 位置保存（フラグメント無し）の挙動は変更しない。
 2. 既存の挙動を変えない:
-   - `open` / `with_limits` の既存 API と挙動は維持する。
-   - 既存の 120 テスト、E2E 166 項目を変えない。
-   - 追加した API が既存 API と同じ結果を返すテストを追加する。
+   - 既存の 121 テスト、E2E 166 項目を変えない。
+
+### 必須テスト
+
+- E2E を 15 回連続実行し、フラグメントスクロールの失敗が 0 件であること。
 
 ## Acceptance criteria
 
@@ -42,7 +40,5 @@ ADR-0013 の未決定「読み込み時のメモリコピー（`ArrayBuffer`・`
 
 - 新規依存を追加しない。
 - `desktop/` を変更しない。
-- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
-  使わない。`unsafe` を使わない。
 - コメントと doc コメントは日本語で簡潔に書く。
 - `master` へ push する。force push はしない。
