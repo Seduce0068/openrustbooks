@@ -60,12 +60,9 @@ ADR-0046 で `scrollIntoView()` から明示的な `scrollTop` 設定に変更�
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
-## 未決定（次ラウンド以降）
+## 解決済み
 
-- E2E が読む `.reader-content` がスクロール適用後に差し替わる原因の特定。
-  - `set_content` の再通知による `innerHTML` 再設定の可能性。
-  - Leptos のリアクティブ更新による DOM 再マウントの可能性。
-- `MutationObserver` で `.reader-content` の差し替えを監視し、0 に戻る
-  タイミングを特定する。
-- 原因特定後の根本修正（例: スクロールを `requestAnimationFrame` で
-  再適用し、DOM 更新の後に確定させる）。
+原因は ADR-0053 で特定・修正した。`MutationObserver` による調査の結果、
+`.reader-content` の差し替えではなく、**前の章の遅れた位置適用コールバック
+が `scroll_content_to_top()` を呼んでいた**ことが判明した。
+世代号による無効化で解消し、E2E 20 回連続成功を確認済み。
