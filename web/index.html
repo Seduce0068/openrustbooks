@@ -509,6 +509,48 @@
             color: var(--color-muted);
         }
 
+        /* 強制カラーモード（Windows ハイコントラスト）。
+           作者指定の色はブラウザに上書きされるため、システムカラーを明示する。 */
+        @media (forced-colors: active) {
+            :root,
+            html.dark {
+                --color-bg: Canvas;
+                --color-fg: CanvasText;
+                --color-muted: GrayText;
+                --color-border: CanvasText;
+                --color-primary: LinkText;
+                --color-primary-hover: Highlight;
+                --color-secondary: Canvas;
+                --color-secondary-hover: Canvas;
+                --color-danger: LinkText;
+                --color-success: LinkText;
+            }
+
+            /* 境界は背景色や影に依存せず、システムカラーの枠で示す。 */
+            .btn,
+            .reader-chapter-select,
+            input,
+            select {
+                border: 1px solid CanvasText;
+            }
+
+            .btn-primary,
+            .btn-danger {
+                color: ButtonText;
+                background: ButtonFace;
+                border-color: ButtonText;
+            }
+
+            /* フォーカスリングが消えないよう、アウトラインを明示する。 */
+            .btn:focus-visible,
+            input:focus-visible,
+            select:focus-visible,
+            .reader-content:focus-visible {
+                outline: 2px solid Highlight;
+                outline-offset: 2px;
+            }
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .editor-container {
