@@ -1835,6 +1835,38 @@ async def run_checks(cdp: Cdp) -> int:
     )
     await cdp.send("Emulation.setEmulatedMedia", {"features": []})
 
+    # 強制カラーモード（Windows ハイコントラスト）でも表示と操作ができる。
+    await cdp.send(
+        "Emulation.setEmulatedMedia",
+        {"features": [{"name": "forced-colors", "value": "active"}]},
+    )
+    await asyncio.sleep(0.3)
+    forced_active = await cdp.evaluate(
+        "window.matchMedia('(forced-colors: active)').matches"
+    )
+    checker.check("強制カラーモードが有効になる", forced_active is True)
+    visible = await cdp.evaluate(
+        "(() => { const el = document.querySelector('#reader-theme');"
+        " if (!el) return false;"
+        " const st = getComputedStyle(el);"
+        " return st.borderTopWidth !== '0px' && st.visibility !== 'hidden'; })()"
+    )
+    checker.check("強制カラーモードでもボタンの境界が残る", visible is True)
+    # 直前のテストでリロードしているため、EPUB を開き直す。
+    await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(0.5)
+    await select_chapter(cdp, 1)
+    moved = await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')",
+        timeout=5,
+    )
+    checker.check("強制カラーモードでも章移動ができる", moved)
+    await cdp.send("Emulation.setEmulatedMedia", {"features": []})
+
     return finish(checker)
 
 
