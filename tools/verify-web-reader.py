@@ -2318,6 +2318,106 @@ async def run_checks(cdp: Cdp) -> int:
         f"(touch-action={touch_action!r})",
     )
 
+    # 旧形式インポート → エクスポート（version 付与）→ 再インポートの連鎖。
+    await cdp.evaluate("localStorage.clear()")
+    legacy_payload = {
+        "openrustbooks:position:sample.epub:legacy": {
+            "chapterIndex": 0,
+            "fragment": None,
+            "scrollTop": 17,
+            "savedAt": 2000,
+        }
+    }
+    legacy_path = SAMPLE.parent / "legacy-roundtrip.json"
+    legacy_path.write_text(_json.dumps(legacy_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id_legacy = document["result"]["root"]["nodeId"]
+    node = await cdp.send(
+        "DOM.querySelector",
+        {"nodeId": root_id_legacy, "selector": "#reader-import-file"},
+    )
+    if node["result"]["nodeId"] != 0:
+        # 旧形式をインポートする。
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(legacy_path)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+            timeout=5,
+        )
+        legacy_pos = await cdp.evaluate(
+            "JSON.parse(localStorage.getItem('openrustbooks:position:sample.epub:legacy'))"
+        )
+        checker.check(
+            "旧形式をインポートすると位置が復元される",
+            legacy_pos is not None and legacy_pos.get("scrollTop") == 17,
+            f"(legacy={legacy_pos!r})",
+        )
+
+        # エクスポートして version: 1 が付くことを確認する。
+        legacy_dl = SAMPLE.parent / "legacy-downloads"
+        legacy_dl.mkdir(parents=True, exist_ok=True)
+        await cdp.send(
+            "Browser.setDownloadBehavior",
+            {"behavior": "allow", "downloadPath": str(legacy_dl), "eventsEnabled": True},
+        )
+        await cdp.evaluate("document.querySelector('#reader-export').click()")
+        exported_path = None
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            candidates = sorted(legacy_dl.glob("*.json"))
+            if candidates:
+                exported_path = candidates[0]
+                break
+            await asyncio.sleep(0.2)
+        checker.check("旧形式インポート後にエクスポートできる", exported_path is not None)
+        if exported_path is not None:
+            exported_payload = _json.loads(exported_path.read_text(encoding="utf-8"))
+            checker.check(
+                "旧形式由来のエクスポートに version: 1 が付く",
+                exported_payload.get("version") == 1
+                and "openrustbooks:position:sample.epub:legacy"
+                in exported_payload.get("positions", {}),
+            )
+            # そのファイルを再インポートしても位置が残る。
+            await cdp.evaluate("localStorage.clear()")
+            node = await cdp.send(
+                "DOM.querySelector",
+                {"nodeId": root_id_legacy, "selector": "#reader-import-file"},
+            )
+            if node["result"]["nodeId"] != 0:
+                await cdp.send(
+                    "DOM.setFileInputFiles",
+                    {
+                        "nodeId": node["result"]["nodeId"],
+                        "files": [str(exported_path)],
+                    },
+                )
+                await cdp.evaluate(
+                    "document.querySelector('#reader-import-file').dispatchEvent("
+                    "new Event('change', {bubbles: true}))"
+                )
+                await wait_until(
+                    cdp,
+                    "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                    timeout=5,
+                )
+                reimported = await cdp.evaluate(
+                    "JSON.parse(localStorage.getItem('openrustbooks:position:sample.epub:legacy'))"
+                )
+                checker.check(
+                    "旧形式由来のエクスポートを再インポートできる",
+                    reimported is not None and reimported.get("scrollTop") == 17,
+                    f"(reimported={reimported!r})",
+                )
+        shutil.rmtree(legacy_dl, ignore_errors=True)
+
     return finish(checker)
 
 
