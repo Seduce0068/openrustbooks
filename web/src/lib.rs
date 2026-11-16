@@ -236,15 +236,15 @@ fn scroll_to_fragment(fragment: &str) {
     let Some(element) = document.get_element_by_id(fragment) else {
         return;
     };
-    // scrollIntoView はレイアウト未確定のときに効かないことがあるため、
-    // 強制リフローのうえで scrollTop を明示的に設定する。
-    if let Some(html_element) = element.dyn_ref::<web_sys::HtmlElement>() {
-        let _ = html_element.offset_height();
-        let target = html_element.offset_top();
-        if let Ok(Some(content)) = document.query_selector(".reader-content") {
-            content.set_scroll_top(target);
-            return;
-        }
+    // scrollIntoView / offsetTop はレイアウト未確定のときに 0 を返すことが
+    // あるため、getBoundingClientRect() で実座標を求めて scrollTop を設定する。
+    if let Ok(Some(content)) = document.query_selector(".reader-content") {
+        let content_rect = content.get_bounding_client_rect();
+        let target_rect = element.get_bounding_client_rect();
+        let current = content.scroll_top();
+        let target = current + (target_rect.top() - content_rect.top()) as i32;
+        content.set_scroll_top(target);
+        return;
     }
     element.scroll_into_view();
 }
@@ -391,7 +391,22 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         // フラグメント移動でも、画像のレイアウト確定前に scrollIntoView が
         // 走ると 0 のままになるため再試行する。
         let fragment_not_applied = ctx.fragment.is_some() && actual == 0;
-        if (ctx.fragment.is_none() && actual != wanted || fragment_not_applied) && attempt < 3 {
+        if ctx.fragment.is_some() && fragment_not_applied && attempt < 12 {
+            // 画像のレイアウトが確定する前に scrollTop を設定すると 0 のまま
+            // になるため、1 フレーム相当の間隔を空けて再試行する。
+            let next = ctx.clone();
+            let retry = Closure::once_into_js(move || {
+                apply_position_frame(next, attempt + 1, deadline);
+            });
+            if let Some(retry_window) = web_sys::window() {
+                let _ = retry_window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    retry.unchecked_ref(),
+                    16,
+                );
+            }
+            return;
+        }
+        if ctx.fragment.is_none() && actual != wanted && attempt < 3 {
             apply_position_frame(ctx.clone(), attempt + 1, deadline);
             return;
         }
