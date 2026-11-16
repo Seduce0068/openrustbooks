@@ -370,4 +370,22 @@ mod tests {
         let sanitized = sanitize_epub_html(r#"<img src="images\pic.png" alt="x">"#);
         assert!(sanitized.contains(r#"src="images\pic.png""#));
     }
+
+    #[test]
+    fn handles_deeply_nested_content_without_panicking() {
+        // 深い入れ子でもスタック消費で異常終了しないことを確認する。
+        let depth = 1000;
+        let mut html = String::new();
+        for _ in 0..depth {
+            html.push_str("<div>");
+        }
+        html.push_str(r#"<p onclick="alert(1)">deep</p>"#);
+        for _ in 0..depth {
+            html.push_str("</div>");
+        }
+        let sanitized = sanitize_epub_html(&html);
+        assert!(sanitized.contains("deep"));
+        assert!(!sanitized.contains("onclick"));
+        assert!(!sanitized.contains("script"));
+    }
 }
