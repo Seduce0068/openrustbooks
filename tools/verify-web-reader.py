@@ -1526,6 +1526,8 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("クリア前に履歴が 2 件以上", before_count >= 2, f"(count={before_count})")
 
     await cdp.evaluate("document.querySelector('#reader-history-clear').click()")
+    await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('#reader-delete-confirm').click()")
     await asyncio.sleep(0.5)
     after_count = await cdp.evaluate(
         "document.querySelectorAll('#reader-history option').length"
@@ -1687,6 +1689,8 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("削除前に履歴が 2 件以上", before_delete >= 2, f"(count={before_delete})")
 
     await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+    await asyncio.sleep(0.3)
+    await cdp.evaluate("document.querySelector('#reader-delete-confirm').click()")
     await asyncio.sleep(0.5)
     after_delete = await cdp.evaluate(
         "document.querySelectorAll('#reader-history option').length"
@@ -1709,6 +1713,8 @@ async def run_checks(cdp: Cdp) -> int:
         if count <= 1:
             break
         await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+        await asyncio.sleep(0.2)
+        await cdp.evaluate("document.querySelector('#reader-delete-confirm').click()")
         await asyncio.sleep(0.3)
     final_count = await cdp.evaluate(
         "document.querySelectorAll('#reader-history option').length"
@@ -1718,6 +1724,50 @@ async def run_checks(cdp: Cdp) -> int:
         "document.querySelector('#reader-history-delete')?.disabled"
     )
     checker.check("履歴が 1 件のとき削除ボタンが disabled になる", delete_disabled is True)
+
+    # 削除確認ダイアログ：キャンセルでは何も消えない。
+    # 履歴を 3 件にする。
+    await select_chapter(cdp, 1)
+    await asyncio.sleep(0.5)
+    await select_chapter(cdp, 0)
+    await asyncio.sleep(0.5)
+    before_cancel = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+    await asyncio.sleep(0.3)
+    dialog_open = await cdp.evaluate(
+        "document.querySelector('#reader-delete-dialog')?.open === true"
+    )
+    checker.check("削除ボタンで確認ダイアログが開く", dialog_open is True)
+    await cdp.evaluate(
+        "Array.from(document.querySelectorAll('#reader-delete-dialog button'))"
+        ".find((b) => b.textContent.includes('Cancel')).click()"
+    )
+    await asyncio.sleep(0.3)
+    after_cancel = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check(
+        "キャンセルすると履歴件数が変わらない",
+        after_cancel == before_cancel,
+        f"(before={before_cancel}, after={after_cancel})",
+    )
+
+    # 確認ボタンで削除が実行される（個別削除テストで確認済みだが、
+    # ダイアログ経由であることを明示的に確認する）。
+    await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+    await asyncio.sleep(0.2)
+    await cdp.evaluate("document.querySelector('#reader-delete-confirm').click()")
+    await asyncio.sleep(0.4)
+    after_confirm = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check(
+        "確認ダイアログで削除が実行される",
+        after_confirm == before_cancel - 1,
+        f"(before={before_cancel}, after={after_confirm})",
+    )
 
     # エクスポート形式のバージョニング。
     # version: 1 は取り込める。
