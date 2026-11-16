@@ -59,6 +59,18 @@ CH1 = """<?xml version="1.0" encoding="utf-8"?>
 
 FILLER = "\n".join(f"<p>filler paragraph {i}</p>" for i in range(40))
 
+EVIL_SVG = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="20" height="20" onload="window.__pwned = 1">
+<script>window.__pwned = 1;</script>
+<rect width="20" height="20" fill="red"/>
+<foreignObject><div onclick="window.__pwned = 1">x</div></foreignObject>
+<image xlink:href="java&#10;script:window.__pwned = 1" width="1" height="1"/>
+<set attributeName="onload" to="window.__pwned = 1" begin="0s"/>
+<animate attributeName="href" values="javascript:window.__pwned = 1" begin="0s"/>
+</svg>
+"""
+
 CH2 = f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
@@ -68,6 +80,7 @@ CH2 = f"""<?xml version="1.0" encoding="utf-8"?>
 <p>Second chapter text.</p>
 {FILLER}
 <img id="tall" src="images/tall.png" alt="tall"/>
+<img id="evil-svg" src="images/evil.svg" alt="evil svg"/>
 <h2 id="part">Part Two</h2>
 <p>Part two text.</p>
 <p><a id="back" href="ch1.xhtml">Back to chapter one</a></p>
@@ -186,6 +199,7 @@ def build_sample() -> None:
         z.writestr(
             "OEBPS/images/tall.png", tall_png(), compress_type=zipfile.ZIP_DEFLATED
         )
+        z.writestr("OEBPS/images/evil.svg", EVIL_SVG, compress_type=zipfile.ZIP_DEFLATED)
 
 
 class SpaHandler(SimpleHTTPRequestHandler):
@@ -1942,6 +1956,47 @@ async def run_checks(cdp: Cdp) -> int:
         has_time,
         f"(labels={labels!r})",
     )
+
+    # SVG Blob URL のサニタイズ。スクリプトを含む SVG を開いた章で確認する。
+    # 直前のテストで ch1 にいるため ch2 へ移動する。
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('#evil-svg')?.src.startsWith('blob:') === true",
+        timeout=5,
+    )
+    svg_src = await cdp.evaluate("document.querySelector('#evil-svg')?.src")
+    svg_text = await cdp.evaluate(
+        "fetch(document.querySelector('#evil-svg').src).then((r) => r.text())"
+    )
+    checker.check("SVG が Blob URL で表示される", str(svg_src or "").startswith("blob:"))
+    lowered = str(svg_text or "").lower()
+    checker.check(
+        "SVG から script が除去される",
+        "<script" not in lowered,
+        f"(svg={str(svg_text)[:120]!r})",
+    )
+    checker.check(
+        "SVG から on* 属性が除去される",
+        "onload=" not in lowered and "onclick=" not in lowered,
+        f"(svg={str(svg_text)[:120]!r})",
+    )
+    checker.check(
+        "SVG から foreignObject が除去される",
+        "foreignobject" not in lowered,
+        f"(svg={str(svg_text)[:120]!r})",
+    )
+    checker.check(
+        "SVG から javascript: リンクが除去される",
+        "javascript:" not in lowered and "script:" not in lowered.replace("\n", ""),
+        f"(svg={str(svg_text)[:120]!r})",
+    )
+    checker.check(
+        "SVG から SMIL 属性書き換えが除去される",
+        "<set" not in lowered and "<animate" not in lowered,
+        f"(svg={str(svg_text)[:120]!r})",
+    )
+    pwned = await cdp.evaluate("window.__pwned === 1")
+    checker.check("SVG のスクリプトが実行されない", pwned is False)
 
     return finish(checker)
 
