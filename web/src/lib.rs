@@ -366,6 +366,11 @@ fn apply_position_after_render(ctx: PositionApplyCtx) {
 
 #[cfg(target_arch = "wasm32")]
 fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
+    // より新しい章の描画が始まっていたら、画像待ちループに入る前にも
+    // 破棄する（古い描画のループが無駄に回り続けるのを防ぐ）。
+    if ctx.generation != ctx.current_generation.get() {
+        return;
+    }
     let Some(window) = web_sys::window() else {
         return;
     };
