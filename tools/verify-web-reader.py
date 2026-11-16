@@ -68,6 +68,9 @@ EVIL_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <image xlink:href="java&#10;script:window.__pwned = 1" width="1" height="1"/>
 <set attributeName="onload" to="window.__pwned = 1" begin="0s"/>
 <animate attributeName="href" values="javascript:window.__pwned = 1" begin="0s"/>
+<use xlink:href="https://attacker.example/track.svg#x" width="1" height="1"/>
+<image href="data:image/png;base64,AAAA" width="1" height="1"/>
+<image href="images/pic.png" width="1" height="1"/>
 </svg>
 """
 
@@ -1994,6 +1997,16 @@ async def run_checks(cdp: Cdp) -> int:
         "SVG から SMIL 属性書き換えが除去される",
         "<set" not in lowered and "<animate" not in lowered,
         f"(svg={str(svg_text)[:120]!r})",
+    )
+    checker.check(
+        "SVG から外部スキーム参照が除去される",
+        "attacker.example" not in lowered and "data:image" not in lowered,
+        f"(svg={str(svg_text)[:200]!r})",
+    )
+    checker.check(
+        "SVG の相対参照は維持される",
+        "images/pic.png" in str(svg_text),
+        f"(svg={str(svg_text)[:200]!r})",
     )
     pwned = await cdp.evaluate("window.__pwned === 1")
     checker.check("SVG のスクリプトが実行されない", pwned is False)
