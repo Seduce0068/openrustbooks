@@ -2487,6 +2487,68 @@ async def run_checks(cdp: Cdp) -> int:
             f"(status={warning!r})",
         )
 
+    # 既存サンプル（remote-resources 宣言なし）では警告が出ない。
+    await cdp.evaluate("localStorage.clear()")
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(1.0)
+    no_remote_warning = await cdp.evaluate(
+        "(() => { const s = document.querySelector('.reader-status')?.textContent || '';"
+        " return !s.includes('remote resources'); })()"
+    )
+    checker.check("宣言なしでは remote-resources 警告が出ない", no_remote_warning is True)
+
+    # remote-resources を宣言する EPUB を生成して開く。
+    remote_opf = OPF.replace('properties="nav"', 'properties="nav remote-resources"')
+    remote_epub = SAMPLE.parent / "remote.epub"
+    with zipfile.ZipFile(remote_epub, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                   compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", remote_opf, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/nav.xhtml", NAV, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch2.xhtml", CH2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/tall.png", tall_png(), compress_type=zipfile.ZIP_DEFLATED)
+
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id_remote = document["result"]["root"]["nodeId"]
+    node = await cdp.send(
+        "DOM.querySelector", {"nodeId": root_id_remote, "selector": "#epub-file"}
+    )
+    if node["result"]["nodeId"] != 0:
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(remote_epub)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#epub-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+        remote_warned = await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('remote resources')",
+            timeout=5,
+        )
+        remote_status = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent || ''"
+        )
+        checker.check(
+            "remote-resources 宣言で警告が出る",
+            remote_warned is True,
+            f"(status={remote_status!r})",
+        )
+
     return finish(checker)
 
 
