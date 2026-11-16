@@ -1713,6 +1713,87 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("履歴が 1 件のとき削除ボタンが disabled になる", delete_disabled is True)
 
+    # エクスポート形式のバージョニング。
+    # version: 1 は取り込める。
+    await cdp.evaluate("localStorage.removeItem('openrustbooks:position:version-test')")
+    version_payload = {
+        "version": 1,
+        "positions": {
+            "openrustbooks:position:version-test": {
+                "chapterIndex": 0,
+                "fragment": None,
+                "scrollTop": 77,
+                "savedAt": 1000,
+            }
+        },
+        "settings": {"fontScale": 1, "lineHeight": 2, "dark": False},
+        "history": {},
+    }
+    version_path = SAMPLE.parent / "version-1.json"
+    version_path.write_text(_json.dumps(version_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send(
+        "DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"}
+    )
+    if node["result"]["nodeId"] != 0:
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(version_path)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+            timeout=5,
+        )
+        imported_v1 = await cdp.evaluate(
+            "JSON.parse(localStorage.getItem('openrustbooks:position:version-test'))"
+        )
+        checker.check(
+            "version: 1 の JSON がインポートできる",
+            imported_v1 is not None and imported_v1.get("scrollTop") == 77,
+            f"(imported={imported_v1!r})",
+        )
+
+    # 未知のバージョンは拒否され、既存データが壊れない。
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:position:version-test',"
+        " JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 999, savedAt: 9999}))"
+    )
+    unknown_payload = {"version": 999, "positions": {}, "settings": {}, "history": {}}
+    unknown_path = SAMPLE.parent / "version-unknown.json"
+    unknown_path.write_text(_json.dumps(unknown_payload), encoding="utf-8")
+    node = await cdp.send(
+        "DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"}
+    )
+    if node["result"]["nodeId"] != 0:
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(unknown_path)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('Unsupported')",
+            timeout=5,
+        )
+        kept_v1 = await cdp.evaluate(
+            "JSON.parse(localStorage.getItem('openrustbooks:position:version-test'))"
+        )
+        checker.check(
+            "未知のバージョンは拒否され既存データが壊れない",
+            kept_v1 is not None and kept_v1.get("scrollTop") == 999,
+            f"(kept={kept_v1!r})",
+        )
+        await cdp.evaluate("localStorage.removeItem('openrustbooks:position:version-test')")
+
     return finish(checker)
 
 
