@@ -435,6 +435,18 @@ fn sanitize_svg_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
         .ok()?;
     let root = document.document_element()?;
 
+    // XML 処理命令（<?xml-stylesheet?> 等）を削除する。Blob URL を直接
+    // 開いたときの外部 CSS 読み込みによる情報漏洩を防ぐ。
+    let children = document.child_nodes();
+    for index in 0..children.length() {
+        let Some(node) = children.get(index) else {
+            continue;
+        };
+        if node.node_type() == web_sys::Node::PROCESSING_INSTRUCTION_NODE {
+            let _ = document.remove_child(&node);
+        }
+    }
+
     // スクリプト要素・foreignObject・SMIL を削除する。foreignObject は HTML の
     // スクリプトを混入でき、SMIL は後から属性を書き換えられる。画像としては
     // 不要なので丸ごと落とす。
