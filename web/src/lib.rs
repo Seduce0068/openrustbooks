@@ -1570,42 +1570,52 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         })
     };
 
-    // 章を移動し、履歴に積む。
-    let navigate_to: Rc<dyn Fn(usize, Option<String>)> = {
+    // 現在位置を記録して移動先を履歴に積む（再描画は呼び出し側が行う）。
+    let push_history_entry = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
-        let render_chapter = Rc::clone(&render_chapter);
         let history_key_state = Rc::clone(&history_key_state);
-        Rc::new(move |index, fragment| {
-            let current_index = history_index.get();
-            {
-                let mut entries = history.borrow_mut();
-                // 移動前の位置を現在エントリへ記録する。
-                if let Some(entry) = entries.get_mut(current_index)
-                    && entry.chapter_index == current.get()
+        Rc::new(
+            move |index: usize, fragment: Option<String>, scroll_top: i32| {
+                let current_index = history_index.get();
                 {
-                    entry.fragment = None;
-                    entry.scroll_top = content_scroll_top();
+                    let mut entries = history.borrow_mut();
+                    // 移動前の位置を現在エントリへ記録する。
+                    if let Some(entry) = entries.get_mut(current_index)
+                        && entry.chapter_index == current.get()
+                    {
+                        entry.fragment = None;
+                        entry.scroll_top = content_scroll_top();
+                    }
+                    // 戻った後に新しい移動をしたら、進む方向は捨てる。
+                    entries.truncate(current_index + 1);
+                    entries.push(HistoryEntry {
+                        chapter_index: index,
+                        fragment,
+                        scroll_top,
+                        saved_at: now_millis(),
+                    });
+                    if entries.len() > HISTORY_LIMIT {
+                        let overflow = entries.len() - HISTORY_LIMIT;
+                        entries.drain(0..overflow);
+                    }
+                    history_index.set(entries.len() - 1);
                 }
-                // 戻った後に新しい移動をしたら、進む方向は捨てる。
-                entries.truncate(current_index + 1);
-                entries.push(HistoryEntry {
-                    chapter_index: index,
-                    fragment: fragment.clone(),
-                    scroll_top: 0,
-                    saved_at: now_millis(),
-                });
-                if entries.len() > HISTORY_LIMIT {
-                    let overflow = entries.len() - HISTORY_LIMIT;
-                    entries.drain(0..overflow);
+                sync_history();
+                if let Some(key) = history_key_state.borrow().as_ref() {
+                    save_history(key, &history.borrow(), history_index.get());
                 }
-                history_index.set(entries.len() - 1);
-            }
-            sync_history();
-            if let Some(key) = history_key_state.borrow().as_ref() {
-                save_history(key, &history.borrow(), history_index.get());
-            }
+            },
+        )
+    };
+
+    // 章を移動し、履歴に積む。
+    let navigate_to: Rc<dyn Fn(usize, Option<String>)> = {
+        let push_history_entry = Rc::clone(&push_history_entry);
+        let render_chapter = Rc::clone(&render_chapter);
+        Rc::new(move |index, fragment| {
+            push_history_entry(index, fragment.clone(), 0);
             render_chapter(index, fragment, None);
         })
     };
@@ -2147,6 +2157,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_content_click = {
         let book = Rc::clone(&book);
         let navigate_to = Rc::clone(&navigate_to);
+        let push_history_entry = Rc::clone(&push_history_entry);
+        let current_fragment = Rc::clone(&current_fragment);
+        let history = Rc::clone(&history);
         let position_key = Rc::clone(&position_key_state);
         move |event: web_sys::MouseEvent| {
             let Some(target) = event
@@ -2163,7 +2176,16 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             };
             event.prevent_default();
             if let Some(fragment) = href.strip_prefix('#') {
+                // 同じフラグメントへの再移動なら履歴を増やさない。
+                if current_fragment.borrow().as_deref() != Some(fragment) {
+                    push_history_entry(current.get(), Some(fragment.to_string()), 0);
+                    *current_fragment.borrow_mut() = Some(fragment.to_string());
+                }
                 scroll_to_fragment(fragment);
+                // スクロール後の実位置を新しい履歴エントリへ反映する。
+                if let Some(entry) = history.borrow_mut().last_mut() {
+                    entry.scroll_top = content_scroll_top();
+                }
                 if let Some(key) = position_key.borrow().as_ref() {
                     save_position(
                         key,
