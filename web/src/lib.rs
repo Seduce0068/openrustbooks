@@ -1444,6 +1444,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
     let (cover_url, set_cover_url) = signal(None::<String>);
+    // 本文の言語（EPUB の metadata.language）。スクリーンリーダーの発音用。
+    let (content_lang, set_content_lang) = signal(None::<String>);
     let initial_settings = load_settings();
     let (font_scale, set_font_scale) = signal(initial_settings.font_scale);
     let (line_height, set_line_height) = signal(initial_settings.line_height);
@@ -1855,6 +1857,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 let _ = web_sys::Url::revoke_object_url(&url);
             }
             set_cover_url.set(None);
+            set_content_lang.set(None);
 
             let book = Rc::clone(&book);
             let cover_url_state = Rc::clone(&cover_url_state);
@@ -1931,6 +1934,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
                     .unwrap_or_default();
 
+                let language = opened.language();
                 let cover = opened
                     .cover_image()
                     .ok()
@@ -1989,6 +1993,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 sync_history();
 
                 *book.borrow_mut() = Some(opened);
+                set_content_lang.set(language);
                 set_chapters.set(options);
                 set_chapter_hrefs.set(hrefs);
                 set_landmarks.set(landmarks.clone());
@@ -2655,7 +2660,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     </aside>
                 </Show>
                 <div class="reader-content" role="region" aria-label="Chapter content" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
-                    <div class="document-content reader-html" inner_html=move || content.get()></div>
+                    <div class="document-content reader-html" inner_html=move || content.get() lang=move || content_lang.get()></div>
                 </div>
             </div>
         </div>

@@ -126,6 +126,11 @@ impl WasmEpubBook {
         serialize_navigation(entries)
     }
 
+    /// EPUB の言語（例: `ja`, `en`）。不明なら `undefined`。
+    pub fn language(&self) -> Option<String> {
+        self.inner.metadata().language.clone()
+    }
+
     /// 表紙画像の情報を JavaScript 値に変換して返す。無ければ空値。
     pub fn cover_image(&self) -> Result<JsValue, JsValue> {
         let cover = self.inner.cover_image().map_err(js_error)?;
