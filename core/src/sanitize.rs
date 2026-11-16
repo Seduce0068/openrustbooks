@@ -388,4 +388,20 @@ mod tests {
         assert!(!sanitized.contains("onclick"));
         assert!(!sanitized.contains("script"));
     }
+
+    #[test]
+    fn handles_10k_nesting_depth() {
+        // さらに深い入れ子でも異常終了しないことを確認する（約 5 秒）。
+        let depth = 10_000;
+        let mut html = String::new();
+        for _ in 0..depth {
+            html.push_str("<div>");
+        }
+        html.push_str("<p>very deep</p>");
+        for _ in 0..depth {
+            html.push_str("</div>");
+        }
+        let sanitized = sanitize_epub_html(&html);
+        assert!(sanitized.contains("very deep"));
+    }
 }
