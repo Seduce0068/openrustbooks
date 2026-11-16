@@ -1772,6 +1772,31 @@ async def run_checks(cdp: Cdp) -> int:
         f"(before={before_cancel}, after={after_cancel})",
     )
 
+    # Esc でもキャンセルとして扱われ、履歴は変わらない。
+    await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+    await asyncio.sleep(0.2)
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyDown", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27},
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyUp", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27},
+    )
+    await asyncio.sleep(0.3)
+    dialog_closed = await cdp.evaluate(
+        "document.querySelector('#reader-delete-dialog')?.open === false"
+    )
+    checker.check("Esc で確認ダイアログが閉じる", dialog_closed is True)
+    after_esc = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check(
+        "Esc では履歴件数が変わらない",
+        after_esc == before_cancel,
+        f"(before={before_cancel}, after={after_esc})",
+    )
+
     # 確認ボタンで削除が実行される（個別削除テストで確認済みだが、
     # ダイアログ経由であることを明示的に確認する）。
     await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
