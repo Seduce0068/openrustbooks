@@ -543,6 +543,23 @@ fn now_millis() -> f64 {
     js_sys::Date::now()
 }
 
+/// 保存時刻をローカルタイムの `YYYY-MM-DD HH:MM` に整形する。
+/// `saved_at` が 0（旧データ）の場合は空文字を返す。
+#[cfg(target_arch = "wasm32")]
+fn format_saved_at(saved_at: f64) -> String {
+    if saved_at <= 0.0 {
+        return String::new();
+    }
+    let date = js_sys::Date::new(&JsValue::from_f64(saved_at));
+    let pad = |value: u32| -> String { format!("{value:02}") };
+    let year = date.get_full_year();
+    let month = pad(date.get_month() + 1);
+    let day = pad(date.get_date());
+    let hour = pad(date.get_hours());
+    let minute = pad(date.get_minutes());
+    format!("{year:04}-{month}-{day} {hour}:{minute}")
+}
+
 /// `openrustbooks:position:` のキーと保存時刻（Unix ミリ秒）を列挙する。
 #[cfg(target_arch = "wasm32")]
 fn list_positions(storage: &web_sys::Storage) -> Vec<(String, f64)> {
@@ -1101,6 +1118,9 @@ struct SavedHistoryEntry {
     fragment: Option<String>,
     #[serde(rename = "scrollTop", default)]
     scroll_top: i32,
+    /// 旧データは 0 として読む（後方互換）。
+    #[serde(rename = "savedAt", default)]
+    saved_at: f64,
 }
 
 /// 履歴全体を JSON に変換するための構造体。
@@ -1160,6 +1180,7 @@ fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
                 chapter_index: entry.chapter_index,
                 fragment: entry.fragment.clone(),
                 scroll_top: entry.scroll_top,
+                saved_at: entry.saved_at,
             })
             .collect(),
         index,
@@ -1176,6 +1197,8 @@ struct HistoryEntry {
     chapter_index: usize,
     fragment: Option<String>,
     scroll_top: i32,
+    /// その位置を訪れた時刻（エポックミリ秒）。
+    saved_at: f64,
 }
 
 /// Reader component
@@ -1236,9 +1259,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (history_state, set_history_state) = signal((0_usize, 0_usize));
     // 確認ダイアログの対象。"entry" / "clear" / ""（閉じている）。
     let (delete_target, set_delete_target) = signal(String::new());
-    // 履歴一覧の UI 用。(履歴インデックス, 章インデックス, フラグメント)。
+    // 履歴一覧の UI 用。(履歴インデックス, 章インデックス, フラグメント, 保存時刻)。
     let (history_entries, set_history_entries) =
-        signal(Vec::<(usize, usize, Option<String>)>::new());
+        signal(Vec::<(usize, usize, Option<String>, f64)>::new());
     let can_back = Memo::new(move |_| history_state.get().1 > 0);
     let can_forward = Memo::new(move |_| {
         let (len, index) = history_state.get();
@@ -1372,11 +1395,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let history_index = Rc::clone(&history_index);
         Rc::new(move || {
             set_history_state.set((history.borrow().len(), history_index.get()));
-            let entries: Vec<(usize, usize, Option<String>)> = history
+            let entries: Vec<(usize, usize, Option<String>, f64)> = history
                 .borrow()
                 .iter()
                 .enumerate()
-                .map(|(index, entry)| (index, entry.chapter_index, entry.fragment.clone()))
+                .map(|(index, entry)| {
+                    (
+                        index,
+                        entry.chapter_index,
+                        entry.fragment.clone(),
+                        entry.saved_at,
+                    )
+                })
                 .collect();
             set_history_entries.set(entries);
         })
@@ -1406,6 +1436,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     chapter_index: index,
                     fragment: fragment.clone(),
                     scroll_top: 0,
+                    saved_at: now_millis(),
                 });
                 if entries.len() > HISTORY_LIMIT {
                     let overflow = entries.len() - HISTORY_LIMIT;
@@ -1510,6 +1541,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 chapter_index: current.get(),
                 fragment: current_fragment.borrow().clone(),
                 scroll_top: content_scroll_top(),
+                saved_at: now_millis(),
             };
             *history.borrow_mut() = vec![entry];
             history_index.set(0);
@@ -1749,6 +1781,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                                     chapter_index: entry.chapter_index,
                                     fragment: entry.fragment,
                                     scroll_top: entry.scroll_top,
+                                    saved_at: entry.saved_at,
                                 })
                                 .collect::<Vec<_>>(),
                             saved.index,
@@ -1761,6 +1794,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             chapter_index: start_index,
                             fragment: start_fragment.clone(),
                             scroll_top: start_scroll,
+                            saved_at: now_millis(),
                         }],
                         0,
                     )
@@ -2327,8 +2361,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <select id="reader-history" class="reader-chapter-select" aria-label="History" on:change=on_history_select prop:disabled=move || history_state.get().0 <= 1>
                     <For
                         each=move || history_entries.get()
-                        key=|(index, chapter_index, fragment)| (*index, *chapter_index, fragment.clone())
-                        children=move |(index, chapter_index, fragment)| {
+                        key=|(index, chapter_index, fragment, _)| (*index, *chapter_index, fragment.clone())
+                        children=move |(index, chapter_index, fragment, saved_at)| {
                             let label = chapters
                                 .get()
                                 .get(chapter_index)
@@ -2337,6 +2371,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             let label = match fragment {
                                 Some(fragment) => format!("{label}#{fragment}"),
                                 None => label,
+                            };
+                            // 旧データ（savedAt=0）は日時を省略する。
+                            let time = format_saved_at(saved_at);
+                            let label = if time.is_empty() {
+                                label
+                            } else {
+                                format!("{label} — {time}")
                             };
                             view! {
                                 <option value=index.to_string() prop:selected=move || history_state.get().1 == index>
