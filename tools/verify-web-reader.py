@@ -1917,6 +1917,32 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("強制カラーモードでも章移動ができる", moved)
     await cdp.send("Emulation.setEmulatedMedia", {"features": []})
 
+    # 履歴サマリーの日時表示。章移動したエントリに日時が入る。
+    await open_sample(cdp)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(0.5)
+    await select_chapter(cdp, 1)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Second chapter text.')",
+        timeout=5,
+    )
+    await asyncio.sleep(0.5)
+    labels = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('#reader-history option')).map((o) => o.textContent)"
+    )
+    import re as _re
+    has_time = any(
+        _re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", str(label)) for label in labels
+    )
+    checker.check(
+        "履歴一覧のラベルに保存日時が表示される",
+        has_time,
+        f"(labels={labels!r})",
+    )
+
     return finish(checker)
 
 
