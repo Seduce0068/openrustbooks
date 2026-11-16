@@ -911,6 +911,10 @@ fn export_positions() -> usize {
 
     let mut root = serde_json::Map::new();
     root.insert(
+        "version".to_string(),
+        serde_json::Value::from(EXPORT_VERSION),
+    );
+    root.insert(
         "positions".to_string(),
         serde_json::Value::Object(positions),
     );
@@ -967,6 +971,13 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
     let serde_json::Value::Object(map) = value else {
         return Err("JSON はオブジェクトである必要があります".to_string());
     };
+    // 未知のバージョンは何も取り込まず拒否する（fail-closed）。
+    // version が無い旧形式はそのまま受け付ける。
+    if let Some(version) = map.get("version")
+        && version.as_u64() != Some(EXPORT_VERSION as u64)
+    {
+        return Err(format!("Unsupported export version: {version}."));
+    }
     let Some(window) = web_sys::window() else {
         return Err("window が取得できません".to_string());
     };
@@ -1072,6 +1083,10 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
 /// 履歴を保存する localStorage のキーの接頭辞。
 #[cfg(target_arch = "wasm32")]
 const HISTORY_KEY_PREFIX: &str = "openrustbooks:history:";
+
+/// エクスポート JSON の形式バージョン。未知のバージョンは受け付けない。
+#[cfg(target_arch = "wasm32")]
+const EXPORT_VERSION: u32 = 1;
 
 /// 履歴の 1 エントリを JSON に変換するための構造体。
 #[cfg(target_arch = "wasm32")]
