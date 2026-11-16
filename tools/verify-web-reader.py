@@ -2418,6 +2418,75 @@ async def run_checks(cdp: Cdp) -> int:
                 )
         shutil.rmtree(legacy_dl, ignore_errors=True)
 
+    # 閾値ちょうどの画像では警告が出ない（既存サンプル 4000px）。
+    await cdp.evaluate("localStorage.clear()")
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(1.0)
+    no_warning = await cdp.evaluate(
+        "(() => { const s = document.querySelector('.reader-status')?.textContent || '';"
+        " return !s.includes('Large image detected'); })()"
+    )
+    checker.check("4000px の画像では警告が出ない", no_warning is True)
+
+    # 閾値超えの画像を持つ EPUB を生成して開く。
+    big_ch2 = CH2.replace(
+        '<img id="tall" src="images/tall.png" alt="tall"/>',
+        '<img id="huge" src="images/huge.png" alt="huge"/>',
+    )
+    big_epub = SAMPLE.parent / "huge.epub"
+    with zipfile.ZipFile(big_epub, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                   compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", OPF, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/nav.xhtml", NAV, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch2.xhtml", big_ch2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/huge.png", tall_png(10, 5000), compress_type=zipfile.ZIP_DEFLATED)
+
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id_big = document["result"]["root"]["nodeId"]
+    node = await cdp.send(
+        "DOM.querySelector", {"nodeId": root_id_big, "selector": "#epub-file"}
+    )
+    if node["result"]["nodeId"] != 0:
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(big_epub)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#epub-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+        await select_chapter(cdp, 1)
+        await wait_until(
+            cdp, "document.querySelector('#huge')?.naturalHeight === 5000", timeout=10
+        )
+        warned = await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('Large image detected')",
+            timeout=5,
+        )
+        warning = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent || ''"
+        )
+        checker.check(
+            "5000px の画像で警告が出る",
+            warned is True,
+            f"(status={warning!r})",
+        )
+
     return finish(checker)
 
 
