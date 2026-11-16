@@ -542,10 +542,8 @@ pub struct WasmConfig {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmConfig {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
+impl Default for WasmConfig {
+    fn default() -> Self {
         Self {
             ai_enabled: true,
             ai_provider: "openai".to_string(),
@@ -553,6 +551,15 @@ impl WasmConfig {
             lint_enabled: true,
             auto_fix: true,
         }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl WasmConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     #[wasm_bindgen(getter)]

@@ -503,6 +503,10 @@ const POSITION_MIN_KEEP: usize = 10;
 #[cfg(target_arch = "wasm32")]
 type SharedPositionKey = std::rc::Rc<std::cell::RefCell<Option<String>>>;
 
+/// 章を描画するコールバックの型。(章インデックス, フラグメント, スクロール位置)。
+#[cfg(target_arch = "wasm32")]
+type RenderChapter = std::rc::Rc<dyn Fn(usize, Option<String>, Option<i32>)>;
+
 /// localStorage に保存する読書位置。
 #[cfg(target_arch = "wasm32")]
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -788,9 +792,10 @@ fn load_settings() -> ReaderSettings {
     let Ok(Some(raw)) = storage.get_item(SETTINGS_KEY) else {
         // 設定キーが無い初回起動に限り、OS がダークなら追従を有効にする。
         // 設定キーが存在する場合は後方互換のためデフォルトのまま。
-        let mut settings = ReaderSettings::default();
-        settings.follow_system = system_prefers_dark();
-        return settings;
+        return ReaderSettings {
+            follow_system: system_prefers_dark(),
+            ..ReaderSettings::default()
+        };
     };
     serde_json::from_str::<ReaderSettings>(&raw)
         .map(ReaderSettings::normalized)
@@ -1043,7 +1048,7 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
         {
             continue;
         }
-        if storage.set_item(&key, &text).is_ok() {
+        if storage.set_item(key, &text).is_ok() {
             imported += 1;
         }
     }
@@ -1302,7 +1307,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     if let Some(window) = web_sys::window()
         && let Ok(Some(mq)) = window.match_media("(prefers-color-scheme: dark)")
     {
-        let set_system_dark = set_system_dark;
         let callback = Closure::wrap(Box::new(move |_event: web_sys::Event| {
             set_system_dark.set(system_prefers_dark());
         }) as Box<dyn FnMut(web_sys::Event)>);
@@ -1316,7 +1320,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let applying_position = Rc::new(Cell::new(false));
     // 位置適用の完了時刻。適用直後のスクロール保存を抑制する。
     let last_apply_time = Rc::new(Cell::new(0.0_f64));
-    let render_chapter: Rc<dyn Fn(usize, Option<String>, Option<i32>)> = {
+    let render_chapter: RenderChapter = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
         let position_key = Rc::clone(&position_key_state);
@@ -1593,11 +1597,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         }
     };
     let on_history_clear = {
-        let open = open_delete_dialog.clone();
+        let open = open_delete_dialog;
         move |_: web_sys::MouseEvent| open("clear")
     };
     let on_history_delete = {
-        let open = open_delete_dialog.clone();
+        let open = open_delete_dialog;
         move |_: web_sys::MouseEvent| open("entry")
     };
     let on_confirm_delete = {
