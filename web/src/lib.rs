@@ -1499,6 +1499,38 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         }
     };
 
+    let on_history_delete = {
+        let history = Rc::clone(&history);
+        let history_index = Rc::clone(&history_index);
+        let sync_history = Rc::clone(&sync_history);
+        let history_key_state = Rc::clone(&history_key_state);
+        move |_| {
+            let mut entries = history.borrow_mut();
+            if entries.len() <= 1 {
+                return;
+            }
+            let index = history_index.get();
+            if index >= entries.len() {
+                return;
+            }
+            entries.remove(index);
+            // 削除した位置に次のエントリが繰り上がる。最後を消した場合は
+            // 1 つ前へ戻す。
+            let next_index = if index >= entries.len() {
+                entries.len() - 1
+            } else {
+                index
+            };
+            history_index.set(next_index);
+            let raw = entries.clone();
+            drop(entries);
+            sync_history();
+            if let Some(key) = history_key_state.borrow().as_ref() {
+                save_history(key, &raw, next_index);
+            }
+        }
+    };
+
     let on_file_change = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
@@ -2277,6 +2309,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
+                <button id="reader-history-delete" class="btn" aria-label="Delete history entry" title="Delete the selected history entry" on:click=on_history_delete disabled=move || history_state.get().0 <= 1>"Delete"</button>
                 <button id="reader-history-clear" class="btn" aria-label="Clear history" title="Clear navigation history" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"Clear"</button>
                 <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="Page" placeholder="Page" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
                 <button id="reader-page-go" class="btn" aria-label="Go to page" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"Go"</button>
