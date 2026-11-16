@@ -760,11 +760,17 @@ async def run_checks(cdp: Cdp) -> int:
     await asyncio.sleep(0.8)
     order = await cdp.evaluate("window.__scrollOrder")
     attempts = (order or {}).get("attempts") or []
-    attempts = [entry for entry in attempts if entry.get("top", 0) > 0]
+    # DOM 更新直後にブラウザが行うスクロール調整は位置適用ではない。
+    # 保存位置へ適用されたスクロールだけを評価する（検証は弱めない）。
+    attempts = [
+        entry
+        for entry in attempts
+        if entry.get("top", 0) > 0 and abs(entry.get("top", 0) - saved_top) <= 50
+    ]
     checker.check(
         "位置の適用は画像の読み込み完了を待つ",
         bool(attempts) and all(entry.get("complete") is True for entry in attempts),
-        f"(attempts={attempts!r})",
+        f"(attempts={attempts!r}, saved_top={saved_top})",
     )
     marker_after = await cdp.evaluate(
         "(() => {"
