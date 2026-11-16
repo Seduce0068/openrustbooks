@@ -2261,6 +2261,44 @@ async def run_checks(cdp: Cdp) -> int:
         f"(text={label_text!r})",
     )
 
+    # 縦スクロール閾値の設定。
+    checker.check(
+        "縦スクロール閾値の入力が存在する",
+        await cdp.evaluate("document.querySelector('#reader-vertical-threshold') !== null"),
+    )
+    await cdp.evaluate(
+        "(() => {"
+        " const input = document.querySelector('#reader-vertical-threshold');"
+        " input.value = '60';"
+        " input.dispatchEvent(new Event('change', {bubbles: true}));"
+        " })()"
+    )
+    await asyncio.sleep(0.5)
+    saved_vertical = await cdp.evaluate(
+        "(() => { const s = JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}');"
+        " return s.verticalScrollThreshold; })()"
+    )
+    checker.check(
+        "縦スクロール閾値が設定に保存される",
+        saved_vertical == 60,
+        f"(verticalScrollThreshold={saved_vertical!r})",
+    )
+    await cdp.evaluate("localStorage.clear()")
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:settings',"
+        " JSON.stringify({verticalScrollThreshold: 999}))"
+    )
+    await reload_reader(cdp)
+    await asyncio.sleep(0.5)
+    clamped_vertical = await cdp.evaluate(
+        "document.querySelector('#reader-vertical-threshold')?.value"
+    )
+    checker.check(
+        "範囲外の縦スクロール閾値は 80 にクランプされる",
+        clamped_vertical == "80",
+        f"(value={clamped_vertical!r})",
+    )
+
     return finish(checker)
 
 
