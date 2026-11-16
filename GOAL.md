@@ -1,42 +1,36 @@
 # Goal
 
-タッチ操作の縦スクロール判定閾値を設定から変更できるようにする。
+ブラウザ標準のピンチズームがリーダーで阻害されていないことを確認し、ADR に記録する。
 
 ## Scope
 
 ### 背景
 
-ADR-0056 の未決定「縦スクロール判定閾値（30px）の設定化」。
-横スワイプ閾値は設定化済みだが、縦移動をスクロールとみなす 30px は
-ハードコードのままで、端末や利用者に合わせられない。
+ADR-0025 の未決定「ピンチズーム・ダブルタップなどのジェスチャー」。
+`index.html` の viewport は `width=device-width, initial-scale=1.0` で
+`user-scalable=no` は無く、`touch-action` の指定も無いため、ブラウザ標準の
+ピンチズームは有効なはず。これを確認して未決定を整理する。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`verticalScrollThreshold` の追加と使用）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0061-vertical-scroll-threshold.md`: 追加
+- `docs/decisions/0062-browser-pinch-zoom.md`: 追加
+- `tools/verify-web-reader.py`: 変更（設定確認の E2E 検証を追加）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 設定:
-   - `ReaderSettings` に `verticalScrollThreshold` を追加する。
-     既定値は 30、範囲は 10〜80px とし、範囲外は既定へ戻す。
-   - 既存の設定 JSON にキーが無い場合は既定値 30 として読む（後方互換）。
-   - 設定の保存・エクスポート・インポートに含まれる。
-2. 動作:
-   - 縦スクロール判定に設定値を使う（横スワイプ閾値は維持）。
-3. UI:
-   - ツールバーに数値入力（`<input id="reader-vertical-threshold">`）を置き、
-     変更すると保存・反映される。
-4. 既存の挙動を変えない:
-   - 既存の 124 テスト、E2E 176 項目を変えない。
+1. 確認:
+   - viewport メタタグに `user-scalable=no` / `maximum-scale=1` が無い。
+   - `.reader-content` に `touch-action: none` が指定されていない。
+2. 既存の挙動を変えない:
+   - プロダクションコードは変更しない（確認のみ）。
+   - 既存の 124 テスト、E2E 179 項目を変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - 縦スクロール閾値の入力が存在し、変更すると設定に保存される。
-  - 範囲外はクランプされる。
+  - viewport がズームを許可している。
+  - 本文領域の `touch-action` が `none` でない。
 
 ## Acceptance criteria
 
@@ -46,8 +40,5 @@ ADR-0056 の未決定「縦スクロール判定閾値（30px）の設定化」�
 ## Constraints
 
 - 新規依存を追加しない。
-- `desktop/` を変更しない。
-- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
-  使わない。`unsafe` を使わない。
-- コメントと doc コメントは日本語で簡潔に書く。
+- プロダクションコードを変更しない。
 - `master` へ push する。force push はしない。
