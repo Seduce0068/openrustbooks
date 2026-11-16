@@ -1669,6 +1669,50 @@ async def run_checks(cdp: Cdp) -> int:
         f"(attrs={lazy_attrs!r})",
     )
 
+    # 履歴エントリの個別削除。
+    await select_chapter(cdp, 0)
+    await wait_until(
+        cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    await asyncio.sleep(0.5)
+    before_delete = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("削除前に履歴が 2 件以上", before_delete >= 2, f"(count={before_delete})")
+
+    await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+    await asyncio.sleep(0.5)
+    after_delete = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check(
+        "個別削除で履歴が 1 件減る",
+        after_delete == before_delete - 1,
+        f"(before={before_delete}, after={after_delete})",
+    )
+    text_kept = await cdp.evaluate(
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
+    )
+    checker.check("個別削除後も表示中の章は変わらない", text_kept is True)
+
+    # 履歴が 1 件になるまで削除を繰り返し、disabled を確認する。
+    for _ in range(5):
+        count = await cdp.evaluate(
+            "document.querySelectorAll('#reader-history option').length"
+        )
+        if count <= 1:
+            break
+        await cdp.evaluate("document.querySelector('#reader-history-delete').click()")
+        await asyncio.sleep(0.3)
+    final_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-history option').length"
+    )
+    checker.check("履歴が 1 件まで減らせる", final_count == 1, f"(count={final_count})")
+    delete_disabled = await cdp.evaluate(
+        "document.querySelector('#reader-history-delete')?.disabled"
+    )
+    checker.check("履歴が 1 件のとき削除ボタンが disabled になる", delete_disabled is True)
+
     return finish(checker)
 
 
