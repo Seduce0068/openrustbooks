@@ -882,6 +882,14 @@ struct ReaderSettings {
     /// OS の prefers-color-scheme に追従するか。
     #[serde(rename = "followSystem", default)]
     follow_system: bool,
+    /// 章移動のスワイプ閾値（px）。既定 50、範囲 30〜120。
+    #[serde(rename = "swipeThreshold", default = "default_swipe_threshold")]
+    swipe_threshold: usize,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn default_swipe_threshold() -> usize {
+    50
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -902,6 +910,7 @@ impl Default for ReaderSettings {
             line_height: DEFAULT_LINE_HEIGHT,
             dark: false,
             follow_system: false,
+            swipe_threshold: 50,
         }
     }
 }
@@ -923,6 +932,7 @@ impl ReaderSettings {
             },
             dark: self.dark,
             follow_system: self.follow_system,
+            swipe_threshold: self.swipe_threshold.clamp(30, 120),
         }
     }
 }
@@ -1222,6 +1232,11 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
                 .get("followSystem")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            swipe_threshold: settings
+                .get("swipeThreshold")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or_else(|| load_settings().swipe_threshold),
         }
         .normalized();
         save_settings(&merged);
@@ -1434,6 +1449,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (line_height, set_line_height) = signal(initial_settings.line_height);
     let (dark, set_dark) = signal(initial_settings.dark);
     let (follow_system, set_follow_system) = signal(initial_settings.follow_system);
+    let (swipe_threshold, set_swipe_threshold) = signal(initial_settings.swipe_threshold);
     // OS の prefers-color-scheme の現在値。OS 側の変更で更新する。
     let (system_dark, set_system_dark) = signal(system_prefers_dark());
     // 実際に適用するダーク表示。follow_system が true なら OS の設定に追従する。
@@ -2063,6 +2079,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let touch_start = Rc::clone(&touch_start);
         let prev_action = Rc::clone(&prev_action);
         let next_action = Rc::clone(&next_action);
+        let swipe_threshold = swipe_threshold;
         move |event: web_sys::TouchEvent| {
             let Some((start_x, start_y)) = touch_start.get() else {
                 return;
@@ -2080,7 +2097,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             if dy.abs() >= 30.0 {
                 return;
             }
-            if dx.abs() < 50.0 {
+            if (dx.abs() as usize) < swipe_threshold.get() {
                 return;
             }
             if dx < 0.0 {
@@ -2315,6 +2332,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             line_height: line_height.get(),
             dark: dark.get(),
             follow_system: follow_system.get(),
+            swipe_threshold: swipe_threshold.get(),
         });
     });
     let font_smaller_action: Rc<dyn Fn()> = {
@@ -2353,6 +2371,20 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
             persist();
         })
+    };
+    let on_swipe_threshold_change = {
+        let persist = Rc::clone(&persist_settings);
+        move |event: web_sys::Event| {
+            let Some(input) = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
+            else {
+                return;
+            };
+            let value = input.value().parse::<usize>().unwrap_or(50).clamp(30, 120);
+            set_swipe_threshold.set(value);
+            persist();
+        }
     };
     let on_font_smaller = {
         let action = Rc::clone(&font_smaller_action);
@@ -2592,6 +2624,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-history-delete" class="btn" aria-label="Delete history entry" title="Delete the selected history entry" on:click=on_history_delete disabled=move || history_state.get().0 <= 1>"Delete"</button>
                 <button id="reader-history-clear" class="btn" aria-label="Clear history" title="Clear navigation history" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"Clear"</button>
                 <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="Page" placeholder="Page" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
+                <input id="reader-swipe-threshold" class="reader-chapter-select" type="number" min="30" max="120" aria-label="Swipe threshold" title="Swipe threshold (px)" on:change=on_swipe_threshold_change style="max-width: 6rem;" prop:value=move || swipe_threshold.get().to_string()/>
                 <button id="reader-page-go" class="btn" aria-label="Go to page" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"Go"</button>
                 <button class="btn" aria-label="Next chapter" aria-keyshortcuts="]" on:click=on_next disabled=move || {
                     let index = current.get();
