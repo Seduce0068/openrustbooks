@@ -2048,6 +2048,91 @@ async def run_checks(cdp: Cdp) -> int:
     pwned = await cdp.evaluate("window.__pwned === 1")
     checker.check("SVG のスクリプトが実行されない", pwned is False)
 
+    # エクスポート→インポートのラウンドトリップ。
+    download_dir = SAMPLE.parent / "downloads"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    await cdp.send(
+        "Browser.setDownloadBehavior",
+        {"behavior": "allow", "downloadPath": str(download_dir), "eventsEnabled": True},
+    )
+    # 書き出す内容を作る（設定・履歴・位置）。
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:settings',"
+        " JSON.stringify({fontScale: 2, lineHeight: 1, dark: true, followSystem: false}))"
+    )
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:position:sample.epub:1:1',"
+        " JSON.stringify({chapterIndex: 1, fragment: null, scrollTop: 33, savedAt: 1000}))"
+    )
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:history:sample.epub:1:1',"
+        " JSON.stringify({entries: [{chapterIndex: 0, fragment: null, scrollTop: 0, savedAt: 100},"
+        " {chapterIndex: 1, fragment: null, scrollTop: 0, savedAt: 200}], index: 1}))"
+    )
+    await cdp.evaluate("document.querySelector('#reader-export').click()")
+    # ダウンロード完了まで待つ。
+    exported = None
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        candidates = sorted(download_dir.glob("*.json"))
+        if candidates:
+            exported = candidates[0]
+            break
+        await asyncio.sleep(0.2)
+    checker.check("エクスポートファイルがダウンロードされる", exported is not None)
+    if exported is not None:
+        payload = _json.loads(exported.read_text(encoding="utf-8"))
+        checker.check("エクスポートに形式バージョンが含まれる", payload.get("version") == 1)
+        checker.check(
+            "エクスポートに位置・設定・履歴が含まれる",
+            "positions" in payload
+            and payload.get("settings", {}).get("fontScale") == 2
+            and "history" in payload,
+        )
+        # 書き出したファイルをそのままインポートする。
+        await cdp.evaluate("localStorage.clear()")
+        document = await cdp.send("DOM.getDocument", {"depth": -1})
+        root_id2 = document["result"]["root"]["nodeId"]
+        node = await cdp.send(
+            "DOM.querySelector",
+            {"nodeId": root_id2, "selector": "#reader-import-file"},
+        )
+        if node["result"]["nodeId"] != 0:
+            await cdp.send(
+                "DOM.setFileInputFiles",
+                {"nodeId": node["result"]["nodeId"], "files": [str(exported)]},
+            )
+            await cdp.evaluate(
+                "document.querySelector('#reader-import-file').dispatchEvent("
+                "new Event('change', {bubbles: true}))"
+            )
+            await wait_until(
+                cdp,
+                "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                timeout=5,
+            )
+            restored = await cdp.evaluate(
+                "(() => ({"
+                " settings: JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}'),"
+                " history: localStorage.getItem('openrustbooks:history:sample.epub:1:1'),"
+                " position: localStorage.getItem('openrustbooks:position:sample.epub:1:1')"
+                " }))()"
+            )
+            checker.check(
+                "ラウンドトリップで表示設定が復元される",
+                restored["settings"].get("fontScale") == 2,
+                f"(settings={restored['settings']!r})",
+            )
+            checker.check(
+                "ラウンドトリップで履歴が復元される",
+                restored["history"] is not None and '"entries"' in str(restored["history"]),
+            )
+            checker.check(
+                "ラウンドトリップで読書位置が復元される",
+                restored["position"] is not None,
+            )
+    shutil.rmtree(download_dir, ignore_errors=True)
+
     return finish(checker)
 
 
