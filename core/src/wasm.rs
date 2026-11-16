@@ -44,8 +44,9 @@ impl WasmEpubBook {
     /// EPUB ZIP のバイト列から本を開く。
     #[wasm_bindgen(constructor)]
     pub fn new(bytes: Vec<u8>) -> Result<WasmEpubBook, JsValue> {
+        // JS から渡されたバイト列の所有権をそのまま使い、二重コピーを避ける。
         let inner =
-            EpubBook::open(&bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+            EpubBook::open_owned(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
         Ok(Self { inner })
     }
 

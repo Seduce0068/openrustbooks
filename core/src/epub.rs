@@ -188,7 +188,19 @@ impl EpubBook {
     /// コンテナ文書や OPF の読み出し・解析の失敗は [`CoreError::Archive`]、
     /// パス逸脱やリミット超過は [`CoreError::Validation`] を返す。
     pub fn with_limits(bytes: &[u8], limits: ArchiveLimits) -> CoreResult<Self> {
-        let archive = ArchiveReader::with_limits(bytes, limits)?;
+        Self::from_archive(ArchiveReader::with_limits(bytes, limits)?)
+    }
+
+    /// 所有権を持つバイト列から EPUB を開く。
+    ///
+    /// 呼び出し側が既にバイト列を所有している場合の二重コピーを避ける。
+    /// 既定のリミットを使い、バリデーションとエラーは `open` と同一。
+    pub fn open_owned(bytes: Vec<u8>) -> CoreResult<Self> {
+        Self::from_archive(ArchiveReader::from_owned(bytes, ArchiveLimits::default())?)
+    }
+
+    /// 開いたアーカイブからメタデータと章を読み出す共通処理。
+    fn from_archive(archive: ArchiveReader) -> CoreResult<Self> {
         if !archive.is_epub() {
             return Err(CoreError::UnsupportedFormat(
                 "EPUB ではありません (mimetype が application/epub+zip ではない)".to_string(),
@@ -2242,6 +2254,19 @@ mod tests {
             Err(err) => err,
             Ok(entries) => panic!("エラーを期待したが {} 件返った", entries.len()),
         }
+    }
+
+    #[test]
+    fn open_owned_matches_open() {
+        let bytes = sample_epub();
+        let borrowed = EpubBook::open(&bytes).unwrap();
+        let owned = EpubBook::open_owned(bytes).unwrap();
+        assert_eq!(owned.metadata(), borrowed.metadata());
+        assert_eq!(owned.chapters(), borrowed.chapters());
+        assert_eq!(
+            owned.chapter_html(0).unwrap(),
+            borrowed.chapter_html(0).unwrap()
+        );
     }
 
     #[test]

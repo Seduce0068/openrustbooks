@@ -88,8 +88,15 @@ impl ArchiveReader {
     /// パス逸脱とリミット超過は検出した時点で `CoreError::Validation` を返し、
     /// 不正なエントリを黙って読み飛ばさない。
     pub fn with_limits(bytes: &[u8], limits: ArchiveLimits) -> CoreResult<Self> {
-        let bytes = bytes.to_vec();
+        Self::from_owned(bytes.to_vec(), limits)
+    }
 
+    /// 所有権を持つバイト列からアーカイブを開く。
+    ///
+    /// 呼び出し側で既に `Vec<u8>` を所有している場合（wasm の境界を越えた
+    /// バイト列など）の二重コピーを避けるため、`with_limits` の実処理を
+    /// そのまま使う。バリデーションとエラーは `with_limits` と同一。
+    pub fn from_owned(bytes: Vec<u8>, limits: ArchiveLimits) -> CoreResult<Self> {
         let (entries, index) = {
             // メタデータの走査だけなので展開用の reader は作らない。
             let archive = ZipArchive::new(Cursor::new(bytes.as_slice())).map_err(map_zip_error)?;
