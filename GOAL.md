@@ -1,39 +1,35 @@
 # Goal
 
-SVG の XML 処理命令（xml-stylesheet 等）を除去し、外部 CSS 参照による情報漏洩を防ぐ。
+削除確認ダイアログの Esc キャンセル動作を E2E で検証する。
 
 ## Scope
 
 ### 背景
 
-ADR-0044 で SVG の外部スキーム参照を塞いだが、XML 処理命令
-（`<?xml-stylesheet href="https://..."?>`）は残っていた（ADR-0044 の未決定）。
-Blob URL を直接開くと、処理命令が外部 CSS を読み込み、読者の IP や閲覧時刻が
-漏れる可能性がある。
+ADR-0040 でネイティブ `<dialog>` による削除確認を実装したが、
+「Esc キーのキャンセル动作の明示的な E2E 検証」が未決定として残っていた。
+ネイティブモーダルの Esc 処理に依存しているため、実際に履歴が消えずに
+閉じることを確認する。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（XML 処理命令の除去）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0045-svg-xml-processing-instructions.md`: 追加
+- `tools/verify-web-reader.py`: 変更（Esc キャンセルの E2E 検証を追加）
+- `docs/decisions/0047-dialog-esc-test.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. XML 処理命令の除去:
-   - SVG サニタイズ時に、パース済み Document の子ノードを走査し、
-     `PROCESSING_INSTRUCTION_NODE` を削除する。
-   - DOM API（`child_nodes()` / `remove_child()`）を使い、新規依存・新規
-     web-sys feature を追加しない。
+1. E2E 検証:
+   - 削除ボタンでダイアログを開き、CDP で Escape キーを送ると
+     ダイアログが閉じること。
+   - Esc では履歴件数が変わらないこと（キャンセルとして扱われる）。
 2. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 156 項目、スクリプト・外部参照の除去、
-     相対参照の維持、SVG の通常表示を変えない。
+   - プロダクションコードは変更しない。
+   - 既存の 119 テスト、E2E 157 項目を変えない。
 
 ### 必須テスト
 
-- `tools/verify-web-reader.py` に追加する。
-  - SVG から `xml-stylesheet` 処理命令が除去される。
-- 既存の 119 テストと E2E 156 項目が通る。
+- 既存の 119 テストと E2E 157 項目に加え、Esc キャンセルの 2 項目が通る。
 
 ## Acceptance criteria
 
@@ -42,9 +38,6 @@ Blob URL を直接開くと、処理命令が外部 CSS を読み込み、読者
 
 ## Constraints
 
-- 新規依存・新規 web-sys feature を追加しない。
-- `desktop/` を変更しない。
-- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
-  使わない。`unsafe` を使わない。
-- コメントと doc コメントは日本語で簡潔に書く。
+- 新規依存を追加しない。
+- プロダクションコードを変更しない。
 - `master` へ push する。force push はしない。
