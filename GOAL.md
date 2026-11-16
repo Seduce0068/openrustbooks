@@ -1,46 +1,41 @@
 # Goal
 
-本文領域のアクセシブル名を章タイトルに結びつける。
+非整形式 XHTML の扱いを調査し、ADR-0005 の未決定を解消する。
 
 ## Scope
 
 ### 背景
 
-ADR-0057 の未決定「ページ見出しへの `aria-labelledby` 設定など、さらに詳細な本文構造の提供」。
-`.reader-content` は `aria-label="Chapter content"` のみで、スクリーンリーダーでは
-どの章を読んでいるか分かりにくい。ツールバーの章タイトルを有効なラベルにする。
+ADR-0005 の未決定「非整形式の XHTML を許容するかどうかの判断（現状は fail-closed）」。
+調査の結果、`EpubBook::chapter_html` は内容をそのまま返し XML 検証をせず、
+Web 側の `sanitize_epub_html`（ammonia）が HTML としてサニタイズしている。
+つまり OPF / nav は XML として fail-closed だが、章本文は HTML パーサーとして
+寛容に扱われている。この実際の挙動をテストで確認し ADR に記録する。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（章タイトルへの id 付与、`aria-labelledby` 追加）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0058-region-aria-labelledby.md`: 追加
+- `core/src/epub.rs`: 変更（調査用テストを追加）
+- `docs/decisions/0059-malformed-xhtml-policy.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. ラベルの結びつけ:
-   - 章タイトルの `<span>` に `id="reader-chapter-title"` を付ける。
-   - `.reader-content` に `aria-labelledby="reader-chapter-title"` を追加する。
-   - 既存の `aria-label="Chapter content"` は後方互換のため維持する
-     （ARIA 仕様で `aria-labelledby` が `aria-label` より優先される）。
+1. 調査:
+   - 非整形式 XHTML（閉じタグ欠落）の章を持つ EPUB を開き、
+     `chapter_html` が内容を返すことを確認する。
+   - OPF が非整形式 XML の場合は `EpubBook::open` がエラーを返す
+     （fail-closed）ことを確認する。
 2. 既存の挙動を変えない:
-   - 既存の 121 テスト、E2E 174 項目を変えない（aria-label の検証を含む）。
-
-### 必須テスト
-
-- `tools/verify-web-reader.py` に追加する。
-  - `.reader-content` の `aria-labelledby` が `reader-chapter-title` を指す。
-  - 参照先の要素に章タイトルが入っている。
+   - プロダクションコードは変更しない（テスト追加のみ）。
+   - 既存の 121 テスト、E2E 176 項目を変えない。
 
 ## Acceptance criteria
 
+- 実際の挙動がテストで確認され、ADR に記録される。
 - 6 ゲートすべて成功する。
-- CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## Constraints
 
 - 新規依存を追加しない。
-- `desktop/` を変更しない。
-- コメントと doc コメントは日本語で簡潔に書く。
+- プロダクションコードを変更しない。
 - `master` へ push する。force push はしない。
