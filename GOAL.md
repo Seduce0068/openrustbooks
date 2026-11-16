@@ -1,32 +1,42 @@
 # Goal
 
-`remote-resources` を宣言する EPUB の扱いをテストで固定し、ADR-0005 の未決定を解消する。
+タッチ操作の縦スクロール判定閾値を設定から変更できるようにする。
 
 ## Scope
 
 ### 背景
 
-ADR-0059 の未決定「`remote-resources` プロパティを宣言する EPUB の扱い」。
-core の OPF パーサーは manifest item の `properties` のうち `nav` と
-`cover-image` のみを解釈し、他のトークンは無視する。実際のリモートアクセスは
-サニタイズ（外部 img src の除去、SVG 外部参照の除去、CSS の除去）と
-Blob URL 解決で塞がれている。この挙動をテストで確認し ADR に記録する。
+ADR-0056 の未決定「縦スクロール判定閾値（30px）の設定化」。
+横スワイプ閾値は設定化済みだが、縦移動をスクロールとみなす 30px は
+ハードコードのままで、端末や利用者に合わせられない。
 
 ### 成果物
 
-- `core/src/epub.rs`: 変更（テスト追加）
-- `docs/decisions/0060-remote-resources-policy.md`: 追加
+- `web/src/lib.rs`: 変更（`verticalScrollThreshold` の追加と使用）
+- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
+- `docs/decisions/0061-vertical-scroll-threshold.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. テスト:
-   - `properties="nav remote-resources"` の OPF を持つ EPUB が開け、
-     目次と章本文が読めること。
-   - `remote-resources` トークンが目次・表紙の判定を壊さないこと。
-2. 既存の挙動を変えない:
-   - プロダクションコードは変更しない（テスト追加のみ）。
-   - 既存の 123 テスト、E2E 176 項目を変えない。
+1. 設定:
+   - `ReaderSettings` に `verticalScrollThreshold` を追加する。
+     既定値は 30、範囲は 10〜80px とし、範囲外は既定へ戻す。
+   - 既存の設定 JSON にキーが無い場合は既定値 30 として読む（後方互換）。
+   - 設定の保存・エクスポート・インポートに含まれる。
+2. 動作:
+   - 縦スクロール判定に設定値を使う（横スワイプ閾値は維持）。
+3. UI:
+   - ツールバーに数値入力（`<input id="reader-vertical-threshold">`）を置き、
+     変更すると保存・反映される。
+4. 既存の挙動を変えない:
+   - 既存の 124 テスト、E2E 176 項目を変えない。
+
+### 必須テスト
+
+- `tools/verify-web-reader.py` に追加する。
+  - 縦スクロール閾値の入力が存在し、変更すると設定に保存される。
+  - 範囲外はクランプされる。
 
 ## Acceptance criteria
 
@@ -36,5 +46,8 @@ Blob URL 解決で塞がれている。この挙動をテストで確認し ADR 
 ## Constraints
 
 - 新規依存を追加しない。
-- プロダクションコードを変更しない。
+- `desktop/` を変更しない。
+- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
+  使わない。`unsafe` を使わない。
+- コメントと doc コメントは日本語で簡潔に書く。
 - `master` へ push する。force push はしない。
