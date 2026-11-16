@@ -352,6 +352,10 @@ struct PositionApplyCtx {
     applying: std::rc::Rc<std::cell::Cell<bool>>,
     /// 位置の適用を完了した時刻。適用直後のスクロール保存を抑制する。
     last_apply_time: std::rc::Rc<std::cell::Cell<f64>>,
+    /// 章描画の世代。古い適用コールバックが新しい章を壊さないようにする。
+    generation: u32,
+    /// 現在の世代を保持する共有カウンタ。
+    current_generation: std::rc::Rc<std::cell::Cell<u32>>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -377,6 +381,11 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         return;
     }
     let callback = Closure::once_into_js(move || {
+        // より新しい章の描画が始まっていたら、古い適用は破棄する。
+        // 連続した章移動で前の章の先頭リセットが新しい章に効くのを防ぐ。
+        if ctx.generation != ctx.current_generation.get() {
+            return;
+        }
         match ctx.fragment.as_deref() {
             Some(fragment) => scroll_to_fragment(fragment),
             None => match ctx.scroll_top {
@@ -1453,6 +1462,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let applying_position = Rc::new(Cell::new(false));
     // 位置適用の完了時刻。適用直後のスクロール保存を抑制する。
     let last_apply_time = Rc::new(Cell::new(0.0_f64));
+    // 章描画の世代カウンタ。描画のたびに進めて古い適用を無効化する。
+    let current_generation = Rc::new(Cell::new(0_u32));
     let render_chapter: RenderChapter = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
@@ -1461,6 +1472,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let scroll_save_timer = Rc::clone(&scroll_save_timer);
         let applying_position = Rc::clone(&applying_position);
         let last_apply_time = Rc::clone(&last_apply_time);
+        let current_generation = Rc::clone(&current_generation);
         Rc::new(move |index, fragment, scroll_top| {
             // 章の切り替えで古いスクロールのデバウンス保存をキャンセルする。
             if let Some(window) = web_sys::window()
@@ -1511,6 +1523,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             },
                         );
                     }
+                    let generation = current_generation.get().wrapping_add(1);
+                    current_generation.set(generation);
                     apply_position_after_render(PositionApplyCtx {
                         chapter_index: index,
                         fragment,
@@ -1519,6 +1533,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         position_key: Rc::clone(&position_key),
                         applying: Rc::clone(&applying_position),
                         last_apply_time: Rc::clone(&last_apply_time),
+                        generation,
+                        current_generation: Rc::clone(&current_generation),
                     });
                 }
                 Err(error) => set_status.set(error),
