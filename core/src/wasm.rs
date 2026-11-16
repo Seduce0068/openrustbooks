@@ -126,6 +126,11 @@ impl WasmEpubBook {
         serialize_navigation(entries)
     }
 
+    /// manifest が `remote-resources` を宣言しているか。
+    pub fn has_remote_resources(&self) -> bool {
+        self.inner.has_remote_resources()
+    }
+
     /// EPUB の言語（例: `ja`, `en`）。不明なら `undefined`。
     pub fn language(&self) -> Option<String> {
         self.inner.metadata().language.clone()

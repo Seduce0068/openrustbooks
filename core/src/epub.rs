@@ -49,6 +49,8 @@ const PAGE_LIST_TYPE: &str = "page-list";
 const NCX_MEDIA_TYPE: &str = "application/x-dtbncx+xml";
 /// 表紙画像を指す `properties` のトークン（EPUB3）。
 const COVER_IMAGE_PROPERTY: &str = "cover-image";
+/// リモート資源を宣言する `properties` のトークン（EPUB3）。
+const REMOTE_RESOURCES_PROPERTY: &str = "remote-resources";
 /// 表紙画像の `id` を持つ `<meta>` の `name` 属性値（EPUB2）。
 const COVER_META_NAME: &str = "cover";
 /// XHTML の文書タイトルを持つ要素のローカル名。
@@ -316,6 +318,13 @@ impl EpubBook {
     pub fn chapter_html(&self, index: usize) -> CoreResult<String> {
         let (_, html) = self.chapter_source(index)?;
         Ok(html)
+    }
+
+    /// manifest のいずれかの item が `remote-resources` を宣言しているか。
+    pub fn has_remote_resources(&self) -> bool {
+        self.manifest
+            .iter()
+            .any(|item| has_property(&item.properties, REMOTE_RESOURCES_PROPERTY))
     }
 
     /// 章から見た相対参照 `href` のリソースをバイト列で返す。

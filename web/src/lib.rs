@@ -1494,6 +1494,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (cover_url, set_cover_url) = signal(None::<String>);
     // 本文の言語（EPUB の metadata.language）。スクリーンリーダーの発音用。
     let (content_lang, set_content_lang) = signal(None::<String>);
+    // remote-resources 宣言を持つ本を開いたときの警告。
+    let (remote_resources_warning, set_remote_resources_warning) = signal(None::<String>);
     let initial_settings = load_settings();
     let (font_scale, set_font_scale) = signal(initial_settings.font_scale);
     let (line_height, set_line_height) = signal(initial_settings.line_height);
@@ -1913,6 +1915,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
             set_cover_url.set(None);
             set_content_lang.set(None);
+            set_remote_resources_warning.set(None);
 
             let book = Rc::clone(&book);
             let cover_url_state = Rc::clone(&cover_url_state);
@@ -1990,6 +1993,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .unwrap_or_default();
 
                 let language = opened.language();
+                let has_remote_resources = opened.has_remote_resources();
                 let cover = opened
                     .cover_image()
                     .ok()
@@ -2049,6 +2053,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
                 *book.borrow_mut() = Some(opened);
                 set_content_lang.set(language);
+                set_remote_resources_warning.set(if has_remote_resources {
+                    Some(String::from("This EPUB declares remote resources."))
+                } else {
+                    None
+                });
                 set_chapters.set(options);
                 set_chapter_hrefs.set(hrefs);
                 set_landmarks.set(landmarks.clone());
@@ -2060,6 +2069,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 set_landmark_options.set(lopts);
                 set_page_list.set(page_list);
                 render_chapter(start_index, start_fragment, Some(start_scroll));
+                // 章描画で status がクリアされるため、その後に警告を出す。
+                if let Some(message) = remote_resources_warning.get() {
+                    set_status.set(message);
+                }
             });
         }
     };
