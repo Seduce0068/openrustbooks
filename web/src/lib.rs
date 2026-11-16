@@ -236,6 +236,16 @@ fn scroll_to_fragment(fragment: &str) {
     let Some(element) = document.get_element_by_id(fragment) else {
         return;
     };
+    // scrollIntoView はレイアウト未確定のときに効かないことがあるため、
+    // 強制リフローのうえで scrollTop を明示的に設定する。
+    if let Some(html_element) = element.dyn_ref::<web_sys::HtmlElement>() {
+        let _ = html_element.offset_height();
+        let target = html_element.offset_top();
+        if let Ok(Some(content)) = document.query_selector(".reader-content") {
+            content.set_scroll_top(target);
+            return;
+        }
+    }
     element.scroll_into_view();
 }
 
@@ -378,7 +388,10 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         let wanted = ctx.scroll_top.unwrap_or(0);
         // 要求した位置に届いていない場合は再試行する。スクロール位置は
         // レイアウトが終わるまで反映されないことがあるため。
-        if ctx.fragment.is_none() && actual != wanted && attempt < 3 {
+        // フラグメント移動でも、画像のレイアウト確定前に scrollIntoView が
+        // 走ると 0 のままになるため再試行する。
+        let fragment_not_applied = ctx.fragment.is_some() && actual == 0;
+        if (ctx.fragment.is_none() && actual != wanted || fragment_not_applied) && attempt < 3 {
             apply_position_frame(ctx.clone(), attempt + 1, deadline);
             return;
         }
