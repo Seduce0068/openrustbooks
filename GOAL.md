@@ -1,69 +1,46 @@
 # Goal
 
-Web 版のエクスポート JSON に形式バージョンを付与し、未知のバージョンを安全に拒否する。
+画像位置復元の E2E テストを安定化し、ブラウザ自身のスクロール調整を誤検知しないようにする。
 
 ## Scope
 
 ### 背景
 
-ADR-0026・ADR-0030 まででエクスポート形式は
-`{ positions, settings, history }` だが、バージョン情報が無い。将来形式が
-変わったときに、古いリーダーが新しいファイルを誤って取り込み、
-読書位置や履歴を壊す恐れがある（ADR-0030・ADR-0032 の未決定
-「エクスポート形式のバージョニング」）。
+「位置の適用は画像の読み込み完了を待つ」テストが稀に失敗する（5 回中 1 回）。
+失敗時の記録は `attempts=[{top:1300, complete:false}, {top:2343, complete:true}]` で、
+画像完了後のスクロールは成功している。最初のスクロールは DOM 更新直後に
+ブラウザが行うスクロール調整で、位置適用とは無関係である。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（バージョン定数、エクスポートへの付与、インポートでの検証）
-- `tools/verify-web-reader.py`: 変更（バージョン検証の E2E 検証を追加）
-- `docs/decisions/0036-export-versioning.md`: 追加（決定と検証の記録）
+- `tools/verify-web-reader.py`: 変更（スクロール試行の絞り込み）
+- `docs/decisions/0037-scroll-order-test-stability.md`: 追加（決定と検証の記録）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. エクスポート:
-   - 出力 JSON のトップレベルに `"version": 1` を付与する。
-   - 既存の `positions` / `settings` / `history` はそのまま維持する。
-2. インポート:
-   - `version` が無い JSON（旧形式）は従来どおり取り込む。
-   - `version` が 1 の JSON は従来どおり取り込む。
-   - `version` が 1 以外（未知のバージョン）の JSON は拒否し、
-     状態メッセージで理由を表示する。何も取り込まない（fail-closed）。
-3. 既存の挙動を変えない:
-   - 既存の 119 テスト、E2E 136 項目、読書位置、履歴、表示設定、掃除、
-     キーボード操作、タッチ操作、landmarks、page-list、履歴一覧、
-     履歴クリア・個別削除、エクスポート・インポート、マージ、
-     カラースキーム追従、画像の非同期デコードを変えない。
+1. テストの絞り込み:
+   - 位置適用によるスクロールだけを評価するため、保存位置 `saved_top` から
+     大きく外れるスクロール試行を除外する。
+   - 画像完了後のスクロールが存在することは引き続き検証する（検証を
+     弱めない）。
+2. 既存の挙動を変えない:
+   - プロダクションコード（`web/src/lib.rs`）を変更しない。
+   - 既存の 119 テスト、E2E 138 項目のチェック内容を変えない。
 
 ### 必須テスト
 
-- `tools/verify-web-reader.py` に追加する。
-  - `version: 1` の JSON がインポートできる。
-  - 未知の `version`（例: 999）の JSON は拒否され、現在のデータが
-    壊れない。
-- 既存の 119 テストと E2E 136 項目が通る。
+- E2E を 5 回連続実行し、すべて成功すること。
+- 既存の 119 テストが通る。
 
 ## Acceptance criteria
 
-- 上記の必須事項がコードと E2E で確認できる。
-- 次がすべて成功する。
-  - `cargo fmt --all -- --check`
-  - `cargo check --all-targets --locked`
-  - `cargo test --all-targets --locked`
-  - `cargo clippy --all-targets --locked -- -D warnings`
-  - `cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked`
-  - `cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked`
-  - `trunk build --offline --dist <一時出力先>`（web）
-  - `python3 tools/verify-web-reader.py --dist <出力先>`（E2E）
+- 上記の必須事項が E2E で確認できる。
+- 6 ゲートすべて成功する。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## Constraints
 
-- 新規依存を追加しない。保存先は localStorage とブラウザのダウンロード。
-  外部送信を追加しない。
-- `desktop/` を変更しない。
-- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
-  使わない。`unsafe` を使わない。
-- コメントと doc コメントは日本語で簡潔に書く。
-- 無関係なリファクタリングをしない。
+- 新規依存を追加しない。
+- プロダクションコードを変更しない。
 - `master` へ push する。force push はしない。
