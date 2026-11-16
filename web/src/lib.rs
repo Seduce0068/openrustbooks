@@ -1234,6 +1234,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let history = Rc::new(RefCell::new(Vec::<HistoryEntry>::new()));
     let history_index = Rc::new(Cell::new(0_usize));
     let (history_state, set_history_state) = signal((0_usize, 0_usize));
+    // 確認ダイアログの対象。"entry" / "clear" / ""（閉じている）。
+    let (delete_target, set_delete_target) = signal(String::new());
     // 履歴一覧の UI 用。(履歴インデックス, 章インデックス, フラグメント)。
     let (history_entries, set_history_entries) =
         signal(Vec::<(usize, usize, Option<String>)>::new());
@@ -1496,13 +1498,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             jump_to_history(new_index);
         }
     };
-    let on_history_clear = {
+    let clear_history: Rc<dyn Fn()> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let history_key_state = Rc::clone(&history_key_state);
         let current_fragment = Rc::clone(&current_fragment);
-        move |_| {
+        Rc::new(move || {
             // 現在位置だけを残して履歴を消す。
             let entry = HistoryEntry {
                 chapter_index: current.get(),
@@ -1515,15 +1517,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             if let Some(key) = history_key_state.borrow().as_ref() {
                 save_history(key, &history.borrow(), history_index.get());
             }
-        }
+        })
     };
 
-    let on_history_delete = {
+    let delete_entry: Rc<dyn Fn()> = {
         let history = Rc::clone(&history);
         let history_index = Rc::clone(&history_index);
         let sync_history = Rc::clone(&sync_history);
         let history_key_state = Rc::clone(&history_key_state);
-        move |_| {
+        Rc::new(move || {
             let mut entries = history.borrow_mut();
             if entries.len() <= 1 {
                 return;
@@ -1547,6 +1549,44 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             if let Some(key) = history_key_state.borrow().as_ref() {
                 save_history(key, &raw, next_index);
             }
+        })
+    };
+
+    // 削除ボタンは確認ダイアログを開くだけにする。
+    let dialog_ref: NodeRef<leptos::html::Dialog> = NodeRef::new();
+    let open_delete_dialog = move |target: &str| {
+        set_delete_target.set(target.to_string());
+        if let Some(dialog) = dialog_ref.get() {
+            let _ = dialog.show_modal();
+        }
+    };
+    let on_history_clear = {
+        let open = open_delete_dialog.clone();
+        move |_: web_sys::MouseEvent| open("clear")
+    };
+    let on_history_delete = {
+        let open = open_delete_dialog.clone();
+        move |_: web_sys::MouseEvent| open("entry")
+    };
+    let on_confirm_delete = {
+        let clear = Rc::clone(&clear_history);
+        let delete = Rc::clone(&delete_entry);
+        move |_: web_sys::MouseEvent| {
+            match delete_target.get().as_str() {
+                "clear" => clear(),
+                "entry" => delete(),
+                _ => {}
+            }
+            set_delete_target.set(String::new());
+            if let Some(dialog) = dialog_ref.get() {
+                dialog.close();
+            }
+        }
+    };
+    let on_cancel_delete = move |_: web_sys::MouseEvent| {
+        set_delete_target.set(String::new());
+        if let Some(dialog) = dialog_ref.get() {
+            dialog.close();
         }
     };
 
@@ -2341,6 +2381,19 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <span class="reader-chapter-title">{move || current_title.get()}</span>
             </div>
             <p class="reader-status" role="status" aria-live="polite">{move || status.get()}</p>
+            // 削除の確認ダイアログ。ネイティブ <dialog> のモーダル機能を使う。
+            <dialog id="reader-delete-dialog" node_ref=dialog_ref aria-labelledby="reader-delete-title">
+                <h2 id="reader-delete-title">{move || if delete_target.get() == "clear" { "Clear all history?" } else { "Delete this history entry?" }}</h2>
+                <p>{move || if delete_target.get() == "clear" {
+                    "The current position will remain and all other history will be removed."
+                } else {
+                    "The selected history entry will be removed."
+                }}</p>
+                <div class="dialog-actions">
+                    <button type="button" class="btn" autofocus on:click=on_cancel_delete>"Cancel"</button>
+                    <button type="button" class="btn btn-danger" id="reader-delete-confirm" on:click=on_confirm_delete>"Delete"</button>
+                </div>
+            </dialog>
             <div class="reader-body">
                 <Show when=move || cover_url.get().is_some()>
                     <aside class="reader-sidebar">
