@@ -2637,7 +2637,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }>
                     "▶"
                 </button>
-                <span class="reader-chapter-title">{move || current_title.get()}</span>
+                <span id="reader-chapter-title" class="reader-chapter-title">{move || current_title.get()}</span>
             </div>
             <p class="reader-status" role="status" aria-live="polite">{move || status.get()}</p>
             // 削除の確認ダイアログ。ネイティブ <dialog> のモーダル機能を使う。
@@ -2659,7 +2659,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
                     </aside>
                 </Show>
-                <div class="reader-content" role="region" aria-label="Chapter content" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
+                <div class="reader-content" role="region" aria-label="Chapter content" aria-labelledby="reader-chapter-title" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
                     <div class="document-content reader-html" inner_html=move || content.get() lang=move || content_lang.get()></div>
                 </div>
             </div>
