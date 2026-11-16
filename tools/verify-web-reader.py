@@ -2180,6 +2180,45 @@ async def run_checks(cdp: Cdp) -> int:
         f"(scrollTop={restored_scroll})",
     )
 
+    # スワイプ閾値の設定。
+    checker.check(
+        "スワイプ閾値の入力が存在する",
+        await cdp.evaluate("document.querySelector('#reader-swipe-threshold') !== null"),
+    )
+    await cdp.evaluate(
+        "(() => {"
+        " const input = document.querySelector('#reader-swipe-threshold');"
+        " input.value = '80';"
+        " input.dispatchEvent(new Event('change', {bubbles: true}));"
+        " })()"
+    )
+    await asyncio.sleep(0.5)
+    saved_threshold = await cdp.evaluate(
+        "(() => { const s = JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}');"
+        " return s.swipeThreshold; })()"
+    )
+    checker.check(
+        "スワイプ閾値が設定に保存される",
+        saved_threshold == 80,
+        f"(swipeThreshold={saved_threshold!r})",
+    )
+    # 範囲外はクランプされる。
+    await cdp.evaluate("localStorage.clear()")
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:settings',"
+        " JSON.stringify({swipeThreshold: 999}))"
+    )
+    await reload_reader(cdp)
+    await asyncio.sleep(0.5)
+    clamped = await cdp.evaluate(
+        "document.querySelector('#reader-swipe-threshold')?.value"
+    )
+    checker.check(
+        "範囲外のスワイプ閾値は 120 にクランプされる",
+        clamped == "120",
+        f"(value={clamped!r})",
+    )
+
     return finish(checker)
 
 
