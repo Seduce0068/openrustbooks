@@ -2299,6 +2299,25 @@ async def run_checks(cdp: Cdp) -> int:
         f"(value={clamped_vertical!r})",
     )
 
+    # ブラウザ標準のピンチズームが阻害されていない。
+    viewport = await cdp.evaluate(
+        "document.querySelector('meta[name=viewport]')?.content || ''"
+    )
+    checker.check(
+        "viewport がズームを許可している",
+        "user-scalable=no" not in viewport.lower()
+        and "maximum-scale=1" not in viewport.lower(),
+        f"(viewport={viewport!r})",
+    )
+    touch_action = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-content')).touchAction"
+    )
+    checker.check(
+        "本文領域の touch-action が none でない",
+        str(touch_action).lower() != "none",
+        f"(touch-action={touch_action!r})",
+    )
+
     return finish(checker)
 
 
