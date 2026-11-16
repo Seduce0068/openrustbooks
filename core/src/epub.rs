@@ -3645,4 +3645,16 @@ mod tests {
         let bytes = epub_with_chapter_and_opf(CH1, "<package><metadata>");
         assert!(EpubBook::open(&bytes).is_err());
     }
+
+    #[test]
+    fn remote_resources_property_does_not_break_navigation() {
+        // `remote-resources` は解釈せず無視するが、nav と章本文は従来どおり読める。
+        // リモート資源への実際のアクセスは表示側のサニタイズで塞がれる。
+        let opf = opf_with_nav_properties("nav remote-resources");
+        let bytes = epub_with_toc(Some(NAV_NESTED), None, &opf);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert!(!book.toc().unwrap().is_empty());
+        assert!(book.chapter_html(0).unwrap().contains("<h1>T</h1>"));
+    }
 }
