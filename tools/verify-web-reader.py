@@ -1800,6 +1800,41 @@ async def run_checks(cdp: Cdp) -> int:
         )
         await cdp.evaluate("localStorage.removeItem('openrustbooks:position:version-test')")
 
+    # 初回起動の追従デフォルト。設定キーが無く OS がダークなら有効になる。
+    await cdp.send(
+        "Emulation.setEmulatedMedia",
+        {"features": [{"name": "prefers-color-scheme", "value": "dark"}]},
+    )
+    await cdp.evaluate("localStorage.removeItem('openrustbooks:settings')")
+    await reload_reader(cdp)
+    await asyncio.sleep(0.5)
+    # 初回デフォルトは localStorage に保存されず UI 状態だけに反映される。
+    initial_follow = await cdp.evaluate(
+        "document.querySelector('#reader-theme-auto')?.getAttribute('aria-pressed')"
+    )
+    checker.check(
+        "初回起動で OS がダークなら追従が有効になる",
+        initial_follow == "true",
+        f"(aria-pressed={initial_follow!r})",
+    )
+
+    # 設定キーが存在し followSystem が無い場合は、従来どおり追従しない。
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:settings',"
+        " JSON.stringify({fontScale: 1, lineHeight: 2, dark: false}))"
+    )
+    await reload_reader(cdp)
+    await asyncio.sleep(0.5)
+    legacy_follow = await cdp.evaluate(
+        "document.querySelector('#reader-theme-auto')?.getAttribute('aria-pressed')"
+    )
+    checker.check(
+        "既存設定に followSystem が無い場合は追従しない（後方互換）",
+        legacy_follow == "false",
+        f"(aria-pressed={legacy_follow!r})",
+    )
+    await cdp.send("Emulation.setEmulatedMedia", {"features": []})
+
     return finish(checker)
 
 
