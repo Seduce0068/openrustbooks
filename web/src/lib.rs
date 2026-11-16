@@ -356,6 +356,32 @@ struct PositionApplyCtx {
     generation: u32,
     /// 現在の世代を保持する共有カウンタ。
     current_generation: std::rc::Rc<std::cell::Cell<u32>>,
+    /// 状態メッセージの更新用（巨大画像の警告に使う）。
+    set_status: std::rc::Rc<dyn Fn(String)>,
+}
+
+/// 本文の巨大画像を検出する（閾値より大きい場合のみ警告）。
+#[cfg(target_arch = "wasm32")]
+fn find_large_image() -> Option<String> {
+    const LARGE_IMAGE_THRESHOLD: u32 = 4000;
+    let document = web_sys::window()?.document()?;
+    let images = document.query_selector_all(".reader-html img").ok()?;
+    for index in 0..images.length() {
+        let Some(node) = images.get(index) else {
+            continue;
+        };
+        let Ok(image) = node.dyn_into::<web_sys::HtmlImageElement>() else {
+            continue;
+        };
+        let width = image.natural_width();
+        let height = image.natural_height();
+        if width > LARGE_IMAGE_THRESHOLD || height > LARGE_IMAGE_THRESHOLD {
+            return Some(format!(
+                "Large image detected ({width}x{height}). Consider a smaller source."
+            ));
+        }
+    }
+    None
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -438,6 +464,10 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
                     saved_at: 0.0,
                 },
             );
+        }
+        // 巨大画像を検出しても表示は変えず、警告だけを出す。
+        if let Some(message) = find_large_image() {
+            (ctx.set_status)(message);
         }
         ctx.last_apply_time.set(now_millis());
         ctx.applying.set(false);
@@ -1516,6 +1546,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let applying_position = Rc::clone(&applying_position);
         let last_apply_time = Rc::clone(&last_apply_time);
         let current_generation = Rc::clone(&current_generation);
+        let set_status = set_status;
         Rc::new(move |index, fragment, scroll_top| {
             // 章の切り替えで古いスクロールのデバウンス保存をキャンセルする。
             if let Some(window) = web_sys::window()
@@ -1578,6 +1609,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         last_apply_time: Rc::clone(&last_apply_time),
                         generation,
                         current_generation: Rc::clone(&current_generation),
+                        set_status: Rc::new({
+                            let set_status = set_status;
+                            move |message: String| set_status.set(message)
+                        }),
                     });
                 }
                 Err(error) => set_status.set(error),
