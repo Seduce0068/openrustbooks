@@ -2243,6 +2243,24 @@ async def run_checks(cdp: Cdp) -> int:
         f"(html lang={html_lang!r})",
     )
 
+    # 本文領域のアクセシブル名が章タイトルを指す。
+    labelled_by = await cdp.evaluate(
+        "document.querySelector('.reader-content')?.getAttribute('aria-labelledby')"
+    )
+    checker.check(
+        "本文領域の aria-labelledby が章タイトルを指す",
+        labelled_by == "reader-chapter-title",
+        f"(aria-labelledby={labelled_by!r})",
+    )
+    label_text = await cdp.evaluate(
+        "document.getElementById('reader-chapter-title')?.textContent || ''"
+    )
+    checker.check(
+        "参照先の章タイトルが入っている",
+        "Chapter" in str(label_text),
+        f"(text={label_text!r})",
+    )
+
     return finish(checker)
 
 
