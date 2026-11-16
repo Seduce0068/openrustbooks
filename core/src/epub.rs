@@ -3628,4 +3628,21 @@ mod tests {
             Err(CoreError::DocumentNotFound(_))
         ));
     }
+
+    #[test]
+    fn malformed_chapter_xhtml_is_passed_through() {
+        // 章本文は XML 検証せずそのまま返す（表示側のサニタイズに委ねる）。
+        let malformed = "<p>unclosed";
+        let bytes = epub_with_chapter(malformed.as_bytes());
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapter_html(0).unwrap(), malformed);
+    }
+
+    #[test]
+    fn malformed_opf_is_rejected() {
+        // OPF は XML として解析し、構文エラーは fail-closed で拒否する。
+        let bytes = epub_with_chapter_and_opf(CH1, "<package><metadata>");
+        assert!(EpubBook::open(&bytes).is_err());
+    }
 }
