@@ -2219,6 +2219,30 @@ async def run_checks(cdp: Cdp) -> int:
         f"(value={clamped!r})",
     )
 
+    # 本文言語の設定。サンプル EPUB は言語 ja。
+    await cdp.evaluate("localStorage.clear()")
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(0.5)
+    content_lang = await cdp.evaluate(
+        "document.querySelector('.reader-html')?.getAttribute('lang')"
+    )
+    checker.check(
+        "本文要素に EPUB の言語が設定される",
+        content_lang == "ja",
+        f"(lang={content_lang!r})",
+    )
+    html_lang = await cdp.evaluate("document.documentElement.getAttribute('lang')")
+    checker.check(
+        "UI 全体の言語は変更されない",
+        html_lang == "ja",
+        f"(html lang={html_lang!r})",
+    )
+
     return finish(checker)
 
 
