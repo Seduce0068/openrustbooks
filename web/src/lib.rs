@@ -769,7 +769,11 @@ fn load_settings() -> ReaderSettings {
         return ReaderSettings::default();
     };
     let Ok(Some(raw)) = storage.get_item(SETTINGS_KEY) else {
-        return ReaderSettings::default();
+        // 設定キーが無い初回起動に限り、OS がダークなら追従を有効にする。
+        // 設定キーが存在する場合は後方互換のためデフォルトのまま。
+        let mut settings = ReaderSettings::default();
+        settings.follow_system = system_prefers_dark();
+        return settings;
     };
     serde_json::from_str::<ReaderSettings>(&raw)
         .map(ReaderSettings::normalized)
