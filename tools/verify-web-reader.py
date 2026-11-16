@@ -60,6 +60,7 @@ CH1 = """<?xml version="1.0" encoding="utf-8"?>
 FILLER = "\n".join(f"<p>filler paragraph {i}</p>" for i in range(40))
 
 EVIL_SVG = """<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="https://attacker.example/style.css" type="text/css"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      width="20" height="20" onload="window.__pwned = 1">
 <script>window.__pwned = 1;</script>
@@ -2006,6 +2007,12 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check(
         "SVG の相対参照は維持される",
         "images/pic.png" in str(svg_text),
+        f"(svg={str(svg_text)[:200]!r})",
+    )
+    checker.check(
+        "SVG から xml-stylesheet 処理命令が除去される",
+        "xml-stylesheet" not in str(svg_text).lower()
+        and "attacker.example/style.css" not in str(svg_text).lower(),
         f"(svg={str(svg_text)[:200]!r})",
     )
     pwned = await cdp.evaluate("window.__pwned === 1")
