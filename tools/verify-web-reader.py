@@ -1758,6 +1758,11 @@ async def run_checks(cdp: Cdp) -> int:
         "document.querySelector('#reader-delete-dialog')?.open === true"
     )
     checker.check("削除ボタンで確認ダイアログが開く", dialog_open is True)
+    # 安全な操作（Cancel）にフォーカスが当たる（誤って Delete を押さないように）。
+    focused_cancel = await cdp.evaluate(
+        "document.activeElement?.textContent === 'Cancel'"
+    )
+    checker.check("確認ダイアログで Cancel にフォーカスが当たる", focused_cancel is True)
     await cdp.evaluate(
         "Array.from(document.querySelectorAll('#reader-delete-dialog button'))"
         ".find((b) => b.textContent.includes('Cancel')).click()"
