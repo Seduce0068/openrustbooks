@@ -424,7 +424,7 @@ fn mime_for_path(path: &str) -> &'static str {
     }
 }
 
-/// SVG からスクリプト実行の経路を除去したバイト列を返す。
+/// SVG からスクリプト実行と外部リソース参照の経路を除去したバイト列を返す。
 /// パース・シリアライズに失敗した場合は `None`（fail-closed）。
 #[cfg(target_arch = "wasm32")]
 fn sanitize_svg_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
@@ -438,7 +438,6 @@ fn sanitize_svg_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
     // スクリプト要素・foreignObject・SMIL を削除する。foreignObject は HTML の
     // スクリプトを混入でき、SMIL は後から属性を書き換えられる。画像としては
     // 不要なので丸ごと落とす。
-    // SMIL 要素も削除する。後から on* 属性や href を書き換えられるため。
     for selector in [
         "script",
         "foreignObject",
@@ -484,9 +483,13 @@ fn sanitize_svg_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
                     .filter(|character| !character.is_whitespace() && !character.is_control())
                     .collect();
                 let is_event = name.starts_with("on");
-                let is_js_link = (name == "href" || name.ends_with(":href"))
-                    && normalized.starts_with("javascript:");
-                if is_event || is_js_link {
+                let is_link = name == "href" || name.ends_with(":href");
+                // javascript: に加えて、外部スキームも削除する。Blob URL を
+                // 直接開いたときのネットワーク要求（IP・閲覧時刻の漏洩）を防ぐ。
+                let is_external = ["javascript:", "http:", "https:", "data:", "blob:", "file:"]
+                    .iter()
+                    .any(|scheme| normalized.starts_with(scheme));
+                if is_event || (is_link && is_external) {
                     removable.push(name);
                 }
             }
