@@ -358,6 +358,96 @@ struct PositionApplyCtx {
     current_generation: std::rc::Rc<std::cell::Cell<u32>>,
     /// 状態メッセージの更新用（巨大画像の警告に使う）。
     set_status: std::rc::Rc<dyn Fn(String)>,
+    /// 巨大画像を縮小するか（既定オフ）。
+    downscale_images: bool,
+    /// 生成した Blob URL の管理リスト。
+    object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>,
+}
+
+/// 巨大画像を Canvas で縮小し、Blob URL を差し替える。
+///
+/// CSS の `max-width: 100%` で表示幅が決まる画像（自然幅が本文領域より大きい
+/// もの）だけを対象にする。狭い画像を縮小すると表示サイズが変わり、
+/// スクロール位置補正が壊れるため除外する。
+#[cfg(target_arch = "wasm32")]
+fn downscale_large_images(object_urls: &std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+    const DOWNSCALE_THRESHOLD: u32 = 4000;
+    const MIN_MAX_DIMENSION: u32 = 2000;
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
+    let Ok(images) = document.query_selector_all(".reader-html img") else {
+        return;
+    };
+    let Ok(Some(content)) = document.query_selector(".reader-content") else {
+        return;
+    };
+    let content_width = content.client_width().max(0) as u32;
+    let max_dimension = MIN_MAX_DIMENSION.max(content_width);
+
+    for index in 0..images.length() {
+        let Some(node) = images.get(index) else {
+            continue;
+        };
+        let Ok(image) = node.dyn_into::<web_sys::HtmlImageElement>() else {
+            continue;
+        };
+        let width = image.natural_width();
+        let height = image.natural_height();
+        if width <= DOWNSCALE_THRESHOLD && height <= DOWNSCALE_THRESHOLD {
+            continue;
+        }
+        // 表示幅が自然幅に依存する画像は縮小しない（レイアウト変化を避ける）。
+        if width <= content_width || width == 0 || height == 0 {
+            continue;
+        }
+        let scale = max_dimension as f64 / width.max(height) as f64;
+        let target_width = (width as f64 * scale).round().max(1.0) as u32;
+        let target_height = (height as f64 * scale).round().max(1.0) as u32;
+        let Ok(canvas) = document.create_element("canvas") else {
+            continue;
+        };
+        let Ok(canvas) = canvas.dyn_into::<web_sys::HtmlCanvasElement>() else {
+            continue;
+        };
+        canvas.set_width(target_width);
+        canvas.set_height(target_height);
+        let Ok(Some(context)) = canvas.get_context("2d") else {
+            continue;
+        };
+        let Ok(context) = context.dyn_into::<web_sys::CanvasRenderingContext2d>() else {
+            continue;
+        };
+        if context
+            .draw_image_with_html_image_element_and_dw_and_dh(
+                &image,
+                0.0,
+                0.0,
+                target_width as f64,
+                target_height as f64,
+            )
+            .is_err()
+        {
+            continue;
+        }
+        let old_url = image.get_attribute("src").unwrap_or_default();
+        let urls = std::rc::Rc::clone(object_urls);
+        let target = image.clone();
+        let callback = Closure::once_into_js(move |blob: web_sys::Blob| {
+            if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                target.set_attribute("src", &url).ok();
+                urls.borrow_mut().push(url);
+                if !old_url.is_empty() {
+                    let _ = web_sys::Url::revoke_object_url(&old_url);
+                }
+            }
+        });
+        let callback: js_sys::Function = callback.unchecked_into();
+        let _ = canvas.to_blob(&callback);
+    }
 }
 
 /// 本文の巨大画像を検出する（閾値より大きい場合のみ警告）。
@@ -468,6 +558,9 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         // 巨大画像を検出しても表示は変えず、警告だけを出す。
         if let Some(message) = find_large_image() {
             (ctx.set_status)(message);
+        }
+        if ctx.downscale_images {
+            downscale_large_images(&ctx.object_urls);
         }
         ctx.last_apply_time.set(now_millis());
         ctx.applying.set(false);
@@ -921,6 +1014,9 @@ struct ReaderSettings {
         default = "default_vertical_scroll_threshold"
     )]
     vertical_scroll_threshold: usize,
+    /// 巨大画像を Canvas で縮小するか（既定オフ）。
+    #[serde(rename = "downscaleImages", default)]
+    downscale_images: bool,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -953,6 +1049,7 @@ impl Default for ReaderSettings {
             follow_system: false,
             swipe_threshold: 50,
             vertical_scroll_threshold: 30,
+            downscale_images: false,
         }
     }
 }
@@ -976,6 +1073,7 @@ impl ReaderSettings {
             follow_system: self.follow_system,
             swipe_threshold: self.swipe_threshold.clamp(30, 120),
             vertical_scroll_threshold: self.vertical_scroll_threshold.clamp(10, 80),
+            downscale_images: self.downscale_images,
         }
     }
 }
@@ -1285,6 +1383,10 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
                 .and_then(|v| v.as_u64())
                 .map(|v| v as usize)
                 .unwrap_or_else(|| load_settings().vertical_scroll_threshold),
+            downscale_images: settings
+                .get("downscaleImages")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         }
         .normalized();
         save_settings(&merged);
@@ -1504,6 +1606,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (swipe_threshold, set_swipe_threshold) = signal(initial_settings.swipe_threshold);
     let (vertical_scroll_threshold, set_vertical_scroll_threshold) =
         signal(initial_settings.vertical_scroll_threshold);
+    let (downscale_images, set_downscale_images) = signal(initial_settings.downscale_images);
     // OS の prefers-color-scheme の現在値。OS 側の変更で更新する。
     let (system_dark, set_system_dark) = signal(system_prefers_dark());
     // 実際に適用するダーク表示。follow_system が true なら OS の設定に追従する。
@@ -1615,6 +1718,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             let set_status = set_status;
                             move |message: String| set_status.set(message)
                         }),
+                        downscale_images: downscale_images.get(),
+                        object_urls: Rc::clone(&object_urls),
                     });
                 }
                 Err(error) => set_status.set(error),
@@ -2408,6 +2513,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             follow_system: follow_system.get(),
             swipe_threshold: swipe_threshold.get(),
             vertical_scroll_threshold: vertical_scroll_threshold.get(),
+            downscale_images: downscale_images.get(),
         });
     });
     let font_smaller_action: Rc<dyn Fn()> = {
@@ -2497,6 +2603,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let on_dark_auto = {
         let action = Rc::clone(&dark_auto_action);
         move |_: web_sys::MouseEvent| action()
+    };
+    let on_downscale_toggle = {
+        let persist = Rc::clone(&persist_settings);
+        move |_: web_sys::MouseEvent| {
+            set_downscale_images.set(!downscale_images.get());
+            persist();
+        }
     };
     let on_clear_data = move |_| {
         let removed = clear_reading_positions();
@@ -2653,6 +2766,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
                 <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
                 <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
+                <button id="reader-downscale" class="btn" title="Downscale oversized images" aria-label="Downscale oversized images" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "Downscale:on" } else { "Downscale:off" }}</button>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
                 <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
                 <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>

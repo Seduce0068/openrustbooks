@@ -28,6 +28,7 @@ web-sys = { version = "0.3", features = [
     "HtmlTableRowElement", "HtmlTableCellElement", "HtmlHeadElement",
     "HtmlBodyElement", "HtmlScriptElement", "HtmlStyleElement",
     "HtmlImageElement", "NodeList", "DomParser", "SupportedType",
+    "HtmlCanvasElement", "CanvasRenderingContext2d",
     "BlobPropertyBag",
     "Event", "MouseEvent", "KeyboardEvent", "InputEvent",
     "TouchEvent", "Touch", "TouchList",
