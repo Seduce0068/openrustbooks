@@ -248,11 +248,40 @@ impl Default for StorageManager {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod local {
     use super::*;
+    use std::path::Component;
     use tokio::fs as tokio_fs;
 
     pub struct LocalStorage {
         root: PathBuf,
         capabilities: StorageCapabilities,
+    }
+
+    /// 既存の最も深い祖先を正規化し、残りの要素を連結して返す。
+    /// 書き込み先など存在しない末尾にも対応するため、末尾は Lexical に連結する。
+    fn canonicalize_existing_prefix(path: &Path) -> CoreResult<PathBuf> {
+        let mut ancestor = path;
+        let mut tail = Vec::new();
+        loop {
+            match ancestor.canonicalize() {
+                Ok(canonical) => {
+                    let mut resolved = canonical;
+                    for name in tail.into_iter().rev() {
+                        resolved.push(name);
+                    }
+                    return Ok(resolved);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let name = ancestor.file_name().ok_or_else(|| {
+                        CoreError::storage(format!("Unable to resolve path: {}", path.display()))
+                    })?;
+                    tail.push(name.to_os_string());
+                    ancestor = ancestor.parent().ok_or_else(|| {
+                        CoreError::storage(format!("Unable to resolve path: {}", path.display()))
+                    })?;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
     }
 
     impl LocalStorage {
@@ -265,12 +294,47 @@ pub mod local {
             Self { root, capabilities }
         }
 
-        fn resolve_path(&self, path: &Path) -> PathBuf {
-            if path.is_absolute() {
+        /// root 外への脱出を拒否する fail-closed なパス解決。
+        /// 相対パスは root 配下に解決し、絶対パスも root 配下のみ許可する。
+        fn resolve_path(&self, path: &Path) -> CoreResult<PathBuf> {
+            // root が正規化できない場合は containment を保証できないため拒否
+            let root = self.root.canonicalize().map_err(|error| {
+                CoreError::storage(format!(
+                    "Unable to canonicalize storage root {}: {}",
+                    self.root.display(),
+                    error
+                ))
+            })?;
+
+            // `..` は canonicalize 前に機械的に拒否（脱出だけでなく防御的に弾く）
+            if path
+                .components()
+                .any(|component| matches!(component, Component::ParentDir))
+            {
+                return Err(CoreError::validation(format!(
+                    "Parent directory traversal is not allowed: {}",
+                    path.display()
+                )));
+            }
+
+            let joined = if path.is_absolute() {
                 path.to_path_buf()
             } else {
-                self.root.join(path)
+                root.join(path)
+            };
+
+            // 既存部分は canonicalize してシンボリックリンクを解決し、
+            // 存在しない末尾のみ Lexical に連結する
+            let resolved = canonicalize_existing_prefix(&joined)?;
+
+            if !resolved.starts_with(&root) {
+                return Err(CoreError::validation(format!(
+                    "Path escapes storage root: {}",
+                    path.display()
+                )));
             }
+
+            Ok(resolved)
         }
     }
 
@@ -296,7 +360,15 @@ pub mod local {
         }
 
         async fn list(&self, path: &Path, options: ListOptions) -> CoreResult<Vec<FileEntry>> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
+            // エントリのパスは正規化済みなので、比較する root も正規化しておく。
+            let root = self.root.canonicalize().map_err(|error| {
+                CoreError::storage(format!(
+                    "Unable to canonicalize storage root {}: {}",
+                    self.root.display(),
+                    error
+                ))
+            })?;
             let mut entries = Vec::new();
 
             let mut read_dir = tokio_fs::read_dir(&full_path).await?;
@@ -319,7 +391,7 @@ pub mod local {
 
                 entries.push(FileEntry {
                     name,
-                    path: path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf(),
+                    path: path.strip_prefix(&root).unwrap_or(&path).to_path_buf(),
                     is_dir,
                     size: if is_dir { None } else { Some(metadata.len()) },
                     modified: metadata.modified().ok().map(|t| t.into()),
@@ -336,7 +408,7 @@ pub mod local {
         }
 
         async fn read(&self, path: &Path, options: ReadOptions) -> CoreResult<Vec<u8>> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
             let mut file = tokio_fs::File::open(&full_path).await?;
 
             if let Some(offset) = options.offset {
@@ -370,7 +442,7 @@ pub mod local {
         }
 
         async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
 
             if options.create_parents
                 && let Some(parent) = full_path.parent()
@@ -399,7 +471,7 @@ pub mod local {
         }
 
         async fn create_dir(&self, path: &Path, recursive: bool) -> CoreResult<()> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
             if recursive {
                 tokio_fs::create_dir_all(&full_path).await?;
             } else {
@@ -409,7 +481,7 @@ pub mod local {
         }
 
         async fn delete(&self, path: &Path, recursive: bool) -> CoreResult<()> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
             if recursive {
                 tokio_fs::remove_dir_all(&full_path).await?;
             } else {
@@ -419,8 +491,8 @@ pub mod local {
         }
 
         async fn move_item(&self, from: &Path, to: &Path, overwrite: bool) -> CoreResult<()> {
-            let full_from = self.resolve_path(from);
-            let full_to = self.resolve_path(to);
+            let full_from = self.resolve_path(from)?;
+            let full_to = self.resolve_path(to)?;
 
             if overwrite && full_to.exists() {
                 if full_to.is_dir() {
@@ -439,7 +511,7 @@ pub mod local {
         }
 
         async fn metadata(&self, path: &Path) -> CoreResult<FileEntry> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
             let metadata = tokio_fs::metadata(&full_path).await?;
             let is_dir = metadata.is_dir();
 
@@ -465,7 +537,7 @@ pub mod local {
         }
 
         async fn exists(&self, path: &Path) -> CoreResult<bool> {
-            Ok(self.resolve_path(path).exists())
+            Ok(self.resolve_path(path)?.exists())
         }
 
         async fn available_space(&self) -> CoreResult<Option<u64>> {
@@ -474,7 +546,7 @@ pub mod local {
         }
 
         async fn open_in_system(&self, path: &Path) -> CoreResult<()> {
-            let full_path = self.resolve_path(path);
+            let full_path = self.resolve_path(path)?;
 
             // `cfg!` rather than `#[cfg]` so every platform compiles the same
             // code path; unsupported platforms report an explicit error
@@ -499,6 +571,102 @@ pub mod local {
         async fn watch(&self, _path: &Path) -> CoreResult<Box<dyn StorageWatchStream>> {
             // Would use notify crate for real implementation
             Err(CoreError::storage("Watch not implemented yet"))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::fs;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+
+        struct TempRoot {
+            path: PathBuf,
+        }
+
+        impl TempRoot {
+            fn new() -> Self {
+                let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "openrustbooks-io-test-{}-{}",
+                    std::process::id(),
+                    id
+                ));
+                fs::create_dir_all(&path).unwrap();
+                Self { path }
+            }
+
+            fn storage(&self) -> LocalStorage {
+                LocalStorage::new(self.path.clone())
+            }
+        }
+
+        impl Drop for TempRoot {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+
+        #[test]
+        fn relative_path_under_root_resolves() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let resolved = storage
+                .resolve_path(Path::new("sub/nested/file.txt"))
+                .unwrap();
+            assert_eq!(
+                resolved,
+                temp.path
+                    .canonicalize()
+                    .unwrap()
+                    .join("sub/nested/file.txt")
+            );
+        }
+
+        #[test]
+        fn parent_dir_escape_is_rejected() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            assert!(storage.resolve_path(Path::new("../escape")).is_err());
+            assert!(storage.resolve_path(Path::new("sub/../../escape")).is_err());
+        }
+
+        #[test]
+        fn absolute_path_outside_root_is_rejected() {
+            let temp = TempRoot::new();
+            let outside = TempRoot::new();
+            let storage = temp.storage();
+            let abs = outside.path.canonicalize().unwrap().join("secret.txt");
+            assert!(storage.resolve_path(&abs).is_err());
+        }
+
+        #[test]
+        fn absolute_path_under_root_is_allowed() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let abs = temp.path.canonicalize().unwrap().join("inside.txt");
+            fs::write(&abs, b"ok").unwrap();
+            let resolved = storage.resolve_path(&abs).unwrap();
+            assert_eq!(resolved, abs);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn symlink_escape_is_rejected() {
+            use std::os::unix::fs::symlink;
+
+            let temp = TempRoot::new();
+            let outside = TempRoot::new();
+            let storage = temp.storage();
+            let link = temp.path.join("link");
+            if symlink(outside.path.canonicalize().unwrap(), &link).is_err() {
+                // シンボリックリンクを作成できない環境ではスキップ
+                return;
+            }
+            let result = storage.resolve_path(Path::new("link/secret.txt"));
+            assert!(result.is_err());
         }
     }
 }
