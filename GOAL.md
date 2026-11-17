@@ -1,32 +1,35 @@
 # Goal
 
-残存する `__prune_*` デバッグコードを削除する（todo.md B10 / C08 の一部）。
+E2E に期待 check 総数を宣言し、未実行 check を失敗扱いにする（todo.md R4-e2e#1 / C06）。
 
 ## Scope
 
 ### 背景
 
-`web/src/lib.rs` の `prune_positions()` に `__prune_before` / `__prune_after` を
-`window` へ書き込むデバッグコードが残っている。E2E からは参照されておらず、
-本番コードに不要な副作用（グローバルへの書き込み）がある。
+`checker.check()` は条件付きブロック内で呼ばれることがあり、DOM ノードが
+見つからない場合などに check 自体がスキップされる。その場合、実 passed 数が
+静的な check 呼び出し数より少なくてもテストは成功してしまう。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（デバッグコード削除）
+- `tools/verify-web-reader.py`: 変更（期待総数の宣言と検証）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `__prune_before` / `__prune_after` の書き込みを削除する。
-2. 掃除ロジック本体（`prune_positions()` の動作）は変更しない。
-3. 既存の 126 テスト、E2E 220 項目を変えない。
+1. `Checker` に `expected` 引数を追加し、`finish()` で
+   `passed + len(failures) == expected` を検証する。
+2. 現在の期待値 220 を `run_checks()` の `Checker(...)` に設定する。
+3. 乖離がある場合は失敗として報告する。
+4. 既存の E2E 220 項目はすべて通る。
 
 ## Acceptance criteria
 
-- 6 ゲート・E2E が成功する。
+- 通常実行で 220 項目すべて成功。
+- 期待値を意図的にずらした場合に失敗することを確認（任意）。
 
 ## Constraints
 
 - 新規依存を追加しない。
-- `desktop/` を変更しない。
+- プロダクションコードを変更しない。
 - `master` へ push する。force push はしない。
