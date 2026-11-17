@@ -60,5 +60,4 @@ status: accepted
 ## 未決定
 
 - `max_retries = 0` の回帰テストは未追加（監査で推奨）。
-- `max_retries + 1` / `attempt + 1` が `usize::MAX` でオーバーフローする
-  既存課題（今回のスコープ外）。
+- ~~`max_retries + 1` / `attempt + 1` が `usize::MAX` でオーバーフローする~~ ADR-0120 で service 経由は解消済み（直接 PipelineConfig 生成経路は残る）。
