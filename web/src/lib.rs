@@ -2864,6 +2864,19 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     }
                     true
                 }
+                "/" => {
+                    if let Some(window) = web_sys::window()
+                        && let Some(document) = window.document()
+                        && let Some(input) = document
+                            .query_selector("#reader-chapter-filter")
+                            .ok()
+                            .flatten()
+                        && let Some(html_input) = input.dyn_into::<web_sys::HtmlInputElement>().ok()
+                    {
+                        html_input.focus();
+                    }
+                    true
+                }
                 _ => false,
             };
             if handled {
@@ -3021,6 +3034,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     <li><kbd>"+"</kbd> " / " <kbd>"-"</kbd> " — Larger / smaller text"</li>
                     <li><kbd>"d"</kbd> " — Toggle dark mode"</li>
                     <li><kbd>"Alt+←"</kbd> " / " <kbd>"Alt+→"</kbd> " — Back / forward"</li>
+                    <li><kbd>"/"</kbd> " — Focus chapter filter"</li>
                     <li><kbd>"?"</kbd> " — Show this help"</li>
                 </ul>
                 <div class="dialog-actions">
