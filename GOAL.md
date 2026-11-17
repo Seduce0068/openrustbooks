@@ -1,36 +1,35 @@
 # Goal
 
-既知脆弱性の検出をローカル検証ゲートに追加する（todo.md B03 の残り）。
+共通ワークフローの `extra_gates` で `cargo audit` を実行できるか調査・判断する（ADR-0125 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`cargo audit` で脆弱性 0 件を確認済みだが、`scripts/verify.sh` には
-ゲートが無く、CI も billing issue で実行できない。再利用可能な
-ローカルゲートを追加し、依存更新時の回帰を防ぐ。
+`.github/workflows/ci.yml:41-43` は `extra_gates` に wasm32 check を渡している。
+`cargo audit` をここに追加できれば、CI でも脆弱性回帰を検出できる。
+ただしグローバル指示 5 では「CI の変更はまず共通ワークフロー側で対応できないか検討する」とされる。
 
 ### 成果物
 
-- `scripts/verify.sh`: 変更（cargo audit ゲート追加）
-- `docs/decisions/0125-audit-gate.md`: 追加
+- `.github/workflows/ci.yml`: 変更（可能なら audit ゲートを `extra_gates` に追加）
+- `docs/decisions/0126-ci-audit-gate.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `cargo audit` をオフライン／キャッシュ優先で実行できるオプションを確認する。
-2. 脆弱性 0 件をゲート化する（`--deny warnings` は使わない。
-   既存の unmaintained 警告 10 件は baseline）。
-3. `cargo-audit` が未インストールの場合はゲートをスキップし警告を出す
-   （環境依存で全員の検証を止めない）。
-4. `bash -n` / `shellcheck` / `shfmt -d` と `./scripts/verify.sh` が成功する。
+1. 共通ワークフロー `Seduce0068/workflows/rust-gates.yml@v1` の `extra_gates` 入力の実体を確認する（GitHub MCP または gh api）。
+2. `extra_gates` が任意コマンドを実行できるなら `cargo audit` を追加する。cargo-audit のインストール手順も必要なら検討。
+3. 変更不能／危険なら「未対応」を明文化する。
+4. ローカル検証（verify.sh）は維持する。
 
 ## Acceptance criteria
 
-- 6 ゲート + audit + wasm + E2E すべて成功する。
+- 判断が ADR に記録される。
+- ローカル検証が成功する。
 
 ## Constraints
 
-- 新規依存を追加しない（`cargo-audit` は既存インストール済みツール）。
-- CI ワークフローは変更しない。
+- 共通ワークフロー自体（`Seduce0068/workflows`）は変更しない。
+- `@v1` ピン留めは維持する（グローバル指示 5）。
 - `master` へ push する。force push はしない。
