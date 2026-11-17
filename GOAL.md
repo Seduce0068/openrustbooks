@@ -1,41 +1,39 @@
 # Goal
 
-docs 配下に `index.md` と `log.md` を整備する（todo.md C04 / R5-ops#1）。
+Web 版に Content-Security-Policy を追加し、外部リソースの読み込み先を制限する（todo.md B01 / E03 の一部）。
 
 ## Scope
 
 ### 背景
 
-共通指示では概念文書ディレクトリに `index.md`、変更を加えたコミットで
-`log.md` への追記を求めているが、`docs/` と `docs/decisions/` の両方に
-存在しない。`docs/decisions/` には 90 件の ADR があり、索引が必要。
+`web/index.html` に CSP が無く、inline `<style>` と Google Fonts の外部
+スタイルシートが無制限に読み込まれる。CSP を追加して許可先を明示する。
 
 ### 成果物
 
-- `docs/index.md`: 追加（docs 配下の文書一覧）
-- `docs/decisions/index.md`: 追加（全 ADR のタイトル・status・.description 一覧）
-- `docs/log.md`: 追加（初回エントリ）
+- `web/index.html`: 変更（`<meta http-equiv="Content-Security-Policy">` 追加）
+- `tools/verify-web-reader.py`: 変更（CSP 存在の E2E 検証を追加）
+- `docs/decisions/0091-content-security-policy.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `docs/index.md` に `requirements.md` / `architecture.md` / `decisions/` /
-   `investigation/` へのリンクと説明を列挙する。
-2. `docs/decisions/index.md` に全 90 件の ADR を
-   `- [ADR-XXXX](file.md) — status: ... — description` の形式で列挙する。
-   タイトルは frontmatter の `title`、status は `status`、説明は `description` を使う。
-3. `docs/log.md` に `## 2026-11-17` の見出しと、今回の索引整備の記録を追加する。
-4. 予約文件格式に従い、フロントマターを付けず単一の `#` 見出しから始める。
-5. markdownlint が通る。
+1. 次を許可する CSP を追加する。
+   - `default-src 'self'`
+   - `script-src 'self' 'wasm-unsafe-eval'`（Wasm のJITに必要）
+   - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+   - `font-src 'self' https://fonts.gstatic.com`
+   - `img-src 'self' blob: data:`
+   - `connect-src 'self'`
+2. 現在の E2E 220 項目が通ること。
+3. サニタイズ済み本文の相対画像（Blob URL）が表示できること。
 
 ## Acceptance criteria
 
-- markdownlint が全ファイルで 0 issues。
 - 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- ADR 本体は変更しない。
-- `docs/investigation/` は別セッションの成果物のため内容は変更しない
-  （`docs/index.md` からのリンクのみ追加）。
+- 新規依存を追加しない。
+- E2E 環境で外部フォントが読めなくてもテストが壊れないこと。
 - `master` へ push する。force push はしない。
