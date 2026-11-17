@@ -1,29 +1,29 @@
 # Goal
 
-`LintConfig.warnings_as_errors` を lint 判定に配線する（ADR-0110 / 0116 の未決定）。
+`LintConfig.config_file` / `rule_config` の rumdl 側配線を調査・判断する（ADR-0123 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`LintConfig.warnings_as_errors`（既定 false）は設定・DTO に存在するが、
-`MarkdownLinter` の判定（`passed = Error severity のみ`）で使われていない。
-利用者が true に設定しても Warning がエラー扱いにならない。
+`LintConfig` は `config_file: Option<PathBuf>` と
+`rule_config: HashMap<String, serde_json::Value>` を持つが、
+`MarkdownLinter::new()` は常に `Config::default()` を使い、
+これらを読んでいない。利用者の `.markdownlint.yaml` やルール固有設定が
+無視されている。
 
 ### 成果物
 
-- `core/src/ai_markdown/lint.rs`: 変更（フラグ保持と判定への反映）
-- `docs/decisions/0123-warnings-as-errors.md`: 追加
+- `core/src/ai_markdown/lint.rs`: 変更（配線可能なら実装）
+- `docs/decisions/0124-rumdl-config-wiring.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `MarkdownLinter` が `warnings_as_errors` を保持する。
-2. true のときは Warning severity も不合格扱いにする（Info は従来どおり無視）。
-3. `lint()` と `lint_and_fix()` の両方に効かせる。
-4. 既定 false の挙動は不変（既存テストが壊れない）。
-5. テストを追加する。
-6. 既存の 203 テスト + wasm 3 件、E2E 228 項目を壊さない。
+1. rumdl 0.3.2 の `Config` 型とファイル読み込み API を調査する。
+2. 安全に配線できるなら `config_file` / `rule_config` を反映する。
+3. 危険／不能なら「未対応」を明文化する（例: 任意ファイル読み込みのリスク）。
+4. 既存の 213 テスト（native）+ wasm 3、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -32,5 +32,5 @@
 ## Constraints
 
 - 新規依存を追加しない。
-- `config_file` / `rule_config` の配線は今回行わない（別タスク）。
+- 任意パスの読み込みは fail-closed にする（ADR-0097 の方針）。
 - `master` へ push する。force push はしない。
