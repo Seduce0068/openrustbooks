@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 103 件）。
+openrustbooks の ADR 一覧（全 104 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -208,3 +208,5 @@ openrustbooks の ADR 一覧（全 103 件）。
   - status: accepted — OpenAiConfig.extra_headers を IPC DTO と Debug 出力からマスクする決定を記録する。
 - [ADR-0103: 設定 DTO のパス情報除外](0103-path-field-redaction.md)
   - status: accepted — 設定 IPC の DTO からローカルパス情報を除外し、マージで保持する決定を記録する。
+- [ADR-0104: AI 送信前のネイティブ同意ダイアログ](0104-send-consent-dialog.md)
+  - status: accepted — 本文を AI へ送る直前に Rust 側でネイティブ確認を要求する決定を記録する。
