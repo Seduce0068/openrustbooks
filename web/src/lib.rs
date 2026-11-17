@@ -268,11 +268,127 @@ fn scroll_content_to_top() {
 #[cfg(target_arch = "wasm32")]
 const IMAGE_SETTLE_MS: f64 = 2000.0;
 
+/// HTML 中の `<img>` のうち、`src` 属性を持つものだけを数える。
+///
+/// `resolve_images()` は解決できなかった画像から `src` を削除するため、
+/// `<img` を単純に数えると実際より多く見積もり、位置復元が上限まで
+/// 無駄に待つ。属性名の大文字小文字・`=` 前後の空白・クォートを許容して
+/// タグ単位で走査する。属性値（クォート内）の文字は属性名として数えない。
+#[cfg(any(target_arch = "wasm32", test))]
+fn count_images_with_src(html: &str) -> usize {
+    /// HTML の属性区切り空白（U+0009/000A/000C/000D/0020）。
+    fn is_space(byte: u8) -> bool {
+        matches!(byte, b'\t' | b'\n' | 0x0c | b'\r' | b' ')
+    }
+
+    let bytes = html.as_bytes();
+    let mut count = 0_usize;
+    let mut cursor = 0_usize;
+    while cursor + 4 <= bytes.len() {
+        if !bytes[cursor..cursor + 4].eq_ignore_ascii_case(b"<img") {
+            cursor += 1;
+            continue;
+        }
+        let name_end = cursor + 4;
+        // `<image>` などの別タグを誤検出しない。
+        if name_end >= bytes.len()
+            || !(is_space(bytes[name_end]) || bytes[name_end] == b'/' || bytes[name_end] == b'>')
+        {
+            cursor = name_end;
+            continue;
+        }
+        // タグ末尾を探す。クォート内の `>` は属性値の一部なので終端にしない。
+        let mut end = name_end;
+        let mut quote = None;
+        while end < bytes.len() {
+            let byte = bytes[end];
+            if let Some(quoted) = quote {
+                if byte == quoted {
+                    quote = None;
+                }
+            } else if byte == b'"' || byte == b'\'' {
+                quote = Some(byte);
+            } else if byte == b'>' {
+                break;
+            }
+            end += 1;
+        }
+        // 属性名 `src` を探す。直前が空白で、直後が区切りなら一致。
+        // クォート内は属性値なので、そこに " src " があっても無視する。
+        let mut position = name_end;
+        let mut quote = None;
+        let mut has_src = false;
+        while position < end {
+            let byte = bytes[position];
+            if let Some(quoted) = quote {
+                if byte == quoted {
+                    quote = None;
+                }
+                position += 1;
+                continue;
+            }
+            if byte == b'"' || byte == b'\'' {
+                quote = Some(byte);
+                position += 1;
+                continue;
+            }
+            if is_space(byte)
+                && position + 4 <= bytes.len()
+                && bytes[position + 1..position + 4].eq_ignore_ascii_case(b"src")
+            {
+                let after = position + 4;
+                if after >= end
+                    || is_space(bytes[after])
+                    || matches!(bytes[after], b'=' | b'/' | b'>')
+                {
+                    has_src = true;
+                    break;
+                }
+            }
+            position += 1;
+        }
+        if has_src {
+            count += 1;
+        }
+        cursor = end.saturating_add(1).min(bytes.len());
+    }
+    count
+}
+
+#[cfg(test)]
+mod image_count_tests {
+    use super::count_images_with_src;
+
+    #[test]
+    fn ignores_src_text_inside_quoted_attributes() {
+        // 回帰: alt/title の値に " src " があっても画像として数えない。
+        assert_eq!(count_images_with_src(r#"<img alt="image src here">"#), 0);
+        assert_eq!(count_images_with_src(r#"<img title='a src b'>"#), 0);
+        assert_eq!(count_images_with_src(r#"<img alt="x src=y">"#), 0);
+        // クォート内の ">" でタグが終わったと誤判定しないことも確認する。
+        assert_eq!(count_images_with_src(r#"<img alt="a > b" src="x">"#), 1);
+    }
+
+    #[test]
+    fn counts_only_images_with_a_src_attribute() {
+        assert_eq!(count_images_with_src(r#"<img src="x">"#), 1);
+        assert_eq!(count_images_with_src(r#"<IMG SRC = 'x'>"#), 1);
+        assert_eq!(count_images_with_src(r#"<img alt="x">"#), 0);
+        assert_eq!(count_images_with_src(r#"<img>"#), 0);
+        assert_eq!(count_images_with_src(r#"<img data-src="x" srcdoc="y">"#), 0);
+        // src なし画像が混在しても、src を持つものだけを数える。
+        assert_eq!(
+            count_images_with_src(r#"<img alt="image src here"><img src="x">"#),
+            1
+        );
+    }
+}
+
 /// 本文の画像が DOM に現れ、すべて読み込みを終えたか判定する。
 ///
-/// `expected` は設定した HTML に含まれる `img` の数。本文の更新は非同期に
-/// DOM へ反映されるため、数が揃うまでは未確定として扱う。`src` が無い画像
-/// （解決できず除去したもの）は待たない。
+/// `expected` は設定した HTML のうち `src` を持つ `img` の数。本文の更新は
+/// 非同期に DOM へ反映されるため、数が揃うまでは未確定として扱う。`src` が
+/// 無い画像（解決できず除去したもの）は数えず、待たない。
 ///
 /// 完了判定は `complete()` だけでは不十分。`complete()` は `src` 未設定・空・
 /// broken・画像読み込み無効でも `true` を返すため、自然サイズが未確定の画像を
@@ -1764,8 +1880,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         let _ = web_sys::Url::revoke_object_url(&url);
                     }
                     *object_urls.borrow_mut() = urls;
-                    // `set_content` は html を move するため、先に画像数を数える。
-                    let expected_images = html.matches("<img").count();
+                    // `set_content` は html を move するため、先に読み込む画像数を数える。
+                    // src を削除された画像は待たないため、src を持つ img だけを数える。
+                    let expected_images = count_images_with_src(&html);
                     set_current.set(index);
                     // DOM の更新前にスクロール位置をリセットする（ブラウザの
                     // スクロール保持を避けるため）。
