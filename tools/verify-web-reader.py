@@ -47,6 +47,7 @@ CH1 = """<?xml version="1.0" encoding="utf-8"?>
 <p><a id="to-ch2" href="ch2.xhtml">Go to chapter two</a></p>
 <p><a id="to-ch2-part" href="ch2.xhtml#part">Go to chapter two part</a></p>
 <p><a id="external-link" href="https://example.com">external link</a></p>
+<p><a id="mailto-link" href="mailto:test@example.com">mail link</a></p>
 <p><a id="bad-js" href="javascript:alert(1)">bad link</a></p>
 <p><a id="missing" href="missing.xhtml">missing link</a></p>
 <p><a id="ext-link" href="https://example.invalid/x">external</a></p>
@@ -2955,6 +2956,29 @@ async def run_checks(cdp: Cdp) -> int:
             and "noreferrer" in str(call.get("features")),
             f"(call={call!r})",
         )
+    # mailto: リンクも同じ分岐で noopener/noreferrer 付きで開かれる。
+    await cdp.evaluate("window.__openCalls = []")
+    mail_href = await cdp.evaluate(
+        "document.querySelector('#mailto-link')?.getAttribute('href')"
+    )
+    checker.check("mailto リンクの href が保持される", mail_href == "mailto:test@example.com",
+                  f"(href={mail_href!r})")
+    await cdp.evaluate("document.querySelector('#mailto-link').click()")
+    await asyncio.sleep(0.3)
+    mail_calls = await cdp.evaluate("window.__openCalls")
+    checker.check("mailto リンクのクリックで window.open が呼ばれる", len(mail_calls or []) == 1,
+                  f"(calls={mail_calls!r})")
+    if mail_calls:
+        call = mail_calls[0]
+        checker.check(
+            "mailto が _blank / noopener,noreferrer で開かれる",
+            call.get("url") == "mailto:test@example.com"
+            and call.get("target") == "_blank"
+            and "noopener" in str(call.get("features"))
+            and "noreferrer" in str(call.get("features")),
+            f"(call={call!r})",
+        )
+
     # スタブを元に戻す（後続のテストに影響しないように）。
     await reload_reader(cdp)
 
