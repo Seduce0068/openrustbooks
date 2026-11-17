@@ -1,35 +1,34 @@
 # Goal
 
-REQ-010 の「最大 3 回再生成」を実装と一致する文言に明文化する（ADR-0105 / 0120 の未決定）。
+環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` の設定マッピングを検証・修正する（ADR-0120 / 0121 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`docs/requirements.md:132` は「rumdl 検査合格まで最大3回再生成」とする一方、
-実装は `for attempt in 0..=max_retries`（既定 3）で
-初期 1 回＋リトライ 3 回＝最大 4 回生成する。
-ADR-0105 / 0120 で解釈差が未決定として残っている。
+`AppConfig::load()` は `Env::prefixed("OPENRUSTBOOKS_").split("_")` を使う。
+`split("_")` は全ての `_` を階層区切り `.` に変換すると推測され、
+`OPENRUSTBOOKS_AI_MAX_RETRIES` が `ai.max.retries` になり、
+serde フィールド `ai.max_retries` に届かない可能性がある。
 
 ### 成果物
 
-- `docs/requirements.md`: 変更（文言を明文化）
-- `docs/decisions/0121-req010-retry-wording.md`: 追加
+- `core/src/config.rs`: 変更（必要ならマッピング修正）
+- `docs/decisions/0122-env-var-mapping.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. REQ-010 の品質ゲートを「初期生成 1 回＋リトライ最大 3 回（合計最大 4 回）」と明記する。
-2. 上限設定 `max_retries` の既定 3 と範囲 0..=10（ADR-0120）への言及を追加する。
-3. 既存の「失敗時は差分提示しユーザー判断へ」は維持する。
-4. コードは変更しない。
+1. figment 0.10.19 の `split("_")` の実際の挙動をローカルクレートで確認する。
+2. `OPENRUSTBOOKS_AI_MAX_RETRIES` が `AiConfig.max_retries` に届くかテストで確認する。
+3. 届かない場合は、既存の環境変数を壊さずに修正する。
+4. 既存の 200 テスト（native 200 + wasm 3）、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
-- markdownlint が通る。
+- 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- コードを変更しない。
-- 実装の挙動（最大 4 回生成）は変更しない。
+- 新規依存を追加しない。
 - `master` へ push する。force push はしない。
