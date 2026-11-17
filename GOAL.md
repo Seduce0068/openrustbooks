@@ -1,30 +1,30 @@
 # Goal
 
-AI 機能の既定を無効にし、同意なく本文が送信されないようにする（todo.md D06 の一部）。
+AI を無効化した後に service が残存し送信できる問題を修正する（ai-consent-auditor 経路 B/C）。
 
 ## Scope
 
 ### 背景
 
-`core/src/config.rs` の `AiConfig::default()` は `enabled: true` で、
-`desktop/src/main.rs` の setup で起動時に `init_ai_service()` が呼ばれる。
-UI 未接続のため実際の送信は起きていないが、機能を接続した瞬間に
-同意なしで本文が送られるリスクがある。
+- `AppState::ai_service()` は `config.ai.enabled` を確認せず、service の有無だけを見る。
+- 設定で `enabled=false` に戻しても `ai_service` が `None` に戻される箇所が無い。
+- そのため、一度有効化された後は設定上無効でも AI コマンドが送信できる。
 
 ### 成果物
 
-- `core/src/config.rs`: 変更（既定 `enabled: false`）
-- `desktop/src/state/mod.rs`: 変更（テストの期待値を更新）
-- `docs/decisions/0099-ai-default-off.md`: 追加
+- `desktop/src/state/mod.rs`: 変更（ai_service() ガード、disable メソッド、テスト）
+- `desktop/src/commands/config.rs`: 変更（無効化時に service を破棄）
+- `docs/decisions/0100-ai-service-guard.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `AiConfig::default().enabled` を false にする。
-2. 既存設定ファイルで明示的に true が設定されていれば従来どおり有効。
-3. 起動時の `init_ai_service()` は `is_ai_enabled()` ガードのまま（既定では呼ばれない）。
-4. 既存テストを更新し、新規テストを追加する。
-5. 6 ゲート・E2E が成功する。
+1. `AppState::ai_service()` は `config.ai.enabled == false` のとき None を返す。
+2. `update_config` / `update_ai_config(enabled=false)` / `reset_config` のとき
+   `ai_service` を None に戻す。
+3. AI コマンドのシグネチャ・Tauri 登録は変更しない。
+4. 既存の 143 テスト、E2E 228 項目を壊さない。
+5. 新規テストを追加する。
 
 ## Acceptance criteria
 
@@ -32,6 +32,6 @@ UI 未接続のため実際の送信は起きていないが、機能を接続�
 
 ## Constraints
 
-- AI 送信プレビュー／同意ダイアログの UI 実装は今回行わない（将来タスク）。
-- OS キーチェーン移行は今回行わない。
+- 同意ダイアログ UI は今回行わない（将来タスク）。
+- 新規依存を追加しない。
 - `master` へ push する。force push はしない。
