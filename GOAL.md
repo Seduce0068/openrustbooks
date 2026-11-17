@@ -1,34 +1,30 @@
 # Goal
 
-AI リトライ回数をトークン上限から誤導出する問題を修正する（todo.md R1-ai#3 / R2-ai#3）。
+旧 DTO の往路で `max_retries` が既定値にリセットされる問題を修正する（ADR-0105 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`core/src/ai_markdown/pipeline.rs:27` が
-`max_retries: config.ai.max_tokens_per_request.min(3)` としている。
-トークン上限（8192 等）をリトライ回数（最大 3）に流用しており、
-設定を変更するとリトライ回数が意図せず変わる。
-要件 REQ-010 は「rumdl 検査合格まで最大 3 回再生成」を求めている。
+`AiConfigView` に `max_retries` を追加したため、古い DTO JSON（キーなし）を
+`update_config` へ渡すと serde の既定値 3 で保存され、利用者の設定（例 5）が
+静かに消える。UI 未接続で現状は発生しないが、接続前に塞ぐ。
 
 ### 成果物
 
-- `core/src/config.rs`: 変更（`AiConfig.max_retries` を追加、既定 3）
-- `core/src/ai_markdown/pipeline.rs`: 変更（専用設定を使用）
-- `desktop/src/commands/config.rs`: 変更（DTO に含める）
-- `docs/decisions/0105-retry-config.md`: 追加
+- `desktop/src/commands/config.rs`: 変更（`AiConfigView` から `max_retries` を除外、
+  `merge_secrets` で現在値を保持）
+- `docs/decisions/0106-retry-merge-preservation.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `AiConfig` に `max_retries: usize` を追加し、既定値を 3 にする。
-2. `PipelineConfig.max_retries` は `config.ai.max_retries` を使う。
-3. DTO（`AiConfigView`）に `max_retries` を含め、JS から設定可能にする。
-   `merge_secrets` の既存ロジックを壊さない。
-4. 既存 TOML に `max_retries` が無い場合も既定 3 で読み込める（後方互換）。
-5. テストを追加する。
-6. 既存の 169 テスト、E2E 228 項目を壊さない。
+1. `AiConfigView` から `max_retries` を削除し、DTO JSON に含まれないようにする。
+2. `merge_secrets` で `ai.max_retries` を現在値から保持する。
+3. 既存テスト `ai_config_view_json_includes_max_retries` を
+   「含まれない」検証に変更する。
+4. 新規テストを追加する（マージで保持されること、DTO に無いこと）。
+5. 既存の 173 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -37,5 +33,5 @@ AI リトライ回数をトークン上限から誤導出する問題を修正�
 ## Constraints
 
 - 新規依存を追加しない。
-- 同意ダイアログ・送信先制限は変更しない。
+- UI 配線は変更しない。
 - `master` へ push する。force push はしない。
