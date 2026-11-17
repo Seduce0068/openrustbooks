@@ -1,30 +1,33 @@
 # Goal
 
-旧 DTO の往路で `max_retries` が既定値にリセットされる問題を修正する（ADR-0105 の未決定）。
+AI 設定変更時に実行中 service を安全に再初期化する（ADR-0106 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`AiConfigView` に `max_retries` を追加したため、古い DTO JSON（キーなし）を
-`update_config` へ渡すと serde の既定値 3 で保存され、利用者の設定（例 5）が
-静かに消える。UI 未接続で現状は発生しないが、接続前に塞ぐ。
+`update_config` は有効時に再初期化せず、`update_ai_config` は `spawn` 内の
+`let _ =` でエラーを握り潰す。そのため保存済み設定（(base_url / model /
+max_retries 等）と実際に送信する service が乖離し得る。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 変更（`AiConfigView` から `max_retries` を除外、
-  `merge_secrets` で現在値を保持）
-- `docs/decisions/0106-retry-merge-preservation.md`: 追加
+- `desktop/src/state/mod.rs`: 変更（fail-closed な再初期化メソッド）
+- `desktop/src/commands/config.rs`: 変更（同期 → async、差分トリガー、エラー伝播）
+- `docs/decisions/0107-ai-service-refresh.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `AiConfigView` から `max_retries` を削除し、DTO JSON に含まれないようにする。
-2. `merge_secrets` で `ai.max_retries` を現在値から保持する。
-3. 既存テスト `ai_config_view_json_includes_max_retries` を
-   「含まれない」検証に変更する。
-4. 新規テストを追加する（マージで保持されること、DTO に無いこと）。
-5. 既存の 173 テスト、E2E 228 項目を壊さない。
+1. `AppState` に fail-closed な再初期化メソッドを追加する。
+   - 無効なら service を破棄。
+   - 有効なら旧 service を破棄してから生成し、失敗時も None のままにする。
+2. `update_config` / `update_ai_config` / `update_lint_config` を async 化し、
+   AI または lint 設定が変わった場合だけ再初期化する。
+3. 再初期化エラーは握り潰さず command の Err として返す。
+4. Tauri の command 登録（`main.rs`）は変更しない。
+5. テストを追加する（差分検知、無効化時の破棄など）。
+6. 既存の 174 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -33,5 +36,5 @@
 ## Constraints
 
 - 新規依存を追加しない。
-- UI 配線は変更しない。
+- 同意ダイアログ（ADR-0104）と送信先制限（ADR-0101）は変更しない。
 - `master` へ push する。force push はしない。
