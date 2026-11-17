@@ -2827,6 +2827,66 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("ヘルプを閉じられる", help_closed is True)
 
+    # 章タイトルの検索フィルター。
+    await cdp.evaluate("localStorage.clear()")
+    await reload_reader(cdp)
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    await asyncio.sleep(0.5)
+    checker.check(
+        "章フィルター入力が存在する",
+        await cdp.evaluate("document.querySelector('#reader-chapter-filter') !== null"),
+    )
+    all_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-chapter-select option').length"
+    )
+    await cdp.evaluate(
+        "(() => { const input = document.querySelector('#reader-chapter-filter');"
+        " input.value = 'Two'; input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+    )
+    await asyncio.sleep(0.4)
+    filtered_labels = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('#reader-chapter-select option'))"
+        ".map((o) => o.textContent)"
+    )
+    checker.check(
+        "フィルターで該当章が残る",
+        any("Two" in str(label) for label in filtered_labels),
+        f"(labels={filtered_labels!r}, all={all_count})",
+    )
+    # 一致しない語では、選択状態を保つため現在章だけが残る。
+    await cdp.evaluate(
+        "(() => { const input = document.querySelector('#reader-chapter-filter');"
+        " input.value = 'ZZZNOTFOUND'; input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+    )
+    await asyncio.sleep(0.4)
+    no_match_labels = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('#reader-chapter-select option'))"
+        ".map((o) => o.textContent)"
+    )
+    checker.check(
+        "一致しないフィルターでは現在章だけが残る",
+        len(no_match_labels) == 1,
+        f"(labels={no_match_labels!r})",
+    )
+    await cdp.evaluate(
+        "(() => { const input = document.querySelector('#reader-chapter-filter');"
+        " input.value = ''; input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+    )
+    await asyncio.sleep(0.4)
+    restored_count = await cdp.evaluate(
+        "document.querySelectorAll('#reader-chapter-select option').length"
+    )
+    checker.check(
+        "フィルターを消すと全章に戻る",
+        restored_count == all_count,
+        f"(count={restored_count}, expected={all_count})",
+    )
+
     return finish(checker)
 
 
