@@ -1,41 +1,47 @@
 # Goal
 
-古い ADR に残る解消済みの未決定項目を整理する。
+章ドロップダウンにタイトル検索フィルターを追加する。
 
 ## Scope
 
 ### 背景
 
-ADR-0005 〜 0013 の未決定には、その後の ADR で既に解消された項目が多数残っている。
-例えば目次解析（ADR-0006）、非整形式 XHTML（ADR-0059）、リモート資源
-（ADR-0060/0066）、SVG の Blob URL（ADR-0043〜0045）、深い入れ子（ADR-0050/0065）、
-メモリコピー（ADR-0051）、相対リンク（ADR-0014）など。
+ADR-0006 の未決定「目次パネルの折りたたみ・検索」。
+章数が多い EPUB ではドロップダウンから目的の章を探しにくい。
+タイトルで絞り込む入力欄を追加し、検索性を向上する。
 
 ### 成果物
 
-- `docs/decisions/0005-epub-body-reading.md`
-- `docs/decisions/0006-epub-table-of-contents.md`
-- `docs/decisions/0007-epub-toc-fragments.md`
-- `docs/decisions/0009-epub-landmarks-and-page-list.md`
-- `docs/decisions/0010-epub-wasm-bindings.md`
-- `docs/decisions/0012-epub-html-display.md`
-- `docs/decisions/0013-epub-display-hardening.md`
+- `web/src/lib.rs`: 変更（検索入力、章リストのフィルタリング）
+- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
+- `docs/decisions/0078-chapter-filter.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 各 ADR の「未決定」から解消済み項目を「解決済み」セクションへ移し、
-   参照先 ADR を明記する。
-2. まだ未実装の項目（EPUB 内 CSS、縦書き、メディア、MathML 等）は
-   「未決定」に残す。
-3. コードは変更しない。
+1. 検索:
+   - ツールバーに `<input id="reader-chapter-filter">` を置く（aria-label="Filter chapters"）。
+   - 入力値で章タイトルを部分一致（大文字小文字無視）で絞り込む。
+   - 現在表示中の章は、フィルターに一致しなくても一覧に残す（選択状態を保持）。
+   - 空文字のときは全章を表示する。
+2. 既存の挙動を変えない:
+   - 章移動・履歴・位置復元は従来どおり。
+   - 既存の 125 テスト、E2E 206 項目を変えない。
+
+### 必須テスト
+
+- `tools/verify-web-reader.py` に追加する。
+  - フィルター入力に "Two" と入れると該当章だけが残る。
+  - 入力を消すと全章に戻る。
 
 ## Acceptance criteria
 
-- markdownlint が通る。
 - 6 ゲートすべて成功する。
+- CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## Constraints
 
-- コードを変更しない。
+- 新規依存を追加しない。
+- `desktop/` を変更しない。
+- コメントと doc コメントは日本語で簡潔に書く。
 - `master` へ push する。force push はしない。
