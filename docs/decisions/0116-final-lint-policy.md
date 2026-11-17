@@ -64,7 +64,7 @@ REQ-010 は「品質ゲート: rumdl 検査合格まで最大3回再生成。
 
 - 構造化ペイロード（diff / issues / content / converged / fixes_applied /
   本文の出所）を保持するエラー型もしくはレスポンスへの移行。
-- `mod.rs` の到達不能な `last_error` / `Err` デッドコードの削除。
+- ~~`mod.rs` の到達不能な `last_error` / `Err` デッドコードの削除~~ ADR-0118 で削除済み。
 - Web UI 未接続（AI ボタンはスタブ、wasm service は常に pass）。
 - `conflict_cycle` 未保持、`WasmLintFixResult` スタブ、反復上限 10 の根拠。
 - `warnings_as_errors` / `config_file` / `rule_config` の rumdl 側未配線。
