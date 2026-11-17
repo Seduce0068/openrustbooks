@@ -3,6 +3,13 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Sentinel used whenever a secret is redacted in `Debug` output or IPC views.
+///
+/// The value is intentionally not a valid credential so that echoing a masked
+/// view back into an update command can be detected and replaced with the
+/// secret currently held by the application.
+pub const REDACTED_SECRET: &str = "***";
+
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -95,7 +102,7 @@ impl Default for AiConfig {
 }
 
 /// OpenAI-compatible API configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OpenAiConfig {
     /// API base URL (e.g., https://api.openai.com/v1)
     pub base_url: String,
@@ -118,6 +125,18 @@ impl Default for OpenAiConfig {
             organization: None,
             extra_headers: Default::default(),
         }
+    }
+}
+
+impl std::fmt::Debug for OpenAiConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAiConfig")
+            .field("base_url", &self.base_url)
+            .field("api_key", &self.api_key.as_ref().map(|_| REDACTED_SECRET))
+            .field("model", &self.model)
+            .field("organization", &self.organization)
+            .field("extra_headers", &self.extra_headers)
+            .finish()
     }
 }
 
@@ -216,7 +235,7 @@ pub struct LocalRootConfig {
 }
 
 /// Google Drive configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GoogleDriveConfig {
     /// OAuth client ID
     pub client_id: String,
@@ -230,6 +249,22 @@ pub struct GoogleDriveConfig {
     pub use_app_data_folder: bool,
     /// Scopes
     pub scopes: Vec<String>,
+}
+
+impl std::fmt::Debug for GoogleDriveConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GoogleDriveConfig")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &REDACTED_SECRET)
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| REDACTED_SECRET),
+            )
+            .field("root_folder_id", &self.root_folder_id)
+            .field("use_app_data_folder", &self.use_app_data_folder)
+            .field("scopes", &self.scopes)
+            .finish()
+    }
 }
 
 /// Editor configuration
@@ -368,8 +403,116 @@ impl AppConfig {
             fs::create_dir_all(config_dir)?;
             let config_file = config_dir.join("config.toml");
             let toml = toml::to_string_pretty(self)?;
-            fs::write(config_file, toml)?;
+            write_private(&config_file, toml.as_bytes())?;
         }
         Ok(())
+    }
+}
+
+/// Write `contents` to `path` with owner-only permissions.
+///
+/// `OpenOptions::mode` applies only on creation, so `set_permissions` is also
+/// called to tighten files that already existed with a wider mode.
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+fn write_private(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    file.write_all(contents)
+}
+
+/// Non-UNIX fallback: use the platform's default file permissions.
+#[cfg(all(not(target_arch = "wasm32"), not(unix)))]
+fn write_private(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    std::fs::write(path, contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config_with_secrets() -> AppConfig {
+        let mut config = AppConfig::default();
+        config.ai.openai.api_key = Some("sk-dummy-do-not-leak".to_string());
+        config.storage.google_drive = Some(GoogleDriveConfig {
+            client_id: "dummy-client-id".to_string(),
+            client_secret: "dummy-client-secret".to_string(),
+            refresh_token: Some("dummy-refresh-token".to_string()),
+            root_folder_id: None,
+            use_app_data_folder: true,
+            scopes: vec!["scope".to_string()],
+        });
+        config
+    }
+
+    #[test]
+    fn debug_output_masks_secret_values() {
+        let debug = format!("{:?}", config_with_secrets());
+
+        assert!(!debug.contains("sk-dummy-do-not-leak"));
+        assert!(!debug.contains("dummy-client-secret"));
+        assert!(!debug.contains("dummy-refresh-token"));
+        assert!(debug.contains(REDACTED_SECRET));
+    }
+
+    #[test]
+    fn config_without_optional_secret_fields_still_deserializes() {
+        let config = config_with_secrets();
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+
+        value
+            .get_mut("ai")
+            .and_then(|v| v.get_mut("openai"))
+            .and_then(|v| v.as_table_mut())
+            .expect("openai table")
+            .remove("api_key");
+        value
+            .get_mut("storage")
+            .and_then(|v| v.get_mut("google_drive"))
+            .and_then(|v| v.as_table_mut())
+            .expect("google_drive table")
+            .remove("refresh_token");
+
+        let stripped = toml::to_string(&value).unwrap();
+        let restored: AppConfig = toml::from_str(&stripped).unwrap();
+
+        assert!(restored.ai.openai.api_key.is_none());
+        assert_eq!(restored.ai.openai.base_url, config.ai.openai.base_url);
+        let drive = restored.storage.google_drive.unwrap();
+        assert!(drive.refresh_token.is_none());
+        assert_eq!(drive.client_secret, "dummy-client-secret");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_creates_and_tightens_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir =
+            std::env::temp_dir().join(format!("openrustbooks-config-perms-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+
+        write_private(&path, b"first").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+
+        // `mode` only applies on creation; an existing 0644 file must also be
+        // tightened when it is overwritten.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        write_private(&path, b"second").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        assert_eq!(std::fs::read(&path).unwrap(), b"second");
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
