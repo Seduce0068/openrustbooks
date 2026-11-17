@@ -1,39 +1,38 @@
 # Goal
 
-Markdown 文書の保存時に front matter が失われるバグを修正する（todo.md 独自 R2-arch-state#1）。
+配布 WASM から開発ホストの絶対パスを除去する（todo.md E01）。
 
 ## Scope
 
 ### 背景
 
-`desktop/src/commands/document.rs` の保存処理は `document.as_text()` を使うが、
-`Document::as_text()` は Markdown の body のみを返すため、
-`DocumentContent::Markdown { front_matter, .. }` がディスク書き込み時に失われる。
+配布用 WASM（`web/dist/*_bg.wasm`）に `/home/koppe/...` などの開発ホスト
+絶対パスが 1811 件含まれている。デバッグ情報やパニックメッセージから
+開発環境のパスが漏れる可能性がある。
 
 ### 成果物
 
-- `core/src/document.rs`: 変更（front matter を結合した完全テキストを返すメソッド）
-- `desktop/src/commands/document.rs`: 変更（保存時に新メソッドを使う）
+- `Cargo.toml`: 変更（ワークスペース共通の `remap-path-prefix` 設定）
+- `tools/verify-web-reader.py`: 変更（配布 WASM のパス漏れ検証を追加、任意）
+- `docs/decisions/0088-wasm-path-stripping.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `Document` に `full_text()`（仮）を追加し、Markdown の場合は
-   front matter を `---` で囲み body の前に結合して返す。
-   - front matter が `None` の場合は body をそのまま返す。
-   - `Text` の場合は従来どおり本文を返す。
-2. 保存処理で `as_text()` の代わりに新メソッドを使う。
-3. 既存の `as_text()` は編集用 API として維持する（挙動変更なし）。
-4. core に単体テストを追加する。
-5. 既存の 125 テスト、E2E 220 項目を変えない。
+1. ワークスペースの `[profile.release]` に `-C remap-path-prefix` を設定し、
+   ビルド時の絶対パスを相対パスへ置換する。
+2. `trunk build --offline` で生成した WASM に開発ホスト絶対パス
+   （`/home/koppe`、`/home/`、`/tmp/`）が含まれないことを確認する。
+3. 既存の 126 テスト、E2E 220 項目を変えない。
 
 ## Acceptance criteria
 
-- 6 ゲートすべて成功する。
-- 新しい単体テストが通る。
+- 配布 WASM に開発ホスト絶対パスが 0 件。
+- 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- 新規依存を追加しない（既存の `serde_norway` を使用）。
-- Web 版には影響しない。
+- 新規依存を追加しない。
+- 既存の `strip = true` は維持する。
+- `desktop/` の Tauri 設定は変更しない。
 - `master` へ push する。force push はしない。
