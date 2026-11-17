@@ -1,35 +1,34 @@
 # Goal
 
-`expected_images` を解決済み画像の実数に合わせ、src 削除画像による無駄な 2 秒待ちを解消する（ADR-0113 の未決定）。
+EPUB 内 CSS の安全な適用方針を調査・判断する（ADR-0012 / 0044 / 0112 等から継続）。
 
 ## Scope
 
 ### 背景
 
-`expected_images` は章 HTML の `"<img"` 出現数で計算されるが、
-`resolve_images()` で解決失敗して `src` を削除された画像もカウントされる。
-一方 `images_settled()` は src なし画像をスキップするため
-`with_source >= expected` が成立せず、2 秒 deadline まで待ち続ける。
+`core/src/sanitize.rs` は `style` タグと `style` 属性を完全に除去する（fail-closed）。
+このため EPUB 独自の組版（縦書き、見出し装飾、独自フォント等）が失われる。
+安全に適用するには `url()` 外部参照の除去、スコープ付きスタイル、
+CSP `style-src` との整合が必要。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`expected_images` の算出方法を修正）
-- `docs/decisions/0114-expected-image-count.md`: 追加
+- `docs/decisions/0115-epub-css-policy.md`: 追加（調査と判断）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `expected_images` を「src を持つ画像の数」に変更する。
-2. `images_settled()` の `with_source >= expected` ロジックは維持する。
-3. 既存の 193 テスト、E2E 228 項目を壊さない。
-4. 新規依存を追加しない。
+1. 現状のサニタイズ・CSP・表示経路を整理する。
+2. 安全に CSS を適用するための選択肢を比較する。
+3. 実装する／見送る／段階導入するか判断し根拠を記録する。
+4. コード変更は行わない（調査と決定のみ）。
 
 ## Acceptance criteria
 
-- 6 ゲート・E2E が成功する。
+- 判断が ADR に記録される。
+- markdownlint が通る。
 
 ## Constraints
 
-- 遅延読み込みは導入しない。
-- `images_settled()` 本体の判定（`complete() && naturalWidth > 0`）は変更しない。
+- コードを変更しない。
 - `master` へ push する。force push はしない。
