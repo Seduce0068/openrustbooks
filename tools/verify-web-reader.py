@@ -2887,6 +2887,32 @@ async def run_checks(cdp: Cdp) -> int:
         f"(count={restored_count}, expected={all_count})",
     )
 
+    # / キーでフィルター入力にフォーカスする。
+    await cdp.evaluate("document.body.focus()")
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyDown", "key": "/", "code": "Slash", "text": "/",
+         "windowsVirtualKeyCode": 191},
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyUp", "key": "/", "code": "Slash",
+         "windowsVirtualKeyCode": 191},
+    )
+    await asyncio.sleep(0.3)
+    focused_filter = await cdp.evaluate(
+        "document.activeElement?.id === 'reader-chapter-filter'"
+    )
+    checker.check("/ キーで章フィルターにフォーカスする", focused_filter is True)
+    # ヘルプに / の記載が増えている。
+    await cdp.evaluate("document.querySelector('#reader-help').click()")
+    await asyncio.sleep(0.3)
+    help_with_slash = await cdp.evaluate(
+        "document.querySelector('#reader-help-dialog')?.textContent.includes('chapter filter')"
+    )
+    checker.check("ヘルプに / の記載がある", help_with_slash is True)
+    await cdp.evaluate("document.querySelector('#reader-help-dialog button').click()")
+
     return finish(checker)
 
 
