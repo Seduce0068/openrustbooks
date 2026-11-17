@@ -63,7 +63,10 @@ impl Default for GeneralConfig {
 /// AI/LLM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiConfig {
-    /// Enable AI features
+    /// Enable AI features.
+    ///
+    /// Disabled by default: no content is sent to any provider until the user
+    /// explicitly opts in.
     pub enabled: bool,
     /// Default provider (openai, ollama, etc.)
     pub default_provider: String,
@@ -87,7 +90,8 @@ pub struct AiConfig {
 impl Default for AiConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            // Off by default; requires explicit user opt-in (see `AiConfig::enabled`).
+            enabled: false,
             default_provider: "openai".to_string(),
             openai: OpenAiConfig::default(),
             ollama: OllamaConfig::default(),
@@ -450,6 +454,28 @@ mod tests {
             scopes: vec!["scope".to_string()],
         });
         config
+    }
+
+    #[test]
+    fn ai_disabled_by_default() {
+        assert!(!AiConfig::default().enabled);
+    }
+
+    #[test]
+    fn toml_can_explicitly_enable_ai() {
+        let config = AppConfig::default();
+        assert!(!config.ai.enabled, "sanity: default must be disabled");
+
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+        value
+            .get_mut("ai")
+            .and_then(|v| v.as_table_mut())
+            .expect("ai table")
+            .insert("enabled".to_string(), toml::Value::Boolean(true));
+
+        let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
+        assert!(restored.ai.enabled);
     }
 
     #[test]

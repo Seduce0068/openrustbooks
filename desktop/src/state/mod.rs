@@ -159,11 +159,11 @@ mod tests {
     #[test]
     fn config_round_trip_in_memory() {
         let state = AppState::new(AppConfig::default());
-        assert!(state.is_ai_enabled());
+        assert!(!state.is_ai_enabled(), "AI must be off by default");
         let mut config = state.config();
-        config.ai.enabled = false;
+        config.ai.enabled = true;
         state.update_config(config).unwrap();
-        assert!(!state.is_ai_enabled());
-        assert!(!state.config().ai.enabled);
+        assert!(state.is_ai_enabled());
+        assert!(state.config().ai.enabled);
     }
 }
