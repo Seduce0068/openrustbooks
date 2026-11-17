@@ -9,6 +9,12 @@ tags:
 status: proposed
 ---
 
+> **文書の位置づけ（2026-11-17 時点）:** 本文は初期提案時点の構成案で、
+> 現在の実装状況とは一部異なり、status も `proposed` のままである。
+> 採用済みの技術・方針は [README](../README.md) と
+> `docs/decisions/` の ADR を参照（例: Leptos 0.8、Tauri 2、rumdl を採用済み）。
+> 本ファイルは提案時の判断記録として残す。
+
 ## 決定と候補
 
 | 項目 | 状態 | 内容 |
