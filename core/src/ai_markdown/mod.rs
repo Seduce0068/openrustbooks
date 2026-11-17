@@ -132,8 +132,9 @@ impl AiMarkdownPipeline {
             // 1. Generate/modify content via AI
             let ai_result = self.call_ai(&request, &current_content, attempt).await?;
 
-            // 2. Apply lint validation and auto-fix
-            let lint_result = self.linter.lint_and_fix(&ai_result.content).await?;
+            // 2. Apply lint validation（auto_fix が有効なときだけ自動修正）
+            let lint_result =
+                validate_content(&self.linter, &ai_result.content, self.config.auto_fix).await?;
 
             // 3. Check if lint passes
             if lint_result.passed || attempt == self.config.max_retries {
@@ -185,6 +186,29 @@ impl AiMarkdownPipeline {
         self.client
             .complete(&prompt, self.config.token_limit, self.config.streaming)
             .await
+    }
+}
+
+/// auto_fix に応じて lint のみ／自動修正付き lint を実行する
+#[cfg(not(target_arch = "wasm32"))]
+async fn validate_content(
+    linter: &lint::MarkdownLinter,
+    content: &str,
+    auto_fix: bool,
+) -> CoreResult<lint::LintResultWrapper> {
+    if auto_fix {
+        linter.lint_and_fix(content).await
+    } else {
+        let issues = linter.lint(content)?;
+        let passed = issues
+            .iter()
+            .all(|issue| issue.severity != lint::LintSeverity::Error);
+        Ok(lint::LintResultWrapper {
+            passed,
+            issues,
+            fixed_content: content.to_string(),
+            fixes_applied: 0,
+        })
     }
 }
 
@@ -493,5 +517,41 @@ impl<Req: PipelineInput> PipelineInput for PipelineRequest<Req> {
     }
     fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) {
         self.inner.add_lint_feedback(issues)
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    const DIRTY: &str = "# Title\n\nTrailing spaces here   \n";
+
+    fn linter() -> lint::MarkdownLinter {
+        lint::MarkdownLinter::new(&LintConfig::default()).expect("linter should build")
+    }
+
+    #[tokio::test]
+    async fn auto_fix_false_keeps_content_unchanged() {
+        let result = validate_content(&linter(), DIRTY, false)
+            .await
+            .expect("validate should succeed");
+
+        assert_eq!(result.fixed_content, DIRTY);
+        assert_eq!(result.fixes_applied, 0);
+        assert!(
+            !result.issues.is_empty(),
+            "自動修正しないので問題は残ること"
+        );
+    }
+
+    #[tokio::test]
+    async fn auto_fix_true_applies_fixes() {
+        let result = validate_content(&linter(), DIRTY, true)
+            .await
+            .expect("validate should succeed");
+
+        assert_ne!(result.fixed_content, DIRTY);
+        assert!(result.fixes_applied > 0);
+        assert!(result.passed);
     }
 }

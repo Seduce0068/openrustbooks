@@ -3,6 +3,7 @@
 use crate::{CoreError, CoreResult, config::LintConfig};
 use rumdl_lib::{
     config::{Config, MarkdownFlavor},
+    document_run::DocumentRun,
     lint,
     rule::Rule,
     rule::{LintError, LintWarning, Severity},
@@ -44,6 +45,8 @@ pub struct LintResultWrapper {
 /// Markdown linter wrapper around rumdl
 pub struct MarkdownLinter {
     rules: Vec<Box<dyn Rule>>,
+    /// lint と fix で共有する rumdl 設定
+    config: Config,
 }
 
 impl MarkdownLinter {
@@ -82,14 +85,23 @@ impl MarkdownLinter {
             rules.push(rule);
         }
 
-        Ok(Self { rules })
+        Ok(Self {
+            rules,
+            config: rumdl_config,
+        })
     }
 
     /// Lint markdown content and return issues
     pub fn lint(&self, content: &str) -> CoreResult<Vec<LintIssue>> {
         let flavor = MarkdownFlavor::Standard;
-        let result: Result<Vec<LintWarning>, LintError> =
-            lint(content, &self.rules, false, flavor, None, None);
+        let result: Result<Vec<LintWarning>, LintError> = lint(
+            content,
+            &self.rules,
+            false,
+            flavor,
+            None,
+            Some(&self.config),
+        );
 
         let warnings = result.map_err(|e| CoreError::lint(format!("Lint error: {:?}", e)))?;
 
@@ -118,15 +130,22 @@ impl MarkdownLinter {
         Ok(issues)
     }
 
-    /// Lint content (auto-fix not available in current rumdl version)
+    /// Lint して自動修正し、修正後の本文で再 lint する
     pub async fn lint_and_fix(&self, content: &str) -> CoreResult<LintResultWrapper> {
-        let issues = self.lint(content)?;
+        // 反復上限は rumdl の wasm 実装に倣う
+        let (fixed_content, fix_result) = DocumentRun::new(content, &self.rules, &self.config)
+            .fix(10)
+            .map_err(|e| CoreError::validation(format!("Auto-fix error: {}", e)))?;
+
+        // 修正前の issues のままだと retry 判定が誤るため再 lint する
+        let issues = self.lint(&fixed_content)?;
         let passed = issues.iter().all(|i| i.severity != LintSeverity::Error);
+
         Ok(LintResultWrapper {
             passed,
             issues,
-            fixed_content: content.to_string(),
-            fixes_applied: 0,
+            fixed_content,
+            fixes_applied: fix_result.rules_fixed,
         })
     }
 
@@ -190,5 +209,61 @@ fn rule_id_from_name(name: &str) -> String {
             }
             name.to_uppercase()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 末尾空白（MD009）は修正可能な代表例
+    const DIRTY: &str = "# Title\n\nTrailing spaces here   \n";
+
+    fn linter() -> MarkdownLinter {
+        MarkdownLinter::new(&LintConfig::default()).expect("linter should build")
+    }
+
+    #[test]
+    fn lint_detects_fixable_issue_without_changing_content() {
+        let linter = linter();
+        let issues = linter.lint(DIRTY).expect("lint should succeed");
+
+        assert!(
+            issues.iter().any(|i| i.rule == "MD009"),
+            "末尾空白が MD009 として検出されること"
+        );
+    }
+
+    #[tokio::test]
+    async fn lint_and_fix_applies_fixes_and_relints() {
+        let linter = linter();
+        let result = linter
+            .lint_and_fix(DIRTY)
+            .await
+            .expect("lint_and_fix should succeed");
+
+        assert!(result.fixes_applied > 0, "修正ルールが 1 以上あること");
+        assert_ne!(result.fixed_content, DIRTY, "本文が変更されること");
+        assert!(result.passed, "修正後に lint が通ること");
+        assert!(
+            result.issues.is_empty(),
+            "修正後に問題が残らないこと: {:?}",
+            result.issues
+        );
+    }
+
+    #[tokio::test]
+    async fn lint_and_fix_is_noop_for_clean_content() {
+        let linter = linter();
+        let clean = "# Title\n\nTrailing spaces here\n";
+        let result = linter
+            .lint_and_fix(clean)
+            .await
+            .expect("lint_and_fix should succeed");
+
+        assert_eq!(result.fixes_applied, 0);
+        assert_eq!(result.fixed_content, clean);
+        assert!(result.passed);
+        assert!(result.issues.is_empty());
     }
 }
