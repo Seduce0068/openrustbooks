@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 99 件）。
+openrustbooks の ADR 一覧（全 100 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -200,3 +200,5 @@ openrustbooks の ADR 一覧（全 99 件）。
   - status: accepted — API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。
 - [ADR-0099: AI 機能の既定無効化](0099-ai-default-off.md)
   - status: accepted — AI 機能を既定で無効にし、明示的な opt-in まで本文を送信しないようにする決定を記録する。
+- [ADR-0100: AI サービスの有効性ガードと破棄](0100-ai-service-guard.md)
+  - status: accepted — AI を無効化した後に service が残存して送信できる問題を修正する決定を記録する。

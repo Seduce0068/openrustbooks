@@ -286,6 +286,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - LocalStorage::resolve_path を fail-closed 化し、root 外へのパス脱出を拒否する決定を記録する。
 - [0098-secret-exposure-mitigation](docs/decisions/0098-secret-exposure-mitigation.md)
 - [0099-ai-default-off](docs/decisions/0099-ai-default-off.md)
+- [0100-ai-service-guard](docs/decisions/0100-ai-service-guard.md)
+  - AI を無効化した後に service が残存して送信できる問題を修正する決定を記録する。
   - AI 機能を既定で無効にし、明示的な opt-in まで本文を送信しないようにする決定を記録する。
   - API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。
 
