@@ -60,7 +60,7 @@ status: accepted
 
 - 保存値の正規化タイミング（load / merge / save）と、範囲外値を
   黙示丸めにするかエラー通知にするか。
-- REQ-010「最大 3 回」と `0..=max_retries` の解釈差（ADR-0105 から継続）。
+- ~~REQ-010「最大 3 回」と `0..=max_retries` の解釈差~~ ADR-0121 で要件文言を明文化済み。
 - 上限 10 の客観的根拠（実測コスト等）。
 - `PipelineConfig` を直接生成する経路はクランプされない
   （pub struct / pub field）。型レベルでの制約は将来課題。

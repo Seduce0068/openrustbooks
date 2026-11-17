@@ -63,9 +63,7 @@ status: accepted
 
 ## 未決定（retry-impact-auditor の指摘）
 
-- REQ-010 の「最大 3 回再生成」は `for attempt in 0..=max_retries`
-  （初期 1 回＋リトライ 3 回＝最大 4 回生成）と解釈している。
-  要件文言の明文化またはループ境界の再検討が必要。
+- ~~REQ-010 の「最大 3 回再生成」と実装の解釈差~~ ADR-0121 で要件文言を明文化済み。
 - ~~`max_retries` の範囲バリデーション（例 0..=10）未実装~~ ADR-0120 で service 境界にクランプを実装済み。
 - ~~`WasmConfig::default().ai_enabled = true` が `AiConfig` の既定 false と
   矛盾~~ ADR-0117 で解消済み。
