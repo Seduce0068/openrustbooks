@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 106 件）。
+openrustbooks の ADR 一覧（全 107 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -214,3 +214,5 @@ openrustbooks の ADR 一覧（全 106 件）。
   - status: accepted — リトライ回数をトークン上限から分離し、AiConfig.max_retries に集約する決定を記録する。
 - [ADR-0106: リトライ設定のマージ保持](0106-retry-merge-preservation.md)
   - status: accepted — max_retries を DTO から除外し、IPC 往復で現在値を保持する決定を記録する。
+- [ADR-0107: AI 設定変更時の service 再初期化](0107-ai-service-refresh.md)
+  - status: accepted — AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
