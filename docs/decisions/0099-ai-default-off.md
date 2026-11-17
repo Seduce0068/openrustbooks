@@ -52,10 +52,10 @@ UI 未接続のため実際の送信は起きていないが、機能を接続�
 
 ## 未決定（ai-consent-auditor の指摘）
 
-- `enabled` は送信時に再チェックされず、一度生成された `ai_service` は
-  設定を false に戻しても残存する（経路 C）。
-- `update_ai_config` から JS が `enabled=true` と任意の `base_url` を
-  設定できる（経路 B）。
+- ~~`enabled` は送信時に再チェックされず、一度生成された `ai_service` は
+  設定を false に戻しても残存する（経路 C）。~~ ADR-0100 で解決済み。
+- ~~`update_ai_config` から JS が `enabled=true` と任意の `base_url` を
+  設定できる（経路 B）。~~ ADR-0101 で送信先を許可リストに制限済み。
 - 送信プレビュー＋ネイティブの同意ダイアログ。
 - wasm 側の `ai_enabled: true` ハードコード（現状はスタブで送信なし）。
 EOF
