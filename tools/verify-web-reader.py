@@ -2695,6 +2695,33 @@ async def run_checks(cdp: Cdp) -> int:
         f"(status={reset_status!r})",
     )
 
+    # JPEG 品質設定。
+    checker.check(
+        "JPEG 品質入力が存在する",
+        await cdp.evaluate("document.querySelector('#reader-jpeg-quality') !== null"),
+    )
+    await cdp.evaluate(
+        "(() => { const input = document.querySelector('#reader-jpeg-quality');"
+        " input.value = '70'; input.dispatchEvent(new Event('change', {bubbles: true})); })()"
+    )
+    await asyncio.sleep(0.5)
+    jpeg_saved = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}').jpegQuality"
+    )
+    checker.check("JPEG 品質が設定に保存される", jpeg_saved == 70, f"(jpegQuality={jpeg_saved!r})")
+    await cdp.evaluate("localStorage.clear()")
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:settings', JSON.stringify({jpegQuality: 999}))"
+    )
+    await reload_reader(cdp)
+    await asyncio.sleep(0.5)
+    jpeg_clamped = await cdp.evaluate("document.querySelector('#reader-jpeg-quality')?.value")
+    checker.check(
+        "範囲外の JPEG 品質は 100 にクランプされる",
+        jpeg_clamped == "100",
+        f"(value={jpeg_clamped!r})",
+    )
+
     return finish(checker)
 
 
