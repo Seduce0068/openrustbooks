@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 108 件）。
+openrustbooks の ADR 一覧（全 109 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -218,3 +218,5 @@ openrustbooks の ADR 一覧（全 108 件）。
   - status: accepted — AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
 - [ADR-0108: 内蔵プロンプトのデシリアライズ修復](0108-prompt-system-prompt.md)
   - status: accepted — 内蔵 .hbs テンプレートに必須フィールドを追加し、AI サービスの初期化失敗を解消する決定を記録する。
+- [ADR-0109: system 指示のテンプレート一元化](0109-system-prompt-unification.md)
+  - status: accepted — OpenAI の固定 system message を削除し、system 指示をプロンプトテンプレートに一元化する決定を記録する。
