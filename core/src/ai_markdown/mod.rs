@@ -208,6 +208,9 @@ async fn validate_content(
             issues,
             fixed_content: content.to_string(),
             fixes_applied: 0,
+            // lint のみの経路では修正を行わないため収束扱いとする
+            converged: true,
+            conflicting_rules: vec![],
         })
     }
 }
@@ -538,6 +541,11 @@ mod tests {
 
         assert_eq!(result.fixed_content, DIRTY);
         assert_eq!(result.fixes_applied, 0);
+        assert!(result.converged, "lint のみの経路は収束扱いになること");
+        assert!(
+            result.conflicting_rules.is_empty(),
+            "lint のみの経路には競合ルールがないこと"
+        );
         assert!(
             !result.issues.is_empty(),
             "自動修正しないので問題は残ること"
@@ -553,5 +561,7 @@ mod tests {
         assert_ne!(result.fixed_content, DIRTY);
         assert!(result.fixes_applied > 0);
         assert!(result.passed);
+        assert!(result.converged);
+        assert!(result.conflicting_rules.is_empty());
     }
 }

@@ -4,6 +4,7 @@ use crate::{CoreError, CoreResult, config::LintConfig};
 use rumdl_lib::{
     config::{Config, MarkdownFlavor},
     document_run::DocumentRun,
+    fix_coordinator::FixResult,
     lint,
     rule::Rule,
     rule::{LintError, LintWarning, Severity},
@@ -40,6 +41,11 @@ pub struct LintResultWrapper {
     pub issues: Vec<LintIssue>,
     pub fixed_content: String,
     pub fixes_applied: usize,
+    /// 自動修正が収束したか。false なら修正は採用されない
+    pub converged: bool,
+    /// 未収束時に検出された競合ルール名。
+    /// 非空なら振動（ルール間の循環）、空なら反復上限到達など別原因を示す。
+    pub conflicting_rules: Vec<String>,
 }
 
 /// Markdown linter wrapper around rumdl
@@ -137,15 +143,21 @@ impl MarkdownLinter {
             .fix(10)
             .map_err(|e| CoreError::validation(format!("Auto-fix error: {}", e)))?;
 
-        // 修正前の issues のままだと retry 判定が誤るため再 lint する
-        let issues = self.lint(&fixed_content)?;
-        let passed = issues.iter().all(|i| i.severity != LintSeverity::Error);
+        let (adopted, fixes_applied, converged) =
+            apply_fix_result(content, &fixed_content, &fix_result);
+        // 採用する本文で再 lint し、本文と lint 結果を整合させる
+        let issues = self.lint(adopted)?;
+        let lint_passed = issues.iter().all(|i| i.severity != LintSeverity::Error);
+        // 未収束なら lint 結果に関わらず fail-closed で false とする
+        let passed = converged && lint_passed;
 
         Ok(LintResultWrapper {
             passed,
             issues,
-            fixed_content,
-            fixes_applied: fix_result.rules_fixed,
+            fixed_content: adopted.to_string(),
+            fixes_applied,
+            converged,
+            conflicting_rules: fix_result.conflicting_rules.clone(),
         })
     }
 
@@ -178,6 +190,20 @@ pub struct RuleMetadata {
     pub name: String,
     pub description: String,
     pub fixable: bool,
+}
+
+/// FixResult を反映する。未収束なら修正を破棄し元本文へ戻す（fail-closed）。
+/// 戻り値は（採用する本文, 適用した修正数, 収束したか）。
+fn apply_fix_result<'a>(
+    original: &'a str,
+    fixed: &'a str,
+    fix_result: &FixResult,
+) -> (&'a str, usize, bool) {
+    if fix_result.converged {
+        (fixed, fix_result.rules_fixed, true)
+    } else {
+        (original, 0, false)
+    }
 }
 
 /// Convert rule name to rule ID (e.g., "heading-style" -> "MD003")
@@ -245,11 +271,50 @@ mod tests {
         assert!(result.fixes_applied > 0, "修正ルールが 1 以上あること");
         assert_ne!(result.fixed_content, DIRTY, "本文が変更されること");
         assert!(result.passed, "修正後に lint が通ること");
+        assert!(result.converged, "修正が収束すること");
+        assert!(result.conflicting_rules.is_empty(), "競合ルールがないこと");
         assert!(
             result.issues.is_empty(),
             "修正後に問題が残らないこと: {:?}",
             result.issues
         );
+    }
+
+    // 疑似 FixResult で fail-closed の分岐を直接検証する
+    fn fake_fix_result(converged: bool) -> FixResult {
+        FixResult {
+            rules_fixed: 3,
+            iterations: 2,
+            context_creations: 5,
+            fixed_rule_names: std::collections::HashSet::new(),
+            converged,
+            conflicting_rules: if converged {
+                Vec::new()
+            } else {
+                vec!["MD044".to_string(), "MD063".to_string()]
+            },
+            conflict_cycle: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn apply_fix_result_adopts_fixes_when_converged() {
+        let (content, fixes, converged) =
+            apply_fix_result("before", "after", &fake_fix_result(true));
+
+        assert_eq!(content, "after", "収束時は修正後の本文を採用すること");
+        assert_eq!(fixes, 3, "収束時は修正数を引き継ぐこと");
+        assert!(converged);
+    }
+
+    #[test]
+    fn apply_fix_result_fails_closed_when_not_converged() {
+        let (content, fixes, converged) =
+            apply_fix_result("before", "after", &fake_fix_result(false));
+
+        assert_eq!(content, "before", "未収束なら元の本文へ戻すこと");
+        assert_eq!(fixes, 0, "未収束なら修正数を 0 にすること");
+        assert!(!converged, "未収束を呼び出し側へ伝えること");
     }
 
     #[tokio::test]
@@ -264,6 +329,7 @@ mod tests {
         assert_eq!(result.fixes_applied, 0);
         assert_eq!(result.fixed_content, clean);
         assert!(result.passed);
+        assert!(result.converged);
         assert!(result.issues.is_empty());
     }
 }
