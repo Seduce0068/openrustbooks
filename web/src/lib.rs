@@ -364,6 +364,22 @@ struct PositionApplyCtx {
     object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>,
 }
 
+/// エクスポートのダウンロード名をローカル時刻のタイムスタンプ付きで作る。
+#[cfg(target_arch = "wasm32")]
+fn export_filename() -> String {
+    let date = js_sys::Date::new_0();
+    let pad = |value: u32| -> String { format!("{value:02}") };
+    format!(
+        "openrustbooks-{:04}{}{}-{}{}{}.json",
+        date.get_full_year(),
+        pad(date.get_month() + 1),
+        pad(date.get_date()),
+        pad(date.get_hours()),
+        pad(date.get_minutes()),
+        pad(date.get_seconds()),
+    )
+}
+
 /// 巨大画像を Canvas で縮小し、Blob URL を差し替える。
 ///
 /// CSS の `max-width: 100%` で表示幅が決まる画像（自然幅が本文領域より大きい
@@ -1272,7 +1288,7 @@ fn export_positions() -> usize {
         return 0;
     };
     let _ = anchor.set_attribute("href", &url);
-    let _ = anchor.set_attribute("download", "openrustbooks-positions.json");
+    let _ = anchor.set_attribute("download", &export_filename());
     if let Some(element) = anchor.dyn_ref::<web_sys::HtmlElement>() {
         element.click();
     }
