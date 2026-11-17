@@ -1,33 +1,30 @@
 # Goal
 
-ゲート数を「6 ゲート」に統一する（todo.md A09 / R3-ci#1）。
+ADR-0044 の未決定（XML 処理命令）を ADR-0045 の解決結果へ更新する（todo.md R5-adr#2）。
 
 ## Scope
 
 ### 背景
 
-実際の検証は fmt / check / test / clippy / wasm32 core / wasm32 web の
-6 項目だが、README:149 と `.github/workflows/ci.yml:3` のコメントに
-「5 ゲート」と残っている。README:167 と `scripts/verify.sh` は 6 ゲート。
+ADR-0044 の「未決定」に XML 処理命令（`<?xml-stylesheet?>`）の扱いが残っているが、
+ADR-0045 で `PROCESSING_INSTRUCTION_NODE` の削除を決定・実装した。
 
 ### 成果物
 
-- `README.md`: 変更（5 → 6）
-- `.github/workflows/ci.yml`: 変更（コメントの 5 → 6）
+- `docs/decisions/0044-svg-external-references.md`: 変更
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 両ファイルの「5 ゲート」を「6 ゲート」に変更する。
-2. コードの挙動・CI 設定本体は変更しない（コメントのみ）。
-3. 6 ゲート・E2E が通る。
+1. XML 処理命令の項目を「未決定」から「解決済み」へ移し、ADR-0045 を参照する。
+2. 他の未決定（CSS `url()`、遅延読み込み、EPUB 内 CSS 等）は維持する。
+3. コードは変更しない。
 
 ## Acceptance criteria
 
-- ドキュメント内のゲート数表記が 6 に統一される。
-- 6 ゲート・E2E が成功する。
+- markdownlint が通る。
 
 ## Constraints
 
-- CI の `- uses:` や入力 parameters は変更しない。
+- コードを変更しない。
 - `master` へ push する。force push はしない。
