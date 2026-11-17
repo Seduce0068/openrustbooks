@@ -41,7 +41,7 @@ CSP `style-src` との整合が必要。
   1. オプトイン設定（既定無効）で、EPUB リーダー限定に適用する。
   2. CSS は `chapter_resource()` で取得し、core 側で厳格フィルタする。
   3. 挿入は `inner_html` ではなく CSSOM（`CSSStyleSheet.replaceSync()` 等）
-     経由とし、全セレクタを `.reader-html ` で prefix する。
+     経由とし、全セレクタを `.reader-html` で prefix する。
   4. 許可候補: 色、フォントサイズ／ウェイト／ファミリ（ローカル一般名のみ）、
      行間、文字間、text-align、余白、border 等。
   5. 必須拒否: 全 `url()`、`@import`、`@font-face`、`@page`、`!important`、
