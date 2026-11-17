@@ -30,6 +30,8 @@ wasm32 単体テストの実行手段を確立する（ADR-0117 の未決定、t
 
 ## Constraints
 
-- 新規依存を追加しない。
+- 新規クレートは追加しない（`wasm-bindgen-test` は Cargo.lock に既存、
+  web の dev-dep で利用中）。core の dev-dep 追加と Cargo.lock の
+  openrustbooks-core エントリ更新は許可する。
 - 既存の wasm32 check ゲートは維持する。
 - `master` へ push する。force push はしない。
