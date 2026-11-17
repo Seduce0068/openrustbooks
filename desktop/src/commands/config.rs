@@ -67,7 +67,7 @@ impl From<&GeneralConfig> for GeneralConfigView {
     }
 }
 
-/// Allow-list view of [`AiConfig`]. `model_overrides` は除外する。
+/// Allow-list view of [`AiConfig`]. `model_overrides` と `max_retries` は除外する。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AiConfigView {
     pub enabled: bool,
@@ -76,8 +76,6 @@ pub struct AiConfigView {
     pub ollama: OllamaConfigView,
     pub max_tokens_per_request: usize,
     pub max_tokens_per_month: Option<u64>,
-    /// 再生成の最大リトライ回数。
-    pub max_retries: usize,
     pub prefer_local: bool,
     pub timeout_secs: u64,
     pub streaming: bool,
@@ -92,7 +90,6 @@ impl From<&AiConfig> for AiConfigView {
             ollama: OllamaConfigView::from(&ai.ollama),
             max_tokens_per_request: ai.max_tokens_per_request,
             max_tokens_per_month: ai.max_tokens_per_month,
-            max_retries: ai.max_retries,
             prefer_local: ai.prefer_local,
             timeout_secs: ai.timeout_secs,
             streaming: ai.streaming,
@@ -290,6 +287,8 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     merged.storage.recent_paths = current.storage.recent_paths.clone();
     merged.ai.ollama.options = current.ai.ollama.options.clone();
     merged.ai.model_overrides = current.ai.model_overrides.clone();
+    // max_retries は DTO から除外したため、JS 往復で現在値を保持する。
+    merged.ai.max_retries = current.ai.max_retries;
 
     // local_roots[].path は id が一意に一致した場合のみ復元する。
     // id が空／不一致／現在側で重複している場合はマージせず安全にスキップする。
@@ -467,12 +466,26 @@ mod tests {
     }
 
     #[test]
-    fn ai_config_view_json_includes_max_retries() {
+    fn ai_config_view_json_excludes_max_retries() {
         let mut config = AppConfig::default();
         config.ai.max_retries = 5;
         let json = serde_json::to_value(AiConfigView::from(&config.ai)).unwrap();
 
-        assert_eq!(json.get("max_retries").and_then(|v| v.as_u64()), Some(5));
+        // max_retries は DTO に出さない（JS 往復で消えるため現在値は merge_secrets で保持）。
+        assert!(json.get("max_retries").is_none());
+    }
+
+    #[test]
+    fn merge_secrets_preserves_max_retries() {
+        let mut current = AppConfig::default();
+        current.ai.max_retries = 5;
+        let mut incoming = current.clone();
+        incoming.ai.max_retries = 3;
+
+        let merged = merge_secrets(&current, &incoming);
+
+        // incoming が 3 でも current の 5 を保持すること。
+        assert_eq!(merged.ai.max_retries, 5);
     }
 
     #[test]
