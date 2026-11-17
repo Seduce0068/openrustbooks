@@ -296,6 +296,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0107-ai-service-refresh](docs/decisions/0107-ai-service-refresh.md)
 - [0108-prompt-system-prompt](docs/decisions/0108-prompt-system-prompt.md)
 - [0109-system-prompt-unification](docs/decisions/0109-system-prompt-unification.md)
+- [0110-lint-auto-fix](docs/decisions/0110-lint-auto-fix.md)
+  - rumdl の fix API を用いて Markdown lint の自動修正を実装し、auto_fix 設定を配線する決定を記録する。
   - OpenAI の固定 system message を削除し、system 指示をプロンプトテンプレートに一元化する決定を記録する。
   - 内蔵 .hbs テンプレートに必須フィールドを追加し、AI サービスの初期化失敗を解消する決定を記録する。
   - AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
