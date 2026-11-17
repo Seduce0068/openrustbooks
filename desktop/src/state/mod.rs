@@ -69,6 +69,18 @@ impl AppState {
         *self.ai_service.write().unwrap() = None;
     }
 
+    /// 設定変更後に AI service を同期する（fail-closed）。
+    ///
+    /// 先に旧 service を破棄してから、有効なら再生成する。
+    /// 生成に失敗しても None のままなので、古い service は残らない。
+    pub async fn refresh_ai_service(&self) -> CoreResult<()> {
+        self.disable_ai_service();
+        if !self.is_ai_enabled() {
+            return Ok(());
+        }
+        self.init_ai_service().await
+    }
+
     /// Add a document
     pub fn add_document(&self, document: Document) {
         let id = document.metadata.id.clone();
@@ -205,6 +217,26 @@ mod tests {
     fn disable_ai_service_clears_service() {
         let state = AppState::new(AppConfig::default());
         state.disable_ai_service();
+        assert!(state.ai_service().is_none());
+    }
+
+    #[tokio::test]
+    async fn refresh_ai_service_disabled_keeps_service_none() {
+        let state = AppState::new(AppConfig::default());
+        state.refresh_ai_service().await.unwrap();
+        assert!(state.ai_service().is_none());
+    }
+
+    #[tokio::test]
+    async fn refresh_ai_service_propagates_init_error_and_keeps_service_none() {
+        let state = AppState::new(AppConfig::default());
+        let mut config = state.config();
+        config.ai.enabled = true;
+        config.ai.default_provider = "unknown".to_string(); // create_client が即エラー
+        state.update_config(config).unwrap();
+
+        // 生成失敗は呼び出し側へ伝播し、service は None のまま（fail-closed）。
+        assert!(state.refresh_ai_service().await.is_err());
         assert!(state.ai_service().is_none());
     }
 }

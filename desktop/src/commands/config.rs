@@ -321,6 +321,19 @@ fn validate_ai_base_urls(ai: &AiConfig) -> Result<(), String> {
     Ok(())
 }
 
+/// ai / lint 設定が変わったかを JSON 表現の差分で判定する。
+/// これらの設定型は PartialEq 未 derive のため serde_json の値を比較する。
+pub(crate) fn ai_or_lint_changed(current: &AppConfig, merged: &AppConfig) -> bool {
+    fn json_differs<T: Serialize>(before: &T, after: &T) -> bool {
+        match (serde_json::to_value(before), serde_json::to_value(after)) {
+            (Ok(before), Ok(after)) => before != after,
+            // シリアライズ失敗時は安全側に倒して「変更あり」とみなす。
+            _ => true,
+        }
+    }
+    json_differs(&current.ai, &merged.ai) || json_differs(&current.lint, &merged.lint)
+}
+
 /// Get current configuration (secrets redacted)
 #[command]
 pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
@@ -329,51 +342,48 @@ pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
 
 /// Update configuration
 #[command]
-pub fn update_config(state: State<'_, Arc<AppState>>, config: AppConfig) -> Result<(), String> {
-    let merged = merge_secrets(&state.config(), &config);
+pub async fn update_config(
+    state: State<'_, Arc<AppState>>,
+    config: AppConfig,
+) -> Result<(), String> {
+    let current = state.config();
+    let merged = merge_secrets(&current, &config);
     validate_ai_base_urls(&merged.ai)?;
-    let ai_enabled = merged.ai.enabled;
+    let changed = ai_or_lint_changed(&current, &merged);
     state.update_config(merged).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
-    if !ai_enabled {
-        // 無効化してもメモリ上の service が残らないようにする。
-        state.disable_ai_service();
+    if changed {
+        state.refresh_ai_service().await.map_err(map_err)?;
     }
     Ok(())
 }
 
 /// Update AI configuration
 #[command]
-pub fn update_ai_config(
+pub async fn update_ai_config(
     state: State<'_, Arc<AppState>>,
     ai_config: AiConfig,
 ) -> Result<(), String> {
     let current = state.config();
-    let ai_enabled = ai_config.enabled;
     let mut incoming = current.clone();
     incoming.ai = ai_config;
     let config = merge_secrets(&current, &incoming);
     validate_ai_base_urls(&config.ai)?;
+    let changed = ai_or_lint_changed(&current, &config);
 
     state.update_config(config).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
 
-    // 有効なら再初期化、無効なら既存 service を破棄する。
-    if ai_enabled {
-        let state_clone = state.inner().clone();
-        tauri::async_runtime::spawn(async move {
-            let _ = state_clone.init_ai_service().await;
-        });
-    } else {
-        state.disable_ai_service();
+    // 差分がある時だけ再初期化。エラーは握り潰さず Err として返す。
+    if changed {
+        state.refresh_ai_service().await.map_err(map_err)?;
     }
-
     Ok(())
 }
 
 /// Update lint configuration
 #[command]
-pub fn update_lint_config(
+pub async fn update_lint_config(
     state: State<'_, Arc<AppState>>,
     lint_config: LintConfig,
 ) -> Result<(), String> {
@@ -382,19 +392,23 @@ pub fn update_lint_config(
     incoming.lint = lint_config;
     // DTO から除外した config_file / rule_config を消さないようマージを通す。
     let config = merge_secrets(&current, &incoming);
+    let changed = ai_or_lint_changed(&current, &config);
     state.update_config(config).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
+    if changed {
+        state.refresh_ai_service().await.map_err(map_err)?;
+    }
     Ok(())
 }
 
 /// Reset configuration to defaults (secrets redacted)
 #[command]
-pub fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
+pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
     let config = AppConfig::default();
     state.update_config(config.clone()).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
-    // 既定は AI 無効なので service も破棄する。
-    state.disable_ai_service();
+    // 既定は AI 無効。他コマンドと一貫性を持たせるため refresh を待つ。
+    state.refresh_ai_service().await.map_err(map_err)?;
     Ok(ConfigView::from(&config))
 }
 
@@ -415,6 +429,45 @@ mod tests {
             scopes: vec!["scope".to_string()],
         });
         config
+    }
+
+    #[test]
+    fn ai_or_lint_changed_detects_ai_updates() {
+        let current = AppConfig::default();
+
+        let mut enabled = current.clone();
+        enabled.ai.enabled = true;
+        assert!(ai_or_lint_changed(&current, &enabled));
+
+        let mut provider = current.clone();
+        provider.ai.default_provider = "ollama".to_string();
+        assert!(ai_or_lint_changed(&current, &provider));
+    }
+
+    #[test]
+    fn ai_or_lint_changed_detects_lint_updates() {
+        let current = AppConfig::default();
+
+        let mut toggled = current.clone();
+        toggled.lint.enabled = false;
+        assert!(ai_or_lint_changed(&current, &toggled));
+
+        let mut rules = current.clone();
+        rules.lint.disable_rules.push("MD999".to_string());
+        assert!(ai_or_lint_changed(&current, &rules));
+    }
+
+    #[test]
+    fn ai_or_lint_changed_ignores_other_sections() {
+        let current = AppConfig::default();
+        let mut merged = current.clone();
+        merged.general.theme = "dark".to_string();
+        merged.editor.font_size = 20.0;
+        merged.reader.theme = "sepia".to_string();
+        merged.storage.max_recent = 42;
+
+        assert!(!ai_or_lint_changed(&current, &merged));
+        assert!(!ai_or_lint_changed(&current, &current));
     }
 
     #[test]
