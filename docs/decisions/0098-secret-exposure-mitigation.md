@@ -68,7 +68,8 @@ secret-auditor の精査）。UI 未接続のため顕在化はしていない�
 ## 未決定
 
 - OS キーチェーン移行（`api_key` / `client_secret` / `refresh_token`）。
-- `extra_headers` に認証情報が入り得る問題（DTO には現状含まれる（推測リスク））。
+- ~~`extra_headers` に認証情報が入り得る問題~~ ADR-0102 で解決済み
+  （DTO から削除し、Debug でマスク）。
 - `desktop/src/commands/document.rs` の `tokio::fs` 直呼び
   （fs-bypass-auditor の指摘。既定 `local_roots` が空で backend 経由に
   置換すると回帰するため保留、ADR-0097 から継続）。
