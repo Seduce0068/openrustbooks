@@ -2793,6 +2793,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let dark_action = Rc::clone(&dark_action);
         let help_dialog = help_dialog;
         move |event: web_sys::KeyboardEvent| {
+            // モーダル表示中は背景のショートカットを止める（Esc は dialog に任せる）。
+            if let Some(window) = web_sys::window()
+                && let Some(document) = window.document()
+                && let Ok(dialogs) = document.query_selector_all("dialog[open]")
+                && dialogs.length() > 0
+            {
+                return;
+            }
             // IME の変換中はキーを奪わない（確定時に誤操作しないため）。
             if event.is_composing() {
                 return;
