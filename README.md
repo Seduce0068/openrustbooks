@@ -311,6 +311,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0122-env-var-mapping](docs/decisions/0122-env-var-mapping.md)
 - [0123-warnings-as-errors](docs/decisions/0123-warnings-as-errors.md)
 - [0124-rule-config-wiring](docs/decisions/0124-rule-config-wiring.md)
+- [0125-audit-gate](docs/decisions/0125-audit-gate.md)
+  - cargo audit をローカル検証スクリプトに追加し、既知脆弱性の回帰を防ぐ決定を記録する。
   - rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
   - LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
   - figment の split('_') で届かない max_retries を extract 後に手動で読み込む決定を記録する。
