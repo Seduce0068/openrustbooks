@@ -24,8 +24,9 @@ ADR-0020 / 0034 / 0046 で「遅延読み込みとの併用」が未決定だっ
 - `resolve_images()` (web/src/lib.rs:789-831) が全画像を Blob URL 化し `src` を設定。
   SVG は `sanitize_svg_bytes()` でサニタイズ後 Blob 化（fail-closed）。
 - `decoding="async"` は付与済み、`loading="lazy"` は明示的に不使用。
-- 完了判定は `images_settled()` (277-304): `src` あり画像が全て `complete()`
-  になるか、`IMAGE_SETTLE_MS = 2000` で打ち切り。
+- 完了判定は `images_settled()` (277-304): `src` あり画像が全て
+  `complete() && naturalWidth > 0`（ADR-0113）になるか、
+  `IMAGE_SETTLE_MS = 2000` で打ち切り。
 - 位置補正 `apply_position_frame()` (551-647) は画像待ち→scrollTop 適用→retry。
 - 同章内 `#id` リンク (2463, 2518) は `scroll_to_fragment()` を即時呼びし、
   画像待ち・retry が無い。
