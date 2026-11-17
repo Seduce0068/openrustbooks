@@ -299,6 +299,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0110-lint-auto-fix](docs/decisions/0110-lint-auto-fix.md)
 - [0111-fix-convergence](docs/decisions/0111-fix-convergence.md)
 - [0112-lazy-image-loading](docs/decisions/0112-lazy-image-loading.md)
+- [0113-image-settle-hardening](docs/decisions/0113-image-settle-hardening.md)
+  - images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
   - IntersectionObserver による画像遅延読み込みは全面切替を見送り、寸法予約→段階導入の順で検討する決定を記録する。
   - rumdl fix の未収束情報を保持し、未収束時は修正を採用しない決定を記録する。
   - rumdl の fix API を用いて Markdown lint の自動修正を実装し、auto_fix 設定を配線する決定を記録する。

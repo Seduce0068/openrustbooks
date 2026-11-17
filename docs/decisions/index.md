@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 112 件）。
+openrustbooks の ADR 一覧（全 113 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -226,3 +226,5 @@ openrustbooks の ADR 一覧（全 112 件）。
   - status: accepted — rumdl fix の未収束情報を保持し、未収束時は修正を採用しない決定を記録する。
 - [ADR-0112: 画像遅延読み込みの判断](0112-lazy-image-loading.md)
   - status: accepted — IntersectionObserver による画像遅延読み込みは全面切替を見送り、寸法予約→段階導入の順で検討する決定を記録する。
+- [ADR-0113: 画像完了判定の強化](0113-image-settle-hardening.md)
+  - status: accepted — images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
