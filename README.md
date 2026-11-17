@@ -9,7 +9,7 @@ openrustbooks/
 ├── Cargo.toml                    # ワークスペース設定
 ├── Cargo.lock                    # アプリケーションのため追跡する
 ├── README.md                     # プロジェクト概要
-├── LICENSE                       # MIT License
+├── LICENSE                       # AGPL-3.0-or-later
 ├── docs/
 │   ├── requirements.md           # 要件定義
 │   ├── architecture.md           # アーキテクチャ設計
@@ -267,6 +267,17 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0082-mailto-link-test](docs/decisions/0082-mailto-link-test.md) - mailto リンクの検証
 - [0083-dead-code-cleanup](docs/decisions/0083-dead-code-cleanup.md) - デッドコードと古い契約値の整理
 - [0084-verification-script](docs/decisions/0084-verification-script.md) - 一括検証スクリプト
+- [0085-single-entry-history-save](docs/decisions/0085-single-entry-history-save.md) - 履歴が 1 件になっても localStorage を更新する決定を記録する。
+- [0086-dependency-vulnerability-fix](docs/decisions/0086-dependency-vulnerability-fix.md) - ammonia と pulldown-cmark の脆弱性を修正する決定を記録する。
+- [0087-front-matter-preservation](docs/decisions/0087-front-matter-preservation.md) - Markdown 文書の保存時に front matter が失われるバグを修正する決定を記録する。
+- [0088-wasm-path-stripping](docs/decisions/0088-wasm-path-stripping.md) - 配布 WASM に含まれる開発ホスト絶対パスを除去する決定を記録する。
+- [0089-init-unification](docs/decisions/0089-init-unification.md) - Rust / JS 双方の init() が同じ初期化処理を呼ぶようにする決定を記録する。
+- [0090-e2e-expected-count](docs/decisions/0090-e2e-expected-count.md) - 未実行の check を見逃さないため、期待総数を宣言して検証する決定を記録する。
+- [0091-content-security-policy](docs/decisions/0091-content-security-policy.md) - Web 版に CSP meta を追加し、リソース読み込み先を制限する決定を記録する。
+- [0092-ime-composing-guard](docs/decisions/0092-ime-composing-guard.md) - IME の変換中はキーボードショートカットを発火させない決定を記録する。
+- [0093-modal-shortcut-guard](docs/decisions/0093-modal-shortcut-guard.md) - dialog が開いているときは背景のキーボードショートカットを止める決定を記録する。
+- [0094-desktop-window-result](docs/decisions/0094-desktop-window-result.md)
+  - get_webview_window の unwrap() を Result 化し、起動時の panic を防ぐ決定を記録する。
 
 ## ライセンス
 

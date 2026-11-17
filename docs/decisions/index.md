@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 90 件）。
+openrustbooks の ADR 一覧（全 94 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -182,3 +182,11 @@ openrustbooks の ADR 一覧（全 90 件）。
   - status: accepted — Rust / JS 双方の init() が同じ初期化処理を呼ぶようにする決定を記録する。
 - [ADR-0090: E2E 期待 check 総数の検証](0090-e2e-expected-count.md)
   - status: accepted — 未実行の check を見逃さないため、期待総数を宣言して検証する決定を記録する。
+- [ADR-0091: Content-Security-Policy の追加](0091-content-security-policy.md)
+  - status: accepted — Web 版に CSP meta を追加し、リソース読み込み先を制限する決定を記録する。
+- [ADR-0092: IME 変換中のショートカット抑制](0092-ime-composing-guard.md)
+  - status: accepted — IME の変換中はキーボードショートカットを発火させない決定を記録する。
+- [ADR-0093: モーダル中のショートカット停止](0093-modal-shortcut-guard.md)
+  - status: accepted — dialog が開いているときは背景のキーボードショートカットを止める決定を記録する。
+- [ADR-0094: Desktop メインウィンドウ取得の Result 化](0094-desktop-window-result.md)
+  - status: accepted — get_webview_window の unwrap() を Result 化し、起動時の panic を防ぐ決定を記録する。
