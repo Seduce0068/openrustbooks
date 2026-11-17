@@ -77,6 +77,8 @@ impl From<&AiConfig> for AiConfigView {
 }
 
 /// Allow-list view of [`openrustbooks_core::config::OpenAiConfig`].
+///
+/// `extra_headers` は認証情報を含み得るため DTO に含めない（編集は config.toml 直接のみ）。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OpenAiConfigView {
     pub base_url: String,
@@ -84,7 +86,6 @@ pub struct OpenAiConfigView {
     pub has_api_key: bool,
     pub model: String,
     pub organization: Option<String>,
-    pub extra_headers: HashMap<String, String>,
 }
 
 impl From<&openrustbooks_core::config::OpenAiConfig> for OpenAiConfigView {
@@ -94,7 +95,6 @@ impl From<&openrustbooks_core::config::OpenAiConfig> for OpenAiConfigView {
             has_api_key: openai.api_key.as_deref().is_some_and(|key| !key.is_empty()),
             model: openai.model.clone(),
             organization: openai.organization.clone(),
-            extra_headers: openai.extra_headers.clone(),
         }
     }
 }
@@ -159,6 +159,11 @@ fn is_placeholder(secret: Option<&str>) -> bool {
     secret.is_none_or(|value| value.is_empty() || value == REDACTED_SECRET)
 }
 
+/// 追加ヘッダが空またはマスク値なら「未変更」とみなす。
+fn are_headers_placeholder(headers: &HashMap<String, String>) -> bool {
+    headers.is_empty() || headers.values().any(|value| value == REDACTED_SECRET)
+}
+
 /// Merge currently held secrets into an incoming config.
 ///
 /// The DTO sent to JS contains presence flags instead of secret values, so an
@@ -169,6 +174,12 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
 
     if is_placeholder(merged.ai.openai.api_key.as_deref()) {
         merged.ai.openai.api_key = current.ai.openai.api_key.clone();
+    }
+
+    // headers は DTO から除外したため、GUI の往復で空／マスク値が来ても現在値を保持する。
+    // 削除する手段は config.toml の直接編集に限定する。
+    if are_headers_placeholder(&merged.ai.openai.extra_headers) {
+        merged.ai.openai.extra_headers = current.ai.openai.extra_headers.clone();
     }
 
     if let (Some(current_drive), Some(incoming_drive)) = (
@@ -309,6 +320,23 @@ mod tests {
     }
 
     #[test]
+    fn config_view_json_hides_extra_headers() {
+        let mut config = config_with_secrets();
+        config.ai.openai.extra_headers.insert(
+            "X-Dummy-Header".to_string(),
+            "dummy-header-value-do-not-leak".to_string(),
+        );
+        let json = serde_json::to_string(&ConfigView::from(&config)).unwrap();
+
+        // DTO にフィールドも値も出ないこと。
+        assert!(!json.contains("\"extra_headers\""), "leaked field name");
+        assert!(
+            !json.contains("dummy-header-value-do-not-leak"),
+            "leaked header value"
+        );
+    }
+
+    #[test]
     fn config_view_reports_unset_secrets_as_false() {
         let view = ConfigView::from(&AppConfig::default());
         let json = serde_json::to_string(&view).unwrap();
@@ -335,6 +363,60 @@ mod tests {
         let drive = merged.storage.google_drive.unwrap();
         assert_eq!(drive.client_secret, "dummy-client-secret");
         assert_eq!(drive.refresh_token.as_deref(), Some("dummy-refresh-token"));
+    }
+
+    #[test]
+    fn merge_secrets_preserves_extra_headers() {
+        let mut current = config_with_secrets();
+        current.ai.openai.extra_headers.insert(
+            "X-Dummy-Header".to_string(),
+            "dummy-header-value-do-not-leak".to_string(),
+        );
+
+        // GUI の往復では headers が空になるため、現在値が消えてはいけない。
+        let empty_incoming = AppConfig::default();
+        let merged = merge_secrets(&current, &empty_incoming);
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            current.ai.openai.extra_headers
+        );
+
+        // マスク sentinel が返ってきた場合も実値を維持する。
+        let mut masked = current.clone();
+        masked
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Dummy-Header".to_string(), REDACTED_SECRET.to_string());
+        let merged = merge_secrets(&current, &masked);
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            current.ai.openai.extra_headers
+        );
+    }
+
+    #[test]
+    fn merge_secrets_replaces_unmasked_extra_headers() {
+        let mut current = config_with_secrets();
+        current
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Old".to_string(), "old-value".to_string());
+        let mut incoming = current.clone();
+        incoming.ai.openai.extra_headers.clear();
+        incoming
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-New".to_string(), "new-value".to_string());
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            incoming.ai.openai.extra_headers
+        );
     }
 
     #[test]

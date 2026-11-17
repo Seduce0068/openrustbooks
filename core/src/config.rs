@@ -139,7 +139,15 @@ impl std::fmt::Debug for OpenAiConfig {
             .field("api_key", &self.api_key.as_ref().map(|_| REDACTED_SECRET))
             .field("model", &self.model)
             .field("organization", &self.organization)
-            .field("extra_headers", &self.extra_headers)
+            // キー名は残し、認証情報を含み得る値だけをマスクする。
+            .field(
+                "extra_headers",
+                &self
+                    .extra_headers
+                    .keys()
+                    .map(|name| (name.as_str(), REDACTED_SECRET))
+                    .collect::<std::collections::HashMap<_, _>>(),
+            )
             .finish()
     }
 }
@@ -486,6 +494,40 @@ mod tests {
         assert!(!debug.contains("dummy-client-secret"));
         assert!(!debug.contains("dummy-refresh-token"));
         assert!(debug.contains(REDACTED_SECRET));
+    }
+
+    #[test]
+    fn debug_output_masks_extra_header_values() {
+        let mut config = config_with_secrets();
+        config.ai.openai.extra_headers.insert(
+            "X-Dummy-Header".to_string(),
+            "dummy-header-value-do-not-leak".to_string(),
+        );
+        let debug = format!("{:?}", config.ai.openai);
+
+        assert!(
+            !debug.contains("dummy-header-value-do-not-leak"),
+            "leaked header value"
+        );
+        // キー名は残り、値だけが sentinel になる。
+        assert!(debug.contains(&format!("\"X-Dummy-Header\": \"{REDACTED_SECRET}\"")));
+    }
+
+    #[test]
+    fn toml_round_trip_keeps_extra_headers() {
+        let mut config = AppConfig::default();
+        config.ai.openai.extra_headers.insert(
+            "X-Dummy-Header".to_string(),
+            "dummy-header-value".to_string(),
+        );
+
+        // Debug マスクは表現だけに影響し、シリアライズ値は変えない。
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let restored: AppConfig = toml::from_str(&serialized).unwrap();
+        assert_eq!(
+            restored.ai.openai.extra_headers,
+            config.ai.openai.extra_headers
+        );
     }
 
     #[test]
