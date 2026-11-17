@@ -53,6 +53,8 @@ pub struct MarkdownLinter {
     rules: Vec<Box<dyn Rule>>,
     /// lint と fix で共有する rumdl 設定
     config: Config,
+    /// true なら Warning も不合格扱いにする
+    warnings_as_errors: bool,
 }
 
 impl MarkdownLinter {
@@ -94,7 +96,13 @@ impl MarkdownLinter {
         Ok(Self {
             rules,
             config: rumdl_config,
+            warnings_as_errors: config.warnings_as_errors,
         })
+    }
+
+    /// 判定に使う warnings_as_errors フラグ（他モジュールと共有する）
+    pub(crate) fn warnings_as_errors(&self) -> bool {
+        self.warnings_as_errors
     }
 
     /// Lint markdown content and return issues
@@ -147,7 +155,7 @@ impl MarkdownLinter {
             apply_fix_result(content, &fixed_content, &fix_result);
         // 採用する本文で再 lint し、本文と lint 結果を整合させる
         let issues = self.lint(adopted)?;
-        let lint_passed = issues.iter().all(|i| i.severity != LintSeverity::Error);
+        let lint_passed = lint_passed(&issues, self.warnings_as_errors());
         // 未収束なら lint 結果に関わらず fail-closed で false とする
         let passed = converged && lint_passed;
 
@@ -190,6 +198,17 @@ pub struct RuleMetadata {
     pub name: String,
     pub description: String,
     pub fixable: bool,
+}
+
+/// issues が lint 合格か判定する。
+/// Error は常に不合格、Warning は warnings_as_errors=true のときだけ不合格、
+/// Info は常に無視。issue の severity 自体は書き換えない。
+pub(crate) fn lint_passed(issues: &[LintIssue], warnings_as_errors: bool) -> bool {
+    issues.iter().all(|issue| match issue.severity {
+        LintSeverity::Error => false,
+        LintSeverity::Warning => !warnings_as_errors,
+        LintSeverity::Info => true,
+    })
 }
 
 /// FixResult を反映する。未収束なら修正を破棄し元本文へ戻す（fail-closed）。
@@ -244,9 +263,33 @@ mod tests {
 
     // 末尾空白（MD009）は修正可能な代表例
     const DIRTY: &str = "# Title\n\nTrailing spaces here   \n";
+    // MD033（インライン HTML）は修正不能な Warning の代表例
+    const WARNING_ONLY: &str = "# Title\n\n<div>html</div>\n";
 
     fn linter() -> MarkdownLinter {
         MarkdownLinter::new(&LintConfig::default()).expect("linter should build")
+    }
+
+    fn linter_with_warnings_as_errors(value: bool) -> MarkdownLinter {
+        let config = LintConfig {
+            warnings_as_errors: value,
+            ..Default::default()
+        };
+        MarkdownLinter::new(&config).expect("linter should build")
+    }
+
+    fn issue(severity: LintSeverity) -> LintIssue {
+        LintIssue {
+            rule: "MD000".to_string(),
+            rule_name: "dummy".to_string(),
+            line: 1,
+            column: 1,
+            end_line: None,
+            end_column: None,
+            message: "test issue".to_string(),
+            severity,
+            fixable: false,
+        }
     }
 
     #[test]
@@ -258,6 +301,86 @@ mod tests {
             issues.iter().any(|i| i.rule == "MD009"),
             "末尾空白が MD009 として検出されること"
         );
+    }
+
+    #[test]
+    fn new_retains_warnings_as_errors_flag() {
+        assert!(!linter().warnings_as_errors());
+        assert!(linter_with_warnings_as_errors(true).warnings_as_errors());
+    }
+
+    #[test]
+    fn lint_passed_ignores_warning_by_default() {
+        assert!(
+            lint_passed(&[issue(LintSeverity::Warning)], false),
+            "既定 false では Warning だけでも合格とすること"
+        );
+    }
+
+    #[test]
+    fn lint_passed_rejects_warning_when_enabled() {
+        assert!(
+            !lint_passed(&[issue(LintSeverity::Warning)], true),
+            "true では Warning を不合格とすること"
+        );
+    }
+
+    #[test]
+    fn lint_passed_ignores_info_even_when_enabled() {
+        assert!(lint_passed(&[issue(LintSeverity::Info)], true));
+        assert!(lint_passed(&[issue(LintSeverity::Info)], false));
+    }
+
+    #[test]
+    fn lint_passed_rejects_error_regardless_of_flag() {
+        for warnings_as_errors in [false, true] {
+            assert!(!lint_passed(
+                &[issue(LintSeverity::Error)],
+                warnings_as_errors
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn lint_and_fix_warning_fails_only_when_warnings_as_errors() {
+        let lenient = linter_with_warnings_as_errors(false);
+        let result = lenient
+            .lint_and_fix(WARNING_ONLY)
+            .await
+            .expect("lint_and_fix should succeed");
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|i| i.severity == LintSeverity::Warning),
+            "比較対象に Warning があること"
+        );
+        assert!(
+            result.passed,
+            "既定 false なら Warning だけでは不合格にしないこと"
+        );
+
+        let strict = linter_with_warnings_as_errors(true);
+        let result = strict
+            .lint_and_fix(WARNING_ONLY)
+            .await
+            .expect("lint_and_fix should succeed");
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|i| i.severity == LintSeverity::Warning),
+            "severity は Warning のまま書き換えないこと: {:?}",
+            result.issues
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .all(|i| i.severity != LintSeverity::Error),
+            "判定のために severity を Error 化しないこと"
+        );
+        assert!(!result.passed, "true なら Warning で不合格とすること");
     }
 
     #[tokio::test]

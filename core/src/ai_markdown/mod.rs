@@ -198,9 +198,7 @@ async fn validate_content(
         linter.lint_and_fix(content).await
     } else {
         let issues = linter.lint(content)?;
-        let passed = issues
-            .iter()
-            .all(|issue| issue.severity != lint::LintSeverity::Error);
+        let passed = lint::lint_passed(&issues, linter.warnings_as_errors());
         Ok(lint::LintResultWrapper {
             passed,
             issues,
@@ -547,6 +545,54 @@ mod tests {
         assert!(
             !result.issues.is_empty(),
             "自動修正しないので問題は残ること"
+        );
+    }
+
+    fn strict_linter() -> lint::MarkdownLinter {
+        let config = LintConfig {
+            warnings_as_errors: true,
+            ..Default::default()
+        };
+        lint::MarkdownLinter::new(&config).expect("linter should build")
+    }
+
+    #[tokio::test]
+    async fn warnings_as_errors_fails_lint_only_path() {
+        // MD033（インライン HTML）は修正不能な Warning を出す
+        let content = "# Title\n\n<div>html</div>\n";
+
+        let lenient = validate_content(&linter(), content, false)
+            .await
+            .expect("validate should succeed");
+        assert!(
+            lenient
+                .issues
+                .iter()
+                .any(|i| i.severity == lint::LintSeverity::Warning),
+            "比較対象に Warning があること"
+        );
+        assert!(
+            lenient.passed,
+            "既定 false の lint のみ経路では Warning を無視すること"
+        );
+
+        let strict = validate_content(&strict_linter(), content, false)
+            .await
+            .expect("validate should succeed");
+        assert!(
+            strict
+                .issues
+                .iter()
+                .any(|i| i.severity == lint::LintSeverity::Warning),
+            "severity は Warning のままであること"
+        );
+        assert!(
+            !strict.passed,
+            "true の lint のみ経路では Warning で不合格とすること"
+        );
+        assert_eq!(
+            strict.fixed_content, content,
+            "lint のみ経路は本文を変えないこと"
         );
     }
 
