@@ -162,6 +162,11 @@ cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 ```
 
+### 一括検証
+
+`./scripts/verify.sh` で、上記 6 ゲート・`trunk build`・E2E をまとめて実行できる
+（一時出力先は自動で削除される）。
+
 ### 手動の E2E 検証
 
 Web 版リーダーの表示と移動は、ヘッドレス Chrome を使った
@@ -261,6 +266,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0081-external-link-popup-test](docs/decisions/0081-external-link-popup-test.md) - 外部リンクのポップアップ呼び出し検証
 - [0082-mailto-link-test](docs/decisions/0082-mailto-link-test.md) - mailto リンクの検証
 - [0083-dead-code-cleanup](docs/decisions/0083-dead-code-cleanup.md) - デッドコードと古い契約値の整理
+- [0084-verification-script](docs/decisions/0084-verification-script.md) - 一括検証スクリプト
 
 ## ライセンス
 
