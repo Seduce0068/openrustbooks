@@ -1,37 +1,37 @@
 # Goal
 
-doc-scanner の指摘に基づき、README とドキュメント索引の陳腐化を解消する。
+desktop の `AppState` 状態遷移をテストする（test-scanner #5）。
 
 ## Scope
 
 ### 背景
 
-- README の構成ツリーが `LICENSE # MIT License` としているが、本文末尾と
-  LICENSE 実体は `AGPL-3.0-or-later`（リモートの b44b063 で変更済み）。
-- README の ADR 一覧は 0084 止まり、docs/index.md と decisions/index.md は
-  「全 90 件」とし、decisions/index.md は 0090 まで（実際は 0094 まで 94 件）。
+`desktop/src/state/mod.rs`（111 行）にテストが無く、
+`is_unsaved` / `has_unsaved_changes` は未保存クローズ拒否を支配する重要な状態。
+Tauri ランタイムなしで `AppState::new` から状態遷移を検証できる。
 
 ### 成果物
 
-- `README.md`: 変更（LICENSE コメント、ADR 一覧を 0094 まで）
-- `docs/index.md`: 変更（件数を 94 に）
-- `docs/decisions/index.md`: 変更（0091〜0094 を追加、件数を 94 に）
+- `desktop/src/state/mod.rs`: 変更（#[cfg(test)] テストを追加）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. README の `LICENSE # MIT License` を `AGPL-3.0-or-later` に変更。
-2. README の ADR 一覧に 0085〜0094 を追加。
-3. 両 index の件数を 94 に更新し、decisions/index.md に 0091〜0094 を追加。
-4. markdownlint が通る。
+1. 次を検証するテストを追加する。
+   - `AppState::new` 直後は未保存変更なし。
+   - `add_document` → `mark_unsaved` で `is_unsaved` / `has_unsaved_changes` が true。
+   - `mark_saved` で false に戻る。
+   - `remove_document` で該当 id が消え、`has_unsaved_changes` が false。
+   - `update_config` / `config` の往復。
+2. 新規依存を追加しない。
+3. 既存の 126 テスト、E2E 223 項目を壊さない。
 
 ## Acceptance criteria
 
-- ドキュメントと実体が一致する。
+- `cargo test --all-targets --locked` が新規テストを含めて成功。
 - 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- ADR 本体は変更しない。
-- `docs/investigation/` と `todo.md` は別セッション成果物のため触らない。
+- `desktop/src/main.rs` や Tauri コマンドは変更しない。
 - `master` へ push する。force push はしない。
