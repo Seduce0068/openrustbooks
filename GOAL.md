@@ -1,29 +1,29 @@
 # Goal
 
-本文内の外部リンクが安全に開かれることを E2E で検証する。
+外部リンクをクリックしたときに新しいタブが開くことを E2E で検証する。
 
 ## Scope
 
 ### 背景
 
-ADR-0013 で「外部リンクは opener を渡さずに開く」と決定し、
-`window.open(..., "_blank", "noopener,noreferrer")` を実装しているが、
-E2E で検証していない。サンプルに外部リンクを追加して回帰テストにする。
+ADR-0080 では外部リンクの href と `noopener noreferrer` を検証したが、
+実際にクリックして `window.open(..., "_blank", "noopener,noreferrer")` が
+呼ばれることは未検証。CDP の `Page.windowOpen` イベントで確認する。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更（サンプルに外部リンク追加、検証を追加）
-- `docs/decisions/0080-external-link-safety-test.md`: 追加
+- `tools/verify-web-reader.py`: 変更（ポップアップ検証を追加）
+- `docs/decisions/0081-external-link-popup-test.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
 1. E2E 検証:
-   - サンプル CH1 に `https://example.com` へのリンクを追加する。
-   - サニタイズ後も href が残ること。
-   - リンクが `rel="noopener noreferrer"` を持つこと（ammonia の link_rel）。
-   - javascript: リンクは除去される既存テストを維持する。
-2. 既存の 125 テスト、E2E 212 項目を変えない。
+   - `Page.windowOpen` イベントを捕捉し、外部リンクをクリックする。
+   - 新しいウィンドウが `example.com` の URL で開くことを確認する（実際の
+     ネットワークアクセスは発生させない）。
+   - 開いたウィンドウを閉じる。
+2. 既存の 125 テスト、E2E 214 項目を変えない。
 
 ## Acceptance criteria
 
