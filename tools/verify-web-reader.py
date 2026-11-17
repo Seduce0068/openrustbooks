@@ -2086,7 +2086,7 @@ async def run_checks(cdp: Cdp) -> int:
         checker.check(
             "エクスポート名にタイムスタンプが付く",
             _re_export.fullmatch(
-                r"openrustbooks-\d{8}-\d{6}(?: \(\d+\))?\.json",
+                r"openrustbooks-\d{8}-\d{6}[+-]\d{4}(?: \(\d+\))?\.json",
                 exported.name,
             )
             is not None,
