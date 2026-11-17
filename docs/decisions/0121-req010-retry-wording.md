@@ -59,6 +59,6 @@ ADR-0105 / 0120 で解釈差が未決定として残っていた。
 - 保存値の正規化タイミング（load / merge / save）と範囲外値の扱い。
 - `PipelineConfig` 直接生成経路はクランプされない（ADR-0120 から継続）。
 - `max_retries = 0` の pipeline 回帰テスト未追加（ADR-0118 / 0120 から継続）。
-- 環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` の figment マッピング（推測、未検証）。
+- ~~環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` の figment マッピング~~ ADR-0122 で解消済み。
 - Web UI 未接続のため「ユーザー判断へ委ねる」は要件として維持されるが
   実装は未達（ADR-0116 から継続）。

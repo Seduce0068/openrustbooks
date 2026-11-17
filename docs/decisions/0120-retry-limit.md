@@ -66,5 +66,4 @@ status: accepted
   （pub struct / pub field）。型レベルでの制約は将来課題。
 - `max_retries = 0` の pipeline 回帰テスト（`attempts == 1`）未追加
   （ADR-0118 から継続）。
-- 環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` が figment の `split("_")` で
-  `ai.max.retries` に変換され、フィールドに届かない可能性（推測、未検証）。
+- ~~環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` のマッピング問題~~ ADR-0122 で手動読み込みにより解消済み。
