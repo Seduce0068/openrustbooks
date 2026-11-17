@@ -23,6 +23,7 @@ jobs:
   gates:
     uses: Seduce0068/workflows/.github/workflows/rust-gates.yml@v1
     with:
+      audit: true
       apt_packages: |
         libwebkit2gtk-4.1-dev
         libayatana-appindicator3-dev
