@@ -79,5 +79,5 @@ status: accepted
   UI 未接続のため適用前差分確認の要否は未確認。
 - `LintConfig.auto_fix` のコメント「Auto-fix on save」と実際の保存処理は
   乖離している（保存時 lint は未配線）。
-- `warnings_as_errors` / `config_file` / `rule_config` は rumdl 側に未配線。
+- ~~`warnings_as_errors` が rumdl 側に未配線~~ ADR-0123 で lint 判定に配線済み（`config_file` / `rule_config` は未配線のまま）。
 - wasm の `WasmMarkdownLinter` はスタブのまま（native と挙動が異なる）。
