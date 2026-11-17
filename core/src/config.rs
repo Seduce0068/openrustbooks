@@ -381,6 +381,14 @@ impl Default for ReaderConfig {
     }
 }
 
+/// 環境変数の生値をパースして `max_retries` を上書きする（失敗時は維持）。
+#[cfg(not(target_arch = "wasm32"))]
+fn apply_env_max_retries(config: &mut AppConfig, raw: Option<String>) {
+    if let Some(retries) = raw.and_then(|value| value.parse::<usize>().ok()) {
+        config.ai.max_retries = retries;
+    }
+}
+
 impl AppConfig {
     /// Load configuration from default locations.
     ///
@@ -408,7 +416,17 @@ impl AppConfig {
         // Load from environment variables (OPENRUSTBOOKS_*)
         figment = figment.merge(Env::prefixed("OPENRUSTBOOKS_").split("_"));
 
-        Ok(figment.extract()?)
+        let mut config: Self = figment.extract()?;
+
+        // `split("_")` は全 `_` を `.` に換えるため MAX_RETRIES は
+        // ai.max.retries になり届かない。extract 後に直接上書きして
+        // env > toml > default の優先順位を保つ（パース失敗時は維持）。
+        apply_env_max_retries(
+            &mut config,
+            std::env::var("OPENRUSTBOOKS_AI_MAX_RETRIES").ok(),
+        );
+
+        Ok(config)
     }
 
     /// Save configuration to default location.
@@ -527,6 +545,32 @@ mod tests {
 
         let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
         assert_eq!(restored.ai.max_retries, 5);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn apply_env_max_retries_overwrites_with_valid_value() {
+        let mut config = AppConfig::default();
+        apply_env_max_retries(&mut config, Some("7".to_string()));
+        assert_eq!(config.ai.max_retries, 7);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn apply_env_max_retries_keeps_value_on_parse_failure() {
+        let mut config = AppConfig::default();
+        config.ai.max_retries = 5;
+        apply_env_max_retries(&mut config, Some("abc".to_string()));
+        assert_eq!(config.ai.max_retries, 5);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn apply_env_max_retries_keeps_value_when_absent() {
+        let mut config = AppConfig::default();
+        config.ai.max_retries = 5;
+        apply_env_max_retries(&mut config, None);
+        assert_eq!(config.ai.max_retries, 5);
     }
 
     #[test]
