@@ -77,7 +77,9 @@ pub fn run() {
             app.manage(Arc::new(state));
 
             // Setup main window
-            let window = app.get_webview_window("main").unwrap();
+            let window = app.get_webview_window("main").ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "main window not found")
+            })?;
             setup_window(&window)?;
 
             // Initialize AI service if enabled
