@@ -119,7 +119,6 @@ impl AiMarkdownPipeline {
         Req: PipelineInput + Send + Sync,
         Res: PipelineOutput + Send + Sync,
     {
-        let mut last_error = None;
         let mut current_content = request.initial_content().unwrap_or_default();
 
         for attempt in 0..=self.config.max_retries {
@@ -158,18 +157,17 @@ impl AiMarkdownPipeline {
 
             // 4. Prepare for retry with lint feedback
             current_content = lint_result.fixed_content;
-            last_error = Some(format!(
-                "Lint validation failed after attempt {}",
-                attempt + 1
-            ));
 
             // Add lint errors to next prompt as context
             request.add_lint_feedback(&lint_result.issues);
         }
 
-        Err(CoreError::ai_pipeline(last_error.unwrap_or_else(|| {
-            "Pipeline failed after max retries".to_string()
-        })))
+        // The `for` loop always returns on the final attempt
+        // (`attempt == max_retries`), so this is unreachable in practice.
+        // Keep a safe error instead of panicking to satisfy the type checker.
+        Err(CoreError::ai_pipeline(
+            "Pipeline failed after max retries".to_string(),
+        ))
     }
 
     /// Call AI with appropriate prompt
