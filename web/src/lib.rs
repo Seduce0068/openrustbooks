@@ -2793,6 +2793,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let dark_action = Rc::clone(&dark_action);
         let help_dialog = help_dialog;
         move |event: web_sys::KeyboardEvent| {
+            // IME の変換中はキーを奪わない（確定時に誤操作しないため）。
+            if event.is_composing() {
+                return;
+            }
             // Ctrl / Meta 併用はブラウザのショートカットを奪わない。
             if event.ctrl_key() || event.meta_key() {
                 return;
