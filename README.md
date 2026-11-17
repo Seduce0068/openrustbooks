@@ -304,6 +304,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0115-epub-css-policy](docs/decisions/0115-epub-css-policy.md)
 - [0116-final-lint-policy](docs/decisions/0116-final-lint-policy.md)
 - [0117-wasm-config-alignment](docs/decisions/0117-wasm-config-alignment.md)
+- [0118-pipeline-dead-code](docs/decisions/0118-pipeline-dead-code.md)
+  - execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
   - WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
   - AI pipeline の最終試行で lint 不合格でも Ok を維持し、呼び出し側が lint_passed を確認して差分を提示する方針を記録する。
   - EPUB 内 CSS は現状どおり適用しないことを維持し、将来のオプトイン・スコープ付き段階導入の方針を記録する。
