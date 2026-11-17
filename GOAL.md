@@ -1,28 +1,29 @@
 # Goal
 
-IME 変換中はキーボードショートカットを発火させない（todo.md B04 / C01 の一部）。
+モーダルダイアログ表示中はキーボードショートカットを停止する（todo.md B04-B07 / C01 の一部）。
 
 ## Scope
 
 ### 背景
 
-`key_handler` は `isComposing` を確認していないため、日本語入力の変換確定時に
-`d` や `[` / `]` などのキーがショートカットとして扱われ、意図せず章移動や
-表示切り替えが起こる可能性がある。
+削除確認ダイアログやショートカットヘルプが開いているときも `key_handler` が
+動作するため、背景の章移動やダーク切替が起こる可能性がある。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`event.is_composing()` のガード追加）
+- `web/src/lib.rs`: 変更（open な dialog の存在を確認するガード）
 - `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0092-ime-composing-guard.md`: 追加
+- `docs/decisions/0093-modal-shortcut-guard.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `key_handler` の先頭で `event.is_composing()` が true なら return する。
-2. E2E で、composition 中を模したキーイベントではショートカットが
-   発火しないことを確認する。
-3. 既存の 221 項目を変えない（期待値を 222 に更新）。
+1. `key_handler` の先頭で、開いている `<dialog>` があれば return する。
+2. 既存の `?` キーはヘルプを開くため、ガードより後に処理される。
+   Esc はネイティブ dialog に任せる（既存どおり）。
+3. E2E で、ヘルプダイアログ表示中に `d` を押してもダーク表示が変わらない
+   ことを確認する。
+4. 期待 check 総数を 223 に更新する。
 
 ## Acceptance criteria
 
