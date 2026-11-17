@@ -1,29 +1,28 @@
 # Goal
 
-外部リンクをクリックしたときに新しいタブが開くことを E2E で検証する。
+mailto: リンクのクリック動作を E2E で検証する。
 
 ## Scope
 
 ### 背景
 
-ADR-0080 では外部リンクの href と `noopener noreferrer` を検証したが、
-実際にクリックして `window.open(..., "_blank", "noopener,noreferrer")` が
-呼ばれることは未検証。CDP の `Page.windowOpen` イベントで確認する。
+ADR-0081 の未決定。外部リンク（http/https）のポップアップ呼び出しは
+検証済みだが、同じ分岐に含まれる `mailto:` は未検証。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更（ポップアップ検証を追加）
-- `docs/decisions/0081-external-link-popup-test.md`: 追加
+- `tools/verify-web-reader.py`: 変更（サンプルに mailto 追加、検証を追加）
+- `docs/decisions/0082-mailto-link-test.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
 1. E2E 検証:
-   - `Page.windowOpen` イベントを捕捉し、外部リンクをクリックする。
-   - 新しいウィンドウが `example.com` の URL で開くことを確認する（実際の
-     ネットワークアクセスは発生させない）。
-   - 開いたウィンドウを閉じる。
-2. 既存の 125 テスト、E2E 214 項目を変えない。
+   - サンプル CH1 に `mailto:test@example.com` リンクを追加する。
+   - サニタイズ後も href が残ること。
+   - クリックで `window.open` が `_blank` / `noopener,noreferrer` 付きで
+     呼ばれること（ADR-0081 のスタブパターン）。
+2. 既存の 125 テスト、E2E 216 項目を変えない。
 
 ## Acceptance criteria
 
