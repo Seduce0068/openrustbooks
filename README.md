@@ -270,4 +270,5 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 
 ## ライセンス
 
-MIT License - see [LICENSE](LICENSE) for details.
+`AGPL-3.0-or-later`（[LICENSE](LICENSE) を参照）。以前の MIT ライセンス本文は
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に保持しています。
