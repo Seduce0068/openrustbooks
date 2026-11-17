@@ -1,0 +1,184 @@
+# decisions
+
+openrustbooks の ADR 一覧（全 90 件）。
+
+- [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
+  - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
+- [ADR-0002: AI支援Markdown生成・修正パイプラインを導入する](0002-ai-markdown-pipeline.md)
+  - status: accepted — AI API + markdownlint (rumdl) の組み合わせで Markdown 品質を保証するパイプラインを共通コアに実装する決定。
+- [ADR-0003: 共通コアをターゲット別依存でNative/Wasm両対応にする](0003-native-wasm-target-split.md)
+  - status: accepted — ネイティブ専用依存をtarget別に分離し、共通コアとWebアプリをwasm32-unknown-unknownでビルド可能にする決定。
+- [ADR-0004: ZIPアーカイブ閲覧をcoreの読み取り専用モジュールとして実装する](0004-zip-archive-reader.md)
+  - status: accepted — アーカイブ閲覧の境界、zipクレートの選定理由、パス逸脱と過大展開への対策を記録する。
+- [ADR-0005: EPUB本文の読み出しをcoreの読み取り専用モジュールとして実装する](0005-epub-body-reading.md)
+  - status: accepted — container.xmlとOPFの解析範囲、quick-xml 0.42の選定理由、本文抽出とパス逸脱への対策を記録する。
+- [ADR-0006: EPUBの目次（nav / NCX）を平坦な深さ付きリストで返す](0006-epub-table-of-contents.md)
+  - status: accepted — EPUB3 nav と EPUB2 NCX の読み分け、平坦リスト採用の理由、欠落と破損の扱いを記録する。
+- [ADR-0007: EPUB目次のフラグメントを保持する](0007-epub-toc-fragments.md)
+  - status: accepted — 目次エントリに文書内アンカーを第2フィールドとして保持し、空パスのhrefを読み飛ばす決定。
+- [ADR-0008: EPUBの表紙画像と章の表示名を取得する](0008-epub-cover-and-chapter-title.md)
+  - status: accepted — 表紙の宣言の解決順と、目次を優先する章タイトルの解決、欠落と破損の扱いを記録する。
+- [ADR-0009: EPUB3 nav の landmarks と page-list を読む](0009-epub-landmarks-and-page-list.md)
+  - status: accepted — EPUB3 nav の landmarks と page-list を既存の目次項目型で返す決定を記録する。
+- [ADR-0010: EPUB読み出し API を WebAssembly に公開する](0010-epub-wasm-bindings.md)
+  - status: accepted — WasmEpubBook で EPUB の読み取り専用 API を JavaScript から利用する方針を記録する。
+- [ADR-0011: Web 版でローカル EPUB をテキスト閲覧する](0011-web-epub-reader.md)
+  - status: accepted — WasmEpubBook を使ったブラウザ内 EPUB 読書の初期 UI と安全な表示境界を記録する。
+- [ADR-0012: EPUB の HTML をサニタイズして表示する](0012-epub-html-display.md)
+  - status: accepted — 章 XHTML の許可リスト方式サニタイズ、画像の Blob URL 化、アンカー移動の決定を記録する。
+- [ADR-0013: EPUB 表示経路を fail-closed に強化する](0013-epub-display-hardening.md)
+  - status: accepted — 画像参照の URL 正規化、外部リンクの opener 分離、EPUB サイズ上限の決定を記録する。
+- [ADR-0014: 本文内の相対リンクから章へ移動する](0014-relative-chapter-links.md)
+  - status: accepted — 相対リンクの解決を core に置き、Web の本文内リンクから章間移動とアンカー移動を行う決定を記録する。
+- [ADR-0015: 読書位置を localStorage に保存して復元する](0015-reading-position.md)
+  - status: accepted — 本ごとの章とフラグメントを localStorage に保存し、開き直したときに復元する決定を記録する。
+- [ADR-0016: 章内のスクロール位置も読書位置として保存する](0016-scroll-position.md)
+  - status: accepted — スクロール位置の保存（デバウンス）と描画後の復元（再試行付き）の決定を記録する。
+- [ADR-0017: 章と位置の移動履歴（戻る・進む）](0017-navigation-history.md)
+  - status: accepted — 読書中の章移動をメモリ上の履歴に積み、戻る・進むでスクロール位置ごと復元する決定を記録する。
+- [ADR-0018: リーダーの表示設定と読書データの削除](0018-reader-display-settings.md)
+  - status: accepted — 文字サイズ・行間・ダーク表示の保存と適用、保存した読書位置の削除の決定を記録する。
+- [ADR-0019: 読書位置の保持期間と件数上限](0019-position-retention.md)
+  - status: accepted — 保存時刻の記録、90 日の寿命、40 件の上限、容量超過時の縮退の決定を記録する。
+- [ADR-0020: 画像読み込みによるレイアウトずれの補正](0020-layout-shift-correction.md)
+  - status: accepted — 画像が確定するまで位置の適用を待つ決定と、フラグメント保存の欠落修正を記録する。
+- [ADR-0021: キーボード操作と ARIA 属性](0021-keyboard-and-aria.md)
+  - status: accepted — リーダーのキーボードショートカットとアクセシビリティ属性の決定を記録する。
+- [ADR-0022: 読書位置のエクスポート・インポート](0022-position-export-import.md)
+  - status: accepted — 保存した読書位置を JSON で書き出し・読み込みする決定を記録する。
+- [ADR-0023: アプリ全体のダークテーマ](0023-app-wide-theme.md)
+  - status: accepted — リーダーのダーク表示トグルをアプリ全体（ツールバー・一覧画面）へ拡張する決定を記録する。
+- [ADR-0024: 章の移動履歴の永続化](0024-history-persistence.md)
+  - status: accepted — 移動履歴を localStorage に保存し、同じ本を開き直したときにも戻る・進むができるようにする決定を記録する。
+- [ADR-0025: タッチ操作（スワイプで章を移動）](0025-touch-gestures.md)
+  - status: accepted — 本文領域のスワイプで章を移動する決定を記録する。
+- [ADR-0026: 設定のエクスポート・インポート](0026-settings-export-import.md)
+  - status: accepted — エクスポート・インポート形式を拡張し、表示設定も含める決定を記録する。
+- [ADR-0027: landmarks の移動 UI](0027-landmarks-ui.md)
+  - status: accepted — EPUB3 nav の landmarks をドロップダウンで表示し、移動できるようにする決定を記録する。
+- [ADR-0028: page-list によるページ移動](0028-page-list-navigation.md)
+  - status: accepted — EPUB3 nav の page-list を使い、ページ番号入力で章へ移動できるようにする決定を記録する。
+- [ADR-0029: 履歴一覧の UI](0029-history-list-ui.md)
+  - status: accepted — 移動履歴をドロップダウンで一覧表示し、任意の履歴エントリへ直接ジャンプできるようにする決定を記録する。
+- [ADR-0030: 履歴のエクスポート・インポート](0030-history-export-import.md)
+  - status: accepted — エクスポート・インポート形式に移動履歴を含める決定を記録する。
+- [ADR-0031: 履歴のクリア](0031-history-clear.md)
+  - status: accepted — 移動履歴を全消去できるようにする決定を記録する。
+- [ADR-0032: インポート時のマージ](0032-import-merge.md)
+  - status: accepted — インポートする読書位置を savedAt で比較し、新しい方を採用する決定を記録する。
+- [ADR-0033: OS のカラースキームへの追従](0033-prefers-color-scheme.md)
+  - status: accepted — prefers-color-scheme を検知してダーク表示を自動で切り替える決定を記録する。
+- [ADR-0034: 本文画像の非同期デコード](0034-async-image-decoding.md)
+  - status: accepted — 本文画像に decoding=\"async\" を付与し、デコードを非同期化して描画をブロックしない決定を記録する。
+- [ADR-0035: 履歴エントリの個別削除](0035-history-delete-entry.md)
+  - status: accepted — 選択中の履歴エントリだけを削除できるようにする決定を記録する。
+- [ADR-0036: エクスポート形式のバージョニング](0036-export-versioning.md)
+  - status: accepted — エクスポート JSON に形式バージョンを付与し、未知のバージョンを fail-closed で拒否する決定を記録する。
+- [ADR-0037: スクロール順序テストの安定化](0037-scroll-order-test-stability.md)
+  - status: accepted — 画像位置復元の E2E がブラウザ自身のスクロール調整を誤検知しないようにする決定を記録する。
+- [ADR-0038: 初回起動時のカラースキーム追従デフォルト](0038-initial-theme-follow.md)
+  - status: accepted — 設定キーが無い初回起動で OS がダークなら追従を有効にする決定を記録する。
+- [ADR-0039: 強制カラーモードへの対応](0039-forced-colors.md)
+  - status: accepted — Windows のハイコントラスト（Forced Colors Mode）でリーダーの視認性を確保する決定を記録する。
+- [ADR-0040: 削除確認ダイアログ](0040-delete-confirmation-dialog.md)
+  - status: accepted — 履歴の削除操作にネイティブ &lt;dialog&gt; の確認を挟み、誤操作を防ぐ決定を記録する。
+- [ADR-0041: 履歴の日時サマリー表示](0041-history-summary.md)
+  - status: accepted — 履歴エントリに保存日時を記録し、一覧ラベルに表示する決定を記録する。
+- [ADR-0042: wasm32 clippy 警告の解消](0042-wasm-clippy-cleanup.md)
+  - status: accepted — wasm32 ターゲットの clippy 警告をゼロにし、コードをクリーンに保つ決定を記録する。
+- [ADR-0043: SVG Blob URL のサニタイズ](0043-svg-blob-sanitization.md)
+  - status: accepted — SVG 画像を Blob URL 化する前にスクリプト実行経路を除去する決定を記録する。
+- [ADR-0044: SVG の外部リソース参照制御](0044-svg-external-references.md)
+  - status: accepted — SVG 内の外部スキーム参照を除去し、Blob URL 直接オープン時のプライバシー漏洩を防ぐ決定を記録する。
+- [ADR-0045: SVG の XML 処理命令除去](0045-svg-xml-processing-instructions.md)
+  - status: accepted — SVG から XML 処理命令を除去し、外部 CSS 参照による情報漏洩を防ぐ決定を記録する。
+- [ADR-0046: フラグメントスクロールの安定化](0046-fragment-scroll-stability.md)
+  - status: accepted — 画像レイアウト未確定によるフラグメント移動のスクロール失敗を解消する決定を記録する。
+- [ADR-0047: 確認ダイアログの Esc キャンセル検証](0047-dialog-esc-test.md)
+  - status: accepted — 削除確認ダイアログの Esc キーによるキャンセル動作を E2E で検証する決定を記録する。
+- [ADR-0048: 確認ダイアログのフォーカス検証](0048-dialog-focus-test.md)
+  - status: accepted — 削除確認ダイアログで安全な操作（Cancel）にフォーカスが当たることを E2E で検証する決定を記録する。
+- [ADR-0049: エクスポート・インポートのラウンドトリップ検証](0049-export-import-roundtrip.md)
+  - status: accepted — 書き出した JSON をそのまま読み込んで位置・設定・履歴が復元されることを E2E で検証する決定を記録する。
+- [ADR-0050: 深い入れ子 XHTML の安全性確認](0050-deep-nesting-safety.md)
+  - status: accepted — 深い入れ子の XHTML がサニタイズ時に異常終了しないことをテストで確認する決定を記録する。
+- [ADR-0051: EPUB バイト列の所有権移譲による二重コピー解消](0051-owned-epub-open.md)
+  - status: accepted — wasm で EPUB を開くときのアーカイブバイト列の二重コピーを解消する決定を記録する。
+- [ADR-0052: フラグメントスクロール retry の強化と残る課題](0052-fragment-retry-hardening.md)
+  - status: accepted — フラグメントスクロールの retry を強化し、残るフレークの調査結果を記録する。
+- [ADR-0053: フラグメントスクロールが 0 に戻る根本原因](0053-scroll-reset-root-cause.md)
+  - status: accepted — 連続した章移動で古い位置適用コールバックが新しい章をリセットする問題を世代号で解消する決定を記録する。
+- [ADR-0054: 画像待ちループの早期世代チェック](0054-early-generation-check.md)
+  - status: accepted — 古い章の画像待ちループを世代チェックで早期停止する決定を記録する。
+- [ADR-0055: 同一章フラグメント移動の履歴記録](0055-same-chapter-fragment-history.md)
+  - status: accepted — 本文内のアンカー・脚注リンクによる同一章内の移動も履歴に記録する決定を記録する。
+- [ADR-0056: スワイプ閾値の設定化](0056-swipe-threshold-setting.md)
+  - status: accepted — 章移動のスワイプ閾値を表示設定から変更できるようにする決定を記録する。
+- [ADR-0057: 本文言語の設定](0057-content-language.md)
+  - status: accepted — EPUB の言語を本文要素の lang 属性に反映し、スクリーンリーダーの発音を最適化する決定を記録する。
+- [ADR-0058: 本文領域のアクセシブル名](0058-region-aria-labelledby.md)
+  - status: accepted — 本文領域の aria-labelledby を章タイトルに結びつける決定を記録する。
+- [ADR-0059: 非整形式 XHTML の扱い](0059-malformed-xhtml-policy.md)
+  - status: accepted — OPF は fail-closed、章本文はサニタイズに委譲する実際の挙動を確認し記録する。
+- [ADR-0060: remote-resources 宣言の扱い](0060-remote-resources-policy.md)
+  - status: accepted — remote-resources を宣言する EPUB を受け付け、リモートアクセスは表示側の防御に委ねる決定を記録する。
+- [ADR-0061: 縦スクロール閾値の設定化](0061-vertical-scroll-threshold.md)
+  - status: accepted — タッチ操作の縦スクロール判定閾値を設定から変更できるようにする決定を記録する。
+- [ADR-0062: ブラウザ標準のピンチズーム](0062-browser-pinch-zoom.md)
+  - status: accepted — リーダーがブラウザ標準のピンチズームを阻害していないことを確認する決定を記録する。
+- [ADR-0063: 旧形式とマージを含むラウンドトリップ検証](0063-legacy-roundtrip.md)
+  - status: accepted — 旧形式 JSON のインポートからエクスポート・再インポートまでの連鎖を検証する決定を記録する。
+- [ADR-0064: 巨大画像の検出と警告](0064-large-image-warning.md)
+  - status: accepted — 本文の巨大画像を検出し、状態メッセージで警告する決定を記録する。
+- [ADR-0065: 10000 階層の入れ子テスト](0065-deep-nesting-10k.md)
+  - status: accepted — より深い入れ子 XHTML の挙動を回帰テストとして固定する決定を記録する。
+- [ADR-0066: remote-resources 宣言の警告](0066-remote-resources-warning.md)
+  - status: accepted — remote-resources を宣言する EPUB を開いたとき、利用者に警告を表示する決定を記録する。
+- [ADR-0067: オプトインの画像縮小](0067-optional-image-downscale.md)
+  - status: accepted — 巨大画像を Canvas で縮小する設定を既定オフで追加する決定を記録する。
+- [ADR-0068: 表示設定の一括リセット](0068-reset-settings.md)
+  - status: accepted — 増えた表示設定をまとめて既定値に戻すボタンを追加する決定を記録する。
+- [ADR-0069: エクスポート名のタイムスタンプ](0069-timestamped-export-filename.md)
+  - status: accepted — エクスポート JSON のダウンロード名にローカル時刻のタイムスタンプを付ける決定を記録する。
+- [ADR-0070: エクスポート名へのタイムゾーン明示](0070-export-filename-timezone.md)
+  - status: accepted — エクスポート JSON のファイル名にタイムゾーン偏移を付ける決定を記録する。
+- [ADR-0071: 縮小画像の MIME 保持](0071-downscale-mime-preservation.md)
+  - status: accepted — 画像縮小時に元画像の MIME タイプを保持する決定を記録する。
+- [ADR-0072: 縮小 JPEG の品質指定](0072-downscale-jpeg-quality.md)
+  - status: accepted — 画像縮小時の JPEG 再エンコードに品質 0.85 を明示する決定を記録する。
+- [ADR-0073: JPEG 品質の設定化](0073-jpeg-quality-setting.md)
+  - status: accepted — 縮小 JPEG の品質を表示設定から変更できるようにする決定を記録する。
+- [ADR-0074: JPEG 品質とファイルサイズの定量比較の調査](0074-jpeg-size-comparison.md)
+  - status: accepted — 縮小 JPEG の品質差がファイルサイズに表れない場合があることを調査し記録する。
+- [ADR-0075: キーボードショートカットのヘルプ](0075-shortcuts-help.md)
+  - status: accepted — ? キーとボタンでショートカット一覧を表示する決定を記録する。
+- [ADR-0076: エクスポート形式のバージョン移行方針](0076-version-migration-policy.md)
+  - status: accepted — 形式バージョン 2 以降を導入するときの受け付け範囲・デフォルト値・移行手順を定義する。
+- [ADR-0077: エクスポート形式 version 1 の十分性](0077-version-1-sufficiency.md)
+  - status: accepted — 現時点では version 1 で十分であることをレビューし、version 2 の導入条件を将来の候補として記録する。
+- [ADR-0078: 章タイトルの検索フィルター](0078-chapter-filter.md)
+  - status: accepted — 章ドロップダウンにタイトル検索フィルターを追加する決定を記録する。
+- [ADR-0079: 章フィルターへのフォーカスショートカット](0079-filter-focus-shortcut.md)
+  - status: accepted — / キーで章フィルター入力にフォーカスする決定を記録する。
+- [ADR-0080: 外部リンク安全性の E2E 検証](0080-external-link-safety-test.md)
+  - status: accepted — 本文内の外部リンクが noopener noreferrer 付きで保持されることを E2E で検証する決定を記録する。
+- [ADR-0081: 外部リンクのポップアップ呼び出し検証](0081-external-link-popup-test.md)
+  - status: accepted — 外部リンクのクリックが noopener/noreferrer 付きの window.open 呼び出しになることを E2E で検証する決定を記録する。
+- [ADR-0082: mailto リンクの検証](0082-mailto-link-test.md)
+  - status: accepted — mailto: リンクが外部リンクと同じ安全な分岐で開かれることを E2E で検証する決定を記録する。
+- [ADR-0083: デッドコードと古い契約値の整理](0083-dead-code-cleanup.md)
+  - status: accepted — 調査で検出された未使用関数と古い E2E 項目数を整理する決定を記録する。
+- [ADR-0084: 一括検証スクリプト](0084-verification-script.md)
+  - status: accepted — 全ゲート・Wasm ビルド・E2E を再現可能に実行するスクリプトを追加する決定を記録する。
+- [ADR-0085: 履歴 1 件の localStorage 保存](0085-single-entry-history-save.md)
+  - status: accepted — 履歴が 1 件になっても localStorage を更新する決定を記録する。
+- [ADR-0086: 既知脆弱性依存の修正](0086-dependency-vulnerability-fix.md)
+  - status: accepted — ammonia と pulldown-cmark の脆弱性を修正する決定を記録する。
+- [ADR-0087: Markdown 保存時の front matter 保全](0087-front-matter-preservation.md)
+  - status: accepted — Markdown 文書の保存時に front matter が失われるバグを修正する決定を記録する。
+- [ADR-0088: 配布 WASM の開発パス除去](0088-wasm-path-stripping.md)
+  - status: accepted — 配布 WASM に含まれる開発ホスト絶対パスを除去する決定を記録する。
+- [ADR-0089: core 初期化処理の一本化](0089-init-unification.md)
+  - status: accepted — Rust / JS 双方の init() が同じ初期化処理を呼ぶようにする決定を記録する。
+- [ADR-0090: E2E 期待 check 総数の検証](0090-e2e-expected-count.md)
+  - status: accepted — 未実行の check を見逃さないため、期待総数を宣言して検証する決定を記録する。
