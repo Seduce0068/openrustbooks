@@ -562,7 +562,8 @@ pub struct WasmConfig {
 impl Default for WasmConfig {
     fn default() -> Self {
         Self {
-            ai_enabled: true,
+            // 送信スタブでもネイティブの AiConfig と揃え、既定はオフ（ADR-0099）。
+            ai_enabled: false,
             ai_provider: "openai".to_string(),
             ai_model: "gpt-4o-mini".to_string(),
             lint_enabled: true,
@@ -668,5 +669,32 @@ pub fn init() {
 pub mod utils {
     pub fn version() -> String {
         env!("CARGO_PKG_VERSION").to_string()
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod tests {
+    use super::WasmConfig;
+
+    #[test]
+    fn ai_disabled_by_default() {
+        // ネイティブの AiConfig と同じく既定はオフ。
+        let config = WasmConfig::default();
+        assert!(!config.ai_enabled());
+    }
+
+    #[test]
+    fn set_ai_enabled_switches_state() {
+        let mut config = WasmConfig::default();
+        config.set_ai_enabled(true);
+        assert!(config.ai_enabled());
+    }
+
+    #[test]
+    fn other_defaults_are_unchanged() {
+        // lint / auto_fix の既定値は変更しない。
+        let config = WasmConfig::default();
+        assert!(config.lint_enabled());
+        assert!(config.auto_fix());
     }
 }
