@@ -30,8 +30,10 @@ ADR-0071 の未決定「JPEG の再エンコード品質（quality）の最適�
 
 ### 必須テスト
 
-- `tools/verify-web-reader.py` に追加する。
-  - JPEG 画像を縮小しても MIME が `image/jpeg` のままである。
+- 既存の 125 テスト、E2E 199 項目（PNG の MIME 保持を含む）が通る。
+- JPEG パスは `to_blob_with_type_and_encoder_options` と
+  `{ quality: 0.85 }` をコード上で確認する（JPEG バイト列の生成は
+  新規依存なしでは E2E に組み込みにくいため、静的確認に留める）。
 
 ## Acceptance criteria
 
