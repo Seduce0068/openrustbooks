@@ -41,13 +41,21 @@ DIST_DIR="$(mktemp -d)"
 trap 'rm -rf "$DIST_DIR"' EXIT
 
 echo "===== START: trunk build ====="
-if (cd web && trunk build --offline --dist "$DIST_DIR"); then
+# 開発ホストの絶対パスを配布 WASM に残さない（rustc の正しいフラグは --remap-path-prefix）。
+if (cd web && RUSTFLAGS="--remap-path-prefix=$HOME=~" trunk build --offline --dist "$DIST_DIR"); then
 	echo "===== END: trunk build rc=0 ====="
 else
 	rc=$?
 	echo "===== END: trunk build rc=$rc ====="
 	exit "$rc"
 fi
+
+echo "===== START: wasm path check ====="
+if grep -a -q '/home/' "$DIST_DIR"/*_bg.wasm; then
+	echo "配布 WASM に開発ホストの絶対パスが含まれています"
+	exit 1
+fi
+echo "===== END: wasm path check rc=0 ====="
 
 echo "===== START: e2e ====="
 if python3 tools/verify-web-reader.py --dist "$DIST_DIR"; then
