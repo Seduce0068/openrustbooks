@@ -294,6 +294,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0105-retry-config](docs/decisions/0105-retry-config.md)
 - [0106-retry-merge-preservation](docs/decisions/0106-retry-merge-preservation.md)
 - [0107-ai-service-refresh](docs/decisions/0107-ai-service-refresh.md)
+- [0108-prompt-system-prompt](docs/decisions/0108-prompt-system-prompt.md)
+  - 内蔵 .hbs テンプレートに必須フィールドを追加し、AI サービスの初期化失敗を解消する決定を記録する。
   - AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
   - max_retries を DTO から除外し、IPC 往復で現在値を保持する決定を記録する。
   - リトライ回数をトークン上限から分離し、AiConfig.max_retries に集約する決定を記録する。
