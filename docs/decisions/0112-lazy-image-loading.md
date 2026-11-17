@@ -75,9 +75,15 @@ ADR-0020 / 0034 / 0046 で「遅延読み込みとの併用」が未決定だっ
 - [MDN: HTMLImageElement.complete](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/complete)
   （`complete` はレイアウト確定を保証しない）
 
+## 解決済み
+
+- ~~EPUB 内 CSS（ADR-0012 から継続）。~~
+  → ADR-0115 で「現状維持（CSS 非適用）」の方針を決定（解消済み）。
+  オプトイン設定や CSS パーサー選定の詳細は ADR-0115 の未決定項目として継続。
+
 ## 未決定
 
 - EPUB の自然寸法をどの層で取得・埋め込むか（core の OPF/画像解析 vs web の事前デコード）。
 - 保存位置近傍の「近傍」の定義（Observer の `rootMargin` 値）。
 - 段階導入時の既定値（最初はオプトイン）。
-- EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
+- 縦書き・ページ送り（ADR-0012 から継続、ADR-0115 でも未決定）。

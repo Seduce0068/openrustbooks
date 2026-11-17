@@ -49,11 +49,15 @@ serde の既定値 3 で保存され、利用者の設定（例 5）が静かに
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- `update_config` が AI 設定変更時に service を再初期化せず、保存設定と実行中
+  service が乖離する問題は ADR-0107 で差分トリガー＋fail-closed な再初期化に
+  解決済み。
+- `update_ai_config` の再初期化エラーが `let _ =` で握り潰される問題も
+  ADR-0107 で `spawn` + `let _ =` を削除し、Err を返す方式に解決済み。
+
 ## 未決定
 
-- service-refresh-auditor の指摘: `update_config` が AI 設定変更時に
-  service を再初期化しないため、保存設定と実行中 service が乖離する。
-  差分トリガー／fail-closed／async 化の設計判断が必要（別タスク）。
-- `update_ai_config` の再初期化エラーが `let _ =` で握り潰される。
 - REQ-010 の「最大 3 回再生成」と `0..=max_retries` の解釈差（ADR-0105 から継続）。
 EOF

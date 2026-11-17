@@ -57,12 +57,14 @@ service-refresh-auditor の指摘）。
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- `core/prompts/*.hbs` 全 7 ファイルに `system_prompt` が無く、native の
+  `AiMarkdownService::new()` が設定に関わらず常に失敗する問題は ADR-0108 で
+  全テンプレートの front matter を修正して解決済み。
+
 ## 未決定（service-refresh-implementer / async-command-auditor の指摘）
 
-- **重大**: `core/prompts/*.hbs` 全 7 ファイルに `system_prompt` が無い一方、
-  `PromptTemplate` はこれを必須とする。そのため native の
-  `AiMarkdownService::new()` は設定に関わらず常に失敗し、AI 有効化時の
-  refresh も Err になる。次タスクで修正する。
 - in-flight の送信はスナップショットされた `Arc<AiMarkdownService>` を使う
   ため、同意ダイアログ表示中の設定変更は当該送信に反映されない。
   AI を無効化しても実行中の送信は完了する。

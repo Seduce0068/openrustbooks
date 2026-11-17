@@ -56,10 +56,15 @@ MDN によれば `HTMLImageElement.complete` は `src` 未設定／空／broken�
 - 全単体テスト core 165 + desktop 28。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- ~~`expected_images` に src 削除画像が残る既存負債（ADR-0112 の段階導入で
+  「可視／位置に影響する画像」定義と統合する）。~~
+  → ADR-0114 で `expected_images` を「src 属性を持つ `<img>` の数」に変更し、
+  src 削除画像による無駄な 2 秒待ちを解消（解消済み）。
+
 ## 未決定（settle-auditor の指摘）
 
 - 破損画像の 2 秒待ちを許容するか、`error` イベント等で即完了扱いにするか。
 - `IMAGE_SETTLE_MS = 2000` の根拠と遅い端末での再調整要否。
 - viewBox のみ SVG の自然幅（ブラウザ依存、推測）。
-- `expected_images` に src 削除画像が残る既存負債（ADR-0112 の段階導入で
-  「可視／位置に影響する画像」定義と統合する）。

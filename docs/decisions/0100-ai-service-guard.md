@@ -53,10 +53,13 @@ status: accepted
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- `base_url` を JS から任意変更できる問題は ADR-0101 で許可リスト方式に制限済み。
+- `extra_headers` を JS から任意変更できる問題は ADR-0102 で DTO から除外・マスク済み。
+- 送信プレビュー＋ネイティブの同意ダイアログは ADR-0104 で実装済み。
+
 ## 未決定
 
-- `base_url` / `extra_headers` を JS から任意変更できる問題
-  （baseurl-auditor の指摘。許可リスト方式を推奨、次タスク）。
-- 送信プレビュー＋ネイティブの同意ダイアログ。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 EOF

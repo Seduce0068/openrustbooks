@@ -54,13 +54,15 @@ status: accepted
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- 旧 DTO JSON（キーなし）を `update_config` へ渡すと 3 で上書きされる問題は
+  ADR-0106 で `max_retries` を DTO から除外しマージ保持する方式に解決済み。
+- `update_config` が AI 設定変更時に service を再初期化せず、実行中 pipeline に
+  新値が反映されない問題は ADR-0107 で fail-closed な再初期化に解決済み。
+
 ## 未決定（retry-impact-auditor の指摘）
 
-- 旧 DTO JSON（キーなし）を `update_config` へ渡すと 3 で上書きされる。
-  現状 UI 未接続でその経路は無いが、UI 接続時に DTO→AppConfig の
-  明示変換が必要。
-- `update_config` は AI 設定変更時に service を再初期化しないため、
-  実行中 pipeline に新値が反映されない。
 - REQ-010 の「最大 3 回再生成」は `for attempt in 0..=max_retries`
   （初期 1 回＋リトライ 3 回＝最大 4 回生成）と解釈している。
   要件文言の明文化またはループ境界の再検討が必要。

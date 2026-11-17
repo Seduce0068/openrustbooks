@@ -61,10 +61,17 @@ status: accepted
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- ~~`FixResult.converged` / `conflicting_rules` を破棄しており、未収束時の
+  fail-closed／ベストエフォートの判断が未定。~~
+  → ADR-0111 で `converged` / `conflicting_rules` を `LintResultWrapper` に
+  保持し、未収束時は元本文へ戻す fail-closed を決定・実装（解消済み）。
+
 ## 未決定（autofix-safety-auditor の指摘）
 
-- `FixResult.converged` / `conflicting_rules` / `conflict_cycle` を破棄しており、
-  未収束時の fail-closed／ベストエフォートの判断が未定。
+- `conflict_cycle`（ルール順序）は ADR-0111 でも Wrapper に含められず、
+  未決定として継続。
 - `fixes_applied` は「修正したルール数」であり編集回数ではない（名称の誤解に注意）。
 - `refine` / `front_matter` のリトライ入力は元原稿を使うため、
   修正後本文（`fixed_content`）が AI の再生成に渡らない。

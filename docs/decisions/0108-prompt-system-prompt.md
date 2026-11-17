@@ -62,14 +62,18 @@ serde の snake_case バリアントと不一致（`"frontmatter"` / `"explainco
   E2E 228 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- ~~OpenAI では `client.rs` の固定 system message と、テンプレートの
+  `system_prompt`（`render()` が user 本文先頭に挿入）が意味的に二重になる。~~
+  → ADR-0109 で固定 system message を削除し、system 指示をテンプレートに
+  一元化（解消済み）。
+- ~~`render()` + `client.complete()` をまたぐ境界テストが無く、
+  既存の `render_starts_with_system_prompt` は API リクエスト全体の
+  重複を検出できない。~~
+  → ADR-0109 で境界テスト 3 件を追加（messages に system role が無いこと、
+  render 結果先頭にテンプレートの `system_prompt` が含まれること）し解消済み。
+
 ## 未決定（system-prompt-auditor の指摘）
 
-- OpenAI では `client.rs` の固定 system message と、テンプレートの
-  `system_prompt`（`render()` が user 本文先頭に挿入）が意味的に二重になる。
-  Ollama には `client.rs` に system 経路が無いため、固定文を削除して
-  テンプレート側に一元化するのが最小（次タスク）。
-- `render()` + `client.complete()` をまたぐ境界テストが無く、
-  既存の `render_starts_with_system_prompt` は API リクエスト全体の
-  重複を検出できない。
 - Ollama API の `system` パラメータ対応は未確認（リポジトリ外の仕様）。
-EOF
