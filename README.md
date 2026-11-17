@@ -289,6 +289,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0100-ai-service-guard](docs/decisions/0100-ai-service-guard.md)
 - [0101-base-url-allowlist](docs/decisions/0101-base-url-allowlist.md)
 - [0102-extra-headers-redaction](docs/decisions/0102-extra-headers-redaction.md)
+- [0103-path-field-redaction](docs/decisions/0103-path-field-redaction.md)
+  - 設定 IPC の DTO からローカルパス情報を除外し、マージで保持する決定を記録する。
   - OpenAiConfig.extra_headers を IPC DTO と Debug 出力からマスクする決定を記録する。
   - AI の送信先 URL を既定ホストと loopback のみに制限し、JS からの任意送信先差し替えを防ぐ決定を記録する。
   - AI を無効化した後に service が残存して送信できる問題を修正する決定を記録する。
