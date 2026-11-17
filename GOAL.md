@@ -15,7 +15,6 @@ WebView の CSP 対象外のため、同意なく本文が外部へ送られる�
 
 - `core/src/ai_markdown/client.rs`: 変更（送信先検証関数と適用）
 - `desktop/src/commands/config.rs`: 変更（設定更新時の検証）
-- `core/src/config.rs`: 変更（必要なら許可リスト設定）
 - `docs/decisions/0101-base-url-allowlist.md`: 追加
 - `GOAL.md`: 本契約
 
@@ -25,8 +24,9 @@ WebView の CSP 対象外のため、同意なく本文が外部へ送られる�
    - OpenAI: `https://api.openai.com/v1`
    - Ollama: `http://localhost:11434`（loopback http は許可）
 2. scheme は https または loopback の http のみ許可する。
-3. カスタムエンドポイントは明示的な opt-in 設定（config.toml / 環境変数等、
-   JS からは変更できない経路）でのみ許可する。
+3. 今回は既定ホスト＋loopback のみをハードコードで許可する。
+   カスタムエンドポイントの opt-in は、IPC が `AppConfig` 全体を受け取るため
+   JS から書き換えられない設計が必要で、将来課題とする。
 4. IPC 設定更新時とクライアント生成時の二重で検証する（defense in depth）。
 5. 新規依存を追加しない（`url` クレートは既存依存）。
 6. 既存の 146 テスト、E2E 228 項目を壊さない。
