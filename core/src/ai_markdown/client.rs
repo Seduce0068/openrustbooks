@@ -14,6 +14,7 @@ use futures::StreamExt;
 use std::pin::Pin;
 use std::sync::Arc;
 use tiktoken_rs::{CoreBPE, bpe_for_model, cl100k_base_singleton};
+use url::Url;
 
 /// Trait for AI clients
 #[async_trait]
@@ -84,6 +85,69 @@ pub trait TokenStream: Send + Unpin + 'static {
     fn is_done(&self) -> bool;
 }
 
+/// Provider whose base URL is being validated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderKind {
+    /// OpenAI (official hosted endpoint).
+    OpenAi,
+    /// Ollama (local loopback endpoint).
+    Ollama,
+}
+
+impl std::fmt::Display for ProviderKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OpenAi => write!(f, "openai"),
+            Self::Ollama => write!(f, "ollama"),
+        }
+    }
+}
+
+/// ハードコードされた既定ホストのみ許可する。
+///
+/// - OpenAI: scheme `https` + host `api.openai.com` + port なし/443
+/// - Ollama: scheme `http` + loopback host（`localhost` / `127.0.0.1` / `[::1]`）+ port 11434
+///
+/// path は互換性のため厳密に検査しない。userinfo は常に拒否する。
+/// カスタムエンドポイント（Azure OpenAI 等）の opt-in は将来課題（ADR）。
+/// エラーメッセージには host と理由のみを含め、userinfo を漏らさない。
+pub fn validate_base_url(url: &str, provider: ProviderKind) -> CoreResult<()> {
+    let parsed = Url::parse(url)
+        .map_err(|_| CoreError::validation(format!("Invalid {provider} base URL")))?;
+
+    // userinfo 付き URL は見せかけのホストになり得るため拒否する。
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(CoreError::validation(format!(
+            "Base URL for {provider} must not contain userinfo"
+        )));
+    }
+
+    let host = parsed.host_str().unwrap_or_default();
+    let port = parsed.port();
+    let allowed = match provider {
+        ProviderKind::OpenAi => {
+            parsed.scheme() == "https"
+                && host.eq_ignore_ascii_case("api.openai.com")
+                && matches!(port, None | Some(443))
+        }
+        ProviderKind::Ollama => {
+            parsed.scheme() == "http"
+                && port == Some(11434)
+                && (host.eq_ignore_ascii_case("localhost")
+                    || host.eq_ignore_ascii_case("127.0.0.1")
+                    || host.eq_ignore_ascii_case("[::1]"))
+        }
+    };
+
+    if allowed {
+        Ok(())
+    } else {
+        Err(CoreError::validation(format!(
+            "Base URL host '{host}' is not allowed for provider {provider}"
+        )))
+    }
+}
+
 /// Create an AI client from configuration
 pub async fn create_client(config: &AiConfig) -> CoreResult<Arc<dyn AiClient + Send + Sync>> {
     match config.default_provider.as_str() {
@@ -105,6 +169,8 @@ pub struct OpenAiClient {
 
 impl OpenAiClient {
     pub async fn new(config: &OpenAiConfig) -> CoreResult<Self> {
+        validate_base_url(&config.base_url, ProviderKind::OpenAi)?;
+
         let openai_config = OpenAIConfig::new()
             .with_api_base(&config.base_url)
             .with_api_key(config.api_key.as_deref().unwrap_or(""))
@@ -270,6 +336,8 @@ pub struct OllamaClient {
 
 impl OllamaClient {
     pub async fn new(config: &OllamaConfig) -> CoreResult<Self> {
+        validate_base_url(&config.base_url, ProviderKind::Ollama)?;
+
         let client = reqwest::Client::new();
         let tokenizer = cl100k_base_singleton(); // Approximation
 
@@ -398,5 +466,100 @@ impl TokenStream for OllamaTokenStream {
 
     fn is_done(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_openai_url_is_allowed() {
+        validate_base_url("https://api.openai.com/v1", ProviderKind::OpenAi).unwrap();
+        // 大小文字・明示 port 443 も同一ホストとして許可する。
+        validate_base_url("https://API.OPENAI.COM/v1", ProviderKind::OpenAi).unwrap();
+        validate_base_url("https://api.openai.com:443/v1", ProviderKind::OpenAi).unwrap();
+    }
+
+    #[test]
+    fn http_attacker_host_is_rejected() {
+        assert!(validate_base_url("http://attacker.example/v1", ProviderKind::OpenAi).is_err());
+        assert!(validate_base_url("http://attacker.example:11434", ProviderKind::Ollama).is_err());
+    }
+
+    #[test]
+    fn https_attacker_host_is_rejected() {
+        assert!(validate_base_url("https://attacker.example/v1", ProviderKind::OpenAi).is_err());
+        assert!(validate_base_url("https://attacker.example:11434", ProviderKind::Ollama).is_err());
+    }
+
+    #[test]
+    fn loopback_ollama_urls_are_allowed() {
+        validate_base_url("http://localhost:11434", ProviderKind::Ollama).unwrap();
+        validate_base_url("http://127.0.0.1:11434", ProviderKind::Ollama).unwrap();
+        validate_base_url("http://[::1]:11434", ProviderKind::Ollama).unwrap();
+        validate_base_url("http://LOCALHOST:11434", ProviderKind::Ollama).unwrap();
+    }
+
+    #[test]
+    fn non_http_schemes_are_rejected() {
+        assert!(validate_base_url("ftp://api.openai.com/v1", ProviderKind::OpenAi).is_err());
+        assert!(validate_base_url("ftp://[::1]:11434", ProviderKind::Ollama).is_err());
+        assert!(validate_base_url("file:///etc/passwd", ProviderKind::OpenAi).is_err());
+    }
+
+    #[test]
+    fn userinfo_is_rejected() {
+        assert!(
+            validate_base_url(
+                "https://user:secret@api.openai.com/v1",
+                ProviderKind::OpenAi
+            )
+            .is_err()
+        );
+        assert!(
+            validate_base_url(
+                "https://api.openai.com@attacker.example/v1",
+                ProviderKind::OpenAi
+            )
+            .is_err()
+        );
+        assert!(
+            validate_base_url("http://user:secret@localhost:11434", ProviderKind::Ollama).is_err()
+        );
+    }
+
+    #[test]
+    fn error_message_does_not_echo_url() {
+        let err = validate_base_url(
+            "https://user:secret@attacker.example/v1",
+            ProviderKind::OpenAi,
+        )
+        .expect_err("userinfo 付き URL は拒否されるべき");
+        let message = err.to_string();
+        assert!(!message.contains("secret"), "userinfo が漏洩: {message}");
+        assert!(
+            !message.contains("attacker.example/v1"),
+            "URL 全体が漏洩: {message}"
+        );
+    }
+
+    #[test]
+    fn non_default_ports_are_rejected() {
+        assert!(validate_base_url("https://api.openai.com:8443/v1", ProviderKind::OpenAi).is_err());
+        assert!(validate_base_url("http://localhost:8080", ProviderKind::Ollama).is_err());
+        assert!(validate_base_url("http://localhost", ProviderKind::Ollama).is_err());
+    }
+
+    #[test]
+    fn urls_for_the_wrong_provider_are_rejected() {
+        assert!(validate_base_url("https://api.openai.com/v1", ProviderKind::Ollama).is_err());
+        assert!(validate_base_url("http://localhost:11434", ProviderKind::OpenAi).is_err());
+    }
+
+    #[test]
+    fn malformed_url_is_rejected() {
+        assert!(validate_base_url("not-a-url", ProviderKind::OpenAi).is_err());
+        assert!(validate_base_url("https://", ProviderKind::Ollama).is_err());
     }
 }

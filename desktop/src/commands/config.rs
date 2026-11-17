@@ -2,6 +2,7 @@
 
 use crate::state::AppState;
 use openrustbooks_core::CoreError;
+use openrustbooks_core::ai_markdown::client::{ProviderKind, validate_base_url};
 use openrustbooks_core::config::{
     AiConfig, AppConfig, EditorConfig, GeneralConfig, GoogleDriveConfig, LintConfig,
     LocalRootConfig, OllamaConfig, REDACTED_SECRET, ReaderConfig, StorageConfig,
@@ -185,6 +186,14 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     merged
 }
 
+/// 保存・再初期化前に両プロバイダの base_url を検証する。
+/// JS は AppConfig 全体を渡せるため、ホストの許可リストは core 側にハードコードする。
+fn validate_ai_base_urls(ai: &AiConfig) -> Result<(), String> {
+    validate_base_url(&ai.openai.base_url, ProviderKind::OpenAi).map_err(map_err)?;
+    validate_base_url(&ai.ollama.base_url, ProviderKind::Ollama).map_err(map_err)?;
+    Ok(())
+}
+
 /// Get current configuration (secrets redacted)
 #[command]
 pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
@@ -195,6 +204,7 @@ pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
 #[command]
 pub fn update_config(state: State<'_, Arc<AppState>>, config: AppConfig) -> Result<(), String> {
     let merged = merge_secrets(&state.config(), &config);
+    validate_ai_base_urls(&merged.ai)?;
     let ai_enabled = merged.ai.enabled;
     state.update_config(merged).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
@@ -216,6 +226,7 @@ pub fn update_ai_config(
     let mut incoming = current.clone();
     incoming.ai = ai_config;
     let config = merge_secrets(&current, &incoming);
+    validate_ai_base_urls(&config.ai)?;
 
     state.update_config(config).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
