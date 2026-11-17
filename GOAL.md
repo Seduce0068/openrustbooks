@@ -13,17 +13,24 @@ Markdown lint の auto-fix を実装するか、死設定として扱うか判�
 
 ### 成果物
 
-- `core/src/ai_markdown/lint.rs`: 変更（auto-fix 実装または明確な拒否／コメント）
+- `core/src/ai_markdown/lint.rs`: 変更（rumdl fix API による auto-fix 実装）
+- `core/src/ai_markdown/mod.rs`: 変更（`auto_fix` フラグの尊重、任意）
 - `docs/decisions/0110-lint-auto-fix.md`: 追加
 - `GOAL.md`: 本契約
 
+調査結果: rumdl 0.3.2 に `document_run::DocumentRun::fix(max_iterations)` が
+公開されており、新規依存なしで実装可能。REQ-010 が自動整形を求めるため
+実装を選択する。
+
 ### 必須事項
 
-1. rumdl のローカルクレートを調査し、auto-fix API の有無を確認する。
-2. API があれば安全に適用して `fixes_applied` を返す。
-3. API が無ければ no-op の理由を明記し、設定（`auto_fix`）との関係を整理する。
-4. テストを追加する。
-5. 既存の 186 テスト、E2E 228 項目を壊さない。
+1. `DocumentRun::fix(10)` で auto-fix を実行し、`fixed_content` と
+   `fixes_applied = FixResult.rules_fixed` を返す。
+2. 修正後に再 lint し、`passed` / `issues` を修正後の内容で作り直す。
+3. `auto_fix` が false のときは修正せず lint のみ行う（フラグを尊重）。
+4. 反復上限 10 を守り、エラーは `CoreError` に変換する。
+5. テストを追加する。
+6. 既存の 186 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
