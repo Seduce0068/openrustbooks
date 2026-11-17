@@ -257,7 +257,8 @@ class Cdp:
 
 
 class Checker:
-    def __init__(self):
+    def __init__(self, expected: int):
+        self.expected = expected
         self.failures: list[str] = []
         self.passed = 0
 
@@ -371,7 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    checker = Checker()
+    # 期待 check 総数: checker.check 203 + checker.equal 17 = 220。
+    checker = Checker(expected=220)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -2930,9 +2932,14 @@ async def run_checks(cdp: Cdp) -> int:
 
 def finish(checker: Checker) -> int:
     print()
+    executed = checker.passed + len(checker.failures)
     print(f"passed: {checker.passed}, failed: {len(checker.failures)}")
     if checker.failures:
         print("failures:", checker.failures)
+    if executed != checker.expected:
+        print(f"expected {checker.expected} checks, but executed {executed}")
+        return 1
+    if checker.failures:
         return 1
     print("all checks passed")
     return 0
