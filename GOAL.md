@@ -1,42 +1,38 @@
 # Goal
 
-`/` キーで章フィルター入力にフォーカスできるようにする。
+全 ADR のフロントマターと Markdown 形式を検証し、整合性を確認する。
 
 ## Scope
 
 ### 背景
 
-章フィルター（ADR-0078）を追加したが、マウスで入力欄をクリックする必要がある。
-キーボード操作を補完するため、`/` でフィルターへフォーカスする。
+79 件の ADR が蓄積された。OKF 準拠のフロントマター（type 必須、
+推奨: title / description / tags / generated / status）と markdownlint
+準拠が維持されているかを一括検証する。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（キーハンドラ、ヘルプの記載）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0079-filter-focus-shortcut.md`: 追加
+- `docs/decisions/0001-use-system-webview.md`: 変更（generated 付与、必要に応じて）
+- `docs/decisions/0002-ai-markdown-pipeline.md`: 変更（同上）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. ショートカット:
-   - `/` キーで `#reader-chapter-filter` にフォーカスする。
-   - 入力欄にフォーカスがあるときは既存の規則によりキーを奪わない。
-   - ヘルプダイアログに `/` の記載を追加する。
-2. 既存の挙動を変えない:
-   - 既存の 125 テスト、E2E 210 項目を変えない。
-
-### 必須テスト
-
-- `tools/verify-web-reader.py` に追加する。
-  - `/` キーでフィルター入力にフォーカスする。
+1. 検証:
+   - 全 ADR に `type` と `status` があること。
+   - `generated.at` が RFC 3339（UTC オフセット付き）であること。
+   - markdownlint が全ファイルで 0 issues であること。
+2. 必要に応じて 0001 / 0002 に generated を付与する（日時は既存の
+   コミット日時を推測せず、現在日時を `date` で取得して使用）。
+3. コードは変更しない。
 
 ## Acceptance criteria
 
+- 全 ADR で検証が通る。
 - 6 ゲートすべて成功する。
-- CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- コードは最小限の変更に留める。
+- コードを変更しない。
+- 既存の判断内容は変更しない（メタデータのみ）。
 - `master` へ push する。force push はしない。
