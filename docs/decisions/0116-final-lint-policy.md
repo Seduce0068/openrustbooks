@@ -67,6 +67,6 @@ REQ-010 は「品質ゲート: rumdl 検査合格まで最大3回再生成。
 - ~~`mod.rs` の到達不能な `last_error` / `Err` デッドコードの削除~~ ADR-0118 で削除済み。
 - Web UI 未接続（AI ボタンはスタブ、wasm service は常に pass）。
 - `conflict_cycle` 未保持、`WasmLintFixResult` スタブ、反復上限 10 の根拠。
-- ~~`warnings_as_errors` の rumdl 側未配線~~ ADR-0123 で lint 判定に配線済み（`config_file` / `rule_config` は未配線のまま）。
+- ~~`warnings_as_errors` の rumdl 側未配線~~ ADR-0123 で lint 判定に配線済み（`config_file` は ADR-0124 で未対応決定、`rule_config` は配線済み）。
 - `refine` / `front_matter` のリトライ入力が元原稿で、修正後本文が
   AI 再生成に渡らない問題（ADR-0110 から継続）。

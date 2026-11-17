@@ -65,4 +65,4 @@ lint 判定（Error severity のみ不合格）で使われていなかった
 - retry 時の lint feedback で Warning を Error 扱いと明示するか。
 - ADR-0116 の `strict_lint` オプトインを見送った判断との関係再整理。
 - wasm の `WasmMarkdownLinter` が常に pass のスタブ（ADR-0110 / 0111 から継続）。
-- `config_file` / `rule_config` の rumdl 側未配線（今回のスコープ外）。
+- `config_file` は rumdl 側未配線（ADR-0124 で判断）。`rule_config` は ADR-0124 で配線済み。
