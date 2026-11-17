@@ -26,6 +26,9 @@ run test cargo test --all-targets --locked
 run clippy cargo clippy --all-targets --locked -- -D warnings
 run wasm-core cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 run wasm-web cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
+# wasm-bindgen-test のテストは Node 上で実際に実行する（--no-run では不十分）。
+# wasm-pack が wasm-bindgen / test-runner を自動的に導入し、--locked でロックファイルを固定する。
+run wasm-test bash -c 'cd core && wasm-pack test --node --locked'
 
 if [[ $fail -ne 0 ]]; then
 	echo "===== ゲート失敗: E2E は実行しません ====="

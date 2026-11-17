@@ -675,22 +675,23 @@ pub mod utils {
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
     use super::WasmConfig;
+    use wasm_bindgen_test::wasm_bindgen_test;
 
-    #[test]
+    #[wasm_bindgen_test]
     fn ai_disabled_by_default() {
         // ネイティブの AiConfig と同じく既定はオフ。
         let config = WasmConfig::default();
         assert!(!config.ai_enabled());
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn set_ai_enabled_switches_state() {
         let mut config = WasmConfig::default();
         config.set_ai_enabled(true);
         assert!(config.ai_enabled());
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn other_defaults_are_unchanged() {
         // lint / auto_fix の既定値は変更しない。
         let config = WasmConfig::default();

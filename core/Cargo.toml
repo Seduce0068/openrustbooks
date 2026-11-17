@@ -77,3 +77,9 @@ serde-wasm-bindgen = "0.6"
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 tokio-test = { workspace = true }
+wasm-bindgen-test = "0.3.79"
+
+# wasm32 のテストビルドでは通常の tokio 依存が無いため、#[tokio::test] の
+# マクロ解決用に dev-dep として最小構成で追加する（ネイティブ側は既に full で入っている）。
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+tokio = { version = "1.40", features = ["macros", "rt"] }
