@@ -74,4 +74,3 @@ status: accepted
   乖離している（保存時 lint は未配線）。
 - `warnings_as_errors` / `config_file` / `rule_config` は rumdl 側に未配線。
 - wasm の `WasmMarkdownLinter` はスタブのまま（native と挙動が異なる）。
-EOF
