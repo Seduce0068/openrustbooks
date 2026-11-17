@@ -1,37 +1,35 @@
 # Goal
 
-desktop の `AppState` 状態遷移をテストする（test-scanner #5）。
+ローカル_filesystem のパス解決を fail-closed にする（todo.md 独自最優先 / code-scanner #1）。
 
 ## Scope
 
 ### 背景
 
-`desktop/src/state/mod.rs`（111 行）にテストが無く、
-`is_unsaved` / `has_unsaved_changes` は未保存クローズ拒否を支配する重要な状態。
-Tauri ランタイムなしで `AppState::new` から状態遷移を検証できる。
+`core/src/io.rs` の `LocalStorage::resolve_path()` は絶対パスを無条件に採用し、
+`..` も正規化せずに root へ結合する。Tauri コマンド経由で任意パスの
+読み書きが可能になり得る（UI 未接続のため現時点では潜在リスク）。
 
 ### 成果物
 
-- `desktop/src/state/mod.rs`: 変更（#[cfg(test)] テストを追加）
+- `core/src/io.rs`: 変更（fail-closed なパス解決＋テスト）
+- `docs/decisions/0097-path-containment.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 次を検証するテストを追加する。
-   - `AppState::new` 直後は未保存変更なし。
-   - `add_document` → `mark_unsaved` で `is_unsaved` / `has_unsaved_changes` が true。
-   - `mark_saved` で false に戻る。
-   - `remove_document` で該当 id が消え、`has_unsaved_changes` が false。
-   - `update_config` / `config` の往復。
-2. 新規依存を追加しない。
-3. 既存の 126 テスト、E2E 223 項目を壊さない。
+1. 絶対パス・`..` による root 脱出を拒否する。
+2. 既存の相対パス（root 配下の通常のパス）は従来どおり動く。
+3. シンボリックリンクで root 外へ出る場合もできれば拒否する。
+4. 新規依存を追加しない。
+5. core の単体テストを追加する。
 
 ## Acceptance criteria
 
-- `cargo test --all-targets --locked` が新規テストを含めて成功。
 - 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- `desktop/src/main.rs` や Tauri コマンドは変更しない。
+- `desktop/` は変更しない（呼び出し側の修正は別タスク）。
+- Web 版には影響しない。
 - `master` へ push する。force push はしない。
