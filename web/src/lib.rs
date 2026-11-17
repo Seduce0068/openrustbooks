@@ -1275,6 +1275,10 @@ fn export_positions() -> usize {
         }
     }
     let count = positions.len();
+    if count == 0 {
+        // 保存済み位置が無い場合は空ファイルを出力しない（呼び出し側が警告を表示する）。
+        return 0;
+    }
 
     // 表示設定も含める。
     let settings = storage

@@ -372,8 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    # 期待 check 総数: checker.check 206 + checker.equal 17 = 223。
-    checker = Checker(expected=223)
+    # 期待 check 総数: checker.check 211 + checker.equal 17 = 228。
+    checker = Checker(expected=228)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -2981,6 +2981,99 @@ async def run_checks(cdp: Cdp) -> int:
         f"(before={dark_before_modal!r}, after={dark_after_modal!r})",
     )
     await cdp.evaluate("document.querySelector('#reader-help-dialog button').click()")
+
+    # 保存データ 0 件のエクスポート経路。
+    # 一時ダウンロード先を指定し、ファイルが生成されないことを確認する。
+    empty_download_dir = SAMPLE.parent / "empty-downloads"
+    empty_download_dir.mkdir(parents=True, exist_ok=True)
+    await cdp.send(
+        "Browser.setDownloadBehavior",
+        {"behavior": "allow", "downloadPath": str(empty_download_dir), "eventsEnabled": True},
+    )
+    await cdp.evaluate("localStorage.clear()")
+    await asyncio.sleep(0.3)
+    # スクロール保存のデバウンスで位置が再登録される可能性があるため直前に再クリアする。
+    await cdp.evaluate("localStorage.clear()")
+    await cdp.evaluate("document.querySelector('#reader-export').click()")
+    no_data_status = await wait_until(
+        cdp,
+        "document.querySelector('.reader-status')?.textContent"
+        "?.includes('No saved reading positions to export.') === true",
+        timeout=5,
+    )
+    checker.check("保存データ 0 件のエクスポートで状態メッセージが出る", no_data_status is True)
+    # ダウンロードが始まる場合に備えて待ってからディレクトリを確認する。
+    await asyncio.sleep(1.0)
+    empty_files = [path.name for path in empty_download_dir.iterdir()]
+    checker.check(
+        "保存データ 0 件ではエクスポートファイルが生成されない",
+        not empty_files,
+        f"(files={empty_files!r})",
+    )
+    shutil.rmtree(empty_download_dir, ignore_errors=True)
+
+    # 文字縮小: A+ で大きくした後に A- で元のサイズへ戻ることと、
+    # 最小値で A- が disabled になることを確認する。
+    # 後続テストへ影響しないよう、クリアしてからサンプルを開き直す。
+    await cdp.evaluate("localStorage.clear()")
+    await reload_reader(cdp)
+    await open_sample(cdp)
+    await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+        timeout=10,
+    )
+    base_font = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    await cdp.evaluate("document.querySelector('#reader-font-larger').click()")
+    await wait_until(
+        cdp,
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize === '20px'",
+        timeout=5,
+    )
+    await cdp.evaluate("document.querySelector('#reader-font-smaller').click()")
+    font_restored = await wait_until(
+        cdp,
+        "(() => { const el = document.querySelector('.reader-html');"
+        f" return !!el && getComputedStyle(el).fontSize === {json.dumps(base_font)}; }})()",
+        timeout=5,
+    )
+    checker.check("A- で文字サイズが元に戻る", font_restored, f"(base={base_font!r})")
+    await cdp.evaluate("document.querySelector('#reader-font-smaller').click()")
+    smaller_disabled = await wait_until(
+        cdp,
+        "document.querySelector('#reader-font-smaller')?.disabled === true",
+        timeout=5,
+    )
+    checker.check("最小値まで下げると A- が disabled になる", smaller_disabled is True)
+
+    # - キーでも文字が小さくなる（CDP の Input.dispatchKeyEvent を使用）。
+    await cdp.evaluate("document.querySelector('#reader-font-larger').click()")
+    await wait_until(
+        cdp,
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize === '18px'",
+        timeout=5,
+    )
+    before_minus = await cdp.evaluate(
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize"
+    )
+    await cdp.evaluate("document.body.focus()")
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyDown", "key": "-", "code": "Minus", "text": "-",
+         "windowsVirtualKeyCode": 189},
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyUp", "key": "-", "code": "Minus", "windowsVirtualKeyCode": 189},
+    )
+    minus_shrunk = await wait_until(
+        cdp,
+        "getComputedStyle(document.querySelector('.reader-html')).fontSize === '16px'",
+        timeout=5,
+    )
+    checker.check("- キーで文字サイズが小さくなる", minus_shrunk, f"(before={before_minus!r})")
 
     return finish(checker)
 
