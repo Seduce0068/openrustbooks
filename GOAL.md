@@ -1,27 +1,26 @@
 # Goal
 
-`WasmConfig` の AI 既定値を `AiConfig` と整合させる（ADR-0099 / 0105 の未決定）。
+`execute_pipeline()` の到達不能なデッドコードを削除する（ADR-0116 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`core/src/wasm.rs` の `WasmConfig::default()` は `ai_enabled: true` だが、
-native の `AiConfig::default()` は ADR-0099 で `enabled: false` に変更済み。
-Wasm の AI 実装はスタブで送信はないが、既定値の不整合は将来の
-fetch クライアント実装時に「既定で送信する」事故につながる。
+`execute_pipeline()` は `lint_result.passed || attempt == max_retries` で
+必ず `Ok` を返すため、ループ外の `last_error` / `Err(...)` は到達不能。
+`last_error` の代入も無意味。ADR-0116 でデッドコードの削除が未決定だった。
 
 ### 成果物
 
-- `core/src/wasm.rs`: 変更（`ai_enabled: false`）
-- `docs/decisions/0117-wasm-config-alignment.md`: 追加
+- `core/src/ai_markdown/mod.rs`: 変更（`last_error` と到達不能な Err を削除）
+- `docs/decisions/0118-pipeline-dead-code.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `WasmConfig::default().ai_enabled` を false に変更する。
-2. 既存の getter / setter は維持する。
-3. テストを追加する（既定 false、setter で true に変更可能）。
+1. `let mut last_error = None;` とループ内の代入、ループ後の `Err(...)` を削除する。
+2. 最終試行で `lint_passed=false` のとき `Ok` を返す挙動（ADR-0116）は変更しない。
+3. `call_ai()` のエラーは `?` で従来どおり伝播する。
 4. 既存の 195 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
@@ -31,5 +30,5 @@ fetch クライアント実装時に「既定で送信する」事故につな�
 ## Constraints
 
 - 新規依存を追加しない。
-- Wasm の AI スタブ実装自体は変更しない。
+- リトライ回数・差分・lint フラグの挙動は変更しない。
 - `master` へ push する。force push はしない。
