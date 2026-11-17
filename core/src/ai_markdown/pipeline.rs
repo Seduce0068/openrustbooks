@@ -24,7 +24,7 @@ impl AiMarkdownService {
     /// Create a new service from app configuration
     pub async fn new(config: &AppConfig) -> CoreResult<Self> {
         let pipeline_config = PipelineConfig {
-            max_retries: config.ai.max_tokens_per_request.min(3), // Use config or default
+            max_retries: config.ai.max_retries,
             auto_fix: config.lint.auto_fix,
             show_diff: true,
             token_limit: config.ai.max_tokens_per_request,

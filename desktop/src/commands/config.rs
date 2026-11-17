@@ -76,6 +76,8 @@ pub struct AiConfigView {
     pub ollama: OllamaConfigView,
     pub max_tokens_per_request: usize,
     pub max_tokens_per_month: Option<u64>,
+    /// 再生成の最大リトライ回数。
+    pub max_retries: usize,
     pub prefer_local: bool,
     pub timeout_secs: u64,
     pub streaming: bool,
@@ -90,6 +92,7 @@ impl From<&AiConfig> for AiConfigView {
             ollama: OllamaConfigView::from(&ai.ollama),
             max_tokens_per_request: ai.max_tokens_per_request,
             max_tokens_per_month: ai.max_tokens_per_month,
+            max_retries: ai.max_retries,
             prefer_local: ai.prefer_local,
             timeout_secs: ai.timeout_secs,
             streaming: ai.streaming,
@@ -461,6 +464,15 @@ mod tests {
 
         assert!(json.contains("\"has_api_key\":false"));
         assert!(json.contains("\"google_drive\":null"));
+    }
+
+    #[test]
+    fn ai_config_view_json_includes_max_retries() {
+        let mut config = AppConfig::default();
+        config.ai.max_retries = 5;
+        let json = serde_json::to_value(AiConfigView::from(&config.ai)).unwrap();
+
+        assert_eq!(json.get("max_retries").and_then(|v| v.as_u64()), Some(5));
     }
 
     #[test]

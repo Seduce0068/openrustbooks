@@ -77,6 +77,9 @@ pub struct AiConfig {
     /// Token limits
     pub max_tokens_per_request: usize,
     pub max_tokens_per_month: Option<u64>,
+    /// 再生成の最大リトライ回数（キー欠落時は既定 3）
+    #[serde(default = "default_max_retries")]
+    pub max_retries: usize,
     /// Prefer local models
     pub prefer_local: bool,
     /// Timeout for API requests (seconds)
@@ -85,6 +88,11 @@ pub struct AiConfig {
     pub streaming: bool,
     /// Custom model overrides
     pub model_overrides: std::collections::HashMap<String, String>,
+}
+
+/// TOML / IPC に `max_retries` が無い古い設定でも既定値を使う（後方互換）。
+fn default_max_retries() -> usize {
+    3
 }
 
 impl Default for AiConfig {
@@ -97,6 +105,7 @@ impl Default for AiConfig {
             ollama: OllamaConfig::default(),
             max_tokens_per_request: 8192,
             max_tokens_per_month: None,
+            max_retries: 3,
             prefer_local: false,
             timeout_secs: 60,
             streaming: true,
@@ -484,6 +493,40 @@ mod tests {
 
         let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
         assert!(restored.ai.enabled);
+    }
+
+    #[test]
+    fn ai_config_default_max_retries_is_three() {
+        assert_eq!(AiConfig::default().max_retries, 3);
+    }
+
+    #[test]
+    fn toml_without_max_retries_uses_default() {
+        let serialized = toml::to_string_pretty(&AppConfig::default()).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+        value
+            .get_mut("ai")
+            .and_then(|v| v.as_table_mut())
+            .expect("ai table")
+            .remove("max_retries");
+
+        let stripped = toml::to_string(&value).unwrap();
+        let restored: AppConfig = toml::from_str(&stripped).unwrap();
+        assert_eq!(restored.ai.max_retries, 3);
+    }
+
+    #[test]
+    fn toml_restores_explicit_max_retries() {
+        let serialized = toml::to_string_pretty(&AppConfig::default()).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+        value
+            .get_mut("ai")
+            .and_then(|v| v.as_table_mut())
+            .expect("ai table")
+            .insert("max_retries".to_string(), toml::Value::Integer(5));
+
+        let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
+        assert_eq!(restored.ai.max_retries, 5);
     }
 
     #[test]
