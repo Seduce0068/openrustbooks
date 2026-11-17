@@ -22,12 +22,18 @@ macro_rules! console_log {
     ($($t:tt)*) => (log(&format!($($t)*)))
 }
 
+/// Wasm 向けの初期化処理（Rust / JS の両方から共有する）。
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn init_core() {
+    console_error_panic_hook::set_once();
+    tracing_wasm::set_as_global_default();
+}
+
 /// Initialize the library for Wasm use
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn init() {
-    console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    init_core();
     console_log!("openrustbooks-core initialized");
 }
 

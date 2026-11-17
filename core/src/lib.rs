@@ -31,8 +31,7 @@ pub use sanitize::sanitize_epub_html;
 pub fn init() {
     #[cfg(target_arch = "wasm32")]
     {
-        console_error_panic_hook::set_once();
-        tracing_wasm::set_as_global_default();
+        wasm::init_core();
     }
 
     #[cfg(not(target_arch = "wasm32"))]
