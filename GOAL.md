@@ -1,37 +1,34 @@
 # Goal
 
-調査で検出されたデッドコードと古い契約値を整理する。
+README の ADR 一覧を 0012 で停止させず、全 83 件を掲載する。
 
 ## Scope
 
 ### 背景
 
-`docs/investigation/round-01.md`（別セッションの調査レポート）で次を指摘された。
-- `tools/verify-web-reader.py` の `open_jpeg_and_measure()` が未呼び出し
-  （JPEG サイズ比較テスト削除時の残骸、約 38 行）。
-- `GOAL.md` の E2E 項目数が 216 のままで、現在は 219。
+別セッションの調査レポートで「README の ADR 一覧が 0012 で停止し、
+0013〜0083 が未掲載」と指摘された。ADR は現在 0001〜0083 の 83 件あり、
+欠番なく存在する。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更（未使用関数を削除）
-- `GOAL.md`: 本契約（数値は現状 219 を記載）
-- `docs/decisions/0083-dead-code-cleanup.md`: 追加
+- `README.md`: 変更（ADR 一覧を 0013〜0083 まで追記）
+- `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 未使用の `open_jpeg_and_measure()` を削除する。
-2. 削除後も E2E が通る（項目数は変わらない）。
-3. 既存の 125 テストを変えない。
-4. 調査レポート（`docs/investigation/`）は別セッションの成果物のため
-   変更・コミットしない。
+1. README の「ドキュメント」セクションの ADR 一覧に、0013〜0083 を
+   ファイル名とタイトル（短縮可）付きで追記する。
+2. 既存の 0001〜0012 の記載は維持する。
+3. コードは変更しない。
 
 ## Acceptance criteria
 
+- markdownlint が通る（既存の MD040 を除く）。
 - 6 ゲートすべて成功する。
-- E2E 219 項目が通る。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- コード以外の機能は変更しない。
+- コードを変更しない。
+- `docs/investigation/` は別セッションの成果物のため触らない。
 - `master` へ push する。force push はしない。
