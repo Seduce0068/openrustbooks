@@ -46,6 +46,7 @@ CH1 = """<?xml version="1.0" encoding="utf-8"?>
 <p>Hello from chapter one.</p>
 <p><a id="to-ch2" href="ch2.xhtml">Go to chapter two</a></p>
 <p><a id="to-ch2-part" href="ch2.xhtml#part">Go to chapter two part</a></p>
+<p><a id="external-link" href="https://example.com">external link</a></p>
 <p><a id="bad-js" href="javascript:alert(1)">bad link</a></p>
 <p><a id="missing" href="missing.xhtml">missing link</a></p>
 <p><a id="ext-link" href="https://example.invalid/x">external</a></p>
@@ -425,6 +426,22 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check(
         "javascript: リンクの href が除去される",
         await cdp.evaluate("document.querySelector('#bad-js')?.getAttribute('href') === null"),
+    )
+    external_href = await cdp.evaluate(
+        "document.querySelector('#external-link')?.getAttribute('href')"
+    )
+    checker.check(
+        "外部リンクの href が保持される",
+        external_href == "https://example.com",
+        f"(href={external_href!r})",
+    )
+    external_rel = await cdp.evaluate(
+        "document.querySelector('#external-link')?.getAttribute('rel') ?? ''"
+    )
+    checker.check(
+        "外部リンクに noopener noreferrer が付く",
+        "noopener" in str(external_rel) and "noreferrer" in str(external_rel),
+        f"(rel={external_rel!r})",
     )
     checker.check(
         "外部画像の src が除去される",
