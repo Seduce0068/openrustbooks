@@ -8,6 +8,9 @@ tags:
   - Markdown
   - rumdl
   - pipeline
+generated:
+  by: opencode
+  at: "2026-11-17T13:19:26+09:00"
 status: accepted
 ---
 
@@ -28,6 +31,7 @@ Markdown は構造化テキスト形式として AI 生成・修正と lint 検�
 | トークン計算 | `tiktoken-rs` | コスト見積もり・コンテキスト窓管理 |
 
 パイプラインの基本フロー：
+
 1. ユーザー入力 (自然言語 / 既存MD + 指示)
 2. AI API で Markdown 生成・修正 (ストリーミング対応)
 3. `rumdl` で検証・自動修正 (設定ファイル `.markdownlint.yaml` 準拠)
@@ -73,8 +77,3 @@ Markdown は構造化テキスト形式として AI 生成・修正と lint 検�
 - [requirements.md](../requirements.md) : REQ-010 追加予定
 - [architecture.md](../architecture.md) : 「AI Markdown パイプライン」節追加予定
 - [ADR-0001](../decisions/0001-use-system-webview.md) : 共通コア Wasm 化方針と整合
-
-[rumdl]: https://github.com/rumdl/rumdl
-[async-openai]: https://github.com/64bit/async-openai
-[rig]: https://github.com/0xPlaygrounds/rig
-[tiktoken-rs]: https://github.com/picochilla/tiktoken-rs

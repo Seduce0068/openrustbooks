@@ -6,6 +6,9 @@ tags:
   - ADR
   - Tauri
   - WebView
+generated:
+  by: opencode
+  at: "2026-11-17T13:19:26+09:00"
 status: accepted
 ---
 
