@@ -106,9 +106,16 @@ chapter_text}`、`EpubMetadata`、`EpubChapter` とする。`EpubBook` は入力
 - プロダクションコードに `unwrap`・`expect`・`panic!`・`unsafe` が無いことを
   目視と grep で確認した。
 
+## 解決済み
+
+- 目次（nav / NCX）の解析と章タイトル: ADR-0006 / 0007 で実装。
+- 非整形式 XHTML の扱い: ADR-0059 で OPF / nav は fail-closed、
+  章本文はサニタイズに委譲すると決定。
+- リモート資源を宣言する EPUB: ADR-0060 で受け付け、
+  ADR-0066 で警告を表示すると決定。
+- 画像の扱い: ADR-0013 で Blob URL 化、ADR-0043 〜 0045 で SVG をサニタイズ。
+  EPUB 内 CSS の適用は未実装（下記「未決定」）。
+
 ## 未決定
 
-- 目次（nav / NCX）の解析と章タイトルの取得方法。
-- 非整形式の XHTML を許容するかどうかの判断（現状は fail-closed）。
-- リモート資源を宣言する EPUB を許容するかどうかの判断。
-- 画像・スタイルの扱いと UI への受け渡し方法（HTML のサニタイズ方針を含む）。
+- EPUB 内 CSS の安全な適用（ADR-0012 から継続）。

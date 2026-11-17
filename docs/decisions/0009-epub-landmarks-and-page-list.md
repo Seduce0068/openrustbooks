@@ -58,7 +58,11 @@ ADR-0006 は目次を `EpubBook::toc()` として実装したが、EPUB3 nav の
 - nav 内に複数の list type がある場合の選択、href・fragment・depth の保持、
   該当 nav が無い場合の空リスト、パス逸脱の拒否をテストした。
 
+## 解決済み
+
+- `page-list` の UI: ADR-0028 でページ番号入力による移動を実装。
+- landmarks の UI: ADR-0027 でドロップダウンによる移動を実装。
+
 ## 未決定
 
-- 表示ページと `page-list` のリンク先を結ぶ UI / レンダラーの契約。
-- アンカー移動と landmarks の用途別 UI。
+- 現在表示中のページ番号の自動表示（ADR-0028 から継続）。

@@ -59,8 +59,13 @@ Wasm ターゲットに `WasmEpubBook` を公開する。コンストラクタ�
   `WasmEpubBook`、`chapter_resource`、`landmarks` などの binding が存在することを確認。
 - Rust の native gates と Wasm build gates が成功した。
 
+## 解決済み
+
+- Web UI への接続: ファイル選択、章描画、状態管理を実装済み。
+- HTML サニタイズ / Blob URL / object URL の破棄: ADR-0013 / 0043 で実装。
+- 大きな EPUB のメモリ: ADR-0051 で所有権移譲、
+  ADR-0067 以降で画像縮小を実装。ブラウザ上の実機検証は E2E で実施済み。
+
 ## 未決定
 
-- `WasmEpubBook` を Web UI のファイル選択・状態管理へ接続する方法。
-- HTML サニタイズ、リソース URL 化、アンカー移動、object URL の破棄。
-- 大きな EPUB のメモリ使用と、ブラウザ上の実機検証。
+- EPUB 内 CSS の安全な適用（ADR-0012 から継続）。

@@ -94,10 +94,14 @@ ADR-0012 は章 XHTML の許可リストサニタイズと画像の Blob URL 表
   `trunk build --offline --dist <一時出力先>` が成功。
 - CI は push 時に `Seduce0068/workflows/rust-gates.yml@v1` で検証される。
 
+## 解決済み
+
+- SVG の Blob URL: ADR-0043 でスクリプト除去、
+  ADR-0044 で外部参照除去、ADR-0045 で XML 処理命令除去。
+- 深い入れ子: ADR-0050 で 1000 階層、ADR-0065 で 10000 階層を確認。
+- メモリコピー: ADR-0051 で所有権移譲による二重コピー解消。
+- 相対リンクと履歴・位置: ADR-0014 で実装。
+
 ## 未決定
 
-- SVG 画像の Blob URL を直接開いた場合のスクリプト実行余地。
-- 深い入れ子の XHTML によるスタック消費。
 - EPUB 内 CSS の安全な適用（`url()` の除去、スコープ付きスタイル）。
-- 読み込み時のメモリコピー（`ArrayBuffer`・`Vec`・`ArchiveReader` の複製）。
-- 相対リンクによる章間移動と、履歴・読書位置の保存（ADR-0012 から継続）。

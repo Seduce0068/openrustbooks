@@ -77,9 +77,13 @@ ADR-0006 は目次を平坦なリストで返し、フラグメント（`#fragme
 - goal loop の実走 1 ラウンド（worker 447.7s、verifier 106.5s、
   `VERDICT: PASS`）。差分は `core/src/epub.rs` のみ。
 
+## 解決済み
+
+- アンカーへの実際の移動: ADR-0046 で位置適用を実装。
+- 章内リンクのアンカー利用: ADR-0055 で同一章フラグメント移動を履歴に記録。
+- `fragment` の復号: core の OPF / nav 解析で `%XX` を復号済み。
+- `landmarks` / `page-list`: ADR-0027 / 0028 で UI を実装。
+
 ## 未決定
 
-- アンカーへの実際の移動（UI と WebView の統合）。
-- 章内リンク（脚注の `noteref` など）の抽出と、目次以外のアンカー利用。
-- `fragment` を復号して返す API の要否。
-- `landmarks` / `page-list` と、章タイトルの自動取得。
+- `epub:type="noteref"` / `footnote` の専用 UI（ADR-0055 から継続）。
