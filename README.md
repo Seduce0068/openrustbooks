@@ -312,6 +312,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0123-warnings-as-errors](docs/decisions/0123-warnings-as-errors.md)
 - [0124-rule-config-wiring](docs/decisions/0124-rule-config-wiring.md)
 - [0125-audit-gate](docs/decisions/0125-audit-gate.md)
+- [0126-ci-audit-gate](docs/decisions/0126-ci-audit-gate.md)
+  - 共通ワークフローの audit 入力を有効化し、CI でも cargo audit を実行する決定を記録する。
   - cargo audit をローカル検証スクリプトに追加し、既知脆弱性の回帰を防ぐ決定を記録する。
   - rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
   - LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
