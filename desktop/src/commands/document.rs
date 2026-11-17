@@ -96,10 +96,10 @@ pub async fn save_document(
     // Write to file if path exists
     if let Some(path) = &document.metadata.path {
         let text = document
-            .as_text()
+            .full_text()
             .ok_or_else(|| CoreError::validation("Document is not text-editable").to_string())?;
 
-        tokio::fs::write(path, text)
+        tokio::fs::write(path, &text)
             .await
             .map_err(|e| CoreError::Io(e).to_string())?;
 

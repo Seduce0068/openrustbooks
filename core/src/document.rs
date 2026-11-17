@@ -238,6 +238,24 @@ impl Document {
         }
     }
 
+    /// 保存用の完全テキストを返す。Markdown は front matter を先頭に結合する。
+    pub fn full_text(&self) -> Option<String> {
+        match &self.content {
+            DocumentContent::Text(t) => Some(t.clone()),
+            DocumentContent::Markdown {
+                content,
+                front_matter,
+            } => match front_matter {
+                Some(fm) => {
+                    let yaml = serde_norway::to_string(fm).ok()?;
+                    Some(format!("---\n{}\n---\n{}", yaml.trim_end(), content))
+                }
+                None => Some(content.clone()),
+            },
+            _ => None,
+        }
+    }
+
     /// Get mutable text content (for editing)
     pub fn as_text_mut(&mut self) -> Option<&mut String> {
         match &mut self.content {
@@ -304,5 +322,26 @@ mod tests {
         let (fm, body) = extract_front_matter(content);
         assert!(fm.is_some());
         assert!(body.contains("# Hello"));
+    }
+
+    #[test]
+    fn full_text_restores_front_matter() {
+        let content = "---\ntitle: Test\n---\n\n# Hello";
+        let (fm, body) = extract_front_matter(content);
+        let document = Document {
+            metadata: DocumentMetadata::new(DocumentId::new(), DocumentFormat::Markdown),
+            content: DocumentContent::Markdown {
+                content: body,
+                front_matter: fm,
+            },
+        };
+        let full = document.full_text().unwrap();
+        assert!(full.starts_with("---\n"));
+        assert!(full.contains("title: Test"));
+        assert!(full.contains("# Hello"));
+        // 再抽出でも同じ情報が得られる。
+        let (fm2, body2) = extract_front_matter(&full);
+        assert!(fm2.is_some());
+        assert!(body2.contains("# Hello"));
     }
 }
