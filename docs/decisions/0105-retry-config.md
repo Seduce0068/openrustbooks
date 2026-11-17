@@ -67,6 +67,6 @@ status: accepted
   （初期 1 回＋リトライ 3 回＝最大 4 回生成）と解釈している。
   要件文言の明文化またはループ境界の再検討が必要。
 - `max_retries` の範囲バリデーション（例 0..=10）未実装。
-- `WasmConfig::default().ai_enabled = true` が `AiConfig` の既定 false と
-  矛盾（ADR-0099 関連、現状 wasm はスタブで送信なし）。
+- ~~`WasmConfig::default().ai_enabled = true` が `AiConfig` の既定 false と
+  矛盾~~ ADR-0117 で解消済み。
 EOF
