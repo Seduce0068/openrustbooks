@@ -1573,9 +1573,6 @@ fn load_history(key: &str, chapter_count: usize) -> Option<SavedHistory> {
 /// 履歴を保存する。localStorage が使えない場合は何もしない。
 #[cfg(target_arch = "wasm32")]
 fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
-    if history.len() <= 1 {
-        return;
-    }
     let Some(window) = web_sys::window() else {
         return;
     };
