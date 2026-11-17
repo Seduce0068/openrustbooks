@@ -2930,6 +2930,34 @@ async def run_checks(cdp: Cdp) -> int:
     checker.check("ヘルプに / の記載がある", help_with_slash is True)
     await cdp.evaluate("document.querySelector('#reader-help-dialog button').click()")
 
+    # 外部リンクのクリックで window.open が noopener/noreferrer 付きで呼ばれる。
+    # 実際にタブを開かず、呼び出し引数だけを記録する。
+    await cdp.evaluate(
+        "(() => {"
+        " window.__openCalls = [];"
+        " window.open = (url, target, features) => {"
+        "  window.__openCalls.push({url, target, features}); return null;"
+        " };"
+        " })()"
+    )
+    await cdp.evaluate("document.querySelector('#external-link').click()")
+    await asyncio.sleep(0.3)
+    open_calls = await cdp.evaluate("window.__openCalls")
+    checker.check("外部リンクのクリックで window.open が呼ばれる", len(open_calls or []) == 1,
+                  f"(calls={open_calls!r})")
+    if open_calls:
+        call = open_calls[0]
+        checker.check(
+            "外部リンクが _blank / noopener,noreferrer で開かれる",
+            call.get("url") == "https://example.com"
+            and call.get("target") == "_blank"
+            and "noopener" in str(call.get("features"))
+            and "noreferrer" in str(call.get("features")),
+            f"(call={call!r})",
+        )
+    # スタブを元に戻す（後続のテストに影響しないように）。
+    await reload_reader(cdp)
+
     return finish(checker)
 
 
