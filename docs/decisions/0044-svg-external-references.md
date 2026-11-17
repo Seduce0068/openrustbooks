@@ -63,9 +63,13 @@ ADR-0043 で SVG のスクリプト実行経路を塞いだが、
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- XML 処理命令（`<?xml-stylesheet?>`）の扱い: ADR-0045 で
+  SVG サニタイズ時に `PROCESSING_INSTRUCTION_NODE` を削除すると決定・実装した。
+
 ## 未決定
 
-- XML 処理命令（`<?xml-stylesheet?>`）の扱い。
 - CSS の `url()` による外部参照（EPUB 内 CSS の安全な適用と併せて検討）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
