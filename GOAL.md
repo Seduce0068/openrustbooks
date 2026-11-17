@@ -1,37 +1,33 @@
 # Goal
 
-core の `init()` 二重定義を解消し、Wasm 初期化を一本化する（todo.md D03）。
+ゲート数を「6 ゲート」に統一する（todo.md A09 / R3-ci#1）。
 
 ## Scope
 
 ### 背景
 
-- `core/src/lib.rs` に `pub fn init()`（native では tracing_subscriber、
-  wasm32 では panic hook + tracing_wasm）
-- `core/src/wasm.rs` に `#[wasm_bindgen] pub fn init()`（JS から呼ばれる）
-- wasm32 では `pub use wasm::*` により名前が衝突し得るが、
-  現在は Rust 側（`web/src/lib.rs`）が `openrustbooks_core::init` を呼ぶと
-  lib.rs の版が使われ、JS 側の wasm-bindgen 版とは別実装になっている。
+実際の検証は fmt / check / test / clippy / wasm32 core / wasm32 web の
+6 項目だが、README:149 と `.github/workflows/ci.yml:3` のコメントに
+「5 ゲート」と残っている。README:167 と `scripts/verify.sh` は 6 ゲート。
 
 ### 成果物
 
-- `core/src/lib.rs`: 変更（Wasm 用 init を wasm.rs の実装へ委譲）
-- `core/src/wasm.rs`: 変更（初期化処理を共通関数へ集約）
+- `README.md`: 変更（5 → 6）
+- `.github/workflows/ci.yml`: 変更（コメントの 5 → 6）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 初期化処理（panic hook + tracing_wasm）を一箇所に集約する。
-2. `core::init()` と wasm-bindgen の `init()` の両方が同じ処理を呼ぶ。
-3. native の tracing_subscriber 初期化は現状維持。
-4. 既存の 126 テスト、E2E 220 項目を変えない。
+1. 両ファイルの「5 ゲート」を「6 ゲート」に変更する。
+2. コードの挙動・CI 設定本体は変更しない（コメントのみ）。
+3. 6 ゲート・E2E が通る。
 
 ## Acceptance criteria
 
+- ドキュメント内のゲート数表記が 6 に統一される。
 - 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- `desktop/` を変更しない。
+- CI の `- uses:` や入力 parameters は変更しない。
 - `master` へ push する。force push はしない。
