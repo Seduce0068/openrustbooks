@@ -2082,6 +2082,16 @@ async def run_checks(cdp: Cdp) -> int:
         await asyncio.sleep(0.2)
     checker.check("エクスポートファイルがダウンロードされる", exported is not None)
     if exported is not None:
+        import re as _re_export
+        checker.check(
+            "エクスポート名にタイムスタンプが付く",
+            _re_export.fullmatch(
+                r"openrustbooks-\d{8}-\d{6}(?: \(\d+\))?\.json",
+                exported.name,
+            )
+            is not None,
+            f"(filename={exported.name!r})",
+        )
         payload = _json.loads(exported.read_text(encoding="utf-8"))
         checker.check("エクスポートに形式バージョンが含まれる", payload.get("version") == 1)
         checker.check(
