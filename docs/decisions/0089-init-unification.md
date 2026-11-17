@@ -44,7 +44,7 @@ wasm32 では `pub use wasm::*` により名前が衝突し得るが、Rust 側
 ## 検証
 
 - `./scripts/verify.sh` を実行し、6 ゲート・trunk build・WASM パス検査・
-  E2E 220 項目がすべて成功した。
+  E2E 223 項目がすべて成功した。
 - `cargo test --all-targets --locked` は 126 件成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 

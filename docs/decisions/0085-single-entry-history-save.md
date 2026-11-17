@@ -44,7 +44,7 @@ localStorage には古い履歴が残り、再読み込みで古い履歴が復�
 
 ## 検証
 
-- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 220 項目が
+- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 223 項目が
   5 回連続で成功。
 - デバッグで、アプリ本体の履歴キーが 1 件に更新されることを確認した。
   古いテスト用キーが残っていたため、E2E の判定は「いずれかの履歴キーが

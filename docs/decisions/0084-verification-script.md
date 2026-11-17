@@ -53,7 +53,7 @@ status: accepted
 ## 検証
 
 - `bash -n` / `shellcheck` / `shfmt -d` が通る。
-- `./scripts/verify.sh` を実行し、6 ゲート・trunk build・E2E 219 項目が
+- `./scripts/verify.sh` を実行し、6 ゲート・trunk build・E2E 223 項目が
   すべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 

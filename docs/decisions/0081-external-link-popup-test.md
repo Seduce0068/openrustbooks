@@ -45,7 +45,7 @@ ADR-0080 では外部リンクの href と `rel="noopener noreferrer"` を検証
 
 ## 検証
 
-- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 216 項目が
+- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 223 項目が
   5 回連続で成功。
 - `window.open` が 1 回呼ばれ、URL / target / features が期待どおりである
   ことを確認した。

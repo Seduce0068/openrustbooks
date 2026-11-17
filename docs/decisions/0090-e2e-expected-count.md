@@ -21,7 +21,10 @@ status: accepted
 ## 決定
 
 - `Checker` に `expected` を追加する。
-- `run_checks()` で期待値 220（`checker.check` 203 + `checker.equal` 17）を設定する。
+- `run_checks()` で期待総数を設定する。実装時は 220
+  （`checker.check` 203 + `checker.equal` 17）、その後 E2E 追加に伴い
+  223 → 228 へ更新された。件数は常に `tools/verify-web-reader.py` の
+  `Checker(expected=...)` を出典とする。
 - `finish()` で `passed + len(failures) == expected` を検証し、
   乖離があれば「expected N checks, but executed M」を表示して失敗（rc=1）とする。
 
@@ -36,16 +39,16 @@ status: accepted
 ## 影響
 
 - E2E の check が追加・削除された場合、期待値も更新する必要がある。
-- 通常実行では 220 項目すべて成功する。
+- 通常実行では 223 項目すべて成功する。
 - プロダクションコードは変更しない。
 
 ## 検証
 
-- 通常実行: `passed: 220, failed: 0`、`all checks passed`。
+- 実装直後（期待値 220）の通常実行: `passed: 220, failed: 0`、`all checks passed`。
 - 期待値を 221 にした一時コピーでは
-  「expected 221 checks, but executed 220」を表示し rc=1 になることを確認した。
-- `./scripts/verify.sh` を実行し、6 ゲート・trunk build・WASM パス検査・
-  E2E 220 項目がすべて成功した。
+  「expected 221 checks, but executed 220」を表示し rc=1 になることを実際に確認した。
+- その後 E2E の追加に伴い期待値は 223 → 228 へ更新されている（ADR-0091 〜 0095）。
+  期待総数は常にコードを出典とし、ADR の記載は作成時点の実績である。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## 未決定

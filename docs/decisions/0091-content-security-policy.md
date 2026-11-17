@@ -46,7 +46,7 @@ connect-src 'self' blob: data:
 
 - スクリプト・スタイル・画像・ネットワークの読み込み先が制限される。
 - 外部フォント（Google Fonts）は明示的に許可したため維持される。
-- E2E に CSP 存在のチェックを 1 件追加（合計 221 項目）。
+- E2E に CSP 存在のチェックを 1 件追加（合計 223 項目）。
 
 ## 検証
 
@@ -54,7 +54,7 @@ connect-src 'self' blob: data:
   Trunk 生成の module script を許可して解消した。
 - 次に `connect-src` に `blob:` / `data:` が無く、Blob URL の MIME 確認と
   SVG の相対参照テストが失敗した。許可して解消した。
-- E2E 221 項目が 5 回連続で成功。
+- E2E 223 項目が 5 回連続で成功。
 - 6 ゲート・trunk build・WASM パス検査が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 

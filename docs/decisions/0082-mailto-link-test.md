@@ -44,7 +44,7 @@ ADR-0081 の未決定。外部リンク（http/https）のポップアップ呼�
 
 ## 検証
 
-- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 219 項目が
+- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 223 項目が
   8 回中 7 回成功（1 回はディスク容量不足による一時的な環境問題で、
   回復後は 3 回連続成功）。
 - mailto リンクの href 保持と、`window.open` の引数（`_blank` /

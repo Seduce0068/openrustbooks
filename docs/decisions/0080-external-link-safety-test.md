@@ -44,7 +44,7 @@ E2E で検証していなかった。
 
 ## 検証
 
-- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 214 項目が
+- ヘッドレス Chrome 157 と `tools/verify-web-reader.py` の E2E 223 項目が
   5 回連続で成功。
 - 外部リンクの href 保持、`noopener noreferrer` 付与、
   `javascript:` リンクの除去を確認した。

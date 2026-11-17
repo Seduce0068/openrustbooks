@@ -23,7 +23,7 @@ status: accepted
 - `key_handler` の先頭で `event.is_composing()` が true なら return する。
 - E2E で `isComposing: true` のキーイベントを発行し、ダーク表示が
   切り替わらないことを確認する。
-- 期待 check 総数を 222 に更新する。
+- 期待 check 総数を 223 に更新する。
 
 ## 選択肢と根拠
 
@@ -41,9 +41,9 @@ status: accepted
 
 ## 検証
 
-- E2E 222 項目を 5 回連続実行し、すべて成功。
+- E2E 223 項目を 5 回連続実行し、すべて成功。
 - `./scripts/verify.sh` を実行し、6 ゲート・trunk build・WASM パス検査・
-  E2E 222 項目がすべて成功した。
+  E2E 223 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## 未決定

@@ -74,10 +74,14 @@ ADR-0012 / ADR-0013 で「DOMPurify などの外部ライブラリを追加し�
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
-## 未決定
+## 解決済み
 
 - `<use href="data:...">` や `<image href="http://...">` による外部リソース
-  参照の制御（プライバシー懸念。スクリプト実行ではない）。
-- XML 処理命令（`<?xml-stylesheet?>`）の扱い。
+  参照の制御（プライバシー懸念）: ADR-0044 で外部参照の制御を実装した。
+- XML 処理命令（`<?xml-stylesheet?>`）の扱い: ADR-0045 で処理命令の除去を
+  実装した。
+
+## 未決定
+
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。

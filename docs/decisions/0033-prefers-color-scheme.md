@@ -72,10 +72,16 @@ ADR-0018・ADR-0023 まででダーク表示は手動トグルのみだった。
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- 追従の初期値（OS がダークなら初回から追従を有効にするか）: ADR-0038 で
+  初回起動時に OS の設定を初期値として採用した。
+- `forced-colors` への対応: ADR-0039 で `@media (forced-colors: active)` の
+  スタイルを追加した（`prefers-contrast` は ADR-0039 で対象外と判断）。
+
 ## 未決定
 
-- 追従の初期値（OS がダークなら初回から追従を有効にするか）。
 - `matchMedia` の購読解除（ページ寿命まで保持しているので不要だが、
   将来 Reader が再マウントされる構成になった場合は必要）。
-- `forced-colors` や `prefers-contrast` への対応。
+- `prefers-contrast: more` への対応（ADR-0039 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。

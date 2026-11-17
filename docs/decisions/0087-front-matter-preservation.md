@@ -46,7 +46,7 @@ status: accepted
 ## 検証
 
 - `cargo test -p openrustbooks-core --lib --locked full_text` が成功。
-- `./scripts/verify.sh` を実行し、6 ゲート・trunk build・E2E 220 項目が
+- `./scripts/verify.sh` を実行し、6 ゲート・trunk build・E2E 223 項目が
   すべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 

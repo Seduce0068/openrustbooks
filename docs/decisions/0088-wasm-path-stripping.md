@@ -41,14 +41,14 @@ status: accepted
 
 - `./scripts/verify.sh` が生成する WASM には開発ホスト絶対パスが含まれない。
 - 手動で `trunk build` する場合は、同じ `RUSTFLAGS` を付ける必要がある。
-- 既存の 126 テスト、E2E 220 項目はそのまま通る。
+- 既存の 126 テスト、E2E 223 項目はそのまま通る。
 
 ## 検証
 
 - `RUSTFLAGS="--remap-path-prefix=$HOME=~" trunk build --offline` で
   生成した WASM の `/home/koppe` 出現回数が 0 件であることを確認した。
 - `./scripts/verify.sh` を実行し、6 ゲート・trunk build・WASM パス検査・
-  E2E 220 項目がすべて成功した。
+  E2E 223 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
 ## 未決定

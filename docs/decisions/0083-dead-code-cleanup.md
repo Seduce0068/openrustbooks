@@ -18,13 +18,14 @@ status: accepted
 
 - `tools/verify-web-reader.py` の `open_jpeg_and_measure()` が未呼び出し
   （ADR-0074 の JPEG サイズ比較テスト削除時の残骸）。
-- 契約の E2E 項目数が古い（216 のまま、実際は 219）。
+- 契約の E2E 項目数が古い（旧契約値 216、現在の期待値は 223）。
 
 ## 決定
 
 - 未使用の `open_jpeg_and_measure()` と、それ専用の
   `jpeg_ch2` / `jpeg_epub` / `wide_jpeg()` を削除（計約 70 行）。
-- 現在の E2E 項目数 219 を契約に反映する。
+- 現在の E2E 項目数 223（`tools/verify-web-reader.py` の
+  `Checker(expected=223)`）を契約に反映する。
 - 調査レポートは別セッションの成果物のため、変更・コミットしない。
 - プロダクションコードは変更しない。
 
@@ -39,11 +40,11 @@ status: accepted
 ## 影響
 
 - E2E ハーネスから未使用コードが消える。
-- E2E の項目数と内容は変わらない（219 項目）。
+- E2E の項目数と内容は変わらない（223 項目）。
 
 ## 検証
 
-- `python3 tools/verify-web-reader.py` が 219 項目すべて成功。
+- `python3 tools/verify-web-reader.py` が 223 項目すべて成功。
 - `cargo test --all-targets --locked` は 125 件成功。
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
