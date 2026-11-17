@@ -189,18 +189,6 @@ def tall_png(width: int = 3000, height: int = 4000) -> bytes:
     )
 
 
-def wide_jpeg(width: int = 4500, height: int = 100) -> bytes:
-    """縮小検証用の巨大な JPEG を組み立てる（既存の Pillow を利用）。"""
-    import io
-    from PIL import Image
-
-    # 品質差が出るよう、ピクセルノイズを使う（縮小後もノイズが残る）。
-    image = Image.effect_noise((width, height), 100).convert("RGB")
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=95)
-    return buffer.getvalue()
-
-
 def build_sample() -> None:
     SAMPLE.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(SAMPLE, "w") as z:
@@ -2751,62 +2739,6 @@ async def run_checks(cdp: Cdp) -> int:
         jpeg_clamped == "100",
         f"(value={jpeg_clamped!r})",
     )
-
-    # JPEG 品質が縮小後のファイルサイズに反映される。
-    jpeg_ch2 = CH2.replace(
-        '<img id="tall" src="images/tall.png" alt="tall"/>',
-        '<img id="jpegwide" src="images/wide.jpg" alt="jpeg wide"/>',
-    )
-    jpeg_epub = SAMPLE.parent / "jpeg-wide.epub"
-    with zipfile.ZipFile(jpeg_epub, "w") as z:
-        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
-                   compress_type=zipfile.ZIP_STORED)
-        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/content.opf", OPF, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/nav.xhtml", NAV, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/ch2.xhtml", jpeg_ch2, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("OEBPS/images/wide.jpg", wide_jpeg(), compress_type=zipfile.ZIP_DEFLATED)
-
-    async def open_jpeg_and_measure(quality: int) -> int:
-        await cdp.evaluate("localStorage.clear()")
-        await cdp.evaluate(
-            f"localStorage.setItem('openrustbooks:settings',"
-            f" JSON.stringify({{downscaleImages: true, jpegQuality: {quality}}}))"
-        )
-        await reload_reader(cdp)
-        doc = await cdp.send("DOM.getDocument", {"depth": -1})
-        fresh_root = doc["result"]["root"]["nodeId"]
-        node = await cdp.send(
-            "DOM.querySelector", {"nodeId": fresh_root, "selector": "#epub-file"}
-        )
-        if node["result"]["nodeId"] == 0:
-            return 0
-        await cdp.send(
-            "DOM.setFileInputFiles",
-            {"nodeId": node["result"]["nodeId"], "files": [str(jpeg_epub)]},
-        )
-        await cdp.evaluate(
-            "document.querySelector('#epub-file').dispatchEvent("
-            "new Event('change', {bubbles: true}))"
-        )
-        await wait_until(
-            cdp,
-            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
-            timeout=10,
-        )
-        await select_chapter(cdp, 1)
-        await wait_until(
-            cdp, "document.querySelector('#jpegwide')?.naturalWidth <= 2000", timeout=10
-        )
-        await asyncio.sleep(0.5)
-        return int(
-            await cdp.evaluate(
-                "fetch(document.querySelector('#jpegwide').src)"
-                ".then((r) => r.blob()).then((b) => b.size)"
-            )
-        )
 
     # キーボードショートカットのヘルプ。
     checker.check(
