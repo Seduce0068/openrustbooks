@@ -2790,7 +2790,42 @@ async def run_checks(cdp: Cdp) -> int:
             )
         )
 
-
+    # キーボードショートカットのヘルプ。
+    checker.check(
+        "ヘルプボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-help') !== null"),
+    )
+    # 入力欄にフォーカスがあるときは ? を奪わない。
+    await cdp.evaluate("document.body.focus()")
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyDown", "key": "?", "code": "Slash", "text": "?",
+         "windowsVirtualKeyCode": 191, "modifiers": 8},
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyUp", "key": "?", "code": "Slash",
+         "windowsVirtualKeyCode": 191, "modifiers": 8},
+    )
+    await asyncio.sleep(0.3)
+    help_open = await cdp.evaluate(
+        "document.querySelector('#reader-help-dialog')?.open === true"
+    )
+    checker.check("? キーでヘルプが開く", help_open is True)
+    help_text = await cdp.evaluate(
+        "document.querySelector('#reader-help-dialog')?.textContent || ''"
+    )
+    checker.check(
+        "ヘルプに主要なショートカットが含まれる",
+        "Previous" in str(help_text) and "dark mode" in str(help_text),
+        f"(text={str(help_text)[:120]!r})",
+    )
+    await cdp.evaluate("document.querySelector('#reader-help-dialog button').click()")
+    await asyncio.sleep(0.3)
+    help_closed = await cdp.evaluate(
+        "document.querySelector('#reader-help-dialog')?.open === false"
+    )
+    checker.check("ヘルプを閉じられる", help_closed is True)
 
     return finish(checker)
 
