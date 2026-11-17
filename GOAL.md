@@ -1,28 +1,29 @@
 # Goal
 
-環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` の設定マッピングを検証・修正する（ADR-0120 / 0121 の未決定）。
+`LintConfig.warnings_as_errors` を lint 判定に配線する（ADR-0110 / 0116 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`AppConfig::load()` は `Env::prefixed("OPENRUSTBOOKS_").split("_")` を使う。
-`split("_")` は全ての `_` を階層区切り `.` に変換すると推測され、
-`OPENRUSTBOOKS_AI_MAX_RETRIES` が `ai.max.retries` になり、
-serde フィールド `ai.max_retries` に届かない可能性がある。
+`LintConfig.warnings_as_errors`（既定 false）は設定・DTO に存在するが、
+`MarkdownLinter` の判定（`passed = Error severity のみ`）で使われていない。
+利用者が true に設定しても Warning がエラー扱いにならない。
 
 ### 成果物
 
-- `core/src/config.rs`: 変更（必要ならマッピング修正）
-- `docs/decisions/0122-env-var-mapping.md`: 追加
+- `core/src/ai_markdown/lint.rs`: 変更（フラグ保持と判定への反映）
+- `docs/decisions/0123-warnings-as-errors.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. figment 0.10.19 の `split("_")` の実際の挙動をローカルクレートで確認する。
-2. `OPENRUSTBOOKS_AI_MAX_RETRIES` が `AiConfig.max_retries` に届くかテストで確認する。
-3. 届かない場合は、既存の環境変数を壊さずに修正する。
-4. 既存の 200 テスト（native 200 + wasm 3）、E2E 228 項目を壊さない。
+1. `MarkdownLinter` が `warnings_as_errors` を保持する。
+2. true のときは Warning severity も不合格扱いにする（Info は従来どおり無視）。
+3. `lint()` と `lint_and_fix()` の両方に効かせる。
+4. 既定 false の挙動は不変（既存テストが壊れない）。
+5. テストを追加する。
+6. 既存の 203 テスト + wasm 3 件、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -31,4 +32,5 @@ serde フィールド `ai.max_retries` に届かない可能性がある。
 ## Constraints
 
 - 新規依存を追加しない。
+- `config_file` / `rule_config` の配線は今回行わない（別タスク）。
 - `master` へ push する。force push はしない。
