@@ -2611,6 +2611,17 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             persist();
         }
     };
+    let on_reset_settings = move |_: web_sys::MouseEvent| {
+        set_font_scale.set(DEFAULT_FONT_SCALE);
+        set_line_height.set(DEFAULT_LINE_HEIGHT);
+        set_dark.set(false);
+        set_follow_system.set(false);
+        set_swipe_threshold.set(50);
+        set_vertical_scroll_threshold.set(30);
+        set_downscale_images.set(false);
+        save_settings(&ReaderSettings::default());
+        set_status.set("Display settings reset.".to_string());
+    };
     let on_clear_data = move |_| {
         let removed = clear_reading_positions();
         set_status.set(format!("Removed {removed} saved reading positions."));
@@ -2768,6 +2779,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
                 <button id="reader-downscale" class="btn" title="Downscale oversized images" aria-label="Downscale oversized images" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "Downscale:on" } else { "Downscale:off" }}</button>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
+                <button id="reader-reset-settings" class="btn" title="Reset display settings" aria-label="Reset display settings" on:click=on_reset_settings>"Reset settings"</button>
                 <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
                 <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>
                 <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" on:change=on_import_change/>
