@@ -12,10 +12,15 @@
 
 ### 成果物
 
-- `Cargo.toml`: 変更（ワークスペース共通の `remap-path-prefix` 設定）
-- `tools/verify-web-reader.py`: 変更（配布 WASM のパス漏れ検証を追加、任意）
+- `scripts/verify.sh`: 変更（trunk build 時に `RUSTFLAGS` で
+  `--remap-path-prefix=$HOME=~` を指定し、ビルド後にパス漏れを検査）
 - `docs/decisions/0088-wasm-path-stripping.md`: 追加
 - `GOAL.md`: 本契約
+
+注: `RUSTFLAGS` に `-C remap-path-prefix=...` を指定すると rustc が
+「unknown codegen option」で失敗するため、正しい `--remap-path-prefix` を
+使う。ワークスペース設定でハードコードすると他環境のパスが残るため、
+`$HOME` を使うスクリプト方式を採用する。
 
 ### 必須事項
 
