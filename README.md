@@ -310,6 +310,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0121-req010-retry-wording](docs/decisions/0121-req010-retry-wording.md)
 - [0122-env-var-mapping](docs/decisions/0122-env-var-mapping.md)
 - [0123-warnings-as-errors](docs/decisions/0123-warnings-as-errors.md)
+- [0124-rule-config-wiring](docs/decisions/0124-rule-config-wiring.md)
+  - rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
   - LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
   - figment の split('_') で届かない max_retries を extract 後に手動で読み込む決定を記録する。
   - REQ-010 の「最大3回再生成」を実装と一致する文言に明文化する決定を記録する。

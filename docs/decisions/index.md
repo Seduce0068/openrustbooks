@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 123 件）。
+openrustbooks の ADR 一覧（全 124 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -248,3 +248,5 @@ openrustbooks の ADR 一覧（全 123 件）。
   - status: accepted — figment の split('_') で届かない max_retries を extract 後に手動で読み込む決定を記録する。
 - [ADR-0123: warnings_as_errors の配線](0123-warnings-as-errors.md)
   - status: accepted — LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
+- [ADR-0124: rule_config の rumdl 配線と config_file の未対応](0124-rule-config-wiring.md)
+  - status: accepted — rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
