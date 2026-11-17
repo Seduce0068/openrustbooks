@@ -372,8 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    # 期待 check 総数: checker.check 203 + checker.equal 17 = 220。
-    checker = Checker(expected=220)
+    # 期待 check 総数: checker.check 204 + checker.equal 17 = 221。
+    checker = Checker(expected=221)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -2926,6 +2926,17 @@ async def run_checks(cdp: Cdp) -> int:
 
     # スタブを元に戻す（後続のテストに影響しないように）。
     await reload_reader(cdp)
+
+    # Content-Security-Policy が設定されている。
+    csp = await cdp.evaluate(
+        "document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')"
+        "?.getAttribute('content') || ''"
+    )
+    checker.check(
+        "Content-Security-Policy が設定される",
+        "default-src 'self'" in str(csp) and "wasm-unsafe-eval" in str(csp),
+        f"(csp={csp!r})",
+    )
 
     return finish(checker)
 
