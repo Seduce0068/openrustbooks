@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 120 件）。
+openrustbooks の ADR 一覧（全 121 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -242,3 +242,5 @@ openrustbooks の ADR 一覧（全 120 件）。
   - status: accepted — wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。
 - [ADR-0120: AI リトライ回数の上限](0120-retry-limit.md)
   - status: accepted — max_retries を service 境界で 0..=10 にクランプし、暴走とオーバーフローを防ぐ決定を記録する。
+- [ADR-0121: REQ-010 リトライ回数の明文化](0121-req010-retry-wording.md)
+  - status: accepted — REQ-010 の「最大3回再生成」を実装と一致する文言に明文化する決定を記録する。
