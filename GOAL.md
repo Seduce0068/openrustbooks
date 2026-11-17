@@ -20,12 +20,13 @@ Rust 側で同意を確認する必要がある。
 ### 必須事項
 
 1. 本文を送る 4 コマンド（generate / refine / to_table / front_matter）に
-   `consent: bool` を追加し、false なら送信前に拒否する（fail-closed）。
-2. JS の bool だけでは同意を担保できないため、可能なら
-   `tauri-plugin-dialog` で Rust 側からネイティブ確認を表示し、結果を待つ。
-3. 送信内容をローカルで合成する preview コマンドを追加する
-   （AI 呼び出し・ネットワークなし）。
-4. Tauri の command 登録（`main.rs`）は変更しない。
+   `AppHandle` を追加し、送信直前に Rust 側でネイティブ確認ダイアログを表示する。
+   JS から `consent: bool` を受け取らない（侵害された renderer が true を渡せるため）。
+2. `tauri-plugin-dialog` の `app.dialog().message(...).show() + oneshot` を使い、
+   async コマンド内で結果を待つ（blocking_show は使わない）。
+3. ダイアログ本文に、送信字段ごとの「文字数＋先頭 80 文字」の要約を表示する
+   （別の preview コマンドは追加しない）。本文全体・API キーは出さない。
+4. Tauri の command 登録（`main.rs`）は変更しない（`AppHandle` は自動注入）。
 5. 新規依存を追加しない（`tauri-plugin-dialog` は既存依存）。
 6. 6 ゲート・E2E が成功する。
 
