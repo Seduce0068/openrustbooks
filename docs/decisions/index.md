@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 118 件）。
+openrustbooks の ADR 一覧（全 119 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -238,3 +238,5 @@ openrustbooks の ADR 一覧（全 118 件）。
   - status: accepted — WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
 - [ADR-0118: AI pipeline のデッドコード削除](0118-pipeline-dead-code.md)
   - status: accepted — execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
+- [ADR-0119: wasm32 テストの実行ゲート](0119-wasm-test-runner.md)
+  - status: accepted — wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。

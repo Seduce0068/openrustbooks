@@ -305,6 +305,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0116-final-lint-policy](docs/decisions/0116-final-lint-policy.md)
 - [0117-wasm-config-alignment](docs/decisions/0117-wasm-config-alignment.md)
 - [0118-pipeline-dead-code](docs/decisions/0118-pipeline-dead-code.md)
+- [0119-wasm-test-runner](docs/decisions/0119-wasm-test-runner.md)
+  - wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。
   - execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
   - WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
   - AI pipeline の最終試行で lint 不合格でも Ok を維持し、呼び出し側が lint_passed を確認して差分を提示する方針を記録する。
