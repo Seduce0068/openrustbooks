@@ -273,6 +273,10 @@ const IMAGE_SETTLE_MS: f64 = 2000.0;
 /// `expected` は設定した HTML に含まれる `img` の数。本文の更新は非同期に
 /// DOM へ反映されるため、数が揃うまでは未確定として扱う。`src` が無い画像
 /// （解決できず除去したもの）は待たない。
+///
+/// 完了判定は `complete()` だけでは不十分。`complete()` は `src` 未設定・空・
+/// broken・画像読み込み無効でも `true` を返すため、自然サイズが未確定の画像を
+/// 見逃さないよう `natural_width() > 0` も要求する（位置復元は自然サイズに依存）。
 #[cfg(target_arch = "wasm32")]
 fn images_settled(expected: usize) -> bool {
     let Some(window) = web_sys::window() else {
@@ -296,7 +300,9 @@ fn images_settled(expected: usize) -> bool {
             continue;
         }
         with_source += 1;
-        if !image.complete() {
+        // `complete()` は src 未設定・空・broken・画像読み込み無効でも true を返す。
+        // 自然サイズが未確定の画像を完了とみなさないよう自然幅も確認する。
+        if !image.complete() || image.natural_width() == 0 {
             return false;
         }
     }
@@ -1732,7 +1738,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let applying_position = Rc::clone(&applying_position);
         let last_apply_time = Rc::clone(&last_apply_time);
         let current_generation = Rc::clone(&current_generation);
-        let set_status = set_status;
         Rc::new(move |index, fragment, scroll_top| {
             // 章の切り替えで古いスクロールのデバウンス保存をキャンセルする。
             if let Some(window) = web_sys::window()
@@ -2340,8 +2345,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let touch_start = Rc::clone(&touch_start);
         let prev_action = Rc::clone(&prev_action);
         let next_action = Rc::clone(&next_action);
-        let swipe_threshold = swipe_threshold;
-        let vertical_scroll_threshold = vertical_scroll_threshold;
         move |event: web_sys::TouchEvent| {
             let Some((start_x, start_y)) = touch_start.get() else {
                 return;
@@ -2795,7 +2798,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let font_smaller_action = Rc::clone(&font_smaller_action);
         let font_larger_action = Rc::clone(&font_larger_action);
         let dark_action = Rc::clone(&dark_action);
-        let help_dialog = help_dialog;
         move |event: web_sys::KeyboardEvent| {
             // モーダル表示中は背景のショートカットを止める（Esc は dialog に任せる）。
             if let Some(window) = web_sys::window()
@@ -2872,7 +2874,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             .flatten()
                         && let Some(html_input) = input.dyn_into::<web_sys::HtmlInputElement>().ok()
                     {
-                        html_input.focus();
+                        let _ = html_input.focus();
                     }
                     true
                 }
