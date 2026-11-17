@@ -2629,6 +2629,53 @@ async def run_checks(cdp: Cdp) -> int:
         f"(naturalWidth={resized_width})",
     )
 
+    # 表示設定の一括リセット。
+    checker.check(
+        "リセットボタンが存在する",
+        await cdp.evaluate("document.querySelector('#reader-reset-settings') !== null"),
+    )
+    # 複数の設定を変更する。
+    await cdp.evaluate("document.querySelector('#reader-font-larger').click()")
+    await cdp.evaluate("document.querySelector('#reader-line-spacing').click()")
+    await cdp.evaluate("document.querySelector('#reader-theme').click()")
+    await cdp.evaluate(
+        "(() => { const input = document.querySelector('#reader-swipe-threshold');"
+        " input.value = '100'; input.dispatchEvent(new Event('change', {bubbles: true})); })()"
+    )
+    await asyncio.sleep(0.5)
+    modified = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}')"
+    )
+    checker.check(
+        "リセット前に設定が変更されている",
+        modified.get("swipeThreshold") == 100 and modified.get("dark") is True,
+        f"(settings={modified!r})",
+    )
+    await cdp.evaluate("document.querySelector('#reader-reset-settings').click()")
+    await asyncio.sleep(0.5)
+    reset = await cdp.evaluate(
+        "JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}')"
+    )
+    checker.check(
+        "リセットで全表示設定が既定値になる",
+        reset.get("fontScale") == 1
+        and reset.get("lineHeight") == 1
+        and reset.get("dark") is False
+        and reset.get("followSystem") is False
+        and reset.get("swipeThreshold") == 50
+        and reset.get("verticalScrollThreshold") == 30
+        and reset.get("downscaleImages") is False,
+        f"(settings={reset!r})",
+    )
+    reset_status = await cdp.evaluate(
+        "document.querySelector('.reader-status')?.textContent || ''"
+    )
+    checker.check(
+        "リセットの状態メッセージが出る",
+        "settings reset" in str(reset_status).lower(),
+        f"(status={reset_status!r})",
+    )
+
     return finish(checker)
 
 
