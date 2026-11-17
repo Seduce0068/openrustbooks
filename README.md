@@ -291,6 +291,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0102-extra-headers-redaction](docs/decisions/0102-extra-headers-redaction.md)
 - [0103-path-field-redaction](docs/decisions/0103-path-field-redaction.md)
 - [0104-send-consent-dialog](docs/decisions/0104-send-consent-dialog.md)
+- [0105-retry-config](docs/decisions/0105-retry-config.md)
+  - リトライ回数をトークン上限から分離し、AiConfig.max_retries に集約する決定を記録する。
   - 本文を AI へ送る直前に Rust 側でネイティブ確認を要求する決定を記録する。
   - 設定 IPC の DTO からローカルパス情報を除外し、マージで保持する決定を記録する。
   - OpenAiConfig.extra_headers を IPC DTO と Debug 出力からマスクする決定を記録する。
