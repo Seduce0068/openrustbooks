@@ -1677,6 +1677,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         index + 1 < len
     });
     let (chapters, set_chapters) = signal(Vec::<(usize, String, Option<String>)>::new());
+    let (chapter_filter, set_chapter_filter) = signal(String::new());
     // spine の href を章インデックス順に保持する（landmarks / page-list の解決用）。
     let (chapter_hrefs, set_chapter_hrefs) = signal(Vec::<String>::new());
     let (landmarks, set_landmarks) = signal(Vec::<TocEntry>::new());
@@ -2101,6 +2102,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_status.set(format!("Opening {}…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
+            set_chapter_filter.set(String::new());
             set_chapter_hrefs.set(Vec::new());
             set_landmarks.set(Vec::new());
             set_landmark_options.set(Vec::new());
@@ -2874,6 +2876,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         key_listener.remove();
     });
 
+    // 章タイトルの部分一致で絞り込む。現在の章は選択状態を保つため残す。
+    let filtered_chapters = Memo::new(move |_| {
+        let filter = chapter_filter.get().trim().to_lowercase();
+        let active = current.get();
+        chapters
+            .get()
+            .into_iter()
+            .filter(|(index, title, _)| {
+                *index == active || filter.is_empty() || title.to_lowercase().contains(&filter)
+            })
+            .collect::<Vec<_>>()
+    });
     let current_title = Memo::new(move |_| {
         chapters
             .get()
@@ -2945,9 +2959,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     />
                 </select>
                 <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
+                <input id="reader-chapter-filter" class="reader-chapter-select" type="search" aria-label="Filter chapters" placeholder="Filter chapters" on:input=move |event: web_sys::Event| {
+                    if let Some(input) = event.target().and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok()) {
+                        set_chapter_filter.set(input.value());
+                    }
+                } style="max-width: 10rem;"/>
                 <select id="reader-chapter-select" class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
-                        each=move || chapters.get()
+                        each=move || filtered_chapters.get()
                         key=|(index, _, _)| *index
                         children=move |(index, title, _)| view! {
                             <option value=index.to_string() prop:selected=move || current.get() == index>
