@@ -976,13 +976,6 @@ fn prune_positions(storage: &web_sys::Storage, keep: &str) {
     }
 
     let remaining = list_positions(storage);
-    if let Some(window) = web_sys::window() {
-        let _ = js_sys::Reflect::set(
-            &window,
-            &JsValue::from_str("__prune_before"),
-            &JsValue::from_f64(remaining.len() as f64),
-        );
-    }
     if remaining.len() <= POSITION_LIMIT {
         return;
     }
@@ -999,13 +992,6 @@ fn prune_positions(storage: &web_sys::Storage, keep: &str) {
     sort_newest_first(&mut others);
     for (key, _) in others.into_iter().skip(budget) {
         let _ = storage.remove_item(&key);
-    }
-    if let Some(window) = web_sys::window() {
-        let _ = js_sys::Reflect::set(
-            &window,
-            &JsValue::from_str("__prune_after"),
-            &JsValue::from_f64(list_positions(storage).len() as f64),
-        );
     }
 }
 
