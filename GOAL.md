@@ -1,34 +1,33 @@
 # Goal
 
-設定 IPC の DTO からローカルパス情報を除外する（ipc-auditor の指摘、ADR-0102 の未決定）。
+AI 送信前にプレビューとネイティブ同意ダイアログを要求する（todo.md D06 の本体）。
 
 ## Scope
 
 ### 背景
 
-`ConfigView` は `GeneralConfig`（`data_dir` / `cache_dir`）、`LintConfig`
-（`config_file` / `rule_config`）、`StorageConfigView`（`local_roots[].path` /
-`recent_paths`）、`OllamaConfig`（`options`）、`AiConfigView`（`model_overrides`）
-を丸ごと JS へ返す。ユーザー名や最近開いた文書名が露出する。
+既定無効化（ADR-0099）、service ガード（ADR-0100）、送信先制限（ADR-0101）により
+リスクは減ったが、利用者が AI を有効にした後は、どの本文がどこへ送られるかを
+確認せずに送信できる。設定 IPC が公開済みで UI 未接続のため、送信前に
+Rust 側で同意を確認する必要がある。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 変更（DTO の VIEW 型追加とマージ保持）
-- `docs/decisions/0103-path-field-redaction.md`: 追加
+- `desktop/src/commands/ai.rs`: 変更（同意チェック、プレビューコマンド）
+- `docs/decisions/0104-send-consent-dialog.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 次の DTO 用 VIEW 型を追加し、パス／汎用マップを返さないようにする。
-   - `GeneralConfigView`: `data_dir` / `cache_dir` を除外（もしくは file_name のみ）。
-   - `LintConfigView`: `config_file` / `rule_config` を除外。
-   - `StorageConfigView`: `local_roots[].path` を除外（`id` / `name` / `read_only` / `watch` は残す）、`recent_paths` を除外。
-   - `OllamaConfigView`: `options` を除外。
-   - `AiConfigView`: `model_overrides` を除外。
-2. `merge_secrets` を拡張し、除外したフィールドは現在値を保持する
-   （GUI 往復で消えないように）。
-3. 既存の 161 テスト、E2E 228 項目を壊さない。
-4. 新規テストを追加する（DTO JSON にパス情報が無いこと、マージ保持）。
+1. 本文を送る 4 コマンド（generate / refine / to_table / front_matter）に
+   `consent: bool` を追加し、false なら送信前に拒否する（fail-closed）。
+2. JS の bool だけでは同意を担保できないため、可能なら
+   `tauri-plugin-dialog` で Rust 側からネイティブ確認を表示し、結果を待つ。
+3. 送信内容をローカルで合成する preview コマンドを追加する
+   （AI 呼び出し・ネットワークなし）。
+4. Tauri の command 登録（`main.rs`）は変更しない。
+5. 新規依存を追加しない（`tauri-plugin-dialog` は既存依存）。
+6. 6 ゲート・E2E が成功する。
 
 ## Acceptance criteria
 
@@ -36,6 +35,6 @@
 
 ## Constraints
 
-- 新規依存を追加しない。
-- UI の配線は変更しない（未接続のまま）。
+- Web UI の配線は変更しない（未接続のまま）。
+- 送信先制限・service ガード・秘密マージは変更しない。
 - `master` へ push する。force push はしない。
