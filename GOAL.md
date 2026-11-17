@@ -1,37 +1,35 @@
 # Goal
 
-AI リトライ回数を安全な範囲にクランプする（ADR-0105 / 0118 の未決定）。
+REQ-010 の「最大 3 回再生成」を実装と一致する文言に明文化する（ADR-0105 / 0120 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`AiMarkdownService::new()` は `config.ai.max_retries` をそのまま
-`PipelineConfig` に渡す。大きすぎる値は API 呼び出しを最大 N+1 回まで
-増やし（コスト制御 REQ-010 と緊張）、`usize::MAX` では
-`max_retries + 1`（ADR-0118）がオーバーフローする。
+`docs/requirements.md:132` は「rumdl 検査合格まで最大3回再生成」とする一方、
+実装は `for attempt in 0..=max_retries`（既定 3）で
+初期 1 回＋リトライ 3 回＝最大 4 回生成する。
+ADR-0105 / 0120 で解釈差が未決定として残っている。
 
 ### 成果物
 
-- `core/src/ai_markdown/pipeline.rs`: 変更（クランプ関数と適用）
-- `docs/decisions/0120-retry-limit.md`: 追加
+- `docs/requirements.md`: 変更（文言を明文化）
+- `docs/decisions/0121-req010-retry-wording.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `max_retries` を 0..=10 にクランプする（既定 3 は維持）。
-2. クランプは `AiMarkdownService::new()` で行い、config.toml / IPC の
-   両方の経路に効かせる。
-3. 0 は許可し（初期1回のみ）、10 を超える値は 10 に丸める。
-4. テストを追加する（0 / 3 / 5 / 11 / usize::MAX）。
-5. 既存の 195 テスト + wasm 3 件、E2E 228 項目を壊さない。
+1. REQ-010 の品質ゲートを「初期生成 1 回＋リトライ最大 3 回（合計最大 4 回）」と明記する。
+2. 上限設定 `max_retries` の既定 3 と範囲 0..=10（ADR-0120）への言及を追加する。
+3. 既存の「失敗時は差分提示しユーザー判断へ」は維持する。
+4. コードは変更しない。
 
 ## Acceptance criteria
 
-- 6 ゲート・E2E が成功する。
+- markdownlint が通る。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- リトライ回数の意味（`0..=max_retries` = 初期1回＋リトライN回）は変更しない。
+- コードを変更しない。
+- 実装の挙動（最大 4 回生成）は変更しない。
 - `master` へ push する。force push はしない。
