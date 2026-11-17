@@ -1,6 +1,6 @@
 # 個人リポジトリ共通の再利用可能ワークフロー
 # （Seduce0068/workflows の rust-gates.yml）へ委譲する。ローカルの
-# 5 ゲート（fmt / check / test / clippy / wasm32）と同じ検証を共通側が
+# 6 ゲート（fmt / check / test / clippy / wasm32 core / wasm32 web）と同じ検証を共通側が
 # 実行する。desktop を含むワークスペース全体を Linux 向けに検証するため、
 # Tauri のビルド依存は apt_packages で渡す。
 name: CI

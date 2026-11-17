@@ -146,7 +146,7 @@ cargo tauri dev
 
 ### CI
 
-push（`master`）と pull request では、GitHub Actions がローカルの 5 ゲートと
+push（`master`）と pull request では、GitHub Actions がローカルの 6 ゲートと
 同じ検証を実行する。検証本体は個人リポジトリ共通の再利用ワークフロー
 （`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）に委譲しており、
 `.github/workflows/ci.yml` は Tauri のビルド依存と wasm32 ゲートを渡す
