@@ -372,8 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    # 期待 check 総数: checker.check 205 + checker.equal 17 = 222。
-    checker = Checker(expected=222)
+    # 期待 check 総数: checker.check 206 + checker.equal 17 = 223。
+    checker = Checker(expected=223)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -2956,6 +2956,31 @@ async def run_checks(cdp: Cdp) -> int:
         dark_before_ime == dark_after_ime,
         f"(before={dark_before_ime!r}, after={dark_after_ime!r})",
     )
+
+    # モーダル表示中は背景のショートカットが止まる。
+    await cdp.evaluate("document.querySelector('#reader-help').click()")
+    await asyncio.sleep(0.3)
+    dark_before_modal = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyDown", "key": "d", "code": "KeyD", "windowsVirtualKeyCode": 68},
+    )
+    await cdp.send(
+        "Input.dispatchKeyEvent",
+        {"type": "keyUp", "key": "d", "code": "KeyD", "windowsVirtualKeyCode": 68},
+    )
+    await asyncio.sleep(0.3)
+    dark_after_modal = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    checker.check(
+        "モーダル中はダーク切替ショートカットが発火しない",
+        dark_before_modal == dark_after_modal,
+        f"(before={dark_before_modal!r}, after={dark_after_modal!r})",
+    )
+    await cdp.evaluate("document.querySelector('#reader-help-dialog button').click()")
 
     return finish(checker)
 
