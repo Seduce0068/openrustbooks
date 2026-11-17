@@ -1,30 +1,35 @@
 # Goal
 
-AI を無効化した後に service が残存し送信できる問題を修正する（ai-consent-auditor 経路 B/C）。
+AI の送信先 `base_url` を許可リストで制限する（ADR-0099/0100 の未決定、baseurl-auditor 推奨）。
 
 ## Scope
 
 ### 背景
 
-- `AppState::ai_service()` は `config.ai.enabled` を確認せず、service の有無だけを見る。
-- 設定で `enabled=false` に戻しても `ai_service` が `None` に戻される箇所が無い。
-- そのため、一度有効化された後は設定上無効でも AI コマンドが送信できる。
+`OpenAiConfig.base_url` / `OllamaConfig.base_url` は単なる String で、
+Tauri IPC の `update_config` / `update_ai_config` から JS が任意 URL
+（例: `http://attacker.example`）に変更して有効化できる。Rust 側 HTTP は
+WebView の CSP 対象外のため、同意なく本文が外部へ送られるリスクがある。
 
 ### 成果物
 
-- `desktop/src/state/mod.rs`: 変更（ai_service() ガード、disable メソッド、テスト）
-- `desktop/src/commands/config.rs`: 変更（無効化時に service を破棄）
-- `docs/decisions/0100-ai-service-guard.md`: 追加
+- `core/src/ai_markdown/client.rs`: 変更（送信先検証関数と適用）
+- `desktop/src/commands/config.rs`: 変更（設定更新時の検証）
+- `core/src/config.rs`: 変更（必要なら許可リスト設定）
+- `docs/decisions/0101-base-url-allowlist.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `AppState::ai_service()` は `config.ai.enabled == false` のとき None を返す。
-2. `update_config` / `update_ai_config(enabled=false)` / `reset_config` のとき
-   `ai_service` を None に戻す。
-3. AI コマンドのシグネチャ・Tauri 登録は変更しない。
-4. 既存の 143 テスト、E2E 228 項目を壊さない。
-5. 新規テストを追加する。
+1. 既定ホストのみを許可する。
+   - OpenAI: `https://api.openai.com/v1`
+   - Ollama: `http://localhost:11434`（loopback http は許可）
+2. scheme は https または loopback の http のみ許可する。
+3. カスタムエンドポイントは明示的な opt-in 設定（config.toml / 環境変数等、
+   JS からは変更できない経路）でのみ許可する。
+4. IPC 設定更新時とクライアント生成時の二重で検証する（defense in depth）。
+5. 新規依存を追加しない（`url` クレートは既存依存）。
+6. 既存の 146 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -32,6 +37,6 @@ AI を無効化した後に service が残存し送信できる問題を修正�
 
 ## Constraints
 
-- 同意ダイアログ UI は今回行わない（将来タスク）。
-- 新規依存を追加しない。
+- Web 版の wasm スタブには影響しない。
+- 同意ダイアログの UI は今回行わない。
 - `master` へ push する。force push はしない。
