@@ -369,14 +369,21 @@ struct PositionApplyCtx {
 fn export_filename() -> String {
     let date = js_sys::Date::new_0();
     let pad = |value: u32| -> String { format!("{value:02}") };
+    // getTimezoneOffset は「UTC - 現地」の分（JST なら -540）なので符号を反転する。
+    let offset_minutes = -(date.get_timezone_offset() as i32);
+    let sign = if offset_minutes < 0 { '-' } else { '+' };
+    let absolute = offset_minutes.unsigned_abs();
     format!(
-        "openrustbooks-{:04}{}{}-{}{}{}.json",
+        "openrustbooks-{:04}{}{}-{}{}{}{}{:02}{:02}.json",
         date.get_full_year(),
         pad(date.get_month() + 1),
         pad(date.get_date()),
         pad(date.get_hours()),
         pad(date.get_minutes()),
         pad(date.get_seconds()),
+        sign,
+        absolute / 60,
+        absolute % 60,
     )
 }
 
