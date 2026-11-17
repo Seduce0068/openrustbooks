@@ -115,3 +115,55 @@ impl AppState {
         self.config.read().unwrap().save()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openrustbooks_core::document::{DocumentContent, DocumentFormat, DocumentMetadata};
+
+    fn sample_document(id: &str) -> Document {
+        Document {
+            metadata: DocumentMetadata::new(
+                DocumentId::from_string(id.to_string()),
+                DocumentFormat::Txt,
+            ),
+            content: DocumentContent::Text("sample".to_string()),
+        }
+    }
+
+    #[test]
+    fn unsaved_changes_state_transitions() {
+        let state = AppState::new(AppConfig::default());
+        let document = sample_document("doc-1");
+        let id = document.metadata.id.clone();
+
+        assert!(!state.has_unsaved_changes());
+
+        state.add_document(document);
+        assert!(state.get_document(&id).is_some());
+        assert!(!state.is_unsaved(&id));
+
+        state.mark_unsaved(&id);
+        assert!(state.is_unsaved(&id));
+        assert!(state.has_unsaved_changes());
+
+        state.mark_saved(&id);
+        assert!(!state.is_unsaved(&id));
+        assert!(!state.has_unsaved_changes());
+
+        assert!(state.remove_document(&id).is_some());
+        assert!(state.get_document(&id).is_none());
+        assert!(!state.has_unsaved_changes());
+    }
+
+    #[test]
+    fn config_round_trip_in_memory() {
+        let state = AppState::new(AppConfig::default());
+        assert!(state.is_ai_enabled());
+        let mut config = state.config();
+        config.ai.enabled = false;
+        state.update_config(config).unwrap();
+        assert!(!state.is_ai_enabled());
+        assert!(!state.config().ai.enabled);
+    }
+}
