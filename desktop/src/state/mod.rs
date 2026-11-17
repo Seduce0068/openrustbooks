@@ -49,13 +49,24 @@ impl AppState {
     }
 
     /// Get AI service if available
+    ///
+    /// 設定で無効な場合は service の有無に関わらず None を返す。
+    /// ロックは逐次取得して重ねない（デッドロック回避）。
     pub fn ai_service(&self) -> Option<Arc<AiMarkdownService>> {
+        if !self.is_ai_enabled() {
+            return None;
+        }
         self.ai_service.read().unwrap().clone()
     }
 
     /// Check if AI features are enabled
     pub fn is_ai_enabled(&self) -> bool {
         self.config.read().unwrap().ai.enabled
+    }
+
+    /// Clear the in-memory AI service (設定無効化時に呼ぶ)
+    pub fn disable_ai_service(&self) {
+        *self.ai_service.write().unwrap() = None;
     }
 
     /// Add a document
@@ -165,5 +176,35 @@ mod tests {
         state.update_config(config).unwrap();
         assert!(state.is_ai_enabled());
         assert!(state.config().ai.enabled);
+    }
+
+    #[test]
+    fn ai_service_is_none_before_enabling() {
+        let state = AppState::new(AppConfig::default());
+        assert!(!state.is_ai_enabled());
+        assert!(state.ai_service().is_none());
+    }
+
+    #[test]
+    fn ai_service_is_none_when_update_config_disables_ai() {
+        let state = AppState::new(AppConfig::default());
+        let mut config = state.config();
+        config.ai.enabled = true;
+        state.update_config(config).unwrap();
+        assert!(state.is_ai_enabled());
+
+        // service が未生成でも、無効設定ならガードが None を返すことを確認。
+        let mut config = state.config();
+        config.ai.enabled = false;
+        state.update_config(config).unwrap();
+        assert!(!state.is_ai_enabled());
+        assert!(state.ai_service().is_none());
+    }
+
+    #[test]
+    fn disable_ai_service_clears_service() {
+        let state = AppState::new(AppConfig::default());
+        state.disable_ai_service();
+        assert!(state.ai_service().is_none());
     }
 }

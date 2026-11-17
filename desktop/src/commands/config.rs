@@ -195,8 +195,13 @@ pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
 #[command]
 pub fn update_config(state: State<'_, Arc<AppState>>, config: AppConfig) -> Result<(), String> {
     let merged = merge_secrets(&state.config(), &config);
+    let ai_enabled = merged.ai.enabled;
     state.update_config(merged).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
+    if !ai_enabled {
+        // 無効化してもメモリ上の service が残らないようにする。
+        state.disable_ai_service();
+    }
     Ok(())
 }
 
@@ -215,12 +220,14 @@ pub fn update_ai_config(
     state.update_config(config).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
 
-    // Reinitialize AI service if enabled
+    // 有効なら再初期化、無効なら既存 service を破棄する。
     if ai_enabled {
         let state_clone = state.inner().clone();
         tauri::async_runtime::spawn(async move {
             let _ = state_clone.init_ai_service().await;
         });
+    } else {
+        state.disable_ai_service();
     }
 
     Ok(())
@@ -245,6 +252,8 @@ pub fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, Strin
     let config = AppConfig::default();
     state.update_config(config.clone()).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
+    // 既定は AI 無効なので service も破棄する。
+    state.disable_ai_service();
     Ok(ConfigView::from(&config))
 }
 
