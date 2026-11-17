@@ -5,8 +5,7 @@ use crate::{
     config::{AiConfig, OllamaConfig, OpenAiConfig},
 };
 use async_openai::types::chat::{
-    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionResponseStream, CreateChatCompletionRequest,
+    ChatCompletionRequestUserMessageArgs, ChatCompletionResponseStream, CreateChatCompletionRequest,
 };
 use async_openai::{Client, config::OpenAIConfig};
 use async_trait::async_trait;
@@ -167,6 +166,36 @@ pub struct OpenAiClient {
     tokenizer: &'static CoreBPE,
 }
 
+/// OpenAI チャットリクエストを組み立てる。
+///
+/// system role は使わず、渡された prompt を user message 1 件として送る。
+/// テンプレート由来の system_prompt は `render()` が prompt 文字列へ挿入するため、
+/// ここで別途 system message を付けると指示が二重になる。Ollama 側もテンプレート
+/// 経由のみなので、両プロバイダで同じ user 1 件の意味に揃える。
+fn build_openai_request(
+    prompt: &str,
+    model: &str,
+    max_tokens: usize,
+    stream: bool,
+) -> CoreResult<CreateChatCompletionRequest> {
+    let messages = vec![
+        ChatCompletionRequestUserMessageArgs::default()
+            .content(prompt)
+            .build()?
+            .into(),
+    ];
+
+    Ok(CreateChatCompletionRequest {
+        model: model.to_string(),
+        messages,
+        max_completion_tokens: Some(max_tokens as u32),
+        temperature: Some(0.3),
+        top_p: Some(0.9),
+        stream: Some(stream),
+        ..Default::default()
+    })
+}
+
 impl OpenAiClient {
     pub async fn new(config: &OpenAiConfig) -> CoreResult<Self> {
         validate_base_url(&config.base_url, ProviderKind::OpenAi)?;
@@ -195,26 +224,7 @@ impl AiClient for OpenAiClient {
         max_tokens: usize,
         _streaming: bool,
     ) -> CoreResult<AiResponse> {
-        let messages = vec![
-            ChatCompletionRequestSystemMessageArgs::default()
-                .content("You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation.")
-                .build()?
-                .into(),
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(prompt)
-                .build()?
-                .into(),
-        ];
-
-        let request = CreateChatCompletionRequest {
-            model: self.model.clone(),
-            messages,
-            max_completion_tokens: Some(max_tokens as u32),
-            temperature: Some(0.3),
-            top_p: Some(0.9),
-            stream: Some(false),
-            ..Default::default()
-        };
+        let request = build_openai_request(prompt, &self.model, max_tokens, false)?;
 
         let response = self
             .client
@@ -247,26 +257,7 @@ impl AiClient for OpenAiClient {
         prompt: &str,
         max_tokens: usize,
     ) -> CoreResult<Box<dyn TokenStream + Send>> {
-        let messages = vec![
-            ChatCompletionRequestSystemMessageArgs::default()
-                .content("You are a Markdown expert. Generate clean, well-structured Markdown that passes markdownlint validation.")
-                .build()?
-                .into(),
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(prompt)
-                .build()?
-                .into(),
-        ];
-
-        let request = CreateChatCompletionRequest {
-            model: self.model.clone(),
-            messages,
-            max_completion_tokens: Some(max_tokens as u32),
-            temperature: Some(0.3),
-            top_p: Some(0.9),
-            stream: Some(true),
-            ..Default::default()
-        };
+        let request = build_openai_request(prompt, &self.model, max_tokens, true)?;
 
         let stream = self
             .client
@@ -472,6 +463,10 @@ impl TokenStream for OllamaTokenStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai_markdown::prompt::{PromptRegistry, PromptType, PromptVariables};
+    use async_openai::types::chat::{
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageContent,
+    };
 
     #[test]
     fn default_openai_url_is_allowed() {
@@ -561,5 +556,77 @@ mod tests {
     fn malformed_url_is_rejected() {
         assert!(validate_base_url("not-a-url", ProviderKind::OpenAi).is_err());
         assert!(validate_base_url("https://", ProviderKind::Ollama).is_err());
+    }
+
+    #[test]
+    fn openai_request_has_only_one_user_message() {
+        // system role が無く、user message が 1 件だけであることを確認。
+        let request = build_openai_request("# Title\n\n本文", "gpt-4o", 128, false).unwrap();
+        assert_eq!(request.messages.len(), 1, "messages は user 1 件のみ");
+        assert!(
+            matches!(request.messages[0], ChatCompletionRequestMessage::User(_)),
+            "先頭は user message であるべき"
+        );
+        assert!(
+            request
+                .messages
+                .iter()
+                .all(|m| !matches!(m, ChatCompletionRequestMessage::System(_))),
+            "system role が残っている"
+        );
+    }
+
+    #[test]
+    fn openai_request_user_content_equals_prompt() {
+        // 渡された prompt がそのまま user message の content になることを確認。
+        let prompt = "# 見出し\n\n- 項目\n\n本文テキスト";
+        let request = build_openai_request(prompt, "gpt-4o", 256, true).unwrap();
+        match &request.messages[0] {
+            ChatCompletionRequestMessage::User(user) => match &user.content {
+                ChatCompletionRequestUserMessageContent::Text(text) => {
+                    assert_eq!(text, prompt, "prompt が加工されずに渡されるべき");
+                }
+                other => panic!("user content が Text ではない: {other:?}"),
+            },
+            other => panic!("user message ではない: {other:?}"),
+        }
+        assert_eq!(request.stream, Some(true));
+    }
+
+    #[test]
+    fn rendered_prompt_contains_template_system_prompt() {
+        // テンプレートの system_prompt が prompt 文字列へ挿入されることを確認。
+        // その prompt を渡しても user 1 件だけで、system role は生成されない。
+        let registry = PromptRegistry::with_builtins().unwrap();
+        let prompt = registry
+            .render(PromptType::Generate, PromptVariables::default())
+            .unwrap();
+        let system_prompt = &registry
+            .get_template(PromptType::Generate)
+            .unwrap()
+            .system_prompt;
+        assert!(
+            prompt.starts_with(system_prompt),
+            "prompt 先頭に system_prompt がない"
+        );
+
+        let request = build_openai_request(&prompt, "gpt-4o", 128, false).unwrap();
+        assert_eq!(request.messages.len(), 1);
+        assert!(matches!(
+            request.messages[0],
+            ChatCompletionRequestMessage::User(_)
+        ));
+        match &request.messages[0] {
+            ChatCompletionRequestMessage::User(user) => match &user.content {
+                ChatCompletionRequestUserMessageContent::Text(text) => {
+                    assert!(
+                        text.contains(system_prompt),
+                        "system_prompt が prompt に含まれる"
+                    );
+                }
+                other => panic!("user content が Text ではない: {other:?}"),
+            },
+            other => panic!("user message ではない: {other:?}"),
+        }
     }
 }
