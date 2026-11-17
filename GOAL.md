@@ -1,34 +1,30 @@
 # Goal
 
-API キーなどの秘密情報の平文露出を減らす（todo.md D05 / code-scanner #2）。
+AI 機能の既定を無効にし、同意なく本文が送信されないようにする（todo.md D06 の一部）。
 
 ## Scope
 
 ### 背景
 
-`core/src/config.rs` の `api_key` / `client_secret` / `refresh_token` は
-`config.toml` へ平文保存され、`desktop/src/commands/config.rs` の `get_config`
-が `AppConfig` を丸ごと JS へ返す。UI 未接続のため顕在化はしていないが、
-接続時に露出する潜在リスクがある（secret-auditor の精査結果）。
+`core/src/config.rs` の `AiConfig::default()` は `enabled: true` で、
+`desktop/src/main.rs` の setup で起動時に `init_ai_service()` が呼ばれる。
+UI 未接続のため実際の送信は起きていないが、機能を接続した瞬間に
+同意なしで本文が送られるリスクがある。
 
 ### 成果物
 
-- `core/src/config.rs`: 変更（カスタム Debug で秘密を赤染め、保存ファイル権限 0600）
-- `desktop/src/commands/config.rs`: 変更（get_config / reset_config をマスク済み DTO に）
-- `docs/decisions/0098-secret-exposure-mitigation.md`: 追加
+- `core/src/config.rs`: 変更（既定 `enabled: false`）
+- `desktop/src/state/mod.rs`: 変更（テストの期待値を更新）
+- `docs/decisions/0099-ai-default-off.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 保存形式・読み込み互換性は維持する（`skip_serializing` は今回使わない。
-   キーチェーン未実装で機能回帰するため）。
-2. `get_config` / `reset_config` が返す JSON に秘密フィールド名・実値が含まれない
-   許可リスト型 DTO を導入する。「設定済みか否か」は bool で伝える。
-3. `update_config` / `update_ai_config` は、秘密フィールドがNone/空のとき
-   保持中の実値をマージしてから保存し、キーが消えないようにする。
-4. 秘密構造体の Debug を実値を出さない実装にする。
-5. config.toml の保存を UNIX 系で 0600 にする。
-6. 新規依存を追加しない。テストを追加する。
+1. `AiConfig::default().enabled` を false にする。
+2. 既存設定ファイルで明示的に true が設定されていれば従来どおり有効。
+3. 起動時の `init_ai_service()` は `is_ai_enabled()` ガードのまま（既定では呼ばれない）。
+4. 既存テストを更新し、新規テストを追加する。
+5. 6 ゲート・E2E が成功する。
 
 ## Acceptance criteria
 
@@ -36,6 +32,6 @@ API キーなどの秘密情報の平文露出を減らす（todo.md D05 / code-
 
 ## Constraints
 
-- Web 版の UI 配線は変更しない（将来タスク）。
-- OS キーチェーン移行は将来課題として残す。
+- AI 送信プレビュー／同意ダイアログの UI 実装は今回行わない（将来タスク）。
+- OS キーチェーン移行は今回行わない。
 - `master` へ push する。force push はしない。
