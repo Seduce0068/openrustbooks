@@ -1,30 +1,31 @@
 # Goal
 
-内蔵プロンプトテンプレートに `system_prompt` を追加し、AI サービスの初期化失敗を修正する（ADR-0107 の未決定）。
+AI プロンプトの system 指示をテンプレート側に一元化する（ADR-0108 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`core/src/ai_markdown/prompt.rs:41` の `PromptTemplate` は `system_prompt: String` を必須とする。
-一方 `core/prompts/*.hbs` 全 7 ファイルの TOML front matter には `system_prompt` が無く、
-`parse_template()` の `toml::from_str` が `missing field system_prompt` で失敗する。
-結果、native の `AiMarkdownService::new()` は設定に関わらず常に失敗する。
+`client.rs` の `complete()` / `stream_complete()` は OpenAI に固定 system message
+"You are a Markdown expert..." を送る一方、`render()` はテンプレートの
+`system_prompt` をユーザーメッセージ先頭に挿入するため、意味的に二重になる。
+Ollama には `client.rs` に system 経路が無く、テンプレート側が唯一の指示経路。
 
 ### 成果物
 
-- `core/prompts/*.hbs`: 変更（7 ファイルに `system_prompt` を追加）
-- `docs/decisions/0108-prompt-system-prompt.md`: 追加
+- `core/src/ai_markdown/client.rs`: 変更（固定 system message の削除）
+- `docs/decisions/0109-system-prompt-unification.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 全 7 テンプレートの front matter に `system_prompt` を追加する。
-   - 内容は既存の `client.rs` の固定 system message
-     （"You are a Markdown expert. ..."）と同等の意味にする。
-2. `PromptRegistry::with_builtins()` が成功することをテストで確認する。
-3. `AiMarkdownService::new()` が AI 有効時に成功することをテストで確認する。
-4. 既存の 179 テスト、E2E 228 項目を壊さない。
+1. `OpenAiClient::complete()` / `stream_complete()` から固定 system message を削除し、
+   `prompt` のみを user message として送る。
+2. Ollama 側のペイロードは変更しない（テンプレートの system_prompt が維持される）。
+3. `AiClient` トレイト・`complete()` シグネチャは変更しない。
+4. 境界テストを追加する（モック AiClient に渡る prompt に system_prompt が含まれ、
+   OpenAI の messages に system role が無いこと）。
+5. 既存の 183 テスト、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -33,5 +34,5 @@
 ## Constraints
 
 - 新規依存を追加しない。
-- テンプレート本文（ユーザープロンプト部分）は変更しない。
+-テンプレート本文・`render()` は変更しない。
 - `master` へ push する。force push はしない。
