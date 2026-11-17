@@ -61,8 +61,7 @@ fetch クライアント実装時に「既定で送信する」事故につな�
 
 ## 未決定（wasm-config-auditor の指摘）
 
-- wasm32 テストの実行手段（`wasm-bindgen-test` 等）がリポジトリに無く、
-  `scripts/verify.sh` の wasm32 ゲートは `cargo check` のみ。
+- ~~wasm32 テストの実行手段が無い~~ ADR-0119 で `wasm-pack test --node` ゲートを追加済み。
 - 将来 fetch クライアント実装時に `config.ai_enabled` をどこで読み、
   false 時にどう fail するか。
 - `config: JsValue` を `WasmConfig` としてデシリアライズする際の検証。
