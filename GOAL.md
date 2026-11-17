@@ -1,35 +1,37 @@
 # Goal
 
-mailto: リンクのクリック動作を E2E で検証する。
+調査で検出されたデッドコードと古い契約値を整理する。
 
 ## Scope
 
 ### 背景
 
-ADR-0081 の未決定。外部リンク（http/https）のポップアップ呼び出しは
-検証済みだが、同じ分岐に含まれる `mailto:` は未検証。
+`docs/investigation/round-01.md`（別セッションの調査レポート）で次を指摘された。
+- `tools/verify-web-reader.py` の `open_jpeg_and_measure()` が未呼び出し
+  （JPEG サイズ比較テスト削除時の残骸、約 38 行）。
+- `GOAL.md` の E2E 項目数が 216 のままで、現在は 219。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更（サンプルに mailto 追加、検証を追加）
-- `docs/decisions/0082-mailto-link-test.md`: 追加
-- `GOAL.md`: 本契約
+- `tools/verify-web-reader.py`: 変更（未使用関数を削除）
+- `GOAL.md`: 本契約（数値は現状 219 を記載）
+- `docs/decisions/0083-dead-code-cleanup.md`: 追加
 
 ### 必須事項
 
-1. E2E 検証:
-   - サンプル CH1 に `mailto:test@example.com` リンクを追加する。
-   - サニタイズ後も href が残ること。
-   - クリックで `window.open` が `_blank` / `noopener,noreferrer` 付きで
-     呼ばれること（ADR-0081 のスタブパターン）。
-2. 既存の 125 テスト、E2E 216 項目を変えない。
+1. 未使用の `open_jpeg_and_measure()` を削除する。
+2. 削除後も E2E が通る（項目数は変わらない）。
+3. 既存の 125 テストを変えない。
+4. 調査レポート（`docs/investigation/`）は別セッションの成果物のため
+   変更・コミットしない。
 
 ## Acceptance criteria
 
 - 6 ゲートすべて成功する。
-- CI は billing issue で実行不可（ローカル検証で代替）。
+- E2E 219 項目が通る。
 
 ## Constraints
 
-- プロダクションコードを変更しない。
+- 新規依存を追加しない。
+- コード以外の機能は変更しない。
 - `master` へ push する。force push はしない。
