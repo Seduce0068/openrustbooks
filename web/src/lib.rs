@@ -387,13 +387,28 @@ fn export_filename() -> String {
     )
 }
 
+/// Blob URL から元画像の MIME を取得する（失敗時は None）。
+#[cfg(target_arch = "wasm32")]
+async fn fetch_blob_type(url: &str) -> Option<String> {
+    let window = web_sys::window()?;
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
+        .await
+        .ok()?;
+    let response: web_sys::Response = response.dyn_into().ok()?;
+    let blob = wasm_bindgen_futures::JsFuture::from(response.blob().ok()?)
+        .await
+        .ok()?;
+    let blob: web_sys::Blob = blob.dyn_into().ok()?;
+    Some(blob.type_())
+}
+
 /// 巨大画像を Canvas で縮小し、Blob URL を差し替える。
 ///
 /// CSS の `max-width: 100%` で表示幅が決まる画像（自然幅が本文領域より大きい
 /// もの）だけを対象にする。狭い画像を縮小すると表示サイズが変わり、
 /// スクロール位置補正が壊れるため除外する。
 #[cfg(target_arch = "wasm32")]
-fn downscale_large_images(object_urls: &std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+async fn downscale_large_images(object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
     const DOWNSCALE_THRESHOLD: u32 = 4000;
     const MIN_MAX_DIMENSION: u32 = 2000;
     let Some(window) = web_sys::window() else {
@@ -457,7 +472,15 @@ fn downscale_large_images(object_urls: &std::rc::Rc<std::cell::RefCell<Vec<Strin
             continue;
         }
         let old_url = image.get_attribute("src").unwrap_or_default();
-        let urls = std::rc::Rc::clone(object_urls);
+        // 元画像の MIME を取得し、JPEG / PNG / WebP なら同じ形式で再エンコードする。
+        let original_mime = if old_url.is_empty() {
+            None
+        } else {
+            fetch_blob_type(&old_url).await
+        };
+        let mime = original_mime
+            .filter(|value| matches!(value.as_str(), "image/jpeg" | "image/png" | "image/webp"));
+        let urls = std::rc::Rc::clone(&object_urls);
         let target = image.clone();
         let callback = Closure::once_into_js(move |blob: web_sys::Blob| {
             if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
@@ -469,7 +492,11 @@ fn downscale_large_images(object_urls: &std::rc::Rc<std::cell::RefCell<Vec<Strin
             }
         });
         let callback: js_sys::Function = callback.unchecked_into();
-        let _ = canvas.to_blob(&callback);
+        if let Some(mime) = mime {
+            let _ = canvas.to_blob_with_type(&callback, &mime);
+        } else {
+            let _ = canvas.to_blob(&callback);
+        }
     }
 }
 
@@ -583,7 +610,10 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
             (ctx.set_status)(message);
         }
         if ctx.downscale_images {
-            downscale_large_images(&ctx.object_urls);
+            let urls = std::rc::Rc::clone(&ctx.object_urls);
+            wasm_bindgen_futures::spawn_local(async move {
+                downscale_large_images(urls).await;
+            });
         }
         ctx.last_apply_time.set(now_millis());
         ctx.applying.set(false);
