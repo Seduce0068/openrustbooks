@@ -1570,6 +1570,17 @@ async def run_checks(cdp: Cdp) -> int:
         "document.querySelectorAll('#reader-history option').length"
     )
     checker.check("クリア後に履歴が 1 件になる", after_count == 1, f"(count={after_count})")
+    single_entry_saved = await cdp.evaluate(
+        "(() => Object.keys(localStorage)"
+        ".filter((k) => k.startsWith('openrustbooks:history:'))"
+        ".map((k) => JSON.parse(localStorage.getItem(k)))"
+        ".some((v) => v && v.entries && v.entries.length === 1 && v.index === 0))()"
+    )
+    checker.check(
+        "履歴 1 件が localStorage に保存される",
+        single_entry_saved is True,
+        f"(saved={single_entry_saved!r})",
+    )
     back_disabled = await cdp.evaluate(
         "document.querySelector('#reader-back')?.disabled"
     )
