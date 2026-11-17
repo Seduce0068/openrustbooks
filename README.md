@@ -278,6 +278,10 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0093-modal-shortcut-guard](docs/decisions/0093-modal-shortcut-guard.md) - dialog が開いているときは背景のキーボードショートカットを止める決定を記録する。
 - [0094-desktop-window-result](docs/decisions/0094-desktop-window-result.md)
   - get_webview_window の unwrap() を Result 化し、起動時の panic を防ぐ決定を記録する。
+- [0095-empty-export-and-text-shrink](docs/decisions/0095-empty-export-and-text-shrink.md)
+  - 保存データ 0 件のエクスポート経路と文字縮小操作を E2E で検証し、空ファイル生成を防ぐ決定を記録する。
+- [0096-appstate-tests](docs/decisions/0096-appstate-tests.md)
+  - desktop の AppState に Tauri ランタイム不要の状態遷移テストを追加する決定を記録する。
 
 ## ライセンス
 
