@@ -1,28 +1,30 @@
 # Goal
 
-wasm32 単体テストの実行手段を確立する（ADR-0117 の未決定、test-scanner #14）。
+AI リトライ回数を安全な範囲にクランプする（ADR-0105 / 0118 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`core/src/wasm.rs` に wasm32 限定テストを追加したが、
-`scripts/verify.sh` の wasm32 ゲートは `cargo check` のみで、
-テストは実行されていない。`wasm-bindgen-test` は dev-dep にあり、
-`wasm-pack` もインストール済み。
+`AiMarkdownService::new()` は `config.ai.max_retries` をそのまま
+`PipelineConfig` に渡す。大きすぎる値は API 呼び出しを最大 N+1 回まで
+増やし（コスト制御 REQ-010 と緊張）、`usize::MAX` では
+`max_retries + 1`（ADR-0118）がオーバーフローする。
 
 ### 成果物
 
-- `scripts/verify.sh`: 変更（wasm32 テスト実行を追加、可能な場合）
-- `docs/decisions/0119-wasm-test-runner.md`: 追加
+- `core/src/ai_markdown/pipeline.rs`: 変更（クランプ関数と適用）
+- `docs/decisions/0120-retry-limit.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. wasm32 テストを実際に実行できるコマンドを特定する。
-2. 実行可能なら `scripts/verify.sh` にゲートとして追加する。
-3. 実行不能ならその理由を ADR に記録し、現状の `cargo check` ゲートを維持する。
-4. 既存の 195 テスト、E2E 228 項目を壊さない。
+1. `max_retries` を 0..=10 にクランプする（既定 3 は維持）。
+2. クランプは `AiMarkdownService::new()` で行い、config.toml / IPC の
+   両方の経路に効かせる。
+3. 0 は許可し（初期1回のみ）、10 を超える値は 10 に丸める。
+4. テストを追加する（0 / 3 / 5 / 11 / usize::MAX）。
+5. 既存の 195 テスト + wasm 3 件、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -30,8 +32,6 @@ wasm32 単体テストの実行手段を確立する（ADR-0117 の未決定、t
 
 ## Constraints
 
-- 新規クレートは追加しない（`wasm-bindgen-test` は Cargo.lock に既存、
-  web の dev-dep で利用中）。core の dev-dep 追加と Cargo.lock の
-  openrustbooks-core エントリ更新は許可する。
-- 既存の wasm32 check ゲートは維持する。
+- 新規依存を追加しない。
+- リトライ回数の意味（`0..=max_retries` = 初期1回＋リトライN回）は変更しない。
 - `master` へ push する。force push はしない。
