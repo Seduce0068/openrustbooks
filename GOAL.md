@@ -21,8 +21,8 @@
 ### 必須事項
 
 1. rumdl 0.3.2 の `Config` 型とファイル読み込み API を調査する。
-2. 安全に配線できるなら `config_file` / `rule_config` を反映する。
-3. 危険／不能なら「未対応」を明文化する（例: 任意ファイル読み込みのリスク）。
+2. `rule_config` は安全に配線できるため実装する（MDxxx キーと JSON object のみ、已知的ルールのみ）。
+3. `config_file` は rumdl の `extends` が任意パス／環境変数へ脱出できるため未対応とし、ADR に明文化する。
 4. 既存の 213 テスト（native）+ wasm 3、E2E 228 項目を壊さない。
 
 ## Acceptance criteria
