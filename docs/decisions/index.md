@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 96 件）。
+openrustbooks の ADR 一覧（全 98 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -194,3 +194,7 @@ openrustbooks の ADR 一覧（全 96 件）。
   - status: accepted — 保存データ 0 件のエクスポート経路と文字縮小操作を E2E で検証し、空ファイル生成を防ぐ決定を記録する。
 - [ADR-0096: Desktop AppState の状態遷移テスト](0096-appstate-tests.md)
   - status: accepted — desktop の AppState に Tauri ランタイム不要の状態遷移テストを追加する決定を記録する。
+- [ADR-0097: ローカルストレージのパス封じ込め](0097-path-containment.md)
+  - status: accepted — LocalStorage::resolve_path を fail-closed 化し、root 外へのパス脱出を拒否する決定を記録する。
+- [ADR-0098: 秘密情報の露出緩和](0098-secret-exposure-mitigation.md)
+  - status: accepted — API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。

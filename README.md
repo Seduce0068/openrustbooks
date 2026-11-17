@@ -282,6 +282,10 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 保存データ 0 件のエクスポート経路と文字縮小操作を E2E で検証し、空ファイル生成を防ぐ決定を記録する。
 - [0096-appstate-tests](docs/decisions/0096-appstate-tests.md)
   - desktop の AppState に Tauri ランタイム不要の状態遷移テストを追加する決定を記録する。
+- [0097-path-containment](docs/decisions/0097-path-containment.md)
+  - LocalStorage::resolve_path を fail-closed 化し、root 外へのパス脱出を拒否する決定を記録する。
+- [0098-secret-exposure-mitigation](docs/decisions/0098-secret-exposure-mitigation.md)
+  - API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。
 
 ## ライセンス
 
