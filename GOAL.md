@@ -1,38 +1,38 @@
 # Goal
 
-エクスポート JSON のダウンロード名にタイムスタンプを付与する。
+エクスポート名のタイムスタンプにタイムゾーン偏移を付与する。
 
 ## Scope
 
 ### 背景
 
-エクスポートのダウンロード名が `openrustbooks-positions.json` 固定のため、
-同じブラウザで再度エクスポートすると `openrustbooks-positions (1).json` のように
-ブラウザが連番を付け、どれが最新か分かりにくい。タイムスタンプを付けて
-バックアップの識別を容易にする。
+ADR-0069 の未決定「ファイル名へのタイムゾーン明示」。
+現在の `openrustbooks-YYYYMMDD-HHMMSS.json` はローカル時刻だが、どの
+タイムゾーンの時刻か分からない。偏移を付けると、異なるタイムゾーンの
+端末間でバックアップを扱うときに順序を正しく判断できる。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（ダウンロード名の生成）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0069-timestamped-export-filename.md`: 追加
+- `web/src/lib.rs`: 変更（ファイル名への偏移付与）
+- `tools/verify-web-reader.py`: 変更（E2E 検証を更新）
+- `docs/decisions/0070-export-filename-timezone.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
 1. ファイル名:
-   - ダウンロード名を `openrustbooks-YYYYMMDD-HHMMSS.json` にする
-     （ローカルタイムゾーン）。
-   - 秒まで含め、同じ秒に 2 回エクスポートした場合のみブラウザの連番に任せる。
+   - `openrustbooks-YYYYMMDD-HHMMSS+HHMM.json` 形式にする
+     （例: `openrustbooks-20261117-093500+0900.json`）。
+   - 偏移は `Date.getTimezoneOffset()` の符号を反転させた値（分）を
+     `HHMM` に変換する。UTC は `+0000`。
 2. 既存の挙動を変えない:
-   - JSON の中身（version / positions / settings / history）は変えない。
-   - 既存の 125 テスト、E2E 197 項目を変えない。
+   - JSON の中身は変えない。
+   - 既存の 125 テスト、E2E 198 項目を壊さない（ファイル名形式の検証は更新する）。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - ダウンロードされたファイル名が `openrustbooks-` で始まり
-    `8桁の日付-6桁の時刻.json` の形式である。
+  - エクスポート名が `openrustbooks-\d{8}-\d{6}[+-]\d{4}\.json` 形式である。
 
 ## Acceptance criteria
 
