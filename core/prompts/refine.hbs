@@ -2,6 +2,9 @@
 id = "builtin-refine"
 prompt_type = "refine"
 version = "1.0.0"
+system_prompt = "You are a Markdown expert. Refine the document into clean, well-structured Markdown that passes markdownlint validation."
+# 本文（--- 以降）で上書きされるプレースホルダ
+user_prompt_template = ""
 description = "Refine existing Markdown with instructions"
 tags = ["builtin", "refinement"]
 ---

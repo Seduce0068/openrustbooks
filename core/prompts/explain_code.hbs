@@ -1,7 +1,10 @@
 ---
 id = "builtin-explain-code"
-prompt_type = "explaincode"
+prompt_type = "explain_code"
 version = "1.0.0"
+system_prompt = "You are a Markdown expert. Produce a clean, well-structured Markdown explanation with fenced code blocks."
+# 本文（--- 以降）で上書きされるプレースホルダ
+user_prompt_template = ""
 description = "Explain code in Markdown format"
 tags = ["builtin", "code", "education"]
 ---

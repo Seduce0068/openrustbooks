@@ -282,3 +282,82 @@ pub fn global_registry() -> &'static PromptRegistry {
         loaded.expect("Failed to load prompt registry")
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_TYPES: [PromptType; 7] = [
+        PromptType::Generate,
+        PromptType::Refine,
+        PromptType::Table,
+        PromptType::FrontMatter,
+        PromptType::Summarize,
+        PromptType::Translate,
+        PromptType::ExplainCode,
+    ];
+
+    #[test]
+    fn builtins_register_all_prompt_types() {
+        let registry = PromptRegistry::with_builtins().expect("組み込みテンプレートは読み込める");
+        for prompt_type in ALL_TYPES {
+            assert!(
+                registry.get_template(prompt_type).is_some(),
+                "{prompt_type:?} が登録されていない"
+            );
+        }
+        assert_eq!(registry.list_templates().len(), ALL_TYPES.len());
+    }
+
+    #[test]
+    fn builtin_system_prompts_are_not_empty() {
+        let registry = PromptRegistry::with_builtins().expect("組み込みテンプレートは読み込める");
+        for prompt_type in ALL_TYPES {
+            let template = registry
+                .get_template(prompt_type)
+                .expect("テンプレートは登録済み");
+            assert!(
+                !template.system_prompt.trim().is_empty(),
+                "{prompt_type:?} の system_prompt が空"
+            );
+        }
+    }
+
+    #[test]
+    fn render_starts_with_system_prompt() {
+        let registry = PromptRegistry::with_builtins().expect("組み込みテンプレートは読み込める");
+        for prompt_type in ALL_TYPES {
+            let rendered = registry
+                .render(prompt_type, PromptVariables::default())
+                .expect("描画できる");
+            let system_prompt = &registry
+                .get_template(prompt_type)
+                .expect("テンプレートは登録済み")
+                .system_prompt;
+            assert!(
+                rendered.starts_with(system_prompt),
+                "{prompt_type:?} の出力先頭に system_prompt がない"
+            );
+            assert_eq!(
+                rendered.matches(system_prompt).count(),
+                1,
+                "{prompt_type:?} の system_prompt が重複している"
+            );
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn service_new_succeeds_with_ai_enabled() {
+        use crate::ai_markdown::AiMarkdownService;
+        use crate::config::AppConfig;
+
+        let mut config = AppConfig::default();
+        config.ai.enabled = true;
+        // Ollama は初期化時に HTTP 要求を行わず、ローカル設定だけで生成できる。
+        config.ai.default_provider = "ollama".to_string();
+        AiMarkdownService::new(&config)
+            .await
+            .expect("AI 有効設定でサービスを初期化できる");
+    }
+}

@@ -1,7 +1,10 @@
 ---
 id = "builtin-frontmatter"
-prompt_type = "frontmatter"
+prompt_type = "front_matter"
 version = "1.0.0"
+system_prompt = "You are a Markdown expert. Produce clean YAML front matter and well-structured Markdown that passes validation."
+# 本文（--- 以降）で上書きされるプレースホルダ
+user_prompt_template = ""
 description = "Generate YAML front matter for document"
 tags = ["builtin", "frontmatter", "metadata"]
 ---
