@@ -2787,6 +2787,17 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let font_larger_disabled = Memo::new(move |_| font_scale.get() + 1 >= FONT_SCALES.len());
 
     // キーボード操作。フォーカスが入力欄にあるときは無視する。
+    // ショートカット一覧ダイアログ（? キーとボタンから開く）。
+    let help_dialog: NodeRef<leptos::html::Dialog> = NodeRef::new();
+    let open_help = move || {
+        if let Some(dialog) = help_dialog.get() {
+            let _ = dialog.show_modal();
+        }
+    };
+    let on_help_click = {
+        let open = open_help;
+        move |_: web_sys::MouseEvent| open()
+    };
     let key_handler = {
         let prev_action = Rc::clone(&prev_action);
         let next_action = Rc::clone(&next_action);
@@ -2795,6 +2806,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let font_smaller_action = Rc::clone(&font_smaller_action);
         let font_larger_action = Rc::clone(&font_larger_action);
         let dark_action = Rc::clone(&dark_action);
+        let help_dialog = help_dialog;
         move |event: web_sys::KeyboardEvent| {
             // Ctrl / Meta 併用はブラウザのショートカットを奪わない。
             if event.ctrl_key() || event.meta_key() {
@@ -2844,6 +2856,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     forward_action();
                     true
                 }
+                "?" => {
+                    if let Some(dialog) = help_dialog.get() {
+                        let _ = dialog.show_modal();
+                    }
+                    true
+                }
                 _ => false,
             };
             if handled {
@@ -2891,6 +2909,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <input id="reader-jpeg-quality" class="reader-chapter-select" type="number" min="50" max="100" aria-label="JPEG quality" title="JPEG quality (%)" on:change=on_jpeg_quality_change style="max-width: 6rem;" prop:value=move || jpeg_quality.get().to_string()/>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
                 <button id="reader-reset-settings" class="btn" title="Reset display settings" aria-label="Reset display settings" on:click=on_reset_settings>"Reset settings"</button>
+                <button id="reader-help" class="btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" aria-keyshortcuts="?" on:click=on_help_click>"?"</button>
                 <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
                 <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>
                 <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" on:change=on_import_change/>
@@ -2973,6 +2992,22 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <div class="dialog-actions">
                     <button type="button" class="btn" autofocus on:click=on_cancel_delete>"Cancel"</button>
                     <button type="button" class="btn btn-danger" id="reader-delete-confirm" on:click=on_confirm_delete>"Delete"</button>
+                </div>
+            </dialog>
+            // キーボードショートカットの一覧。
+            <dialog id="reader-help-dialog" node_ref=help_dialog aria-labelledby="reader-help-title">
+                <h2 id="reader-help-title">"Keyboard shortcuts"</h2>
+                <ul class="shortcut-list">
+                    <li><kbd>"["</kbd> " / " <kbd>"]"</kbd> " — Previous / next chapter"</li>
+                    <li><kbd>"+"</kbd> " / " <kbd>"-"</kbd> " — Larger / smaller text"</li>
+                    <li><kbd>"d"</kbd> " — Toggle dark mode"</li>
+                    <li><kbd>"Alt+←"</kbd> " / " <kbd>"Alt+→"</kbd> " — Back / forward"</li>
+                    <li><kbd>"?"</kbd> " — Show this help"</li>
+                </ul>
+                <div class="dialog-actions">
+                    <button type="button" class="btn" autofocus on:click=move |_| {
+                        if let Some(dialog) = help_dialog.get() { dialog.close(); }
+                    }>"Close"</button>
                 </div>
             </dialog>
             <div class="reader-body">
