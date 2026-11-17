@@ -52,8 +52,11 @@ ADR-0071 の未決定「JPEG の再エンコード品質（quality）の最適�
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- JPEG 品質の設定化: ADR-0073 で `jpegQuality`（既定 85、範囲 50〜100）として実装。
+
 ## 未決定
 
-- JPEG 品質を利用者が設定で変更できるようにするか。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。

@@ -52,8 +52,12 @@ ADR-0067 の未決定「縮小後の画質比較と、JPEG 再エンコードの
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- JPEG の再エンコード品質の最適値: ADR-0072 で 0.85 に決定し、
+  ADR-0073 で利用者が設定から変更できるようにした。
+
 ## 未決定
 
-- JPEG の再エンコード品質（quality）の最適値。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。

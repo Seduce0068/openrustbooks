@@ -53,8 +53,12 @@ ADR-0069 の未決定「ファイル名へのタイムゾーン明示」。
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- 夏時間の境界における偏移の扱い: `Date.getTimezoneOffset()` がその時点の
+  偏移を自動で返すため、追加処理は不要（本 ADR の決定時に確認済み）。
+
 ## 未決定
 
-- 夏時間の境界における偏移の扱い（Date API が自動で判定するため追加処理は不要）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
