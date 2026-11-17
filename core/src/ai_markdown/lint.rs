@@ -2,14 +2,16 @@
 
 use crate::{CoreError, CoreResult, config::LintConfig};
 use rumdl_lib::{
-    config::{Config, MarkdownFlavor},
+    config::{Config, MarkdownFlavor, RuleConfig},
     document_run::DocumentRun,
     fix_coordinator::FixResult,
     lint,
     rule::Rule,
     rule::{LintError, LintWarning, Severity},
+    rules::{all_rules, create_rule_by_name},
 };
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 
 /// Lint issue found in markdown
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,16 +59,69 @@ pub struct MarkdownLinter {
     warnings_as_errors: bool,
 }
 
+/// `LintConfig.rule_config` を rumdl の `Config.rules` へ変換する。
+/// 不正なキー・値は黙視せず Validation として拒否する（fail-closed）。
+fn build_rumdl_config(rule_config: &HashMap<String, serde_json::Value>) -> CoreResult<Config> {
+    let mut config = Config::default();
+
+    for (id, value) in rule_config {
+        // キーは大文字 MD + 3桁のみ許可
+        let valid_id = id.len() == 5
+            && id.starts_with("MD")
+            && id.as_bytes()[2..].iter().all(u8::is_ascii_digit);
+        if !valid_id {
+            return Err(CoreError::validation(format!(
+                "不正な lint ルール ID: {id}"
+            )));
+        }
+
+        // rumdl のルールレジストリに存在する ID のみ許可
+        if create_rule_by_name(id, &config).is_none() {
+            return Err(CoreError::validation(format!(
+                "未知の lint ルール ID: {id}"
+            )));
+        }
+
+        let serde_json::Value::Object(entries) = value else {
+            return Err(CoreError::validation(format!(
+                "lint ルール {id} の設定は object であること"
+            )));
+        };
+
+        // JSON 値を TOML 値へ変換。変換できない値は拒否する
+        let mut values = BTreeMap::new();
+        for (name, raw) in entries {
+            let parsed: toml::Value = serde_json::from_value(raw.clone()).map_err(|err| {
+                CoreError::validation(format!(
+                    "lint ルール {id} の設定値 {name} が不正です: {err}"
+                ))
+            })?;
+            values.insert(name.clone(), parsed);
+        }
+
+        config.rules.insert(
+            id.clone(),
+            RuleConfig {
+                severity: None,
+                values,
+            },
+        );
+    }
+
+    Ok(config)
+}
+
 impl MarkdownLinter {
     /// Create a new linter with configuration
     pub fn new(config: &LintConfig) -> CoreResult<Self> {
         let mut rules: Vec<Box<dyn Rule>> = Vec::new();
 
-        // Load all built-in rules - need a default config
-        let rumdl_config = Config::default();
-        let all_rules = rumdl_lib::rules::all_rules(&rumdl_config);
+        // rule_config を反映した設定をルール生成時と lint/fix 時の両方で共有する
+        let rumdl_config = build_rumdl_config(&config.rule_config)?;
+        let all_rules = all_rules(&rumdl_config);
 
-        // Filter rules based on config
+        // enable/disable フィルタが最終判定。rule_config はルール生成時のパラメータであり、
+        // フィルタで除外されたルールを復活させない（競合時はフィルタが優先）。
         for rule in all_rules {
             let rule_name = rule.name();
             let rule_id = rule_id_from_name(rule_name);
@@ -276,6 +331,145 @@ mod tests {
             ..Default::default()
         };
         MarkdownLinter::new(&config).expect("linter should build")
+    }
+
+    fn linter_with_rule_config(
+        rule_config: HashMap<String, serde_json::Value>,
+    ) -> CoreResult<MarkdownLinter> {
+        MarkdownLinter::new(&LintConfig {
+            rule_config,
+            ..Default::default()
+        })
+    }
+
+    #[test]
+    fn rule_config_valid_key_is_stored_in_rules() {
+        let rule_config = [(
+            "MD013".to_string(),
+            serde_json::json!({ "line_length": 100 }),
+        )]
+        .into_iter()
+        .collect();
+        let linter = linter_with_rule_config(rule_config).expect("有効な設定は受理されること");
+
+        let rule = linter
+            .config
+            .rules
+            .get("MD013")
+            .expect("MD013 が rules に入ること");
+        assert!(rule.severity.is_none(), "severity は上書きしないこと");
+        assert_eq!(
+            rule.values.get("line_length"),
+            Some(&toml::Value::Integer(100)),
+            "line_length が toml::Value として保持されること"
+        );
+    }
+
+    #[test]
+    fn rule_config_line_length_is_applied_to_generated_rule() {
+        let long_line = "word ".repeat(19);
+        let content = format!("# Title\n\n{}\n", long_line.trim_end());
+
+        let without_override = MarkdownLinter::new(&LintConfig {
+            disable_rules: vec![],
+            ..Default::default()
+        })
+        .expect("linter should build");
+        assert!(
+            without_override
+                .lint(&content)
+                .expect("lint should succeed")
+                .iter()
+                .any(|i| i.rule == "MD013"),
+            "上書きなしの既定 80 文字では MD013 が出ること"
+        );
+
+        let rule_config = [(
+            "MD013".to_string(),
+            serde_json::json!({ "line_length": 100 }),
+        )]
+        .into_iter()
+        .collect();
+        let with_override = MarkdownLinter::new(&LintConfig {
+            disable_rules: vec![],
+            rule_config,
+            ..Default::default()
+        })
+        .expect("linter should build");
+        assert!(
+            !with_override
+                .lint(&content)
+                .expect("lint should succeed")
+                .iter()
+                .any(|i| i.rule == "MD013"),
+            "line_length=100 なら 94 文字行で MD013 が出ないこと"
+        );
+    }
+
+    #[test]
+    fn rule_config_rejects_invalid_keys() {
+        // MD999 は書式上正しいが rumdl の既知ルールではない
+        for id in ["BOGUS", "md013", "MD13", "MD0134", "MD999"] {
+            let rule_config = [(id.to_string(), serde_json::json!({}))]
+                .into_iter()
+                .collect();
+            assert!(
+                matches!(
+                    linter_with_rule_config(rule_config),
+                    Err(CoreError::Validation(_))
+                ),
+                "{id} は拒否されること"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_config_rejects_non_object_value() {
+        for value in [
+            serde_json::json!(100),
+            serde_json::json!("MD013"),
+            serde_json::json!(null),
+            serde_json::json!([1, 2]),
+        ] {
+            let label = value.to_string();
+            let rule_config = [("MD013".to_string(), value)].into_iter().collect();
+            assert!(
+                matches!(
+                    linter_with_rule_config(rule_config),
+                    Err(CoreError::Validation(_))
+                ),
+                "object 以外の値は拒否されること: {label}"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_config_rejects_unconvertible_value() {
+        // JSON null は toml::Value に変換できない
+        let rule_config = [(
+            "MD013".to_string(),
+            serde_json::json!({ "line_length": null }),
+        )]
+        .into_iter()
+        .collect();
+        assert!(matches!(
+            linter_with_rule_config(rule_config),
+            Err(CoreError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn default_rule_config_keeps_existing_lint_behavior() {
+        let linter = linter();
+        assert!(
+            linter.config.rules.is_empty(),
+            "既定の rule_config は空であること"
+        );
+        let issues = linter.lint(DIRTY).expect("lint should succeed");
+        assert!(
+            issues.iter().any(|i| i.rule == "MD009"),
+            "既定設定でも MD009 が検出されること"
+        );
     }
 
     fn issue(severity: LintSeverity) -> LintIssue {
