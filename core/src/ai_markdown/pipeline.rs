@@ -7,6 +7,11 @@ use crate::ai_markdown::{
 use crate::{CoreError, CoreResult, config::AppConfig};
 use std::sync::Arc;
 
+/// リトライ回数を 0..=10 にクランプする（呼び出し増と +1 のオーバーフローを防ぐ）。
+pub(crate) fn clamp_max_retries(value: usize) -> usize {
+    value.min(10)
+}
+
 /// High-level service for AI Markdown operations
 pub struct AiMarkdownService {
     pipeline: Arc<AiMarkdownPipeline>,
@@ -24,7 +29,7 @@ impl AiMarkdownService {
     /// Create a new service from app configuration
     pub async fn new(config: &AppConfig) -> CoreResult<Self> {
         let pipeline_config = PipelineConfig {
-            max_retries: config.ai.max_retries,
+            max_retries: clamp_max_retries(config.ai.max_retries),
             auto_fix: config.lint.auto_fix,
             show_diff: true,
             token_limit: config.ai.max_tokens_per_request,
@@ -275,5 +280,35 @@ impl AiMarkdownExt for Arc<AiMarkdownService> {
 impl AiMarkdownExt for &Arc<AiMarkdownService> {
     fn ai(&self) -> AiOperationBuilder {
         AiOperationBuilder::new((*self).clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_max_retries;
+
+    #[test]
+    fn clamp_zero_stays_zero() {
+        assert_eq!(clamp_max_retries(0), 0);
+    }
+
+    #[test]
+    fn clamp_three_stays_three() {
+        assert_eq!(clamp_max_retries(3), 3);
+    }
+
+    #[test]
+    fn clamp_five_stays_five() {
+        assert_eq!(clamp_max_retries(5), 5);
+    }
+
+    #[test]
+    fn clamp_eleven_becomes_ten() {
+        assert_eq!(clamp_max_retries(11), 10);
+    }
+
+    #[test]
+    fn clamp_usize_max_becomes_ten() {
+        assert_eq!(clamp_max_retries(usize::MAX), 10);
     }
 }
