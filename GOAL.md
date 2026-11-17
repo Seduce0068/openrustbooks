@@ -1,38 +1,40 @@
 # Goal
 
-エクスポート名のタイムスタンプにタイムゾーン偏移を付与する。
+画像縮小時に元画像の MIME タイプを保持する。
 
 ## Scope
 
 ### 背景
 
-ADR-0069 の未決定「ファイル名へのタイムゾーン明示」。
-現在の `openrustbooks-YYYYMMDD-HHMMSS.json` はローカル時刻だが、どの
-タイムゾーンの時刻か分からない。偏移を付けると、異なるタイムゾーンの
-端末間でバックアップを扱うときに順序を正しく判断できる。
+ADR-0067 の未決定「縮小後の画質比較と、JPEG 再エンコードの選択」。
+現在は `canvas.to_blob()` の既定（PNG）で再エンコードしているため、
+JPEG の写真画像でも PNG になり、ファイルサイズが増えることがある。
+また、GIF のアニメーション情報は失われる（縮小自体が静止化するため
+既知の制約）。元の MIME を保持し、JPEG/PNG/WebP は同じ形式で再エンコードする。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（ファイル名への偏移付与）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を更新）
-- `docs/decisions/0070-export-filename-timezone.md`: 追加
+- `web/src/lib.rs`: 変更（元 Blob の MIME 取得と `to_blob_with_type` 使用）
+- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
+- `docs/decisions/0071-downscale-mime-preservation.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. ファイル名:
-   - `openrustbooks-YYYYMMDD-HHMMSS+HHMM.json` 形式にする
-     （例: `openrustbooks-20261117-093500+0900.json`）。
-   - 偏移は `Date.getTimezoneOffset()` の符号を反転させた値（分）を
-     `HHMM` に変換する。UTC は `+0000`。
+1. MIME 保持:
+   - 縮小前に元画像の `src`（Blob URL）を `fetch` して Blob の `type` を取得する。
+   - 取得した MIME が `image/jpeg` / `image/png` / `image/webp` のいずれかなら
+     `canvas.to_blob_with_type()` で同じ形式に再エンコードする。
+   - それ以外（GIF 等）は従来どおり既定（PNG）を使う。
+   - MIME 取得に失敗した場合も既定（PNG）にフォールバックする（fail-safe）。
 2. 既存の挙動を変えない:
-   - JSON の中身は変えない。
-   - 既存の 125 テスト、E2E 198 項目を壊さない（ファイル名形式の検証は更新する）。
+   - 縮小機能は既定オフ（ADR-0067）のまま。
+   - 既存の 125 テスト、E2E 198 項目を変えない。
 
 ### 必須テスト
 
 - `tools/verify-web-reader.py` に追加する。
-  - エクスポート名が `openrustbooks-\d{8}-\d{6}[+-]\d{4}\.json` 形式である。
+  - 縮小後の画像 Blob の MIME が元画像と同じである（JPEG の場合）。
 
 ## Acceptance criteria
 
@@ -43,5 +45,7 @@ ADR-0069 の未決定「ファイル名へのタイムゾーン明示」。
 
 - 新規依存を追加しない。
 - `desktop/` を変更しない。
+- プロダクションコードで `unwrap()` / `expect()` / `panic!` / `todo!` を
+  使わない。`unsafe` を使わない。
 - コメントと doc コメントは日本語で簡潔に書く。
 - `master` へ push する。force push はしない。
