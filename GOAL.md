@@ -1,30 +1,32 @@
 # Goal
 
-ADR-0044 の未決定（XML 処理命令）を ADR-0045 の解決結果へ更新する（todo.md R5-adr#2）。
+残存する `__prune_*` デバッグコードを削除する（todo.md B10 / C08 の一部）。
 
 ## Scope
 
 ### 背景
 
-ADR-0044 の「未決定」に XML 処理命令（`<?xml-stylesheet?>`）の扱いが残っているが、
-ADR-0045 で `PROCESSING_INSTRUCTION_NODE` の削除を決定・実装した。
+`web/src/lib.rs` の `prune_positions()` に `__prune_before` / `__prune_after` を
+`window` へ書き込むデバッグコードが残っている。E2E からは参照されておらず、
+本番コードに不要な副作用（グローバルへの書き込み）がある。
 
 ### 成果物
 
-- `docs/decisions/0044-svg-external-references.md`: 変更
+- `web/src/lib.rs`: 変更（デバッグコード削除）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. XML 処理命令の項目を「未決定」から「解決済み」へ移し、ADR-0045 を参照する。
-2. 他の未決定（CSS `url()`、遅延読み込み、EPUB 内 CSS 等）は維持する。
-3. コードは変更しない。
+1. `__prune_before` / `__prune_after` の書き込みを削除する。
+2. 掃除ロジック本体（`prune_positions()` の動作）は変更しない。
+3. 既存の 126 テスト、E2E 220 項目を変えない。
 
 ## Acceptance criteria
 
-- markdownlint が通る。
+- 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- コードを変更しない。
+- 新規依存を追加しない。
+- `desktop/` を変更しない。
 - `master` へ push する。force push はしない。
