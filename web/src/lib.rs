@@ -362,6 +362,8 @@ struct PositionApplyCtx {
     downscale_images: bool,
     /// 生成した Blob URL の管理リスト。
     object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>,
+    /// 縮小 JPEG の品質（パーセント）。
+    jpeg_quality: usize,
 }
 
 /// エクスポートのダウンロード名をローカル時刻のタイムスタンプ付きで作る。
@@ -408,7 +410,10 @@ async fn fetch_blob_type(url: &str) -> Option<String> {
 /// もの）だけを対象にする。狭い画像を縮小すると表示サイズが変わり、
 /// スクロール位置補正が壊れるため除外する。
 #[cfg(target_arch = "wasm32")]
-async fn downscale_large_images(object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+async fn downscale_large_images(
+    object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>,
+    jpeg_quality: usize,
+) {
     const DOWNSCALE_THRESHOLD: u32 = 4000;
     const MIN_MAX_DIMENSION: u32 = 2000;
     let Some(window) = web_sys::window() else {
@@ -499,7 +504,7 @@ async fn downscale_large_images(object_urls: std::rc::Rc<std::cell::RefCell<Vec<
                 if js_sys::Reflect::set(
                     &options,
                     &JsValue::from_str("quality"),
-                    &JsValue::from_f64(0.85),
+                    &JsValue::from_f64(jpeg_quality as f64 / 100.0),
                 )
                 .is_ok()
                 {
@@ -629,8 +634,9 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         }
         if ctx.downscale_images {
             let urls = std::rc::Rc::clone(&ctx.object_urls);
+            let quality = ctx.jpeg_quality;
             wasm_bindgen_futures::spawn_local(async move {
-                downscale_large_images(urls).await;
+                downscale_large_images(urls, quality).await;
             });
         }
         ctx.last_apply_time.set(now_millis());
@@ -1088,6 +1094,14 @@ struct ReaderSettings {
     /// 巨大画像を Canvas で縮小するか（既定オフ）。
     #[serde(rename = "downscaleImages", default)]
     downscale_images: bool,
+    /// 縮小 JPEG の品質（パーセント）。既定 85、範囲 50〜100。
+    #[serde(rename = "jpegQuality", default = "default_jpeg_quality")]
+    jpeg_quality: usize,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn default_jpeg_quality() -> usize {
+    85
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1121,6 +1135,7 @@ impl Default for ReaderSettings {
             swipe_threshold: 50,
             vertical_scroll_threshold: 30,
             downscale_images: false,
+            jpeg_quality: 85,
         }
     }
 }
@@ -1145,6 +1160,7 @@ impl ReaderSettings {
             swipe_threshold: self.swipe_threshold.clamp(30, 120),
             vertical_scroll_threshold: self.vertical_scroll_threshold.clamp(10, 80),
             downscale_images: self.downscale_images,
+            jpeg_quality: self.jpeg_quality.clamp(50, 100),
         }
     }
 }
@@ -1458,6 +1474,11 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
                 .get("downscaleImages")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            jpeg_quality: settings
+                .get("jpegQuality")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or_else(|| load_settings().jpeg_quality),
         }
         .normalized();
         save_settings(&merged);
@@ -1678,6 +1699,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (vertical_scroll_threshold, set_vertical_scroll_threshold) =
         signal(initial_settings.vertical_scroll_threshold);
     let (downscale_images, set_downscale_images) = signal(initial_settings.downscale_images);
+    let (jpeg_quality, set_jpeg_quality) = signal(initial_settings.jpeg_quality);
     // OS の prefers-color-scheme の現在値。OS 側の変更で更新する。
     let (system_dark, set_system_dark) = signal(system_prefers_dark());
     // 実際に適用するダーク表示。follow_system が true なら OS の設定に追従する。
@@ -1791,6 +1813,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }),
                         downscale_images: downscale_images.get(),
                         object_urls: Rc::clone(&object_urls),
+                        jpeg_quality: jpeg_quality.get(),
                     });
                 }
                 Err(error) => set_status.set(error),
@@ -2585,6 +2608,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             swipe_threshold: swipe_threshold.get(),
             vertical_scroll_threshold: vertical_scroll_threshold.get(),
             downscale_images: downscale_images.get(),
+            jpeg_quality: jpeg_quality.get(),
         });
     });
     let font_smaller_action: Rc<dyn Fn()> = {
@@ -2675,6 +2699,20 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let action = Rc::clone(&dark_auto_action);
         move |_: web_sys::MouseEvent| action()
     };
+    let on_jpeg_quality_change = {
+        let persist = Rc::clone(&persist_settings);
+        move |event: web_sys::Event| {
+            let Some(input) = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
+            else {
+                return;
+            };
+            let value = input.value().parse::<usize>().unwrap_or(85).clamp(50, 100);
+            set_jpeg_quality.set(value);
+            persist();
+        }
+    };
     let on_downscale_toggle = {
         let persist = Rc::clone(&persist_settings);
         move |_: web_sys::MouseEvent| {
@@ -2690,6 +2728,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         set_swipe_threshold.set(50);
         set_vertical_scroll_threshold.set(30);
         set_downscale_images.set(false);
+        set_jpeg_quality.set(85);
         save_settings(&ReaderSettings::default());
         set_status.set("Display settings reset.".to_string());
     };
@@ -2849,6 +2888,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
                 <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
                 <button id="reader-downscale" class="btn" title="Downscale oversized images" aria-label="Downscale oversized images" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "Downscale:on" } else { "Downscale:off" }}</button>
+                <input id="reader-jpeg-quality" class="reader-chapter-select" type="number" min="50" max="100" aria-label="JPEG quality" title="JPEG quality (%)" on:change=on_jpeg_quality_change style="max-width: 6rem;" prop:value=move || jpeg_quality.get().to_string()/>
                 <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
                 <button id="reader-reset-settings" class="btn" title="Reset display settings" aria-label="Reset display settings" on:click=on_reset_settings>"Reset settings"</button>
                 <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
