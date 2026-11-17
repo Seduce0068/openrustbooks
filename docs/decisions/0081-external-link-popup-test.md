@@ -53,8 +53,12 @@ ADR-0080 では外部リンクの href と `rel="noopener noreferrer"` を検証
 - 6 ゲート（fmt / check / test / clippy / wasm32 × 2）と `trunk build` が成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 解決済み
+
+- `mailto:` リンクのクリック動作の検証: ADR-0082 で href の保持と
+  `window.open` の引数（`_blank` / `noopener,noreferrer`）を確認した。
+
 ## 未決定
 
-- `mailto:` リンクのクリック動作の検証。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
