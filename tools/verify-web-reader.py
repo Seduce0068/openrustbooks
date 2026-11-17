@@ -2549,6 +2549,86 @@ async def run_checks(cdp: Cdp) -> int:
             f"(status={remote_status!r})",
         )
 
+    # オプトインの画像縮小。幅が本文より大きい 4500x100 の画像を使う。
+    checker.check(
+        "画像縮小トグルが存在する",
+        await cdp.evaluate("document.querySelector('#reader-downscale') !== null"),
+    )
+    wide_ch2 = CH2.replace(
+        '<img id="tall" src="images/tall.png" alt="tall"/>',
+        '<img id="wide" src="images/wide.png" alt="wide"/>',
+    )
+    wide_epub = SAMPLE.parent / "wide.epub"
+    with zipfile.ZipFile(wide_epub, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                   compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", OPF, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/nav.xhtml", NAV, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch2.xhtml", wide_ch2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/wide.png", tall_png(4500, 100), compress_type=zipfile.ZIP_DEFLATED)
+
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id_wide = document["result"]["root"]["nodeId"]
+
+    async def open_wide() -> None:
+        doc = await cdp.send("DOM.getDocument", {"depth": -1})
+        fresh_root = doc["result"]["root"]["nodeId"]
+        node = await cdp.send(
+            "DOM.querySelector", {"nodeId": fresh_root, "selector": "#epub-file"}
+        )
+        if node["result"]["nodeId"] == 0:
+            return
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(wide_epub)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#epub-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+        await select_chapter(cdp, 1)
+        await wait_until(
+            cdp, "document.querySelector('#wide')?.naturalWidth > 0", timeout=10
+        )
+        await asyncio.sleep(1.0)
+
+    # 既定（オフ）では縮小されない。
+    await cdp.evaluate("localStorage.clear()")
+    await reload_reader(cdp)
+    await open_wide()
+    original_width = await cdp.evaluate("document.querySelector('#wide')?.naturalWidth ?? 0")
+    checker.check(
+        "既定では巨大画像が縮小されない",
+        original_width == 4500,
+        f"(naturalWidth={original_width})",
+    )
+
+    # トグルを有効にして再度開く。
+    await cdp.evaluate("document.querySelector('#reader-downscale').click()")
+    await asyncio.sleep(0.3)
+    pressed = await cdp.evaluate(
+        "document.querySelector('#reader-downscale')?.getAttribute('aria-pressed')"
+    )
+    checker.check("画像縮小トグルが有効になる", pressed == "true")
+    await open_wide()
+    await wait_until(
+        cdp, "document.querySelector('#wide')?.naturalWidth <= 2000", timeout=10
+    )
+    resized_width = await cdp.evaluate("document.querySelector('#wide')?.naturalWidth ?? 0")
+    checker.check(
+        "有効時は巨大画像が 2000px 以下に縮小される",
+        0 < resized_width <= 2000,
+        f"(naturalWidth={resized_width})",
+    )
+
     return finish(checker)
 
 
