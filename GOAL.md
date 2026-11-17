@@ -1,39 +1,39 @@
 # Goal
 
-履歴が 1 件のとき localStorage が更新されないバグを修正する（todo.md B09）。
+既知脆弱性のある依存 2 件を修正する（todo.md B03）。
 
 ## Scope
 
 ### 背景
 
-`save_history()` は `history.len() <= 1` のとき早期リターンするため、
-履歴クリア（ADR-0031）や個別削除（ADR-0035）で 1 件になったとき、
-localStorage には古い履歴が残る。再読み込みすると古い履歴が復活する。
+`cargo audit` が次を報告した。
+- ammonia 4.2.4: RUSTSEC-2026-0533（SVG/MathML の mutation XSS）→ 4.2.5 以上
+- pulldown-cmark 0.13.5: RUSTSEC-2026-0433（入れ子 wikilink の二次時間）→ 0.13.6 以上
+
+いずれも既存のバージョン指定（ammonia "4.2.4"、pulldown-cmark "0.13"）の
+セマンティック互換範囲内で修正できる。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（早期リターンを削除し 1 件でも保存）
-- `tools/verify-web-reader.py`: 変更（E2E 検証を追加）
-- `docs/decisions/0085-single-entry-history-save.md`: 追加
+- `Cargo.lock`: 変更（2 クレートのバージョン更新）
+- `docs/decisions/0086-dependency-vulnerability-fix.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `save_history()` から `history.len() <= 1` の早期リターンを削除する。
-2. 履歴が 1 件のときも、当該本の localStorage キーに
-   `{ entries: [現在位置], index: 0 }` を保存する。
-3. `load_history()` は従来どおり 2 件以上のみ復元する
-   （1 件の保存データは次回の現在位置として扱う）。
-4. E2E で、クリア後に localStorage の履歴が 1 件になることを確認する。
-5. 既存の 125 テスト、E2E 219 項目を変えない。
+1. `cargo update -p ammonia --precise 4.2.5` と
+   `cargo update -p pulldown-cmark --precise 0.13.6` で Cargo.lock を更新する。
+2. `cargo audit` で脆弱性 0 件になる（警告は既存）。
+3. 6 ゲートと E2E が通る。
+4. 必要なら `core/Cargo.toml` の下限を更新する（API 変更は想定しない）。
 
 ## Acceptance criteria
 
-- 6 ゲートすべて成功する。
-- E2E が通る。
+- `cargo audit` の vulnerabilities が 0 件。
+- 6 ゲート・E2E が成功する。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- `desktop/` を変更しない。
+- 新規クレートは追加しない（既存依存のバージョン更新のみ）。
+- `desktop/` の設定は変更しない。
 - `master` へ push する。force push はしない。
