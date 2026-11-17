@@ -493,7 +493,25 @@ async fn downscale_large_images(object_urls: std::rc::Rc<std::cell::RefCell<Vec<
         });
         let callback: js_sys::Function = callback.unchecked_into();
         if let Some(mime) = mime {
-            let _ = canvas.to_blob_with_type(&callback, &mime);
+            if mime == "image/jpeg" {
+                // JPEG は品質を明示してブラウザ依存の既定値を避ける。
+                let options = js_sys::Object::new();
+                if js_sys::Reflect::set(
+                    &options,
+                    &JsValue::from_str("quality"),
+                    &JsValue::from_f64(0.85),
+                )
+                .is_ok()
+                {
+                    let _ = canvas.to_blob_with_type_and_encoder_options(
+                        &callback,
+                        &mime,
+                        &JsValue::from(options),
+                    );
+                }
+            } else {
+                let _ = canvas.to_blob_with_type(&callback, &mime);
+            }
         } else {
             let _ = canvas.to_blob(&callback);
         }
