@@ -9,7 +9,6 @@ use openrustbooks_core::config::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{State, command};
 
@@ -21,11 +20,13 @@ fn map_err(e: CoreError) -> String {
 /// Allow-list view of [`AppConfig`] returned to the JS side.
 ///
 /// Secret fields are never serialized; only `has_*` presence flags are sent.
+/// パスを含むフィールド（data_dir / cache_dir / config_file / rule_config /
+/// local_roots[].path / recent_paths）も DTO から除外して JS への開示を防ぐ。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigView {
-    pub general: GeneralConfig,
+    pub general: GeneralConfigView,
     pub ai: AiConfigView,
-    pub lint: LintConfig,
+    pub lint: LintConfigView,
     pub storage: StorageConfigView,
     pub editor: EditorConfig,
     pub reader: ReaderConfig,
@@ -34,9 +35,9 @@ pub struct ConfigView {
 impl From<&AppConfig> for ConfigView {
     fn from(config: &AppConfig) -> Self {
         Self {
-            general: config.general.clone(),
+            general: GeneralConfigView::from(&config.general),
             ai: AiConfigView::from(&config.ai),
-            lint: config.lint.clone(),
+            lint: LintConfigView::from(&config.lint),
             storage: StorageConfigView::from(&config.storage),
             editor: config.editor.clone(),
             reader: config.reader.clone(),
@@ -44,19 +45,40 @@ impl From<&AppConfig> for ConfigView {
     }
 }
 
-/// Allow-list view of [`AiConfig`].
+/// Allow-list view of [`GeneralConfig`]. `data_dir` / `cache_dir` は除外する。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GeneralConfigView {
+    pub language: String,
+    pub theme: String,
+    pub telemetry: bool,
+    pub check_updates: bool,
+    pub log_level: String,
+}
+
+impl From<&GeneralConfig> for GeneralConfigView {
+    fn from(general: &GeneralConfig) -> Self {
+        Self {
+            language: general.language.clone(),
+            theme: general.theme.clone(),
+            telemetry: general.telemetry,
+            check_updates: general.check_updates,
+            log_level: general.log_level.clone(),
+        }
+    }
+}
+
+/// Allow-list view of [`AiConfig`]. `model_overrides` は除外する。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AiConfigView {
     pub enabled: bool,
     pub default_provider: String,
     pub openai: OpenAiConfigView,
-    pub ollama: OllamaConfig,
+    pub ollama: OllamaConfigView,
     pub max_tokens_per_request: usize,
     pub max_tokens_per_month: Option<u64>,
     pub prefer_local: bool,
     pub timeout_secs: u64,
     pub streaming: bool,
-    pub model_overrides: HashMap<String, String>,
 }
 
 impl From<&AiConfig> for AiConfigView {
@@ -65,13 +87,30 @@ impl From<&AiConfig> for AiConfigView {
             enabled: ai.enabled,
             default_provider: ai.default_provider.clone(),
             openai: OpenAiConfigView::from(&ai.openai),
-            ollama: ai.ollama.clone(),
+            ollama: OllamaConfigView::from(&ai.ollama),
             max_tokens_per_request: ai.max_tokens_per_request,
             max_tokens_per_month: ai.max_tokens_per_month,
             prefer_local: ai.prefer_local,
             timeout_secs: ai.timeout_secs,
             streaming: ai.streaming,
-            model_overrides: ai.model_overrides.clone(),
+        }
+    }
+}
+
+/// Allow-list view of [`OllamaConfig`]. `options` は除外する。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OllamaConfigView {
+    pub base_url: String,
+    pub model: String,
+    pub keep_alive_minutes: u32,
+}
+
+impl From<&OllamaConfig> for OllamaConfigView {
+    fn from(ollama: &OllamaConfig) -> Self {
+        Self {
+            base_url: ollama.base_url.clone(),
+            model: ollama.model.clone(),
+            keep_alive_minutes: ollama.keep_alive_minutes,
         }
     }
 }
@@ -99,13 +138,35 @@ impl From<&openrustbooks_core::config::OpenAiConfig> for OpenAiConfigView {
     }
 }
 
+/// Allow-list view of [`LintConfig`]. `config_file` / `rule_config` は除外する。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LintConfigView {
+    pub enabled: bool,
+    pub enable_rules: Vec<String>,
+    pub disable_rules: Vec<String>,
+    pub auto_fix: bool,
+    pub warnings_as_errors: bool,
+}
+
+impl From<&LintConfig> for LintConfigView {
+    fn from(lint: &LintConfig) -> Self {
+        Self {
+            enabled: lint.enabled,
+            enable_rules: lint.enable_rules.clone(),
+            disable_rules: lint.disable_rules.clone(),
+            auto_fix: lint.auto_fix,
+            warnings_as_errors: lint.warnings_as_errors,
+        }
+    }
+}
+
 /// Allow-list view of [`StorageConfig`].
+/// `local_roots[].path` と `recent_paths` は JS に開示しない。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StorageConfigView {
     pub default_backend: String,
-    pub local_roots: Vec<LocalRootConfig>,
+    pub local_roots: Vec<LocalRootView>,
     pub google_drive: Option<GoogleDriveConfigView>,
-    pub recent_paths: Vec<PathBuf>,
     pub max_recent: usize,
 }
 
@@ -113,13 +174,36 @@ impl From<&StorageConfig> for StorageConfigView {
     fn from(storage: &StorageConfig) -> Self {
         Self {
             default_backend: storage.default_backend.clone(),
-            local_roots: storage.local_roots.clone(),
+            local_roots: storage
+                .local_roots
+                .iter()
+                .map(LocalRootView::from)
+                .collect(),
             google_drive: storage
                 .google_drive
                 .as_ref()
                 .map(GoogleDriveConfigView::from),
-            recent_paths: storage.recent_paths.clone(),
             max_recent: storage.max_recent,
+        }
+    }
+}
+
+/// Allow-list view of [`LocalRootConfig`]. `path` は除外する。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LocalRootView {
+    pub id: String,
+    pub name: String,
+    pub read_only: bool,
+    pub watch: bool,
+}
+
+impl From<&LocalRootConfig> for LocalRootView {
+    fn from(root: &LocalRootConfig) -> Self {
+        Self {
+            id: root.id.clone(),
+            name: root.name.clone(),
+            read_only: root.read_only,
+            watch: root.watch,
         }
     }
 }
@@ -194,6 +278,36 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
         }
     }
 
+    // 以下は DTO から除外したフィールド。JS 往復で消えないよう現在値を保持する。
+    // 値は JS に開示されないため、incoming の値に関わらず current を採用する。
+    merged.general.data_dir = current.general.data_dir.clone();
+    merged.general.cache_dir = current.general.cache_dir.clone();
+    merged.lint.config_file = current.lint.config_file.clone();
+    merged.lint.rule_config = current.lint.rule_config.clone();
+    merged.storage.recent_paths = current.storage.recent_paths.clone();
+    merged.ai.ollama.options = current.ai.ollama.options.clone();
+    merged.ai.model_overrides = current.ai.model_overrides.clone();
+
+    // local_roots[].path は id が一意に一致した場合のみ復元する。
+    // id が空／不一致／現在側で重複している場合はマージせず安全にスキップする。
+    for root in &mut merged.storage.local_roots {
+        if root.id.is_empty() {
+            continue;
+        }
+        let mut matches = current
+            .storage
+            .local_roots
+            .iter()
+            .filter(|current_root| current_root.id == root.id);
+        let Some(current_root) = matches.next() else {
+            continue; // 不一致の場合はマージしない
+        };
+        if matches.next().is_some() {
+            continue; // 現在側で id が重複している場合も安全のためスキップ
+        }
+        root.path = current_root.path.clone();
+    }
+
     merged
 }
 
@@ -261,8 +375,11 @@ pub fn update_lint_config(
     state: State<'_, Arc<AppState>>,
     lint_config: LintConfig,
 ) -> Result<(), String> {
-    let mut config = state.config();
-    config.lint = lint_config;
+    let current = state.config();
+    let mut incoming = current.clone();
+    incoming.lint = lint_config;
+    // DTO から除外した config_file / rule_config を消さないようマージを通す。
+    let config = merge_secrets(&current, &incoming);
     state.update_config(config).map_err(map_err)?;
     state.save_config().map_err(map_err)?;
     Ok(())
@@ -282,6 +399,7 @@ pub fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn config_with_secrets() -> AppConfig {
         let mut config = AppConfig::default();
@@ -445,5 +563,226 @@ mod tests {
         let merged = merge_secrets(&current, &incoming);
 
         assert!(merged.storage.google_drive.is_none());
+    }
+
+    /// JSON オブジェクトのキーを再帰的に集める（値の部分文字列との誤検知を避ける）。
+    fn collect_json_keys(value: &serde_json::Value, out: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map {
+                    out.push(key.clone());
+                    collect_json_keys(child, out);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    collect_json_keys(item, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn config_with_paths() -> AppConfig {
+        let mut config = config_with_secrets();
+        config.general.data_dir = Some(PathBuf::from("/secret/data-dir"));
+        config.general.cache_dir = Some(PathBuf::from("/secret/cache-dir"));
+        config.lint.config_file = Some(PathBuf::from("/secret/lint.toml"));
+        config.lint.rule_config.insert(
+            "secret-rule".to_string(),
+            serde_json::json!({"token": "rule-secret-value"}),
+        );
+        config.storage.recent_paths = vec![PathBuf::from("/secret/recent/book.epub")];
+        config.storage.local_roots = vec![
+            LocalRootConfig {
+                id: "root-a".to_string(),
+                name: "A".to_string(),
+                path: PathBuf::from("/secret/root-a"),
+                read_only: false,
+                watch: true,
+            },
+            LocalRootConfig {
+                id: "root-b".to_string(),
+                name: "B".to_string(),
+                path: PathBuf::from("/secret/root-b"),
+                read_only: true,
+                watch: false,
+            },
+        ];
+        config.ai.ollama.options.insert(
+            "secret-opt".to_string(),
+            serde_json::json!("ollama-secret-value"),
+        );
+        config.ai.model_overrides.insert(
+            "secret-model".to_string(),
+            "override-secret-value".to_string(),
+        );
+        config
+    }
+
+    #[test]
+    fn config_view_json_hides_path_bearing_fields() {
+        let json = serde_json::to_string(&ConfigView::from(&config_with_paths())).unwrap();
+
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let mut keys = Vec::new();
+        collect_json_keys(&value, &mut keys);
+        for forbidden in [
+            "data_dir",
+            "cache_dir",
+            "config_file",
+            "rule_config",
+            "recent_paths",
+            "path",
+            "options",
+            "model_overrides",
+        ] {
+            assert!(
+                !keys.iter().any(|key| key == forbidden),
+                "leaked field name as key: {forbidden}"
+            );
+            assert!(
+                !json.contains(&format!("\"{forbidden}\"")),
+                "leaked field name in JSON: {forbidden}"
+            );
+        }
+
+        for secret in [
+            "/secret/data-dir",
+            "/secret/cache-dir",
+            "/secret/lint.toml",
+            "/secret/recent/book.epub",
+            "/secret/root-a",
+            "/secret/root-b",
+            "rule-secret-value",
+            "ollama-secret-value",
+            "override-secret-value",
+        ] {
+            assert!(!json.contains(secret), "leaked value: {secret}");
+        }
+    }
+
+    #[test]
+    fn config_view_keeps_non_path_fields() {
+        let json = serde_json::to_string(&ConfigView::from(&config_with_paths())).unwrap();
+
+        for kept in [
+            "\"language\"",
+            "\"theme\"",
+            "\"telemetry\"",
+            "\"check_updates\"",
+            "\"log_level\"",
+            "\"enable_rules\"",
+            "\"disable_rules\"",
+            "\"auto_fix\"",
+            "\"warnings_as_errors\"",
+            "\"default_backend\"",
+            "\"max_recent\"",
+            "\"keep_alive_minutes\"",
+            "\"id\"",
+            "\"name\"",
+            "\"read_only\"",
+            "\"watch\"",
+            "\"model\"",
+        ] {
+            assert!(json.contains(kept), "missing field: {kept}");
+        }
+    }
+
+    #[test]
+    fn merge_secrets_preserves_hidden_fields() {
+        let current = config_with_paths();
+        // DTO 往復では除外フィールドが既定値／マスク値で返ってくる想定。
+        let mut incoming = AppConfig::default();
+        incoming.storage.google_drive = Some(GoogleDriveConfig {
+            client_id: "dummy-client-id".to_string(),
+            client_secret: String::new(),
+            refresh_token: Some(REDACTED_SECRET.to_string()),
+            root_folder_id: None,
+            use_app_data_folder: true,
+            scopes: vec![],
+        });
+        let merged = merge_secrets(&current, &incoming);
+
+        assert_eq!(merged.general.data_dir, current.general.data_dir);
+        assert_eq!(merged.general.cache_dir, current.general.cache_dir);
+        assert_eq!(merged.lint.config_file, current.lint.config_file);
+        assert_eq!(merged.lint.rule_config, current.lint.rule_config);
+        assert_eq!(merged.storage.recent_paths, current.storage.recent_paths);
+        assert_eq!(merged.ai.ollama.options, current.ai.ollama.options);
+        assert_eq!(merged.ai.model_overrides, current.ai.model_overrides);
+
+        // 既存のシークレット保持も壊れていないこと。
+        assert_eq!(
+            merged.ai.openai.api_key.as_deref(),
+            current.ai.openai.api_key.as_deref()
+        );
+        let drive = merged.storage.google_drive.as_ref().unwrap();
+        let current_drive = current.storage.google_drive.as_ref().unwrap();
+        assert_eq!(drive.client_secret, current_drive.client_secret);
+        assert_eq!(drive.refresh_token, current_drive.refresh_token);
+    }
+
+    #[test]
+    fn merge_secrets_restores_local_root_paths_by_id() {
+        let current = config_with_paths();
+        let mut incoming = current.clone();
+
+        // id が一致すれば path が空でも現在値が復元される。
+        incoming.storage.local_roots[0].path.clear();
+        // 新規 id は現在値がないためマージせず incoming の値を維持する。
+        incoming.storage.local_roots.push(LocalRootConfig {
+            id: "root-new".to_string(),
+            name: "New".to_string(),
+            path: PathBuf::from("/incoming/new"),
+            read_only: false,
+            watch: false,
+        });
+        // id が空のルートもマージ対象外。
+        incoming.storage.local_roots.push(LocalRootConfig {
+            id: String::new(),
+            name: "NoId".to_string(),
+            path: PathBuf::from("/incoming/no-id"),
+            read_only: false,
+            watch: false,
+        });
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert_eq!(
+            merged.storage.local_roots[0].path,
+            PathBuf::from("/secret/root-a")
+        );
+        assert_eq!(
+            merged.storage.local_roots[1].path,
+            PathBuf::from("/secret/root-b")
+        );
+        assert_eq!(
+            merged.storage.local_roots[2].path,
+            PathBuf::from("/incoming/new")
+        );
+        assert_eq!(
+            merged.storage.local_roots[3].path,
+            PathBuf::from("/incoming/no-id")
+        );
+    }
+
+    #[test]
+    fn merge_secrets_skips_ambiguous_local_root_ids() {
+        let mut current = config_with_paths();
+        // 現在側で id が重複した場合は誤マージを避ける。
+        current.storage.local_roots.push(LocalRootConfig {
+            id: "root-a".to_string(),
+            name: "Duplicate".to_string(),
+            path: PathBuf::from("/secret/duplicate"),
+            read_only: false,
+            watch: false,
+        });
+        let mut incoming = current.clone();
+        incoming.storage.local_roots[0].path.clear();
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert!(merged.storage.local_roots[0].path.as_os_str().is_empty());
     }
 }
