@@ -306,6 +306,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0117-wasm-config-alignment](docs/decisions/0117-wasm-config-alignment.md)
 - [0118-pipeline-dead-code](docs/decisions/0118-pipeline-dead-code.md)
 - [0119-wasm-test-runner](docs/decisions/0119-wasm-test-runner.md)
+- [0120-retry-limit](docs/decisions/0120-retry-limit.md)
+  - max_retries を service 境界で 0..=10 にクランプし、暴走とオーバーフローを防ぐ決定を記録する。
   - wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。
   - execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
   - WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
