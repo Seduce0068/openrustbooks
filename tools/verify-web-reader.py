@@ -372,8 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    # 期待 check 総数: checker.check 204 + checker.equal 17 = 221。
-    checker = Checker(expected=221)
+    # 期待 check 総数: checker.check 205 + checker.equal 17 = 222。
+    checker = Checker(expected=222)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -2936,6 +2936,25 @@ async def run_checks(cdp: Cdp) -> int:
         "Content-Security-Policy が設定される",
         "default-src 'self'" in str(csp) and "wasm-unsafe-eval" in str(csp),
         f"(csp={csp!r})",
+    )
+
+    # IME 変換中（isComposing=true）はショートカットが効かない。
+    await cdp.evaluate("document.body.focus()")
+    dark_before_ime = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    await cdp.evaluate(
+        "document.dispatchEvent(new KeyboardEvent('keydown', {"
+        " key: 'd', bubbles: true, cancelable: true, isComposing: true}))"
+    )
+    await asyncio.sleep(0.3)
+    dark_after_ime = await cdp.evaluate(
+        "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
+    )
+    checker.check(
+        "IME 変換中はショートカットが発火しない",
+        dark_before_ime == dark_after_ime,
+        f"(before={dark_before_ime!r}, after={dark_after_ime!r})",
     )
 
     return finish(checker)
