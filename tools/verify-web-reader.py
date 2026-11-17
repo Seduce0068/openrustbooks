@@ -2638,6 +2638,15 @@ async def run_checks(cdp: Cdp) -> int:
         0 < resized_width <= 2000,
         f"(naturalWidth={resized_width})",
     )
+    resized_mime = await cdp.evaluate(
+        "fetch(document.querySelector('#wide').src)"
+        ".then((r) => r.blob()).then((b) => b.type)"
+    )
+    checker.check(
+        "縮小後も元画像の MIME が保持される",
+        resized_mime == "image/png",
+        f"(mime={resized_mime!r})",
+    )
 
     # 表示設定の一括リセット。
     checker.check(
