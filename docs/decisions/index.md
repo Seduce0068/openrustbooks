@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 114 件）。
+openrustbooks の ADR 一覧（全 115 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -230,3 +230,5 @@ openrustbooks の ADR 一覧（全 114 件）。
   - status: accepted — images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
 - [ADR-0114: 期待画像数の算出](0114-expected-image-count.md)
   - status: accepted — expected_images を src を持つ画像の数にし、src 削除画像による無駄な 2 秒待ちを解消する決定を記録する。
+- [ADR-0115: EPUB 内 CSS の適用方針](0115-epub-css-policy.md)
+  - status: accepted — EPUB 内 CSS は現状どおり適用しないことを維持し、将来のオプトイン・スコープ付き段階導入の方針を記録する。

@@ -301,6 +301,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0112-lazy-image-loading](docs/decisions/0112-lazy-image-loading.md)
 - [0113-image-settle-hardening](docs/decisions/0113-image-settle-hardening.md)
 - [0114-expected-image-count](docs/decisions/0114-expected-image-count.md)
+- [0115-epub-css-policy](docs/decisions/0115-epub-css-policy.md)
+  - EPUB 内 CSS は現状どおり適用しないことを維持し、将来のオプトイン・スコープ付き段階導入の方針を記録する。
   - expected_images を src を持つ画像の数にし、src 削除画像による無駄な 2 秒待ちを解消する決定を記録する。
   - images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
   - IntersectionObserver による画像遅延読み込みは全面切替を見送り、寸法予約→段階導入の順で検討する決定を記録する。
