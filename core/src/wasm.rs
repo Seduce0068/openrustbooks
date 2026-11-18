@@ -57,6 +57,18 @@ pub fn render_markdown_wasm(md: &str) -> String {
     crate::render_markdown(md)
 }
 
+/// SVG バイト列をサニタイズする Wasm 公開 API。
+///
+/// 純粋関数 [`crate::sanitize::sanitize_svg_xml`] の薄いラッパー。UTF-8 変換
+/// とサニタイズに失敗した場合は `None`（fail-closed）。`render_markdown_wasm`
+/// と同じく `wasm_bindgen` 属性は wasm32 のときだけ付与し、ネイティブの
+/// `cargo check --all-targets` からも web クレートが参照できるようにする。
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+pub fn sanitize_svg_wasm(bytes: &[u8]) -> Option<Vec<u8>> {
+    let svg = std::str::from_utf8(bytes).ok()?;
+    crate::sanitize::sanitize_svg_xml(svg).map(String::into_bytes)
+}
+
 /// EPUB 読み取り API を JavaScript に公開するラッパー。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]

@@ -10,7 +10,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use ammonia::Builder;
+use ammonia::{Builder, UrlRelative};
 
 use crate::image_dimensions::MAX_DIMENSION;
 
@@ -207,6 +207,288 @@ fn has_url_scheme(value: &str) -> bool {
     };
     first.is_ascii_alphabetic()
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+// --- SVG 専用サニタイザ ---------------------------------------------------
+
+/// SVG の既定名前空間。
+const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
+
+/// 表示を許可する SVG 要素。
+///
+/// html5ever が SVG のタグ名を camelCase に調整するため、
+/// `clipPath` / `linearGradient` / `radialGradient` は camelCase で登録する。
+/// `script` / `foreignObject` / SMIL などは [`SVG_CLEAN_CONTENT_TAGS`] に置き、
+/// ここには入れない（ammonia が重複を assert するため）。
+const SVG_ALLOWED_TAGS: &[&str] = &[
+    "svg",
+    "g",
+    "rect",
+    "circle",
+    "ellipse",
+    "line",
+    "polygon",
+    "polyline",
+    "path",
+    "text",
+    "tspan",
+    "defs",
+    "use",
+    "image",
+    "symbol",
+    "clipPath",
+    "mask",
+    "pattern",
+    "linearGradient",
+    "radialGradient",
+    "stop",
+    "marker",
+    "desc",
+    "view",
+    "switch",
+];
+
+/// 内容ごと削除する要素。
+///
+/// 実行要素・埋め込み要素・SMIL に加え、`title` / `a` も SVG 画像には不要な
+/// ため落とす。html5ever の調整に合わせ camelCase で登録する。
+const SVG_CLEAN_CONTENT_TAGS: &[&str] = &[
+    "script",
+    "style",
+    "foreignObject",
+    "set",
+    "animate",
+    "animateColor",
+    "animateMotion",
+    "animateTransform",
+    "discard",
+    "mpath",
+    "title",
+    "template",
+    "noscript",
+    "iframe",
+    "object",
+    "embed",
+    "a",
+];
+
+/// すべての SVG 要素で許可する属性。CSS 適用につながる `style` は含めない。
+const SVG_GENERIC_ATTRIBUTES: &[&str] = &["id"];
+
+/// 図形・テキストで許可する描画属性。
+const SVG_SHAPE_ATTRIBUTES: &[&str] = &[
+    "cx",
+    "cy",
+    "d",
+    "dx",
+    "dy",
+    "fill",
+    "fill-opacity",
+    "fill-rule",
+    "font-family",
+    "font-size",
+    "height",
+    "opacity",
+    "points",
+    "preserveAspectRatio",
+    "r",
+    "rx",
+    "ry",
+    "stroke",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-opacity",
+    "stroke-width",
+    "text-anchor",
+    "transform",
+    "width",
+    "x",
+    "x1",
+    "x2",
+    "y",
+    "y1",
+    "y2",
+];
+
+/// SVG 要素ごとに許可する属性。
+///
+/// html5ever は `viewBox` / `preserveAspectRatio` / `gradientUnits` などを
+/// camelCase に調整し、`xmlns:xlink` はローカル名 `xlink` として保持する。
+fn svg_tag_attributes() -> HashMap<&'static str, HashSet<&'static str>> {
+    let shape: HashSet<&'static str> = SVG_SHAPE_ATTRIBUTES.iter().copied().collect();
+    let mut linked = shape.clone();
+    linked.extend(["href", "preserveAspectRatio"]);
+    HashMap::from([
+        (
+            "svg",
+            HashSet::from([
+                "xmlns",
+                "xlink",
+                "viewBox",
+                "width",
+                "height",
+                "preserveAspectRatio",
+            ]),
+        ),
+        ("image", linked.clone()),
+        ("use", HashSet::from(["href", "x", "y", "width", "height"])),
+        ("rect", shape.clone()),
+        ("circle", shape.clone()),
+        ("ellipse", shape.clone()),
+        ("line", shape.clone()),
+        ("polygon", shape.clone()),
+        ("polyline", shape.clone()),
+        ("path", shape.clone()),
+        ("text", linked.clone()),
+        ("tspan", linked),
+        (
+            "symbol",
+            HashSet::from([
+                "viewBox",
+                "preserveAspectRatio",
+                "x",
+                "y",
+                "width",
+                "height",
+            ]),
+        ),
+        ("clipPath", HashSet::from(["clipPathUnits"])),
+        (
+            "mask",
+            HashSet::from(["maskUnits", "maskContentUnits", "x", "y", "width", "height"]),
+        ),
+        (
+            "pattern",
+            HashSet::from([
+                "patternUnits",
+                "patternContentUnits",
+                "patternTransform",
+                "viewBox",
+                "preserveAspectRatio",
+                "x",
+                "y",
+                "width",
+                "height",
+                "href",
+            ]),
+        ),
+        (
+            "linearGradient",
+            HashSet::from([
+                "gradientUnits",
+                "gradientTransform",
+                "x1",
+                "y1",
+                "x2",
+                "y2",
+                "href",
+            ]),
+        ),
+        (
+            "radialGradient",
+            HashSet::from([
+                "gradientUnits",
+                "gradientTransform",
+                "cx",
+                "cy",
+                "r",
+                "fx",
+                "fy",
+                "href",
+            ]),
+        ),
+        (
+            "stop",
+            HashSet::from(["offset", "stop-color", "stop-opacity"]),
+        ),
+        (
+            "marker",
+            HashSet::from([
+                "markerWidth",
+                "markerHeight",
+                "markerUnits",
+                "refX",
+                "refY",
+                "orient",
+                "viewBox",
+                "preserveAspectRatio",
+            ]),
+        ),
+    ])
+}
+
+/// SVG の XML 文字列を表示用にサニタイズする（fail-closed）。
+///
+/// XML 処理命令を入力側で除いたうえで ammonia の許可リストを適用し、
+/// 実行・埋め込み・アニメーション要素、イベントハンドラ、外部スキームの
+/// 参照を落とす。相対参照（例: `images/pic.png`, `#gradient`）は残し、
+/// 表示側が解決する。XHTML 用の [`sanitize_epub_html`] とは独立した契約。
+///
+/// 空入力・XML 処理命令の閉じ欠落・SVG ルート要素が無い場合・出力が空の
+/// 場合は `None` を返す。
+pub fn sanitize_svg_xml(svg: &str) -> Option<String> {
+    if svg.trim().is_empty() {
+        return None;
+    }
+    let stripped = strip_xml_processing_instructions(svg)?;
+    if stripped.trim().is_empty() {
+        return None;
+    }
+
+    let mut builder = Builder::default();
+    builder
+        .tags(SVG_ALLOWED_TAGS.iter().copied().collect())
+        .clean_content_tags(SVG_CLEAN_CONTENT_TAGS.iter().copied().collect())
+        .generic_attributes(SVG_GENERIC_ATTRIBUTES.iter().copied().collect())
+        .tag_attributes(svg_tag_attributes())
+        // 絶対スキームはすべて拒否する。相対 URL は PassThrough で残すが、
+        // `//host/path` も相対として扱われるため attribute_filter で弾く。
+        .url_schemes(HashSet::new())
+        .url_relative(UrlRelative::PassThrough)
+        .strip_comments(true)
+        .link_rel(None)
+        // 入力の xmlns 値に関わらず正しい既定名前空間を付与する。
+        .set_tag_attribute_value("svg", "xmlns", SVG_NAMESPACE)
+        .attribute_filter(|element, attribute, value| {
+            let reject = (element == "svg" && attribute == "xmlns" && value != SVG_NAMESPACE)
+                || (matches!(attribute, "href" | "src") && !is_local_reference(value));
+            if reject {
+                None
+            } else {
+                Some(Cow::Borrowed(value))
+            }
+        });
+
+    // PI 除去で残った前後の空白テキストノードは取り除き、SVG ルートだけを返す。
+    let cleaned = builder.clean(&stripped).to_string();
+    let cleaned = cleaned.trim().to_string();
+    if cleaned.is_empty() || !cleaned.starts_with("<svg") || !cleaned.ends_with("</svg>") {
+        return None;
+    }
+    Some(cleaned)
+}
+
+/// XML 処理命令（`<?...?>`）を入力から除去する。
+///
+/// ammonia は DOM 上の ProcessingInstruction を常に削除するが、HTML パーサの
+/// 文脈では `<?xml-stylesheet?>` がコメントとして扱われるため、動作をパーサ
+/// 実装に依存させず入力側で明示的に落とす。閉じが無い場合は fail-closed。
+fn strip_xml_processing_instructions(svg: &str) -> Option<String> {
+    if !svg.contains("<?") {
+        return Some(svg.to_string());
+    }
+    let mut output = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(start) = rest.find("<?") {
+        output.push_str(&rest[..start]);
+        let after_open = &rest[start + 2..];
+        let end = after_open.find("?>")?;
+        rest = &after_open[end + 2..];
+    }
+    output.push_str(rest);
+    Some(output)
 }
 
 #[cfg(test)]
@@ -456,5 +738,88 @@ mod tests {
         assert!(!sanitized.contains("src="), "{sanitized}");
         assert!(sanitized.contains(r#"width="100""#), "{sanitized}");
         assert!(sanitized.contains(r#"height="50""#), "{sanitized}");
+    }
+
+    /// E2E の EVIL_SVG と同じ悪意要素を含む入力。
+    const EVIL_SVG: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="https://attacker.example/style.css" type="text/css"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="20" height="20" onload="window.__pwned = 1">
+<script>window.__pwned = 1;</script>
+<rect width="20" height="20" fill="red"/>
+<foreignObject><div onclick="window.__pwned = 1">x</div></foreignObject>
+<image xlink:href="java&#10;script:window.__pwned = 1" width="1" height="1"/>
+<set attributeName="onload" to="window.__pwned = 1" begin="0s"/>
+<animate attributeName="href" values="javascript:window.__pwned = 1" begin="0s"/>
+<use xlink:href="https://attacker.example/track.svg#x" width="1" height="1"/>
+<image href="data:image/png;base64,AAAA" width="1" height="1"/>
+<image href="images/pic.png" width="1" height="1"/>
+</svg>
+"#;
+
+    #[test]
+    fn svg_sanitizer_removes_evil_content_and_keeps_relative_images() {
+        let clean = sanitize_svg_xml(EVIL_SVG).expect("EVIL_SVG should be sanitized");
+        let lowered = clean.to_ascii_lowercase();
+        assert!(clean.starts_with("<svg"), "{clean}");
+        assert!(clean.trim_end().ends_with("</svg>"), "{clean}");
+        assert!(
+            clean.contains(r#"xmlns="http://www.w3.org/2000/svg""#),
+            "{clean}"
+        );
+        assert!(clean.contains(r#"width="20""#), "{clean}");
+        assert!(clean.contains(r#"height="20""#), "{clean}");
+        assert!(clean.contains("<rect"), "{clean}");
+        assert!(!lowered.contains("<script"), "{clean}");
+        assert!(!lowered.contains("onload="), "{clean}");
+        assert!(!lowered.contains("onclick="), "{clean}");
+        assert!(!lowered.contains("foreignobject"), "{clean}");
+        assert!(!lowered.contains("<set"), "{clean}");
+        assert!(!lowered.contains("<animate"), "{clean}");
+        assert!(!lowered.contains("javascript:"), "{clean}");
+        assert!(!lowered.replace('\n', "").contains("script:"), "{clean}");
+        assert!(!lowered.contains("attacker.example"), "{clean}");
+        assert!(!lowered.contains("data:image"), "{clean}");
+        assert!(!lowered.contains("xml-stylesheet"), "{clean}");
+        assert!(!lowered.contains("__pwned"), "{clean}");
+        assert!(clean.contains("images/pic.png"), "{clean}");
+    }
+
+    #[test]
+    fn svg_sanitizer_rejects_empty_and_non_svg_input() {
+        assert_eq!(sanitize_svg_xml(""), None);
+        assert_eq!(sanitize_svg_xml("  \n\t"), None);
+        assert_eq!(sanitize_svg_xml("<p>not svg</p>"), None);
+        assert_eq!(sanitize_svg_xml("<?xml version='1.0'?>"), None);
+        assert_eq!(sanitize_svg_xml("<?xml version='1.0'<svg/>"), None);
+    }
+
+    #[test]
+    fn svg_sanitizer_rejects_external_and_root_relative_references() {
+        for href in [
+            "//evil.example/x.svg",
+            "/images/pic.png",
+            r"\\evil.example\x.svg",
+            "https://example.com/x.svg",
+            "data:image/svg+xml;base64,AAAA",
+            "blob:https://example.com/id",
+            "",
+        ] {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg"><image href="{href}" width="1" height="1"/></svg>"#
+            );
+            let clean = sanitize_svg_xml(&svg).expect("svg should be sanitized");
+            assert!(!clean.contains("href="), "kept href {href:?}: {clean}");
+        }
+    }
+
+    #[test]
+    fn svg_sanitizer_keeps_fragment_references_and_camel_case_attributes() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient></defs><rect width="10" height="10" fill="url(#g)" preserveAspectRatio="xMidYMid meet"/></svg>"#;
+        let clean = sanitize_svg_xml(svg).expect("svg should be sanitized");
+        assert!(clean.contains(r#"viewBox="0 0 10 10""#), "{clean}");
+        assert!(clean.contains("linearGradient"), "{clean}");
+        assert!(clean.contains(r#"fill="url(#g)""#), "{clean}");
+        assert!(clean.contains("preserveAspectRatio"), "{clean}");
     }
 }

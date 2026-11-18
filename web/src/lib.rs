@@ -14,6 +14,8 @@ use openrustbooks_core::init;
 #[cfg(target_arch = "wasm32")]
 use openrustbooks_core::sanitize::sanitize_epub_html;
 use openrustbooks_core::wasm::render_markdown_wasm;
+#[cfg(target_arch = "wasm32")]
+use openrustbooks_core::wasm::sanitize_svg_wasm;
 use wasm_bindgen::prelude::*;
 
 /// E2E の起動診断用に Wasm の実行段階へタイムスタンプを付ける。
@@ -1047,97 +1049,12 @@ fn mime_for_path(path: &str) -> &'static str {
 }
 
 /// SVG からスクリプト実行と外部リソース参照の経路を除去したバイト列を返す。
-/// パース・シリアライズに失敗した場合は `None`（fail-closed）。
+///
+/// 実装は core の [`sanitize_svg_wasm`] に一本化した（旧 DomParser 手動実装は
+/// 削除）。fail-closed の契約も core 側が担う。
 #[cfg(target_arch = "wasm32")]
 fn sanitize_svg_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
-    let text = String::from_utf8(bytes.to_vec()).ok()?;
-    let parser = web_sys::DomParser::new().ok()?;
-    let document = parser
-        .parse_from_string(&text, web_sys::SupportedType::ImageSvgXml)
-        .ok()?;
-    let root = document.document_element()?;
-
-    // XML 処理命令（<?xml-stylesheet?> 等）を削除する。Blob URL を直接
-    // 開いたときの外部 CSS 読み込みによる情報漏洩を防ぐ。
-    let children = document.child_nodes();
-    for index in 0..children.length() {
-        let Some(node) = children.get(index) else {
-            continue;
-        };
-        if node.node_type() == web_sys::Node::PROCESSING_INSTRUCTION_NODE {
-            let _ = document.remove_child(&node);
-        }
-    }
-
-    // スクリプト要素・foreignObject・SMIL を削除する。foreignObject は HTML の
-    // スクリプトを混入でき、SMIL は後から属性を書き換えられる。画像としては
-    // 不要なので丸ごと落とす。
-    for selector in [
-        "script",
-        "foreignObject",
-        "set",
-        "animate",
-        "animateMotion",
-        "animateTransform",
-    ] {
-        if let Ok(nodes) = document.query_selector_all(selector) {
-            for index in 0..nodes.length() {
-                if let Some(node) = nodes.get(index)
-                    && let Some(element) = node.dyn_ref::<web_sys::Element>()
-                {
-                    element.remove();
-                }
-            }
-        }
-    }
-
-    // 全要素の on* 属性と javascript: リンクを削除する。
-    if let Ok(all) = document.query_selector_all("*") {
-        for index in 0..all.length() {
-            let Some(node) = all.get(index) else {
-                continue;
-            };
-            let Some(element) = node.dyn_ref::<web_sys::Element>() else {
-                continue;
-            };
-            let mut removable: Vec<String> = Vec::new();
-            for name in js_sys::Array::from(&element.get_attribute_names()).iter() {
-                let name = match name.as_string() {
-                    Some(name) => name.to_ascii_lowercase(),
-                    None => continue,
-                };
-                let value = element
-                    .get_attribute(&name)
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
-                // ブラウザは javascript: の途中の空白・制御文字を無視するため、
-                // 判定前に取り除く（"java\nscript:" のような回避を防ぐ）。
-                let normalized: String = value
-                    .chars()
-                    .filter(|character| !character.is_whitespace() && !character.is_control())
-                    .collect();
-                let is_event = name.starts_with("on");
-                let is_link = name == "href" || name.ends_with(":href");
-                // javascript: に加えて、外部スキームも削除する。Blob URL を
-                // 直接開いたときのネットワーク要求（IP・閲覧時刻の漏洩）を防ぐ。
-                let is_external = ["javascript:", "http:", "https:", "data:", "blob:", "file:"]
-                    .iter()
-                    .any(|scheme| normalized.starts_with(scheme));
-                if is_event || (is_link && is_external) {
-                    removable.push(name);
-                }
-            }
-            for name in removable {
-                let _ = element.remove_attribute(&name);
-            }
-        }
-    }
-
-    let clean = root.outer_html();
-    if clean.is_empty() {
-        return None;
-    }
-    Some(clean.into_bytes())
+    sanitize_svg_wasm(bytes)
 }
 
 /// バイト列から Blob URL を作る。呼び出し側が寿命を管理する。
