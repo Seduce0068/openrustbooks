@@ -1,35 +1,36 @@
 # Goal
 
-共通ワークフローの `extra_gates` で `cargo audit` を実行できるか調査・判断する（ADR-0125 の未決定）。
+CodeMirror エディタ UI 接続の現状と段階導入方針を調査・判断する（todo.md A05 / ADR-0012 から継続）。
 
 ## Scope
 
 ### 背景
 
-`.github/workflows/ci.yml:41-43` は `extra_gates` に wasm32 check を渡している。
-`cargo audit` をここに追加できれば、CI でも脆弱性回帰を検出できる。
-ただしグローバル指示 5 では「CI の変更はまず共通ワークフロー側で対応できないか検討する」とされる。
+`web/src/lib.rs` の Editor コンポーネントは Save / AI Generate / AI Refine /
+Lint ボタンがすべてハンドラ無しのスタブで、CodeMirror の統合も
+`Effect::new` のログだけ。デスクトップ側には document 系 command が
+登録済みだが、Web 側に Tauri invoke は無い。
 
 ### 成果物
 
-- `.github/workflows/ci.yml`: 変更（可能なら audit ゲートを `extra_gates` に追加）
-- `docs/decisions/0126-ci-audit-gate.md`: 追加
+- `docs/decisions/0127-editor-ui-integration.md`: 追加（調査と判断）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 共通ワークフロー `Seduce0068/workflows/rust-gates.yml@v1` の `extra_gates` 入力の実体を確認する（GitHub MCP または gh api）。
-2. `extra_gates` が任意コマンドを実行できるなら `cargo audit` を追加する。cargo-audit のインストール手順も必要なら検討。
-3. 変更不能／危険なら「未対応」を明文化する。
-4. ローカル検証（verify.sh）は維持する。
+1. Web Editor / SettingsForm の未配線箇所を列挙する。
+2. デスクトップ側 command と Web UI をつなぐ最小経路を設計する。
+3. 新規依存（CodeMirror の wasm バインディング等）が必要か調査する。
+4. 実装する／見送る／段階導入するかを判断し記録する。
+5. コード変更は行わない（調査と決定のみ）。
 
 ## Acceptance criteria
 
 - 判断が ADR に記録される。
-- ローカル検証が成功する。
+- markdownlint が通る。
 
 ## Constraints
 
-- 共通ワークフロー自体（`Seduce0068/workflows`）は変更しない。
-- `@v1` ピン留めは維持する（グローバル指示 5）。
+- コードを変更しない。
+- 新規依存を追加しない（調査のみ）。
 - `master` へ push する。force push はしない。
