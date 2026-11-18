@@ -1,37 +1,38 @@
 # Goal
 
-部分設定インポートの bool false リセット懸念を調査し、no-op と判断する（ADR-0158）。
+CLS（Cumulative Layout Shift）を E2E で直接計測し、画像寸法予約の効果をゲートする。
 
 ## Scope
 
 ### 背景
 
-当初は `dark` / `followSystem` / `downscaleImages` の
-`unwrap_or(false)` を `load_settings()` フォールバックへ変更し、
-E2E を 234 → 235 にする予定だった。
-しかし ADR-0157 の現在値保護ガードと `load_settings()` が同じ
-`SETTINGS_KEY` を読むため、问题的な状態は自然には成立しないことが判明した。
+ADR-0149 で `width` / `height` 属性による寸法予約を実装したが、
+「CLS が減った」ことを直接検証するチェックは無い（ADR-0136 / 0149 の未決定）。
+E2E は 234 項目（check 217 + equal 17）。
 
 ### 成果物
 
-- `docs/decisions/0158-partial-settings-import.md`: 追加（調査結果）
-- `GOAL.md`: 最終契約へ更新
-- コード変更なし（`web/src/lib.rs` / `tools/verify-web-reader.py` は HEAD と同一）
+- `tools/verify-web-reader.py`: 変更（PerformanceObserver による CLS 計測とチェック 1 件追加、234 → 235）
+- `docs/decisions/0159-cls-e2e-measurement.md`: 追加
+- `GOAL.md`: 本契約
 
-### 決定
+### 必須事項
 
-1. 3 bool の `unwrap_or(false)` は現行挙動を維持する。
-2. E2E 期待総数は 234 のまま。
-3. ADR-0157 の「現在設定キーがある場合はスキップ」ガードを維持する。
-4. 既定値を永続化する設計論点は ADR-0158 の未決定として記録する。
+1. `Page.addScriptToEvaluateOnNewDocument` 等で
+   `PerformanceObserver('layout-shift')` を登録し、CLS を蓄積する。
+2. サンプル EPUB を開き、画像セトリング後に CLS を読み、
+   妥当な閾値（例 0.1 以下）で 1 件チェックする。
+3. 閾値は実測に基づき、フレークしない値を選ぶ（最低 5 回連続で確認）。
+4. 既存 234 項目を壊さない。期待総数を 235 に更新。
 
 ## Acceptance criteria
 
-- markdownlint が 0 issues。
-- 既存の全ゲート・E2E 234 項目が維持される。
+- E2E 235 項目、5 回連続 0 失敗。
+- 6 ゲート + audit + wasm-test が成功する。
 
 ## Constraints
 
 - 新規依存を追加しない。
-- `todo.md` と `docs/investigation/` は触らない。
+- CLS 計測は本番コードへ影響させない（E2E スクリプトのみ）。
+- 外部ブラウザ 5 種の実機検証は本次対象外（Chrome 157 headless のみ）。
 - `master` へ push する。force push はしない。
