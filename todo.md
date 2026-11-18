@@ -22,8 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【PR-H04】設定保存と AI 再初期化が分かれてコミットされ、失敗時に中途半端な状態になる。
-  根拠 `desktop/src/commands/config.rs:524,544,565,655`。
 - 【TD-H04】`can_watch=true` を報告しつつ `LocalStorage::watch()` は常に未実装エラー。
   根拠 `core/src/io.rs:291,571-574` / `desktop/src/commands/fs.rs:145-157` /
   `desktop/src/main.rs:111`。実装するか `can_watch=false` とコマンド非公開化。
@@ -217,6 +215,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-H04】設定保存と AI service 初期化を prepare/commit に分離。
+      生成失敗時に config / disk / service を不変とし、保存成功後のみ service を置換。
+      desktop 59 件・E2E 247 件・全ゲート成功 / ADR-0177。
 - [x] 【PR-H03 / TD-H03】EPUB ロードへ独立した load_generation を導入し、
       古い完了の UI 上書きを遮断（ガード 10 箇所）。E2E 247 件・全ゲート成功
       / ADR-0176。E2E 追加は再現フックが無く 247 維持（理由は ADR 記載）。
