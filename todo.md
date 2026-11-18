@@ -55,8 +55,6 @@ status: current
 <!-- R6-2026-11-19 中優先度 -->
 - 【PR-M01 / TD-M04】Ollama ストリームがチャンク境界で JSON 行を失い、HTTP タイムアウトも無い。
   根拠 `core/src/ai_markdown/client.rs:332,437-452`。行バッファと timeout を追加。
-- 【PR-M02】table の span/start/value 属性に img 同様の fail-closed 検証が無い。
-  根拠 `core/src/sanitize.rs:98-106,135,152`。
 - 【PR-M04】`read` の offset/limit に上限が無く `max_file_size` も未適用。
   根拠 `core/src/io.rs:34,108`。
 - 【PR-M06】atomic write の tmp パスが固定で並行書き込みが衝突する。
@@ -194,6 +192,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M02】table 数値属性（colspan/rowspan/start/value/span）を fail-closed 検証。
+      不正値は属性のみ削除、unit 4 件追加（core 224）。E2E 249 件・全ゲート成功 / ADR-0187。
 - [x] 【PR-M03 / PR-M05】設定 IPC 境界を DTO 正規化へ統一。
       extra_headers / 秘密 / パスの注入を遮断し、ヘッダはキー単位マージ。
       update_ai_config の api_key は ADR-0098 契約で受容。
