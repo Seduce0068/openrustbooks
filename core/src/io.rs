@@ -5,6 +5,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// 既定の読み取り上限（256 MiB）。
+///
+/// `ReadOptions.limit` と `StorageCapabilities.max_file_size` がどちらも
+/// `None` のときに適用する。EPUB 側の 256 MiB 上限と揃える（R6 PR-M04）。
+pub const DEFAULT_MAX_READ_BYTES: u64 = 256 * 1024 * 1024;
+
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageCapabilities {
@@ -408,6 +414,29 @@ pub mod local {
         }
     }
 
+    /// 実際に読み取るバイト数上限を解決する（R6 PR-M04）。
+    ///
+    /// 1. `effective` = capabilities の `max_file_size`（未指定なら既定の 256 MiB）
+    /// 2. `requested` = `options.limit`（未指定なら `effective`）
+    /// 3. `requested > effective` なら黙って clamp せず `CoreError::Validation` を返す
+    /// 4. それ以外は `requested.min(effective)` を `take()` に渡す
+    ///
+    /// capabilities 側の上限が既定値より大きい場合もその値を尊重する。
+    /// エラー文言にはファイル内容も呼び出し元の生パスも含めない。
+    fn resolve_read_limit(
+        requested_limit: Option<u64>,
+        max_file_size: Option<u64>,
+    ) -> CoreResult<u64> {
+        let effective = max_file_size.unwrap_or(DEFAULT_MAX_READ_BYTES);
+        let requested = requested_limit.unwrap_or(effective);
+        if requested > effective {
+            return Err(CoreError::validation(format!(
+                "Requested read limit {requested} exceeds the storage limit of {effective} bytes"
+            )));
+        }
+        Ok(requested.min(effective))
+    }
+
     #[async_trait]
     impl StorageBackend for LocalStorage {
         fn id(&self) -> &str {
@@ -486,14 +515,27 @@ pub mod local {
                 file.seek(std::io::SeekFrom::Start(offset)).await?;
             }
 
-            let mut data = Vec::new();
-            if let Some(limit) = options.limit {
+            // offset と limit は加算せず独立に扱う（R6 PR-M04）。
+            // 要求上限がストレージ上限を超える場合は部分読みを黙って返さずエラーにする。
+            let real_limit = resolve_read_limit(options.limit, self.capabilities.max_file_size)?;
+            let (data, reached_limit) = {
                 use tokio::io::AsyncReadExt;
-                let mut limited = file.take(limit);
+                let mut limited = (&mut file).take(real_limit);
+                let mut data = Vec::new();
                 limited.read_to_end(&mut data).await?;
-            } else {
+                (data, limited.limit() == 0)
+            };
+
+            // limit 未指定は「ファイル全体を読む」要求なので、上限で切り詰めた
+            // 場合は呼び出し元が検知できない。残りバイトがあれば明示エラーにする。
+            if reached_limit && options.limit.is_none() {
                 use tokio::io::AsyncReadExt;
-                file.read_to_end(&mut data).await?;
+                let mut probe = [0u8; 1];
+                if file.read(&mut probe).await? != 0 {
+                    return Err(CoreError::validation(format!(
+                        "File exceeds the maximum allowed read size of {real_limit} bytes"
+                    )));
+                }
             }
 
             Ok(data)
@@ -1079,6 +1121,182 @@ pub mod local {
                 !text.contains("Invalid UTF-8"),
                 "エラー文言へ元内容を埋め込まない: {text:?}"
             );
+        }
+
+        /// 上限超過エラーが `CoreError::Validation` であること（archive.rs と同種）。
+        fn assert_limit_validation_error(error: &CoreError) {
+            match error {
+                CoreError::Validation(message) => {
+                    assert!(
+                        message.contains("exceeds"),
+                        "上限超過を示す文言であること: {message}"
+                    );
+                }
+                other => panic!("expected Validation error, got {other:?}"),
+            }
+        }
+
+        /// `limit=None` かつ capabilities 未指定なら 256 MiB の既定上限になること（R6 PR-M04）。
+        /// 巨大ファイルを作らず pure helper で上限解決ロジックを検証する。
+        #[test]
+        fn read_limit_defaults_to_256_mib() {
+            assert_eq!(DEFAULT_MAX_READ_BYTES, 256 * 1024 * 1024);
+            assert_eq!(
+                resolve_read_limit(None, None).expect("既定上限を返す"),
+                DEFAULT_MAX_READ_BYTES
+            );
+
+            // 要求 limit が既定上限より小さければ要求値を保持する。
+            assert_eq!(
+                resolve_read_limit(Some(1024), None).expect("要求値を返す"),
+                1024
+            );
+            // 既定上限超えは clamp せず明示エラーにする。
+            let error = resolve_read_limit(Some(DEFAULT_MAX_READ_BYTES + 1), None)
+                .expect_err("既定上限超えはエラーになる");
+            assert_limit_validation_error(&error);
+        }
+
+        /// capabilities の `max_file_size` を尊重し、上限超えはエラーにすること（R6 PR-M04）。
+        #[test]
+        fn read_limit_respects_capabilities_max_file_size() {
+            // cap Some(小): 要求 <= cap は要求値／既定、要求 > cap はエラー。
+            assert_eq!(
+                resolve_read_limit(Some(50), Some(100)).expect("要求値を返す"),
+                50
+            );
+            assert_eq!(
+                resolve_read_limit(None, Some(100)).expect("cap を返す"),
+                100
+            );
+            let error =
+                resolve_read_limit(Some(1_000), Some(100)).expect_err("cap 超えはエラーになる");
+            assert_limit_validation_error(&error);
+
+            // cap Some(>DEFAULT): 既定上限へ下げず cap の値を尊重する。
+            let large_cap = DEFAULT_MAX_READ_BYTES * 2;
+            assert_eq!(
+                resolve_read_limit(None, Some(large_cap)).expect("cap を尊重する"),
+                large_cap
+            );
+            assert_eq!(
+                resolve_read_limit(Some(DEFAULT_MAX_READ_BYTES), Some(large_cap))
+                    .expect("要求値を返す"),
+                DEFAULT_MAX_READ_BYTES
+            );
+            let error = resolve_read_limit(Some(large_cap + 1), Some(large_cap))
+                .expect_err("cap 超えはエラーになる");
+            assert_limit_validation_error(&error);
+
+            // limit u64::MAX も黙って clamp せず明示エラーにする。
+            for cap in [None, Some(100)] {
+                let error = resolve_read_limit(Some(u64::MAX), cap)
+                    .expect_err("u64::MAX の要求はエラーになる");
+                assert_limit_validation_error(&error);
+            }
+        }
+
+        /// `read()` が上限超過を部分読みではなく Validation エラーとして返すこと（R6 PR-M04）。
+        #[tokio::test]
+        async fn read_rejects_limit_above_capabilities_max_file_size() {
+            let temp = TempRoot::new();
+            fs::write(temp.path.join("data.bin"), b"0123456789").unwrap();
+            let storage = LocalStorage {
+                root: temp.path.clone(),
+                capabilities: StorageCapabilities {
+                    max_file_size: Some(4),
+                    ..Default::default()
+                },
+            };
+
+            // 要求 limit > cap → 部分読みせず Validation エラー。
+            let error = storage
+                .read(
+                    Path::new("data.bin"),
+                    ReadOptions {
+                        limit: Some(6),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .expect_err("cap 超えの要求はエラー");
+            assert_limit_validation_error(&error);
+
+            // 要求 limit <= cap → 要求値どおりに読める。
+            let bytes = storage
+                .read(
+                    Path::new("data.bin"),
+                    ReadOptions {
+                        limit: Some(2),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .expect("cap 以下の要求は成功する");
+            assert_eq!(bytes, b"01".to_vec());
+
+            // read_text() も read() を経由するため同じエラーが伝播する。
+            let error = storage
+                .read_text(
+                    Path::new("data.bin"),
+                    ReadOptions {
+                        limit: Some(u64::MAX),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .expect_err("read_text も上限超過をエラーにする");
+            assert_limit_validation_error(&error);
+        }
+
+        /// limit 未指定でファイルが上限より大きい場合も黙って切り詰めないこと（R6 PR-M04）。
+        #[tokio::test]
+        async fn read_rejects_file_larger_than_effective_limit() {
+            let temp = TempRoot::new();
+            fs::write(temp.path.join("oversized.bin"), b"0123456789").unwrap();
+            let storage = LocalStorage {
+                root: temp.path.clone(),
+                capabilities: StorageCapabilities {
+                    max_file_size: Some(4),
+                    ..Default::default()
+                },
+            };
+
+            // limit=None は「ファイル全体を読む」要求なので、切り詰めるならエラーにする。
+            let error = storage
+                .read(Path::new("oversized.bin"), ReadOptions::default())
+                .await
+                .expect_err("上限を超えるファイルは黙って部分読みしない");
+            assert_limit_validation_error(&error);
+
+            // 上限ちょうどのファイルは正常に読める。
+            fs::write(temp.path.join("exact.bin"), b"0123").unwrap();
+            let bytes = storage
+                .read(Path::new("exact.bin"), ReadOptions::default())
+                .await
+                .expect("上限ちょうどは成功する");
+            assert_eq!(bytes, b"0123".to_vec());
+        }
+
+        /// offset がファイル末尾を超えてもエラーではなく空 Vec を返すこと（R6 PR-M04）。
+        #[tokio::test]
+        async fn read_with_offset_beyond_eof_returns_empty_vec() {
+            let temp = TempRoot::new();
+            fs::write(temp.path.join("small.txt"), b"abc").unwrap();
+            let storage = temp.storage();
+
+            let bytes = storage
+                .read(
+                    Path::new("small.txt"),
+                    ReadOptions {
+                        offset: Some(1_000),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(bytes.is_empty(), "末尾超えの offset では空 Vec: {bytes:?}");
         }
     }
 }
