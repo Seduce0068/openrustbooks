@@ -74,4 +74,4 @@ ADR-0040:49 は `window.confirm()` を「スタイル制御ができず、E2E �
 - 確認文言の i18n（ADR-0151 の i18n 未決定を継続）。
 - `<dialog>` との UI/UX 統一。
 - 5 ブラウザ実機での confirm 挙動（現状は Chrome 157 headless で検証）。
-- import 側の確認保護（ADR-0151 の残項目）。
+- ~~import 側の確認保護~~ ADR-0172 で confirm 追加済み。

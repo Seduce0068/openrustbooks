@@ -1,37 +1,26 @@
 # Goal
 
-読書位置のインポートに確認ダイアログを追加する（ADR-0171 の未決定）。
+バックアップのインポートに `window.confirm()` の確認ダイアログを追加する（ADR-0172）。
 
 ## Scope
 
 ### 背景
 
-ADR-0157 で現在の設定／履歴は保護されたが、
-インポートは新しい読書位置を上書きし得る（ADR-0032 の savedAt マージ）。
-Clear data には確認を追加済み（ADR-0171）だが、import は未確認。
+ADR-0157 で現在の設定／履歴は保護されたが、読書位置は `savedAt` マージで上書きされ得た。
+Clear data には確認を追加済み（ADR-0171）だが、import は未確認だった。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`window.confirm()` による確認）
-- `tools/verify-web-reader.py`: 変更（既存 import テストで confirm を true 化、新規 1 件、245 → 246）
 - `docs/decisions/0172-import-confirmation.md`: 追加
-- `GOAL.md`: 本契約
+- `GOAL.md`: 最終契約へ更新
 
-### 必須事項
+### 決定
 
-1. ファイル選択後に `window.confirm()` で確認し、false なら読み込み／取り込みを行わない。
-2. キャンセル時は status を変更せず、ファイル入力もリセットして再選択可能にする。
-3. 既存 import E2E では confirm を JS オーバーライドで true にし、try/finally で復元。
-4. 新規 E2E で confirm=false のとき位置キーが変化しないことを検証。
-5. 期待総数 245 → 246。
+- ファイル取得後・読み込み前に confirm を呼び、false なら input をリセットして return。
+- 成功時も input をリセットし同一ファイルを再選択可能にする。
+- E2E は既存 import 11 箇所を `select_import_file()` ヘルパーに統一し、
+  実ダイアログを回避。期待総数 245 → 246。
 
 ## Acceptance criteria
 
-- E2E 246 項目が成功する。
-- 6 ゲート + audit + wasm-test が成功する。
-
-## Constraints
-
-- ADR-0171 の Clear data confirm と同じ方針（CDP ではオーバーライド）。
-- 新規依存を追加しない。
-- `master` へ push する。force push はしない。
+- E2E 246 項目、全ゲート成功（検証済み）。
