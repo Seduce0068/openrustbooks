@@ -1,44 +1,42 @@
 # Goal
 
-Web エディタを textarea ベースの最小構成へ配線する（ADR-0127 の第一段）。
+エディタ Preview で Markdown を実際にレンダリングする（ADR-0161 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`web/src/lib.rs` の Editor コンポーネントは `editor-pane` が空の div で、
-Save は `saving` を切り替えるだけ、AI / Lint ボタンは未配線。
-ADR-0127 は CodeMirror を導入せず textarea 最小構成で進める方針を決定済み。
+ADR-0161 で textarea と Preview を接続したが、Preview は
+`sanitize_epub_html()` のみで `# Heading` が見出しにならない。
+core は `pulldown-cmark 0.13` と `comrak 0.59` を宣言済みだが未使用。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（textarea 入力、Preview 接続、未実装ボタンの明示）
-- `web/index.html`: 変更（textarea のスタイル最小追加）
-- `tools/verify-web-reader.py`: 変更（E2E 2 件追加、235 → 237）
-- `docs/decisions/0161-minimal-editor-ui.md`: 追加
+- `core/Cargo.toml` / `Cargo.lock`: 依存整理（不要なら削除、必要なら feature 調整）
+- `core/src/lib.rs` / 新規モジュール: Markdown → HTML 変換とサニタイズ
+- `core/src/wasm.rs`: Wasm 公開 API
+- `web/src/lib.rs`: Preview での利用
+- `tools/verify-web-reader.py`: E2E 1 件追加、237 → 238
+- `docs/decisions/0162-markdown-preview-rendering.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `editor-pane` を `<textarea id="editor-input">` に置き換え、
-   `content` シグナルと双方向バインドする。
-2. Preview が入力をリアルタイムにサニタイズ表示する（既存 `Preview` を再利用）。
-3. Save / AI Generate / AI Refine / Lint ボタンは、未接続を誤解させないよう
-   disabled ＋ title/aria で「デスクトップ版のみ／未実装」と明示する。
-4. 書式 select も disabled にする（機能未接続のため）。
-5. E2E に 2 件追加:
-   - `/editor/e2e` で textarea に Markdown を入力すると Preview に反映される。
-   - 未実装ボタンが disabled である。
-6. 既存 235 項目と全ゲートを壊さない。期待総数を 237 に更新。
+1. 既存依存のいずれか（推奨: comrak の featureless 設定）を使い、
+   Markdown → HTML 変換を core に追加する。
+2. 生成 HTML は `sanitize_epub_html()` を通してから `inner_html` に渡す
+   （XSS fail-closed）。
+3. Web の Preview が `# Heading` を `<h1>` として表示する。
+4. E2E を 1 件追加（heading / リンク / script 除去など）、期待総数 237 → 238。
+5. 既存 237 項目と全ゲートを壊さない。
 
 ## Acceptance criteria
 
-- E2E 237 項目が成功する。
+- E2E 238 項目が成功する。
 - 6 ゲート + audit + wasm-test が成功する。
 
 ## Constraints
 
-- CodeMirror や npm 依存を追加しない。
-- Tauri invoke は有効化しない（ADR-0128 の判断を維持）。
-- 保存処理は実装しない（誤解を与えない表示に留める）。
+- 新規依存は追加しない（既存の comrak / pulldown-cmark を整理して利用）。
+- `unsafe` 禁止。
 - `master` へ push する。force push はしない。
