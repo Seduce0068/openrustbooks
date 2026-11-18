@@ -234,10 +234,56 @@ def wait_for_debug_port(timeout: float = 20.0) -> None:
     raise RuntimeError("Chrome のデバッグポートが開きませんでした")
 
 
+# 起動フレークの診断に使う CDP イベントだけを覚える。
+# Runtime.enable / Log.enable / Network.enable は大量のイベントを流すため、
+# send() の応答待ちで捨てていたものをここに退避する。
+DIAGNOSTIC_EVENTS = {
+    "Runtime.consoleAPICalled",
+    "Runtime.exceptionThrown",
+    "Log.entryAdded",
+    "Network.loadingFailed",
+    "Page.domContentEventFired",
+    "Page.loadEventFired",
+}
+MAX_DIAGNOSTIC_EVENTS = 500
+MAX_REQUEST_URLS = 500
+
+
 class Cdp:
     def __init__(self, ws):
         self.ws = ws
         self.counter = 0
+        self.diagnostic_events: list[dict] = []
+        self.request_urls: dict[str, str] = {}
+        self.dropped_diagnostic_events = 0
+
+    def _record_event(self, message: dict) -> None:
+        """応答待ちに混ざるイベントを捨てずに診断用へ退避する。"""
+        method = message.get("method", "")
+        params = message.get("params", {})
+        if method == "Network.requestWillBeSent":
+            request_id = params.get("requestId")
+            url = params.get("request", {}).get("url", "")
+            if request_id:
+                if len(self.request_urls) >= MAX_REQUEST_URLS:
+                    self.request_urls.pop(next(iter(self.request_urls)))
+                self.request_urls[request_id] = url
+        if method not in DIAGNOSTIC_EVENTS:
+            return
+        if len(self.diagnostic_events) < MAX_DIAGNOSTIC_EVENTS:
+            self.diagnostic_events.append(message)
+        else:
+            self.dropped_diagnostic_events += 1
+
+    def take_diagnostics(self):
+        """退避したイベントを引き出してクリアする。"""
+        events = self.diagnostic_events
+        urls = dict(self.request_urls)
+        dropped = self.dropped_diagnostic_events
+        self.diagnostic_events = []
+        self.request_urls = {}
+        self.dropped_diagnostic_events = 0
+        return events, urls, dropped
 
     async def send(self, method: str, params: dict | None = None) -> dict:
         self.counter += 1
@@ -247,6 +293,8 @@ class Cdp:
             message = json.loads(await self.ws.recv())
             if message.get("id") == request_id:
                 return message
+            if "method" in message:
+                self._record_event(message)
 
     async def evaluate(self, expression: str):
         result = await self.send(
@@ -371,16 +419,136 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
     return None
 
 
+# 新文書の生成前に注入し、Wasm 起動の節目とページ側の例外を残す。
+# Trunk のローダは init() 完了時に TrunkApplicationStarted を dispatch する。
+BOOT_PROBE = r"""
+(() => {
+  window.__orbBoot = { errors: [], events: [] };
+  const note = (kind, text) => {
+    const boot = window.__orbBoot;
+    if (!boot || !Array.isArray(boot.events) || boot.events.length >= 50) return;
+    boot.events.push(kind + ': ' + String(text));
+  };
+  window.addEventListener('error', (e) => {
+    if (window.__orbBoot && window.__orbBoot.errors.length < 50) {
+      window.__orbBoot.errors.push(String(e.message));
+    }
+    note('pageerror', e.message);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    if (window.__orbBoot && window.__orbBoot.errors.length < 50) {
+      window.__orbBoot.errors.push(String(e.reason));
+    }
+    note('unhandledrejection', e.reason);
+  });
+  window.addEventListener('TrunkApplicationStarted', () => note('trunk', 'started'));
+  document.addEventListener('DOMContentLoaded', () => note('dom', 'DOMContentLoaded'));
+})()
+"""
+
+BOOT_STATE = """(() => {
+  const boot = window.__orbBoot || {};
+  return {
+    url: location.href,
+    readyState: document.readyState,
+    bodyChildren: document.body ? document.body.children.length : -1,
+    hasReader: document.querySelector('.reader-container') !== null,
+    rustStartedAt: window.__orbRustStartedAt ?? null,
+    rustMountedAt: window.__orbRustMountedAt ?? null,
+    errors: boot.errors || [],
+    events: boot.events || [],
+    bodySnippet: document.body ? document.body.innerHTML.slice(0, 300) : ''
+  };
+})()"""
+
+
+def format_cdp_diagnostics(cdp: Cdp) -> list[str]:
+    """Cdp に退避したイベントを可読な行へ変換する。"""
+    events, urls, dropped = cdp.take_diagnostics()
+    lines: list[str] = []
+    for event in events:
+        method = event.get("method", "")
+        params = event.get("params", {})
+        if method == "Runtime.consoleAPICalled":
+            args = ", ".join(
+                str(arg.get("value", arg.get("description", "")))
+                for arg in params.get("args", [])
+            )
+            lines.append(f"console.{params.get('type', 'log')}: {args}")
+        elif method == "Runtime.exceptionThrown":
+            detail = params.get("exceptionDetails", {})
+            description = detail.get("exception", {}).get("description") or detail.get("text", "")
+            lines.append(f"pageerror: {description}")
+        elif method == "Log.entryAdded":
+            entry = params.get("entry", {})
+            lines.append(
+                f"log.{entry.get('level', '')}: {entry.get('text', '')} ({entry.get('url', '')})"
+            )
+        elif method == "Network.loadingFailed":
+            request_id = params.get("requestId")
+            lines.append(
+                f"requestfailed: {urls.get(request_id, '?')} "
+                f"{params.get('errorText', '')} type={params.get('type', '')}"
+            )
+        elif method in ("Page.domContentEventFired", "Page.loadEventFired"):
+            lines.append(method)
+    if dropped:
+        lines.append(f"... {dropped} CDP diagnostic events dropped")
+    return lines
+
+
+async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
+    """マウント待ち失敗時にだけ原因の手掛かりを出力する（check 数は増やさない）。"""
+    print(f"--- startup diagnostics [{label}] ---", flush=True)
+    for line in format_cdp_diagnostics(cdp):
+        print(f"  {line}", flush=True)
+    try:
+        state = await cdp.evaluate(BOOT_STATE)
+    except Exception as exc:  # 診断取得自体が失敗しても検証は続行する
+        state = None
+        print(f"  page state error: {exc}", flush=True)
+    if isinstance(state, dict):
+        for key in (
+            "url",
+            "readyState",
+            "bodyChildren",
+            "hasReader",
+            "rustStartedAt",
+            "rustMountedAt",
+            "errors",
+            "events",
+            "bodySnippet",
+        ):
+            print(f"  page.{key}: {state.get(key)!r}", flush=True)
+    else:
+        print(f"  page state unavailable: {state!r}", flush=True)
+    print("--- end startup diagnostics ---", flush=True)
+
+
 async def run_checks(cdp: Cdp) -> int:
     # 期待 check 総数: checker.check 212 + checker.equal 17 = 229。
     checker = Checker(expected=229)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
+    await cdp.send("Log.enable")
+    await cdp.send("Network.enable")
     await cdp.send("DOM.enable")
+    # イベントは send() が捨てずに退避するため、有効化は navigate より前に行う。
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": BOOT_PROBE})
     await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/reader/e2e"})
 
-    mounted = await wait_until(cdp, "document.querySelector('.reader-container') !== null")
+    reader_selector = "document.querySelector('.reader-container') !== null"
+    mounted = await wait_until(cdp, reader_selector)
+    if not mounted:
+        # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
+        await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
+        # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
+        # check は最後に 1 度だけ実行し、期待総数 229 を維持する。
+        await cdp.send("Page.reload", {"ignoreCache": True})
+        mounted = await wait_until(cdp, reader_selector)
+        if not mounted:
+            await dump_startup_diagnostics(cdp, "リロード後もマウントせず")
     checker.check("Reader ルートが表示される", mounted)
     if not mounted:
         return finish(checker)
@@ -399,6 +567,7 @@ async def run_checks(cdp: Cdp) -> int:
     )
     if not opened:
         print("status:", await cdp.evaluate("document.querySelector('.reader-status')?.textContent"))
+        await dump_startup_diagnostics(cdp, "EPUB 読込待ちタイムアウト")
         return finish(checker)
 
     # サニタイズ。

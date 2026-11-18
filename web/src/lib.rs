@@ -14,14 +14,34 @@ use openrustbooks_core::init;
 use openrustbooks_core::sanitize::sanitize_epub_html;
 use wasm_bindgen::prelude::*;
 
+/// E2E の起動診断用に Wasm の実行段階へタイムスタンプを付ける。
+/// wasm-bindgen の init() が完了したか、Leptos のマウントまで進んだかを
+/// ブラウザ側から判別できるようにする（本番の挙動には影響しない）。
+#[cfg(target_arch = "wasm32")]
+fn mark_boot_stage(name: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = js_sys::Reflect::set(
+            &window,
+            &JsValue::from_str(name),
+            &JsValue::from_f64(js_sys::Date::now()),
+        );
+    }
+}
+
 // Initialize panic hook and tracing for Wasm
 #[wasm_bindgen(start)]
 pub fn main() {
     init();
     leptos::logging::log!("openrustbooks-web starting...");
+    #[cfg(target_arch = "wasm32")]
+    mark_boot_stage("__orbRustStartedAt");
 
     // Mount the Leptos app
     mount_to_body(|| view! { <App/> });
+
+    #[cfg(target_arch = "wasm32")]
+    mark_boot_stage("__orbRustMountedAt");
+    leptos::logging::log!("openrustbooks-web mounted");
 }
 
 /// Main application component
