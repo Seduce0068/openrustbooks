@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 148 件）。
+openrustbooks の ADR 一覧（全 149 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -298,3 +298,5 @@ openrustbooks の ADR 一覧（全 148 件）。
   - status: rejected — 縦書きのアプリ側実装を試行したが、位置保存・復元を検証できなかったため見送った決定を記録する。
 - [ADR-0148: 画像縮小の完了シグナルとリトライ](0148-downscale-completion-signal.md)
   - status: accepted — 画像縮小の完了を data-downscaled で明示し、未確定画像のリトライと MIME 属性化で E2E フレークを解消する決定を記録する。
+- [ADR-0149: 画像自然寸法の属性予約](0149-image-dimension-reservation.md)
+  - status: accepted — EPUB 画像の自然寸法を core で取得し、web で width/height 属性として付与する実装を記録する。
