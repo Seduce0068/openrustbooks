@@ -22,8 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【PR-H06】SVG サニタイズが core（ammonia）と web（DomParser + 手動）で二重実装され drift リスク。
-  根拠 `core/src/sanitize.rs:124` / `web/src/lib.rs:940,1040,2298`。
 - 【CI-H01】CI が trunk build・配布パス検査・E2E(246件) をマージゲートに入れていない。
   根拠 `.github/workflows/ci.yml:24,42-44` / `scripts/verify.sh:64-121`。
   CI billing 解消後に共通ワークフロー側で対応。
@@ -206,6 +204,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-H06】SVG サニタイズを core の ammonia 共通実装へ一本化。
+      DomParser 手動実装を削除し、unit 4 件追加（core 216）。
+      E2E 249 件・全ゲート成功 / ADR-0181。
 - [x] 【TD-H06】下書きをバックアップの optional `drafts` field へ追加。
       version:1 互換を維持し、1 MiB 超過除外・現在値保護を適用。
       E2E 249 件・全ゲート成功 / ADR-0180。
