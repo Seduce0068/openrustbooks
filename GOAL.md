@@ -1,35 +1,36 @@
 # Goal
 
-README / architecture の依存一覧を実装事実へ合わせる（ADR-0163 の未決定）。
+save-error 通知のリスナーを共通化し、Editor / Reader の status 競合を解消する（ADR-0164 の未決定）。
 
 ## Scope
 
 ### 背景
 
-ADR-0163 で pulldown-cmark の直接依存を削除したが、
-README.md:74 と docs/architecture.md:178 は未使用の依存として記載したまま。
-README.md:271 の ADR-0086 タイトルは履歴なので変更しない。
+ADR-0154 で追加した `openrustbooks:save-error` リスナーは Reader に 1 つだったが、
+ADR-0164 で Editor にも追加した結果、両方が同じイベントを受け取り得る。
+SPA 遷移時は排他と推測されるが、同時存在時に status が競合するリスクがある。
 
 ### 成果物
 
-- `README.md`: 変更（依存一覧を `comrak` 中心に更新）
-- `docs/architecture.md`: 変更（Markdown 処理の記述を更新）
-- `docs/decisions/0163-remove-unused-markdown-dep.md`: 変更（未決定を解消）
+- `web/src/lib.rs`: 変更（共通リスナー／emit 先の明示）
+- `tools/verify-web-reader.py`: 変更（必要なら E2E 1 件、240 → 241）
+- `docs/decisions/0165-save-error-listener.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. README.md:74 の技術スタック表を「`comrak`（Markdown→HTML）, `ammonia`（サニタイズ）, `rumdl`（lint）」等、実装に合わせる。
-2. docs/architecture.md:178 の `pulldown-cmark / comrak` も `comrak` 中心に更新（サニタイズと lint への言及を追加可）。
-3. ADR-0163 の未決定「README / architecture の依存一覧更新」を解消済みにする。
-4. markdownlint が通る。コード変更は行わない。
+1. `report_save_failure()` が発行するイベントに、対象画面（reader / editor）を
+   識別できる情報を含めるか、リスナーを 1 箇所へ集約する。
+2. Editor / Reader の両方が同時に存在しても、誤った画面の status を上書きしない。
+3. 既存の 3 経路（下書き / 読書位置 / 表示設定 / 履歴）の通知を壊さない。
+4. E2E 240 項目（必要なら +1）と全ゲートを壊さない。
 
 ## Acceptance criteria
 
-- markdownlint（全 docs + README）が 0 issues。
+- 全ゲート成功、E2E 240 または 241 項目成功。
 
 ## Constraints
 
-- ADR-0086 のタイトル（脆弱性修正の履歴）は変更しない。
-- `todo.md` と `docs/investigation/` は触らない。
+- 新規依存を追加しない。
+- 本文・値をイベントへ載せない（ADR-0154 / 0164 の原則維持）。
 - `master` へ push する。force push はしない。
