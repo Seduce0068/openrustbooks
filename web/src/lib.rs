@@ -1795,6 +1795,26 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (current, set_current) = signal(0_usize);
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
+    // 巨大画像の自然サイズは画像の読み込み完了時に確定する。位置適用の
+    // セトリング待ちには 2 秒の上限があるため、それを過ぎて読み込まれる
+    // 画像を取りこぼさないよう load イベントでも警告を検出する。
+    // load はバブルしないため document でキャプチャする。
+    if let Some(window) = web_sys::window()
+        && let Some(document) = window.document()
+    {
+        let on_image_load = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            if let Some(message) = find_large_image() {
+                set_status.set(message);
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = document.add_event_listener_with_callback_and_bool(
+            "load",
+            on_image_load.as_ref().unchecked_ref(),
+            true,
+        );
+        // ページ寿命まで有効にするため保持する。
+        on_image_load.forget();
+    }
     let (cover_url, set_cover_url) = signal(None::<String>);
     // 本文の言語（EPUB の metadata.language）。スクリーンリーダーの発音用。
     let (content_lang, set_content_lang) = signal(None::<String>);
