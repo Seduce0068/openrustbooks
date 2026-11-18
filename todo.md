@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【TD-H04】`can_watch=true` を報告しつつ `LocalStorage::watch()` は常に未実装エラー。
-  根拠 `core/src/io.rs:291,571-574` / `desktop/src/commands/fs.rs:145-157` /
-  `desktop/src/main.rs:111`。実装するか `can_watch=false` とコマンド非公開化。
 - 【TD-H05】エディタ下書きが画面遷移・リロードで失われる（自動保存／未保存表示／beforeunload 無い）。
   根拠 `web/src/lib.rs:219-220,248-272,281-292` / `docs/requirements.md:159`。
 - 【TD-H06】エディタ下書きがバックアップのエクスポート／インポート対象外。
@@ -215,6 +212,9 @@ status: current
 
 ## 完了
 
+- [x] 【TD-H04】can_watch を false 化し、未登録の watch_directory 関数も削除。
+      capability / IPC / 実装を一致。core 212 件・E2E 247 件・全ゲート成功
+      / ADR-0178。
 - [x] 【PR-H04】設定保存と AI service 初期化を prepare/commit に分離。
       生成失敗時に config / disk / service を不変とし、保存成功後のみ service を置換。
       desktop 59 件・E2E 247 件・全ゲート成功 / ADR-0177。
