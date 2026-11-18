@@ -380,11 +380,13 @@ impl WasmDiffResult {
 }
 
 /// Wasm-compatible AI Markdown service
+///
+/// fail-closed: ブラウザには AI クライアントが無いため、すべてのメソッドは
+/// 架空の成功値を返さずエラーを返す（ADR-0099）。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct WasmAiMarkdownService {
-    /// Reserved for the browser AI client, which is not implemented yet: the
-    /// methods below still return placeholder content.
+    /// Reserved for the browser AI client, which is not implemented yet.
     #[allow(dead_code)]
     config: JsValue,
 }
@@ -404,16 +406,10 @@ impl WasmAiMarkdownService {
         prompt: String,
         _context: Option<String>,
     ) -> Result<WasmPipelineResult, JsValue> {
-        // This would call the actual pipeline
-        // For now, return a placeholder
-        console_log!("Generate called with prompt: {}", prompt);
-        Ok(WasmPipelineResult {
-            content: format!("# Generated\n\nContent for: {}", prompt),
-            diff: None,
-            lint_passed: true,
-            attempts: 1,
-            tokens_used: 100,
-        })
+        console_log!("AI generate unavailable (prompt: {} chars)", prompt.len());
+        Err(JsValue::from_str(
+            "AI features are not available in the browser.",
+        ))
     }
 
     /// Refine existing Markdown
@@ -424,14 +420,14 @@ impl WasmAiMarkdownService {
         instruction: String,
         _context: Option<String>,
     ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!("Refine called with instruction: {}", instruction);
-        Ok(WasmPipelineResult {
-            content: format!("{}\n\n<!-- Refined: {} -->", content, instruction),
-            diff: None,
-            lint_passed: true,
-            attempts: 1,
-            tokens_used: 150,
-        })
+        console_log!(
+            "AI refine unavailable (content: {} chars, instruction: {} chars)",
+            content.len(),
+            instruction.len()
+        );
+        Err(JsValue::from_str(
+            "AI features are not available in the browser.",
+        ))
     }
 
     /// Convert to table
@@ -442,15 +438,10 @@ impl WasmAiMarkdownService {
         format: String,
         _headers: Option<JsValue>,
     ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!("Table conversion for format: {}", format);
-        Ok(WasmPipelineResult {
-            content: "| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |"
-                .to_string(),
-            diff: None,
-            lint_passed: true,
-            attempts: 1,
-            tokens_used: 80,
-        })
+        console_log!("AI table conversion unavailable (format: {})", format);
+        Err(JsValue::from_str(
+            "AI features are not available in the browser.",
+        ))
     }
 
     /// Generate front matter
@@ -460,18 +451,21 @@ impl WasmAiMarkdownService {
         content: String,
         _schema: Option<JsValue>,
     ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!("Front matter generation");
-        Ok(WasmPipelineResult {
-            content: format!("---\ntitle: Generated\n---\n\n{}", content),
-            diff: None,
-            lint_passed: true,
-            attempts: 1,
-            tokens_used: 50,
-        })
+        console_log!(
+            "AI front matter unavailable (content: {} chars)",
+            content.len()
+        );
+        Err(JsValue::from_str(
+            "AI features are not available in the browser.",
+        ))
     }
 }
 
 /// Wasm-compatible Markdown linter
+///
+/// fail-closed: rumdl の lint 本体は wasm でもビルドできるが、ブラウザ側の
+/// 設定パース／issue 変換／未収束時の扱いを安全に配線していないため、
+/// 架空の「問題なし」を返さずエラーを返す。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct WasmMarkdownLinter {
@@ -490,20 +484,21 @@ impl WasmMarkdownLinter {
 
     #[wasm_bindgen]
     pub fn lint(&self, content: String) -> Result<JsValue, JsValue> {
-        console_log!("Linting content ({} chars)", content.len());
-        // Return empty issues array for now
-        Ok(serde_wasm_bindgen::to_value(&Vec::<WasmLintIssue>::new()).unwrap())
+        console_log!("Linting unavailable (content: {} chars)", content.len());
+        Err(JsValue::from_str(
+            "Linting is not available in the browser.",
+        ))
     }
 
     #[wasm_bindgen]
     pub async fn lint_and_fix(&self, content: String) -> Result<WasmLintFixResult, JsValue> {
-        console_log!("Lint and fix content ({} chars)", content.len());
-        Ok(WasmLintFixResult {
-            passed: true,
-            issues: vec![],
-            fixed_content: content,
-            fixes_applied: 0,
-        })
+        console_log!(
+            "Lint and fix unavailable (content: {} chars)",
+            content.len()
+        );
+        Err(JsValue::from_str(
+            "Linting is not available in the browser.",
+        ))
     }
 }
 
@@ -684,8 +679,48 @@ pub mod utils {
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
-    use super::WasmConfig;
+    use super::{WasmAiMarkdownService, WasmConfig, WasmMarkdownLinter};
+    use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// `Result<T, JsValue>` が期待どおりのエラー文字列を返すことを検証する。
+    /// `unwrap_err()` は `T: Debug` を要求するため `match` で回避する。
+    fn assert_js_error<T>(result: Result<T, JsValue>, expected: &str) {
+        match result {
+            Ok(_) => panic!("expected an error: {expected}"),
+            Err(error) => assert_eq!(error.as_string().as_deref(), Some(expected)),
+        }
+    }
+
+    #[wasm_bindgen_test]
+    async fn ai_methods_fail_closed() {
+        const EXPECTED: &str = "AI features are not available in the browser.";
+        let service = WasmAiMarkdownService::new(JsValue::NULL);
+
+        assert_js_error(service.generate("prompt".into(), None).await, EXPECTED);
+        assert_js_error(
+            service
+                .refine("content".into(), "instruction".into(), None)
+                .await,
+            EXPECTED,
+        );
+        assert_js_error(
+            service
+                .to_table("data".into(), "markdown".into(), None)
+                .await,
+            EXPECTED,
+        );
+        assert_js_error(service.front_matter("content".into(), None).await, EXPECTED);
+    }
+
+    #[wasm_bindgen_test]
+    async fn lint_methods_fail_closed() {
+        const EXPECTED: &str = "Linting is not available in the browser.";
+        let linter = WasmMarkdownLinter::new(JsValue::NULL);
+
+        assert_js_error(linter.lint("# Heading\n".into()), EXPECTED);
+        assert_js_error(linter.lint_and_fix("# Heading\n".into()).await, EXPECTED);
+    }
 
     #[wasm_bindgen_test]
     fn ai_disabled_by_default() {
