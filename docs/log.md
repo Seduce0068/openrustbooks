@@ -1,5 +1,8 @@
 # log
 
+## 2026-11-19
+
+- 全消去／インポートの部分失敗を操作単位で通知し、E2E を 242→243 に更新（ADR-0169）。
 ## 2026-11-18
 
 - 未使用の workspace.dependencies.rumdl を削除し、default features 復活の罠を排除（ADR-0168）。

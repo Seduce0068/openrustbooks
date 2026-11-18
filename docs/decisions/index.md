@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 168 件）。
+openrustbooks の ADR 一覧（全 169 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -338,3 +338,5 @@ openrustbooks の ADR 一覧（全 168 件）。
   - status: accepted — 下書き保存に 1 MiB の UTF-8 バイト上限を設け、超過時は保存せず固定文言で通知する決定を記録する。
 - [ADR-0168: workspace の rumdl 宣言削除](0168-workspace-rumdl-cleanup.md)
   - status: accepted — 未使用の workspace.dependencies.rumdl を削除し、default features 復活の罠を排除する決定を記録する。
+- [ADR-0169: 部分ストレージ失敗の可視化](0169-partial-storage-failures.md)
+  - status: accepted — 読書位置の全消去・インポートの部分失敗を操作単位で通知する決定を記録する。
