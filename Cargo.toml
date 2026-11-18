@@ -24,7 +24,6 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.8", features = ["serde", "v4"] }
 comrak = { version = "0.59", default-features = false }
-rumdl = { version = "0.3", default-features = true }
 async-openai = { version = "0.42", features = ["chat-completion"] }
 tiktoken-rs = "0.12"
 reqwest = { version = "0.13", features = ["json", "stream"] }
