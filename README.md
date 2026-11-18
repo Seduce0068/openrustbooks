@@ -316,6 +316,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0127-editor-ui-integration](docs/decisions/0127-editor-ui-integration.md)
 - [0128-settings-form-wiring](docs/decisions/0128-settings-form-wiring.md)
 - [0129-document-path-validation](docs/decisions/0129-document-path-validation.md)
+- [0130-desktop-csp](docs/decisions/0130-desktop-csp.md)
+  - desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
   - desktop の document command で AppConfig.local_roots によるパス検証を行う決定を記録する。
   - SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。
   - CodeMirror を導入せず、既存の Tauri command を段階的に Web UI へ接続する方針を記録する。

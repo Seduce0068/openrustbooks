@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 129 件）。
+openrustbooks の ADR 一覧（全 130 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -260,3 +260,5 @@ openrustbooks の ADR 一覧（全 129 件）。
   - status: accepted — SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。
 - [ADR-0129: document command のパス封じ込め](0129-document-path-validation.md)
   - status: accepted — desktop の document command で AppConfig.local_roots によるパス検証を行う決定を記録する。
+- [ADR-0130: デスクトップ版 CSP の Wasm 対応](0130-desktop-csp.md)
+  - status: accepted — desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
