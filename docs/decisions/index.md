@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 179 件）。
+openrustbooks の ADR 一覧（全 180 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -360,3 +360,5 @@ openrustbooks の ADR 一覧（全 179 件）。
   - status: accepted — 未実装の watch を利用可能と報告せず、到達不能な IPC も削除する決定を記録する。
 - [ADR-0179: エディタ下書きのデバウンス自動保存](0179-editor-autosave.md)
   - status: accepted — 明示 Save に加えてデバウンス自動保存を導入し、画面遷移時の下書き損失を防ぐ決定を記録する。
+- [ADR-0180: エディタ下書きのバックアップ対応](0180-draft-backup.md)
+  - status: accepted — バックアップ JSON に下書きを optional field として含め、復元時に現在値を保護する決定を記録する。
