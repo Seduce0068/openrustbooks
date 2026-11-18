@@ -1,36 +1,34 @@
 # Goal
 
-`Cdp.send()` の `recv()` にタイムアウトを設ける（ADR-0142 / 0143 の未決定）。
+縦書き表示とページ送りの現状を調査し、段階導入方針を判断する（todo.md の残タスク）。
 
 ## Scope
 
 ### 背景
 
-`tools/verify-web-reader.py:398` の `await self.ws.recv()` にはタイムアウトが無く、
-CDP が応答を返さない場合 `wait_until` の 20 秒 wall-clock deadline も効かず
-E2E 全体がハングし得る（ADR-0142 / 0143 の未決定）。
+Web リーダーは現在横書きの連続スクロール（`readers-writing-mode` 等は未実装）。
+ユーザー要望には縦書き／ページ送りが残っているが、要件と実装経路が未整理。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更（`asyncio.wait_for` による recv タイムアウト）
-- `docs/decisions/0144-cdp-recv-timeout.md`: 追加
+- `docs/decisions/0145-vertical-writing-pagination.md`: 追加（調査と判断）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `Cdp.send()` の `recv()` を `asyncio.wait_for` で包み、既定タイムアウト（例 10 秒）を設定する。
-2. タイムアウト時は `RuntimeError`（または同等）で失敗させ、診断情報を添える（fail-closed）。
-3. 通常の CDP 応答・診断イベント退避は維持する。
-4. E2E 期待総数 229 は維持する。
-5. 5 回連続実行で 0 失敗、全ゲート成功。
+1. Web / core の現在の表示・スクロール・位置復元の仕組みを列挙する。
+2. 縦書き（CSS `writing-mode: vertical-rl`）を入れた場合に壊れる既存機能（位置復元、画像、フラグメント、E2E）を特定する。
+3. ページ送り（連続スクロールとの併用／排他）の選択肢を比較する。
+4. 実装／見送り／段階導入を判断し記録する。
+5. コード変更は行わない（調査と決定のみ）。
 
 ## Acceptance criteria
 
-- E2E 229 項目 5 回連続 0 失敗。
-- 6 ゲート + audit + wasm-test が成功する。
+- 判断が ADR に記録される。
+- markdownlint が通る。
 
 ## Constraints
 
-- 新規依存を追加しない（Python 標準 `asyncio` のみ）。
-- CDP プロトコルの意味（id 照合、イベント退避）は変更しない。
+- コードを変更しない。
+- 新規依存を追加しない（調査のみ）。
 - `master` へ push する。force push はしない。
