@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 199 件）。
+openrustbooks の ADR 一覧（全 200 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -400,3 +400,5 @@ openrustbooks の ADR 一覧（全 199 件）。
   - status: accepted — 本文領域のアクセシブル名を aria-labelledby へ一本化し、ダーク切替の状態を実効値で告知する決定を記録する。
 - [ADR-0199: 第三者通知の網羅](0199-third-party-notices.md)
   - status: accepted — 配布に関係する依存クレートを cargo metadata から網羅し、ライセンス ID と出典を第三者通知へ記載する決定を記録する。
+- [ADR-0200: send_wrapper の直接依存化](0200-send-wrapper-direct-dep.md)
+  - status: accepted — Leptos の doc(hidden) re-export を避け、send_wrapper を web クレートの直接依存として使う決定を記録する。
