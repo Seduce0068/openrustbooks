@@ -776,7 +776,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 223 + checker.equal 17 = 240。
+    # 期待 check 総数: checker.check 224 + checker.equal 17 = 241。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -785,8 +785,9 @@ async def run_checks(cdp: Cdp) -> int:
     # エディタの textarea 入力→Preview 反映とデスクトップ専用操作の disabled 化 +2
     # （ADR-0127 の最小構成）、Markdown 見出しの描画と script 除去 +1、
     # エディタ下書きの localStorage 保存→リロード復元 +1 と保存失敗の status /
-    # console 通知 +1（ADR-0154 / ADR-0161）。
-    checker = Checker(expected=240)
+    # console 通知 +1（ADR-0154 / ADR-0161）、
+    # 保存失敗イベントの送信先分離（旧共通名が status を書き換えない）+1（ADR-0164）。
+    checker = Checker(expected=241)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -816,7 +817,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 240 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 241 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3922,6 +3923,35 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
           localStorage.removeItem('openrustbooks:editor:e2e');
           return true;
         })()""")
+
+    # ADR-0164: 保存失敗イベントを Reader / Editor で分けたため、旧共通名の
+    # イベントはどちらのリスナーも購読せず、Editor の status は変化しない。
+    # 旧方式では両リスナーが共通名を購読し status が競合し得た。
+    try:
+        await cdp.evaluate(
+            "(() => { const save = Array.from(document.querySelectorAll('.editor-toolbar button'))"
+            ".find((b) => (b.getAttribute('aria-label') || '').includes('Save draft'));"
+            " if (save) save.click(); return true; })()"
+        )
+        draft_ok = await wait_until(
+            cdp,
+            "document.querySelector('.editor-status')?.textContent.includes('下書きを保存しました')",
+            timeout=5,
+        )
+        await cdp.evaluate("window.dispatchEvent(new Event('openrustbooks:save-error'))")
+        await asyncio.sleep(0.2)
+        isolated_status = await cdp.evaluate(
+            "document.querySelector('.editor-status')?.textContent ?? ''"
+        )
+        checker.check(
+            "旧共通の保存失敗イベントは status を更新しない",
+            draft_ok and "下書きを保存しました" in isolated_status,
+            f"(status={isolated_status!r})",
+        )
+    finally:
+        await cdp.evaluate(
+            "(() => { localStorage.removeItem('openrustbooks:editor:e2e'); return true; })()"
+        )
 
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
     # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の

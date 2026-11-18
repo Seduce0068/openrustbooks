@@ -217,7 +217,8 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::new());
 
-    // 保存失敗（ADR-0154）を受け取り、利用者向けの status に表示する。
+    // 保存失敗（ADR-0154 / 0164）のうち Editor 向けだけを受け取り、
+    // 利用者向けの status に表示する。Reader 向けイベントは受け取らない。
     // dispatch_event は同期なので、Save ハンドラの report_save_failure の
     // 直後にこのリスナーが走る。本文はイベントにも status にも載せない。
     if let Some(window) = web_sys::window() {
@@ -225,7 +226,7 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
             set_status.set(SAVE_ERROR_MESSAGE.to_string());
         }) as Box<dyn FnMut(web_sys::Event)>);
         let _ = window.add_event_listener_with_callback(
-            "openrustbooks:save-error",
+            SaveErrorTarget::Editor.event_name(),
             on_save_error.as_ref().unchecked_ref(),
         );
         // ページ寿命まで有効にするため保持する。
@@ -1319,18 +1320,43 @@ fn prune_positions(storage: &web_sys::Storage, keep: &str) {
 const SAVE_ERROR_MESSAGE: &str =
     "保存に失敗しました。ブラウザの設定または空き容量を確認してください。";
 
+/// 保存失敗通知の送信先（ADR-0164 のリスナー競合を解消する）。
+///
+/// 送信先ごとにイベント名を分ける。SPA 遷移後も `forget()` したリスナーは
+/// window に残るため、同じイベントを両画面が購読すると status が競合する。
+/// イベントへ載せるのは送信先を表すイベント名だけで、本文・値・キー名は
+/// 含めない（ADR-0154 の redaction 方針を維持）。
+#[derive(Clone, Copy)]
+enum SaveErrorTarget {
+    /// Reader の保存失敗通知は wasm ビルドだけが発行する（native の Reader は stub）。
+    #[cfg(target_arch = "wasm32")]
+    Reader,
+    Editor,
+}
+
+impl SaveErrorTarget {
+    /// 各画面のリスナーが購読するイベント名。
+    fn event_name(self) -> &'static str {
+        match self {
+            #[cfg(target_arch = "wasm32")]
+            Self::Reader => "openrustbooks:save-error:reader",
+            Self::Editor => "openrustbooks:save-error:editor",
+        }
+    }
+}
+
 /// localStorage の保存失敗をコンソールと status に通知する。
 ///
 /// wasm では tracing の出力が確認しづらいため `console.error` を使う。
 /// save 関数は `set_status` を直接持たないので、window へのカスタムイベントで
-/// Reader / Editor に伝え、そこで status を更新する。文言は固定なので
-/// イベントに機微情報を載せる必要はない。
-fn report_save_failure(context: &str) {
+/// 送信先の画面へ伝え、そこで status を更新する。通常の `Event` を使い、
+/// 本文・値・キー名はイベントにも固定文言にも載せない。
+fn report_save_failure(context: &str, target: SaveErrorTarget) {
     web_sys::console::error_1(&JsValue::from_str(&format!(
         "openrustbooks: {context} の保存に失敗しました"
     )));
     if let Some(window) = web_sys::window()
-        && let Ok(event) = web_sys::Event::new("openrustbooks:save-error")
+        && let Ok(event) = web_sys::Event::new(target.event_name())
     {
         let _ = window.dispatch_event(&event);
     }
@@ -1354,17 +1380,17 @@ fn load_editor_draft(doc_id: &str) -> Option<String> {
 /// ADR-0154 の共通通知（カスタムイベント + console.error）だけを発行する。
 fn save_editor_draft(doc_id: &str, content: &str) -> bool {
     let Some(window) = web_sys::window() else {
-        report_save_failure("下書き");
+        report_save_failure("下書き", SaveErrorTarget::Editor);
         return false;
     };
     let Ok(Some(storage)) = window.local_storage() else {
-        report_save_failure("下書き");
+        report_save_failure("下書き", SaveErrorTarget::Editor);
         return false;
     };
     if storage.set_item(&editor_draft_key(doc_id), content).is_ok() {
         true
     } else {
-        report_save_failure("下書き");
+        report_save_failure("下書き", SaveErrorTarget::Editor);
         false
     }
 }
@@ -1376,11 +1402,11 @@ fn save_editor_draft(doc_id: &str, content: &str) -> bool {
 #[cfg(target_arch = "wasm32")]
 fn save_position(key: &str, position: &SavedPosition) {
     let Some(window) = web_sys::window() else {
-        report_save_failure("読書位置");
+        report_save_failure("読書位置", SaveErrorTarget::Reader);
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
-        report_save_failure("読書位置");
+        report_save_failure("読書位置", SaveErrorTarget::Reader);
         return;
     };
     let position = SavedPosition {
@@ -1409,7 +1435,7 @@ fn save_position(key: &str, position: &SavedPosition) {
             return;
         }
     }
-    report_save_failure("読書位置");
+    report_save_failure("読書位置", SaveErrorTarget::Reader);
 }
 
 /// 表示設定の localStorage キー。
@@ -1554,16 +1580,16 @@ fn load_settings() -> ReaderSettings {
 #[cfg(target_arch = "wasm32")]
 fn save_settings(settings: &ReaderSettings) {
     let Some(window) = web_sys::window() else {
-        report_save_failure("表示設定");
+        report_save_failure("表示設定", SaveErrorTarget::Reader);
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
-        report_save_failure("表示設定");
+        report_save_failure("表示設定", SaveErrorTarget::Reader);
         return;
     };
     if let Ok(raw) = serde_json::to_string(settings) {
         if storage.set_item(SETTINGS_KEY, &raw).is_err() {
-            report_save_failure("表示設定");
+            report_save_failure("表示設定", SaveErrorTarget::Reader);
         }
     }
 }
@@ -1959,11 +1985,11 @@ fn load_history(key: &str, chapter_count: usize) -> Option<SavedHistory> {
 #[cfg(target_arch = "wasm32")]
 fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
     let Some(window) = web_sys::window() else {
-        report_save_failure("履歴");
+        report_save_failure("履歴", SaveErrorTarget::Reader);
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
-        report_save_failure("履歴");
+        report_save_failure("履歴", SaveErrorTarget::Reader);
         return;
     };
     let saved = SavedHistory {
@@ -1980,7 +2006,7 @@ fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
     };
     if let Ok(raw) = serde_json::to_string(&saved) {
         if storage.set_item(key, &raw).is_err() {
-            report_save_failure("履歴");
+            report_save_failure("履歴", SaveErrorTarget::Reader);
         }
     }
 }
@@ -2092,13 +2118,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         // ページ寿命まで有効にするため保持する。
         on_image_load.forget();
     }
-    // save 関数からの保存失敗通知を受け取り status に表示する。
+    // save 関数からの Reader 向け保存失敗通知だけを受け取り status に表示する。
+    // Editor 向けイベントは受け取らず、status を競合させない（ADR-0164）。
     if let Some(window) = web_sys::window() {
         let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
             set_status.set(SAVE_ERROR_MESSAGE.to_string());
         }) as Box<dyn FnMut(web_sys::Event)>);
         let _ = window.add_event_listener_with_callback(
-            "openrustbooks:save-error",
+            SaveErrorTarget::Reader.event_name(),
             on_save_error.as_ref().unchecked_ref(),
         );
         // ページ寿命まで有効にするため保持する。
