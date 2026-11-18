@@ -51,7 +51,7 @@ ADR-0162 で comrak 0.59（featureless）を Markdown Preview に採用した結
 
 ## 未決定
 
-- workspace.dependencies の rumdl エントリ整理（ADR-0155 と連動）。
+- ~~workspace.dependencies の rumdl エントリ整理~~ ADR-0168 で削除済み。
 
 ## 解消済み
 

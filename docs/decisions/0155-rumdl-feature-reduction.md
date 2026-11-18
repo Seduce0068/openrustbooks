@@ -64,8 +64,7 @@ core は `rumdl_lib::config::Config` と rules API のみを使用
 
 ## 未決定
 
-- ルート workspace の `rumdl` エントリを `default-features=false` に
-  揃えるか削除するか。
+- ~~ルート workspace の `rumdl` エントリ~~ ADR-0168 で削除済み。
 - `parallel` 再導入の要否（性能ベンチ未実施）。
 - 上流 rumdl が serde_yaml / tikv-jemallocator を optional 化するか
   （0.3.4 でも未変化、0.3 固定下では解消不可）。

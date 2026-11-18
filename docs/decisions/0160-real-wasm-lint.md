@@ -72,7 +72,7 @@ native の `MarkdownLinter` も wasm でコンパイルされるため、
 - エラー文言の i18n、`js_sys::Error` 化（`e.message` 提供）。
 - 未知キーの拒否方針、部分 config のフィールド単位マージ。
 - `WasmConfig.lint_enabled` / `auto_fix` と `LintConfig` の権威関係。
-- バンドルサイズ計測とサイズゲート、ルート `Cargo.toml:28` の
-  workspace rumdl `default-features=true` 残存（ADR-0155 から継続）。
+- バンドルサイズ計測とサイズゲート（ADR-0155 から継続）。
+  ~~workspace rumdl 残存~~ ADR-0168 で削除済み。
 - `conflict_cycle`、反復上限 10 の根拠、`rule_config` 上限、
   severity / enabled のルール単位 support（既存 ADR から継続）。
