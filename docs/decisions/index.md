@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 153 件）。
+openrustbooks の ADR 一覧（全 154 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -308,3 +308,5 @@ openrustbooks の ADR 一覧（全 153 件）。
   - status: accepted — 配布 WASM の開発ホスト絶対パス検査を、glob 非マッチと grep エラーでも失敗するようにする決定を記録する。
 - [ADR-0153: About 画面の表示内容の正確化](0153-about-page-accuracy.md)
   - status: accepted — About 画面のライセンスと対応形式を実装事実に合わせる決定を記録する。
+- [ADR-0154: localStorage 保存失敗の可視化](0154-storage-failure-visibility.md)
+  - status: accepted — localStorage への保存失敗時に固定文言の status 表示と console.error を出す決定を記録する。
