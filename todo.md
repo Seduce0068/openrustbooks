@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【PR-H01 / TD-H01】`WriteOptions.overwrite` が無視され既存ファイルが黙って上書きされる。
-  根拠 `core/src/io.rs:443-459` / `desktop/src/commands/fs.rs:78`。`overwrite=false` のとき
-  `create_new` または存在確認で AlreadyExists を返す。
 - 【PR-H02 / TD-H02】`read_text` が不正 UTF-8 の内容断片をエラー文言へ埋め込む。
   根拠 `core/src/io.rs:432-439`。lossy 変換して返すか、理由のみのエラーにする。
 - 【PR-H03 / TD-H03】EPUB 非同期ロードに世代管理が無く、古いファイルが新しい選択を上書きする。
@@ -234,6 +231,10 @@ status: current
 - [x] 2026-11-19: `swarm-project-review` 5 観点と `swarm-todo-discovery` 5 観点を
       並列実行し、R6 で重複排除・根拠確認・重大度再判定のうえ未着手へ追記。
       エージェントは 10 体、深さ 1、書き込みは `todo.md` のみ。
+- [x] 【PR-H01 / TD-H01】`WriteOptions.overwrite` を実効化。
+      `core/src/io.rs` で既存ファイルを拒否し、root 相対パスのみをエラーへ記載。
+      unit 6 件追加（core 208 件）、`./scripts/verify.sh` rc=0 / E2E 246 件成功
+      / ADR-0173。TOCTOU は未決定として継続。
 
 ## メモ
 
