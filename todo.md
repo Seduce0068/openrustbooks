@@ -22,8 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【TD-H05】エディタ下書きが画面遷移・リロードで失われる（自動保存／未保存表示／beforeunload 無い）。
-  根拠 `web/src/lib.rs:219-220,248-272,281-292` / `docs/requirements.md:159`。
 - 【TD-H06】エディタ下書きがバックアップのエクスポート／インポート対象外。
   根拠 `web/src/lib.rs:1397-1409,1716-1777,1843-1855,1988`。
 - 【PR-H06】SVG サニタイズが core（ammonia）と web（DomParser + 手動）で二重実装され drift リスク。
@@ -212,6 +210,9 @@ status: current
 
 ## 完了
 
+- [x] 【TD-H05】エディタ下書きを 800ms デバウンス自動保存し、未保存表示を追加。
+      タイマー cleanup と世代ガードで古い発火を破棄。beforeunload は E2E 阻塞のため見送り。
+      E2E 248 件・全ゲート成功 / ADR-0179。
 - [x] 【TD-H04】can_watch を false 化し、未登録の watch_directory 関数も削除。
       capability / IPC / 実装を一致。core 212 件・E2E 247 件・全ゲート成功
       / ADR-0178。
