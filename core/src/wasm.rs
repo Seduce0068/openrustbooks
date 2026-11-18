@@ -461,44 +461,94 @@ impl WasmAiMarkdownService {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+use crate::{
+    ai_markdown::lint::{LintIssue, LintResultWrapper, LintSeverity, MarkdownLinter, lint_passed},
+    config::LintConfig,
+};
+
 /// Wasm-compatible Markdown linter
 ///
-/// fail-closed: rumdl の lint 本体は wasm でもビルドできるが、ブラウザ側の
-/// 設定パース／issue 変換／未収束時の扱いを安全に配線していないため、
-/// 架空の「問題なし」を返さずエラーを返す。
+/// featureless の rumdl を直接配線した実 lint。ADR-0156 の fail-closed スタブを
+/// 解消し、ブラウザでも `MarkdownLinter` の判定結果をそのまま返す。
+/// `converged` / `conflicting_rules` は `WasmLintFixResult` にまだ公開しない
+/// （ADR-0156 の未決定を維持し、構造体変更を最小限に留める）。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct WasmMarkdownLinter {
-    /// Reserved for wiring up `rumdl` rules in the browser build.
-    #[allow(dead_code)]
-    config: JsValue,
+    inner: MarkdownLinter,
+    /// `LintConfig.auto_fix` を保持し、修正経路の分岐に使う。
+    auto_fix: bool,
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl WasmMarkdownLinter {
+    /// JS 側の設定を解釈して lint 本体を構築する。
+    ///
+    /// `null` / `undefined`（引数省略）は `LintConfig::default()` を使う。
+    /// それ以外は `serde_wasm_bindgen::from_value` で完全な `LintConfig` を要求し、
+    /// パース失敗（型不一致・必須フィールド不足）は既定へ反転させずエラーにする
+    /// （fail-closed）。未知のキーは serde が無視する。パース成功後も
+    /// `MarkdownLinter::new` がルール設定を検証し、不正な rule_config はエラーにする。
     #[wasm_bindgen(constructor)]
-    pub fn new(config: JsValue) -> Self {
-        Self { config }
+    pub fn new(config: JsValue) -> Result<Self, JsValue> {
+        // null / undefined（引数省略）は既定設定。それ以外はパース失敗を
+        // 黙って既定に落とさずエラーにする（部分オブジェクトの
+        // `auto_fix:false` が既定 true へ反転する fail-open を避ける）。
+        let lint_config = if config.is_null() || config.is_undefined() {
+            LintConfig::default()
+        } else {
+            match serde_wasm_bindgen::from_value::<LintConfig>(config) {
+                Ok(value) => value,
+                Err(error) => {
+                    return Err(JsValue::from_str(&format!("Invalid lint config: {error}")));
+                }
+            }
+        };
+        let auto_fix = lint_config.auto_fix;
+        let inner = MarkdownLinter::new(&lint_config).map_err(js_error)?;
+        Ok(Self { inner, auto_fix })
     }
 
+    /// Markdown を lint し、issues を JS 配列として返す。
     #[wasm_bindgen]
     pub fn lint(&self, content: String) -> Result<JsValue, JsValue> {
-        console_log!("Linting unavailable (content: {} chars)", content.len());
-        Err(JsValue::from_str(
-            "Linting is not available in the browser.",
-        ))
+        console_log!("Linting markdown (content: {} chars)", content.len());
+        let issues = self.inner.lint(&content).map_err(js_error)?;
+        let wasm_issues: Vec<WasmLintIssue> = issues.iter().map(to_wasm_issue).collect();
+        serde_wasm_bindgen::to_value(&wasm_issues)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
+    /// Lint し、`auto_fix` が有効なら自動修正して結果を返す。
+    ///
+    /// ネイティブの `validate_content` と同じ分岐を wasm 側でも再現する
+    /// （`MarkdownLinter::lint_and_fix` 自体は auto_fix 引数を持たないため）。
     #[wasm_bindgen]
     pub async fn lint_and_fix(&self, content: String) -> Result<WasmLintFixResult, JsValue> {
-        console_log!(
-            "Lint and fix unavailable (content: {} chars)",
-            content.len()
-        );
-        Err(JsValue::from_str(
-            "Linting is not available in the browser.",
-        ))
+        let result: LintResultWrapper = if self.auto_fix {
+            self.inner.lint_and_fix(&content).await.map_err(js_error)?
+        } else {
+            let issues = self.inner.lint(&content).map_err(js_error)?;
+            let passed = lint_passed(&issues, self.inner.warnings_as_errors());
+            LintResultWrapper {
+                passed,
+                issues,
+                fixed_content: content.clone(),
+                fixes_applied: 0,
+                // lint のみの経路では修正を行わないため収束扱いとする。
+                converged: true,
+                conflicting_rules: Vec::new(),
+            }
+        };
+
+        Ok(WasmLintFixResult {
+            passed: result.passed,
+            issues: result.issues.iter().map(to_wasm_issue).collect(),
+            fixed_content: result.fixed_content,
+            fixes_applied: result.fixes_applied,
+        })
     }
 }
 
@@ -511,9 +561,35 @@ pub struct WasmLintIssue {
     rule_name: String,
     line: usize,
     column: usize,
+    // GOAL.md の必須事項に従い、native の LintIssue と同じ範囲情報を公開する。
+    end_line: Option<usize>,
+    end_column: Option<usize>,
     message: String,
     severity: String,
     fixable: bool,
+}
+
+/// `LintIssue` を JS 公開用の `WasmLintIssue` へ変換する。
+///
+/// severity は `LintSeverity` の serde 表現（lowercase）と揃えた文字列にする。
+#[cfg(target_arch = "wasm32")]
+fn to_wasm_issue(issue: &LintIssue) -> WasmLintIssue {
+    let severity = match issue.severity {
+        LintSeverity::Error => "error",
+        LintSeverity::Warning => "warning",
+        LintSeverity::Info => "info",
+    };
+    WasmLintIssue {
+        rule: issue.rule.clone(),
+        rule_name: issue.rule_name.clone(),
+        line: issue.line,
+        column: issue.column,
+        end_line: issue.end_line,
+        end_column: issue.end_column,
+        message: issue.message.clone(),
+        severity: severity.to_string(),
+        fixable: issue.fixable,
+    }
 }
 
 /// Wasm-compatible lint fix result
@@ -536,8 +612,9 @@ impl WasmLintFixResult {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn issues(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self.issues).unwrap()
+    pub fn issues(&self) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(&self.issues)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen(getter)]
@@ -713,13 +790,105 @@ mod tests {
         assert_js_error(service.front_matter("content".into(), None).await, EXPECTED);
     }
 
-    #[wasm_bindgen_test]
-    async fn lint_methods_fail_closed() {
-        const EXPECTED: &str = "Linting is not available in the browser.";
-        let linter = WasmMarkdownLinter::new(JsValue::NULL);
+    fn linter() -> WasmMarkdownLinter {
+        // null は LintConfig としてパースできないため既定設定へフォールバックする。
+        WasmMarkdownLinter::new(JsValue::NULL).expect("linter should build")
+    }
 
-        assert_js_error(linter.lint("# Heading\n".into()), EXPECTED);
-        assert_js_error(linter.lint_and_fix("# Heading\n".into()).await, EXPECTED);
+    /// `lint()` が返した JS 配列を rule ID のリストへ変換する。
+    fn rule_names(value: JsValue) -> Vec<String> {
+        let issues: Vec<super::WasmLintIssue> =
+            serde_wasm_bindgen::from_value(value).expect("issues should deserialize");
+        issues.into_iter().map(|issue| issue.rule).collect()
+    }
+
+    #[wasm_bindgen_test]
+    fn lint_returns_no_issues_for_clean_markdown() {
+        let rules = rule_names(
+            linter()
+                .lint("# Title\n\nClean paragraph.\n".into())
+                .expect("lint should succeed"),
+        );
+        assert!(
+            rules.is_empty(),
+            "clean markdown should have no issues: {rules:?}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn lint_detects_inline_html() {
+        let rules = rule_names(
+            linter()
+                .lint("# Title\n\n<div>html</div>\n".into())
+                .expect("lint should succeed"),
+        );
+        assert!(
+            !rules.is_empty(),
+            "inline HTML should produce at least one issue"
+        );
+        assert!(
+            rules.iter().any(|rule| rule == "MD033"),
+            "MD033 should be detected: {rules:?}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    async fn lint_and_fix_returns_passed_and_fixed_content() {
+        let dirty = "# Title\n\nTrailing spaces here   \n";
+        let result = linter()
+            .lint_and_fix(dirty.into())
+            .await
+            .expect("lint_and_fix should succeed");
+
+        assert!(result.passed(), "fixed markdown should pass lint");
+        assert_ne!(result.fixed_content(), dirty, "content should be fixed");
+        assert!(
+            result.fixes_applied() > 0,
+            "at least one fix should be applied"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    async fn auto_fix_false_keeps_content_unchanged() {
+        // WasmConfig.auto_fix ではなく、constructor に渡した LintConfig.auto_fix が権威。
+        let config = crate::config::LintConfig {
+            auto_fix: false,
+            ..Default::default()
+        };
+        let js_config = serde_wasm_bindgen::to_value(&config).expect("config should serialize");
+        let linter = WasmMarkdownLinter::new(js_config).expect("linter should build");
+
+        let dirty = "# Title\n\nTrailing spaces here   \n";
+        let result = linter
+            .lint_and_fix(dirty.into())
+            .await
+            .expect("lint_and_fix should succeed");
+
+        assert_eq!(
+            result.fixed_content(),
+            dirty,
+            "auto_fix=false なら本文を変更しないこと"
+        );
+        assert_eq!(result.fixes_applied(), 0, "auto_fix=false なら修正数は 0");
+        let rules = rule_names(result.issues().expect("issues should serialize"));
+        assert!(
+            rules.iter().any(|rule| rule == "MD009"),
+            "lint のみの経路でも問題は報告されること: {rules:?}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn incomplete_config_is_rejected() {
+        // 部分オブジェクトを黙って既定へ落とすと auto_fix:false が反転するためエラーにする。
+        let partial = serde_wasm_bindgen::to_value(&serde_json::json!({ "auto_fix": false }))
+            .expect("config should serialize");
+        match WasmMarkdownLinter::new(partial) {
+            Ok(_) => panic!("incomplete config should be rejected"),
+            Err(error) => assert_eq!(
+                error.as_string().as_deref().unwrap_or("").split(':').next(),
+                Some("Invalid lint config")
+            ),
+        }
     }
 
     #[wasm_bindgen_test]
