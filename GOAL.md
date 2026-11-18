@@ -1,22 +1,37 @@
 # Goal
 
-エディタ下書きをデバウンス自動保存し、未保存状態を可視化する（R6 TD-H05、ADR-0179）。
+README の ADR 一覧で 0098〜0131 の説明が ADR-0132 に入れ子になっている問題を修正する（R6 PR-H07）。
 
 ## Scope
 
+### 背景
+
+README.md の ADR 一覧は 0098〜0131 がリンクのみで、本来それぞれの説明が
+ADR-0132 の行の下に 35 件ぶん入れ子になっている。
+`docs/decisions/index.md` には正しい description があるため、これを出典にして
+各 ADR 行へ 1 行の説明を戻す。
+
 ### 成果物
 
-- `web/src/lib.rs`: 800ms デバウンス自動保存、未保存表示、タイマー cleanup
-- `tools/verify-web-reader.py`: E2E 1 件、247 → 248
-- `docs/decisions/0179-editor-autosave.md`: 追加（beforeunload 見送りを記録）
-- `todo.md`: TD-H05 を完了へ移動
+- `README.md`: 変更（ADR 0098〜0131 の説明を正しい行へ配置）
+- `docs/decisions/0132-preserve-logic-unification.md`: 必要なら未決定の解消記録
+- `docs/decisions/0179-editor-autosave.md`: 変更不要（索引は最新）
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- 入力直後に未保存表示、800ms 後に自動保存。
-- 同一文言の再 set をスキップし aria-live の発話過多を防止。
-- beforeunload は CDP のダイアログブロッキングを避けるため実装しない。
+1. ADR-0098〜0131 の各行に `docs/decisions/index.md` の description を 1 行で追加する。
+2. ADR-0132 の行には ADR-0132 自身の description のみを残す。
+3. 既存のリンク・見出し・ライセンス節を壊さない。
+4. markdownlint が通る。
+5. コード変更なし（E2E 248 維持）。
 
 ## Acceptance criteria
 
-- E2E 248 項目、全ゲート成功（検証済み）。
+- markdownlint（docs + README + todo）が 0 issues。
+
+## Constraints
+
+- `docs/decisions/index.md` は自動生成の出典として変更しない。
+- `todo.md` は R6 の成果物として保持し、完了反映のみ行う。
+- `master` へ push する。force push はしない。
