@@ -64,7 +64,7 @@ core は `comrak 0.59` と `pulldown-cmark 0.13` を宣言済みだが未使用�
 
 ## 未決定
 
-- pulldown-cmark（未使用・`simd` feature 付き）の削除。
+- ~~pulldown-cmark の削除~~ ADR-0163 で直接依存を削除（推移依存は残存）。
 - GFM 拡張の範囲（tasklist / 数式等）の要否。
 - `a.href` のプロトコル相対 URL 方針、`target` 許可時の `noopener` 戦略。
 - 巨大入力のデバウンス、IME / Undo の実機検証（ADR-0161 から継続）。
