@@ -22,8 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【TD-H06】エディタ下書きがバックアップのエクスポート／インポート対象外。
-  根拠 `web/src/lib.rs:1397-1409,1716-1777,1843-1855,1988`。
 - 【PR-H06】SVG サニタイズが core（ammonia）と web（DomParser + 手動）で二重実装され drift リスク。
   根拠 `core/src/sanitize.rs:124` / `web/src/lib.rs:940,1040,2298`。
 - 【CI-H01】CI が trunk build・配布パス検査・E2E(246件) をマージゲートに入れていない。
@@ -208,6 +206,9 @@ status: current
 
 ## 完了
 
+- [x] 【TD-H06】下書きをバックアップの optional `drafts` field へ追加。
+      version:1 互換を維持し、1 MiB 超過除外・現在値保護を適用。
+      E2E 249 件・全ゲート成功 / ADR-0180。
 - [x] 【PR-H07】README の ADR 一覧を `docs/decisions/index.md` と整合。
       ADR-0098〜0131 の説明 34 件を正しい行へ移動し、0132 には自身の説明のみ。
       markdownlint 0 issues / コード変更なし・E2E 248 維持。
