@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 161 件）。
+openrustbooks の ADR 一覧（全 162 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -324,3 +324,5 @@ openrustbooks の ADR 一覧（全 161 件）。
   - status: accepted — fail-closed スタブだった WasmMarkdownLinter を featureless rumdl の実 lint に接続する決定を記録する。
 - [ADR-0161: 最小限の textarea エディタ UI](0161-minimal-editor-ui.md)
   - status: accepted — CodeMirror を導入せず、textarea と既存 Preview を接続した最小エディタを実装する決定を記録する。
+- [ADR-0162: Markdown Preview のレンダリング](0162-markdown-preview-rendering.md)
+  - status: accepted — エディタ Preview で comrak による Markdown レンダリングと二段構えのサニタイズを行う決定を記録する。
