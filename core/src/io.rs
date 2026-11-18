@@ -249,7 +249,76 @@ impl Default for StorageManager {
 pub mod local {
     use super::*;
     use std::path::Component;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::fs as tokio_fs;
+
+    /// atomic write の一時ファイル名に使うプロセス内カウンタ。
+    ///
+    /// 固定の `<file>.tmp` では並行書き込みが同じ一時ファイルを同時に開いて
+    /// 上書きし合い、片方の内容が失われる／途中状態が rename される恐れがある
+    /// （R6 PR-M06）。PID と組み合わせることでプロセス間でも名前が衝突しない。
+    static ATOMIC_WRITE_ID: AtomicUsize = AtomicUsize::new(0);
+
+    /// `<file>.<pid>.<counter>.tmp` 形式の一時パスを生成する。
+    fn atomic_temp_path(full_path: &Path) -> PathBuf {
+        let counter = ATOMIC_WRITE_ID.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        let mut file_name = full_path.file_name().unwrap_or_default().to_os_string();
+        file_name.push(format!(".{pid}.{counter}.tmp"));
+        full_path.with_file_name(file_name)
+    }
+
+    /// 既存の一時ファイルを決して上書きせずに開く。
+    /// 同名が残っていた場合はカウンタを進めて再試行する。
+    async fn create_atomic_temp(full_path: &Path) -> CoreResult<(PathBuf, tokio_fs::File)> {
+        const MAX_TEMP_ATTEMPTS: usize = 128;
+
+        for _ in 0..MAX_TEMP_ATTEMPTS {
+            let candidate = atomic_temp_path(full_path);
+            match tokio_fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&candidate)
+                .await
+            {
+                Ok(file) => return Ok((candidate, file)),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        Err(CoreError::storage(format!(
+            "Unable to create a unique temporary file after {MAX_TEMP_ATTEMPTS} attempts"
+        )))
+    }
+
+    /// 一時ファイルへ書き込んでから rename する。失敗時は一時ファイルを削除する。
+    async fn write_atomic(full_path: &Path, data: &[u8]) -> CoreResult<()> {
+        let (temp_path, mut file) = create_atomic_temp(full_path).await?;
+
+        let write_result = async {
+            use tokio::io::AsyncWriteExt;
+            file.write_all(data).await?;
+            file.flush().await?;
+            Ok::<(), std::io::Error>(())
+        }
+        .await;
+
+        // Windows ではハンドルを開いたまま rename できないため明示的に閉じる。
+        drop(file);
+
+        if write_result.is_err() {
+            let _ = tokio_fs::remove_file(&temp_path).await;
+        }
+        write_result?;
+
+        if let Err(error) = tokio_fs::rename(&temp_path, full_path).await {
+            let _ = tokio_fs::remove_file(&temp_path).await;
+            return Err(error.into());
+        }
+
+        Ok(())
+    }
 
     pub struct LocalStorage {
         root: PathBuf,
@@ -467,9 +536,7 @@ pub mod local {
             }
 
             if options.atomic {
-                let temp_path = full_path.with_extension("tmp");
-                tokio_fs::write(&temp_path, data).await?;
-                tokio_fs::rename(&temp_path, &full_path).await?;
+                write_atomic(&full_path, data).await?;
             } else {
                 tokio_fs::write(&full_path, data).await?;
             }
@@ -865,6 +932,115 @@ pub mod local {
 
             assert_eq!(fs::read(&existing).unwrap(), b"replacement".to_vec());
             assert!(!temp.path.join("existing.tmp").exists());
+        }
+
+        /// 一時ファイル名が呼び出しごとに異なり、`<file>.<pid>.<counter>.tmp`
+        /// の形式になること（R6 PR-M06）。
+        #[test]
+        fn atomic_temp_paths_are_unique() {
+            let target = Path::new("/tmp/openrustbooks-test/book.txt");
+            let first = atomic_temp_path(target);
+            let second = atomic_temp_path(target);
+
+            assert_ne!(first, second, "並行書き込みで同じ一時名を使わない");
+            assert_eq!(first.parent(), target.parent());
+            let first_name = first.file_name().unwrap().to_string_lossy();
+            let second_name = second.file_name().unwrap().to_string_lossy();
+            assert!(first_name.starts_with("book.txt."));
+            assert!(first_name.ends_with(".tmp"));
+            assert!(second_name.starts_with("book.txt."));
+            assert!(second_name.ends_with(".tmp"));
+        }
+
+        /// 同じ対象への並行な一時ファイル作成が衝突しないこと。
+        #[tokio::test]
+        async fn concurrent_atomic_temp_creation_uses_distinct_files() {
+            let temp = TempRoot::new();
+            let target = temp.path.join("book.txt");
+
+            let (first_path, first_file) = create_atomic_temp(&target).await.unwrap();
+            let (second_path, second_file) = create_atomic_temp(&target).await.unwrap();
+
+            assert_ne!(first_path, second_path);
+            assert!(first_path.exists());
+            assert!(second_path.exists());
+
+            drop(first_file);
+            drop(second_file);
+            fs::remove_file(&first_path).unwrap();
+            fs::remove_file(&second_path).unwrap();
+        }
+
+        /// 固定名の旧一時ファイルが残っていても上書きせず、別名を使うこと。
+        #[tokio::test]
+        async fn atomic_write_does_not_overwrite_preexisting_tmp() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            // 旧実装は `note.txt` の tmp を `note.tmp` に固定していた。
+            let stale_tmp = temp.path.join("note.tmp");
+            fs::write(&stale_tmp, b"stale").unwrap();
+
+            let options = WriteOptions {
+                atomic: true,
+                ..Default::default()
+            };
+            storage
+                .write(Path::new("note.txt"), b"fresh", options)
+                .await
+                .unwrap();
+
+            assert_eq!(
+                fs::read(temp.path.join("note.txt")).unwrap(),
+                b"fresh".to_vec()
+            );
+            assert_eq!(fs::read(&stale_tmp).unwrap(), b"stale".to_vec());
+        }
+
+        /// 2 つの並行 atomic write が両方成功し、内容が混ざらず、
+        /// 成功後に一時ファイルが残らないこと。
+        #[tokio::test]
+        async fn concurrent_atomic_writes_keep_both_contents_and_leave_no_tmp() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let options_a = WriteOptions {
+                atomic: true,
+                ..Default::default()
+            };
+            let options_b = WriteOptions {
+                atomic: true,
+                ..Default::default()
+            };
+
+            let (result_a, result_b) = tokio::join!(
+                storage.write(Path::new("a.txt"), b"alpha payload", options_a),
+                storage.write(Path::new("b.txt"), b"beta payload", options_b),
+            );
+            result_a.expect("a.txt の atomic write が成功する");
+            result_b.expect("b.txt の atomic write が成功する");
+
+            assert_eq!(
+                fs::read(temp.path.join("a.txt")).unwrap(),
+                b"alpha payload".to_vec()
+            );
+            assert_eq!(
+                fs::read(temp.path.join("b.txt")).unwrap(),
+                b"beta payload".to_vec()
+            );
+
+            let leftovers: Vec<PathBuf> = fs::read_dir(&temp.path)
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.ends_with(".tmp"))
+                })
+                .collect();
+            assert!(
+                leftovers.is_empty(),
+                "atomic write 成功後に一時ファイルが残っていないこと: {leftovers:?}"
+            );
         }
 
         #[tokio::test]
