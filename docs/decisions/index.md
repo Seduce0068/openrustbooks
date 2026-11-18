@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 190 件）。
+openrustbooks の ADR 一覧（全 191 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -382,3 +382,5 @@ openrustbooks の ADR 一覧（全 190 件）。
   - status: accepted — Ollama の JSONL ストリームをバッファリングし、HTTP タイムアウトとエラーを fail-closed で扱う決定を記録する。
 - [ADR-0190: read 上限の fail-closed 化](0190-read-limit-hardening.md)
   - status: accepted — StorageBackend::read の要求サイズに上限を設け、超過時は黙って切り詰めずエラーにする決定を記録する。
+- [ADR-0191: 外部フォントの削除](0191-external-font-removal.md)
+  - status: accepted — Google Fonts の preconnect / stylesheet を廃止し、CSP とフォントスタックをローカル完結にする決定を記録する。
