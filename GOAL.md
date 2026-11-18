@@ -1,22 +1,38 @@
 # Goal
 
-StorageBackend::read の offset / limit に上限を適用する（R6 PR-M04、ADR-0190）。
+Google Fonts への外部送信を削除する（R6 PR-M07）。
 
 ## Scope
 
+### 背景
+
+`web/index.html` は Google Fonts の preconnect 2 件と stylesheet を読み込み、
+CSP も `https://fonts.googleapis.com` / `https://fonts.gstatic.com` を許可する。
+preconnect は CSP の対象外で、ページ読み込み時に IP と TLS 情報が外部へ渡る。
+
 ### 成果物
 
-- `core/src/io.rs`: DEFAULT_MAX_READ_BYTES / resolve_read_limit / probe、unit 5 件
-- `docs/decisions/0190-read-limit-hardening.md`: 追加
-- `todo.md`: PR-M04 を完了へ移動
+- `web/index.html`: 変更（外部 link 削除、CSP からフォントホスト削除、
+  システムフォントスタックへ変更）
+- `docs/decisions/0191-no-external-fonts.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- effective = capabilities.max_file_size.unwrap_or(256 MiB)。
-- 上限超過は clamp せず CoreError::validation。
-- limit=None も 1 byte probe で超過検出。
-- 他経路（desktop document.rs / web wasm.rs）は未決定として ADR に記録。
+1. `preconnect` 2 件と Google Fonts stylesheet の link を削除する。
+2. CSP の `style-src` / `font-src` から external host を削除する。
+3. `--font-mono` / `--font-sans` をローカルで利用可能なフォントへ変更する。
+   - mono: `ui-monospace, 'Cascadia Code', 'Source Code Pro', Consolas, monospace`
+   - sans: `system-ui, -apple-system, 'Segoe UI', 'Noto Sans JP', sans-serif`
+4. E2E 249 項目を壊さない（trunk build で `web/dist` が更新されること）。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- core 246 / E2E 249、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 249 項目成功。
+
+## Constraints
+
+- 新規依存・同梱フォントファイルを追加しない（本次は外部送信の削除のみ）。
+- EPUB 本文の CSS 方針（ADR-0115）は変更しない。
+- `master` へ push する。force push はしない。
