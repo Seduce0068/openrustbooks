@@ -1,22 +1,36 @@
 # Goal
 
-設定 IPC で DTO 外フィールドを注入できないようにする（R6 PR-M03 / PR-M05、ADR-0186）。
+table の数値属性に fail-closed 検証を追加する（R6 PR-M02）。
 
 ## Scope
 
+### 背景
+
+`img` の `width` / `height` は `is_valid_dimension()` で検証されるが、
+`td` / `th` の `colspan` / `rowspan`、`ol` の `start`、
+`li` の `value`、`col` / `colgroup` の `span` は任意文字列を通す。
+極端な値でレイアウト計算コストやメモリが増える可能性がある。
+
 ### 成果物
 
-- `desktop/src/commands/config.rs`: normalize_to_dto_boundary / normalize_ai_from_js、キー単位ヘッダマージ、unit 3 件
-- `docs/decisions/0186-config-ipc-boundary.md`: 追加
-- `todo.md`: PR-M03 / PR-M05 を完了へ移動
+- `core/src/sanitize.rs`: 変更（数値属性検証と unit test）
+- `docs/decisions/0187-table-attribute-validation.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- update_config は ConfigPatch 境界で正規化。
-- update_ai_config は extra_headers のみ遮断（api_key は ADR-0098 契約で受容）。
-- merge_secrets のヘッダはキー単位（defence-in-depth）。
-- E2E 249 件維持。
+1. `colspan` / `rowspan` / `start` / `value` / `span` を
+   ASCII 数字・1..=上限（推奨 1000）・桁数上限で検証する。
+2. 不正値は属性ごと削除する（fail-closed、本文自体は残す）。
+3. unit test を追加（正常値維持、0 / 負数 / 全角 / 上限超 / 長すぎる文字列の削除）。
+4. 全ゲート成功（E2E 249 維持）。
 
 ## Acceptance criteria
 
-- core 220 / desktop 62 / web 2、E2E 249、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 249 項目成功。
+
+## Constraints
+
+- 新規依存を追加しない。
+- `img` の寸法検証（1..=16384）は維持し、上限を共有しない。
+- `master` へ push する。force push はしない。
