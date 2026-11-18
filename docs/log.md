@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- Reader アンマウント時に残余 Blob URL を revoke し、SPA 往復のメモリ残存を防止（ADR-0192）。
 - Google Fonts の外部送信を削除し verify.sh に静的ゲートを追加（ADR-0191）。
 - read の要求サイズへ 256 MiB 上限を fail-closed 適用し core を 241→246 件へ拡充（ADR-0190）。
 - Ollama ストリームに行バッファ・fail-closed エラー・timeout 配線を追加し core を 228→241 件へ拡充（ADR-0189）。
