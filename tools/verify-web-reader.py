@@ -478,7 +478,10 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
             # CDP 無応答は検証基盤の失敗。リトライで隠さず fail-closed で伝播させる。
             raise
         except Exception:
-            pass
+            # evaluate 由来の例外は種別を問わず再送出（R6 TD-M02）。
+            # ここで握り潰すと JS 式の typo や定数未定義がタイムアウトまで隠れ、
+            # 後続 check が別経路で通ると E2E 全体が緑になり検出力が静かに低下する。
+            raise
         await asyncio.sleep(0.25)
     return False
 
