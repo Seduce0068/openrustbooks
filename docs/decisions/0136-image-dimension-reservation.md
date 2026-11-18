@@ -82,7 +82,7 @@ ADR-0112 は画像遅延読み込みの前に「自然寸法を `width` / `heigh
 
 ## 未決定
 
-- `imagesize` の wasm32 ビルド可否と feature 絞り込みの影響（未ビルド確認）。
+- ~~`imagesize` の wasm32 ビルド可否~~ ADR-0137 で verification 済み（成功）。
 - 作者指定 `width` / `height` の扱い（信頼／上書き／クランプ）。
 - 縮小後の属性更新の有無（比率の丸れによる微シフト、推測）。
 - viewBox のみ SVG の既定 natural size（ADR-0113 から継続、推測）。
