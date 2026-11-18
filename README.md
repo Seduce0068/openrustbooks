@@ -285,75 +285,75 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0097-path-containment](docs/decisions/0097-path-containment.md)
   - LocalStorage::resolve_path を fail-closed 化し、root 外へのパス脱出を拒否する決定を記録する。
 - [0098-secret-exposure-mitigation](docs/decisions/0098-secret-exposure-mitigation.md)
+  - API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。
 - [0099-ai-default-off](docs/decisions/0099-ai-default-off.md)
+  - AI 機能を既定で無効にし、明示的な opt-in まで本文を送信しないようにする決定を記録する。
 - [0100-ai-service-guard](docs/decisions/0100-ai-service-guard.md)
+  - AI を無効化した後に service が残存して送信できる問題を修正する決定を記録する。
 - [0101-base-url-allowlist](docs/decisions/0101-base-url-allowlist.md)
+  - AI の送信先 URL を既定ホストと loopback のみに制限し、JS からの任意送信先差し替えを防ぐ決定を記録する。
 - [0102-extra-headers-redaction](docs/decisions/0102-extra-headers-redaction.md)
+  - OpenAiConfig.extra_headers を IPC DTO と Debug 出力からマスクする決定を記録する。
 - [0103-path-field-redaction](docs/decisions/0103-path-field-redaction.md)
+  - 設定 IPC の DTO からローカルパス情報を除外し、マージで保持する決定を記録する。
 - [0104-send-consent-dialog](docs/decisions/0104-send-consent-dialog.md)
+  - 本文を AI へ送る直前に Rust 側でネイティブ確認を要求する決定を記録する。
 - [0105-retry-config](docs/decisions/0105-retry-config.md)
+  - リトライ回数をトークン上限から分離し、AiConfig.max_retries に集約する決定を記録する。
 - [0106-retry-merge-preservation](docs/decisions/0106-retry-merge-preservation.md)
+  - max_retries を DTO から除外し、IPC 往復で現在値を保持する決定を記録する。
 - [0107-ai-service-refresh](docs/decisions/0107-ai-service-refresh.md)
+  - AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
 - [0108-prompt-system-prompt](docs/decisions/0108-prompt-system-prompt.md)
+  - 内蔵 .hbs テンプレートに必須フィールドを追加し、AI サービスの初期化失敗を解消する決定を記録する。
 - [0109-system-prompt-unification](docs/decisions/0109-system-prompt-unification.md)
+  - OpenAI の固定 system message を削除し、system 指示をプロンプトテンプレートに一元化する決定を記録する。
 - [0110-lint-auto-fix](docs/decisions/0110-lint-auto-fix.md)
+  - rumdl の fix API を用いて Markdown lint の自動修正を実装し、auto_fix 設定を配線する決定を記録する。
 - [0111-fix-convergence](docs/decisions/0111-fix-convergence.md)
+  - rumdl fix の未収束情報を保持し、未収束時は修正を採用しない決定を記録する。
 - [0112-lazy-image-loading](docs/decisions/0112-lazy-image-loading.md)
+  - IntersectionObserver による画像遅延読み込みは全面切替を見送り、寸法予約→段階導入の順で検討する決定を記録する。
 - [0113-image-settle-hardening](docs/decisions/0113-image-settle-hardening.md)
+  - images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
 - [0114-expected-image-count](docs/decisions/0114-expected-image-count.md)
+  - expected_images を src を持つ画像の数にし、src 削除画像による無駄な 2 秒待ちを解消する決定を記録する。
 - [0115-epub-css-policy](docs/decisions/0115-epub-css-policy.md)
+  - EPUB 内 CSS は現状どおり適用しないことを維持し、将来のオプトイン・スコープ付き段階導入の方針を記録する。
 - [0116-final-lint-policy](docs/decisions/0116-final-lint-policy.md)
+  - AI pipeline の最終試行で lint 不合格でも Ok を維持し、呼び出し側が lint_passed を確認して差分を提示する方針を記録する。
 - [0117-wasm-config-alignment](docs/decisions/0117-wasm-config-alignment.md)
+  - WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
 - [0118-pipeline-dead-code](docs/decisions/0118-pipeline-dead-code.md)
+  - execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
 - [0119-wasm-test-runner](docs/decisions/0119-wasm-test-runner.md)
+  - wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。
 - [0120-retry-limit](docs/decisions/0120-retry-limit.md)
+  - max_retries を service 境界で 0..=10 にクランプし、暴走とオーバーフローを防ぐ決定を記録する。
 - [0121-req010-retry-wording](docs/decisions/0121-req010-retry-wording.md)
+  - REQ-010 の「最大3回再生成」を実装と一致する文言に明文化する決定を記録する。
 - [0122-env-var-mapping](docs/decisions/0122-env-var-mapping.md)
+  - figment の split('_') で届かない max_retries を extract 後に手動で読み込む決定を記録する。
 - [0123-warnings-as-errors](docs/decisions/0123-warnings-as-errors.md)
+  - LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
 - [0124-rule-config-wiring](docs/decisions/0124-rule-config-wiring.md)
+  - rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
 - [0125-audit-gate](docs/decisions/0125-audit-gate.md)
+  - cargo audit をローカル検証スクリプトに追加し、既知脆弱性の回帰を防ぐ決定を記録する。
 - [0126-ci-audit-gate](docs/decisions/0126-ci-audit-gate.md)
+  - 共通ワークフローの audit 入力を有効化し、CI でも cargo audit を実行する決定を記録する。
 - [0127-editor-ui-integration](docs/decisions/0127-editor-ui-integration.md)
+  - CodeMirror を導入せず、既存の Tauri command を段階的に Web UI へ接続する方針を記録する。
 - [0128-settings-form-wiring](docs/decisions/0128-settings-form-wiring.md)
+  - SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。
 - [0129-document-path-validation](docs/decisions/0129-document-path-validation.md)
+  - desktop の document command で AppConfig.local_roots によるパス検証を行う決定を記録する。
 - [0130-desktop-csp](docs/decisions/0130-desktop-csp.md)
+  - desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
 - [0131-config-patch-command](docs/decisions/0131-config-patch-command.md)
+  - ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
 - [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
   - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
-  - ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
-  - desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
-  - desktop の document command で AppConfig.local_roots によるパス検証を行う決定を記録する。
-  - SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。
-  - CodeMirror を導入せず、既存の Tauri command を段階的に Web UI へ接続する方針を記録する。
-  - 共通ワークフローの audit 入力を有効化し、CI でも cargo audit を実行する決定を記録する。
-  - cargo audit をローカル検証スクリプトに追加し、既知脆弱性の回帰を防ぐ決定を記録する。
-  - rule_config を rumdl Config に反映し、config_file は extends のリスクから未対応とする決定を記録する。
-  - LintConfig.warnings_as_errors を lint 判定に反映し、Warning をオプトインで不合格扱いにする決定を記録する。
-  - figment の split('_') で届かない max_retries を extract 後に手動で読み込む決定を記録する。
-  - REQ-010 の「最大3回再生成」を実装と一致する文言に明文化する決定を記録する。
-  - max_retries を service 境界で 0..=10 にクランプし、暴走とオーバーフローを防ぐ決定を記録する。
-  - wasm-bindgen-test と wasm-pack により wasm32 単体テストを実際に実行するゲートを追加する決定を記録する。
-  - execute_pipeline の到達不能な last_error と動的 Err を削除する決定を記録する。
-  - WasmConfig の ai_enabled 既定値を false にし、native の AiConfig と揃える決定を記録する。
-  - AI pipeline の最終試行で lint 不合格でも Ok を維持し、呼び出し側が lint_passed を確認して差分を提示する方針を記録する。
-  - EPUB 内 CSS は現状どおり適用しないことを維持し、将来のオプトイン・スコープ付き段階導入の方針を記録する。
-  - expected_images を src を持つ画像の数にし、src 削除画像による無駄な 2 秒待ちを解消する決定を記録する。
-  - images_settled() に自然幅の確認を追加し、complete() だけでは見逃す画像を待つ決定を記録する。
-  - IntersectionObserver による画像遅延読み込みは全面切替を見送り、寸法予約→段階導入の順で検討する決定を記録する。
-  - rumdl fix の未収束情報を保持し、未収束時は修正を採用しない決定を記録する。
-  - rumdl の fix API を用いて Markdown lint の自動修正を実装し、auto_fix 設定を配線する決定を記録する。
-  - OpenAI の固定 system message を削除し、system 指示をプロンプトテンプレートに一元化する決定を記録する。
-  - 内蔵 .hbs テンプレートに必須フィールドを追加し、AI サービスの初期化失敗を解消する決定を記録する。
-  - AI/lint 設定変更時に service を fail-closed で再初期化する決定を記録する。
-  - max_retries を DTO から除外し、IPC 往復で現在値を保持する決定を記録する。
-  - リトライ回数をトークン上限から分離し、AiConfig.max_retries に集約する決定を記録する。
-  - 本文を AI へ送る直前に Rust 側でネイティブ確認を要求する決定を記録する。
-  - 設定 IPC の DTO からローカルパス情報を除外し、マージで保持する決定を記録する。
-  - OpenAiConfig.extra_headers を IPC DTO と Debug 出力からマスクする決定を記録する。
-  - AI の送信先 URL を既定ホストと loopback のみに制限し、JS からの任意送信先差し替えを防ぐ決定を記録する。
-  - AI を無効化した後に service が残存して送信できる問題を修正する決定を記録する。
-  - AI 機能を既定で無効にし、明示的な opt-in まで本文を送信しないようにする決定を記録する。
-  - API キー等の IPC 露出をマスクし、Debug とファイル権限を硬化する決定を記録する。
 
 ## ライセンス
 
