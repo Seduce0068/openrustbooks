@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- About 画面のライセンスと対応形式を実装事実に合わせ、E2E を 231→232 に更新（ADR-0153）。
 - 残タスクを 5 観点のエージェントで探索し、成果を ADR-0151 に集約。
 - `verify.sh` の WASM パス検査を fail-closed 化（WASM＋JS グルー、ADR-0152）。
 - ADR を ADR-0091〜0150 まで追加し、`docs/decisions/index.md` を全 150 件に更新。
