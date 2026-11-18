@@ -81,8 +81,6 @@ status: current
   根拠 `core/src/image_dimensions.rs:9-18,46-72`。
 - 【TD-M02】E2E `wait_until` が JS 評価例外を握りつぶし、戻り値も無視される箇所がある。
   根拠 `tools/verify-web-reader.py:463-472,609`。
-- 【TD-M03】Checker がチェック名の一意性を検証せず、総数だけでは形骸化する。
-  根拠 `tools/verify-web-reader.py:445-451`。
 - 【TD-M05】wasm-pack test --node が CI ゲートに含まれていない。
   根拠 `.github/workflows/ci.yml:42-43` / `docs/decisions/0119`。
 - 【TD-M06】rumdl の `default-features=false` が CI で静的検査されていない。
@@ -204,6 +202,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M03】E2E Checker に check 名の重複検知を追加。
+      AST 解析で 249 件すべて一意、重複 0。E2E 249 件・全ゲート成功 / ADR-0182。
 - [x] 【PR-H06】SVG サニタイズを core の ammonia 共通実装へ一本化。
       DomParser 手動実装を削除し、unit 4 件追加（core 216）。
       E2E 249 件・全ゲート成功 / ADR-0181。
