@@ -14,6 +14,9 @@ use ammonia::{Builder, UrlRelative};
 
 use crate::image_dimensions::MAX_DIMENSION;
 
+/// table 関連の数値属性（colspan/rowspan/start/value/span）の上限。
+const MAX_TABLE_NUMBER: u32 = 1000;
+
 /// 表示を許可する要素。
 ///
 /// `script`・`style`・`iframe`・`object`・`form` などの実行・埋め込み・
@@ -133,9 +136,17 @@ pub fn sanitize_epub_html(html: &str) -> String {
         .url_schemes(HashSet::from(["http", "https", "mailto"]))
         .link_rel(Some("noopener noreferrer"))
         .attribute_filter(|element, attribute, value| {
-            let reject = element == "img"
+            let reject = (element == "img"
                 && ((attribute == "src" && !is_local_reference(value))
-                    || (matches!(attribute, "width" | "height") && !is_valid_dimension(value)));
+                    || (matches!(attribute, "width" | "height") && !is_valid_dimension(value))))
+                || (matches!(element, "td" | "th")
+                    && matches!(attribute, "colspan" | "rowspan")
+                    && !is_valid_table_number(value))
+                || (element == "ol" && attribute == "start" && !is_valid_table_number(value))
+                || (element == "li" && attribute == "value" && !is_valid_table_number(value))
+                || (matches!(element, "col" | "colgroup")
+                    && attribute == "span"
+                    && !is_valid_table_number(value));
             if reject {
                 None
             } else {
@@ -156,6 +167,20 @@ fn is_valid_dimension(value: &str) -> bool {
     value
         .parse::<u32>()
         .is_ok_and(|dimension| (1..=MAX_DIMENSION).contains(&dimension))
+}
+
+/// table 関連の数値属性が安全な整数か判定する。
+///
+/// ASCII 数字 1〜4 桁だけを許し、`1..=MAX_TABLE_NUMBER` に収める。
+/// 単位・負数・全角数字・上限超えは fail-closed で拒否する。
+/// `len()` による桁数チェックで超長い入力は `parse` 前に弾く。
+fn is_valid_table_number(value: &str) -> bool {
+    if value.is_empty() || value.len() > 4 || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    value
+        .parse::<u32>()
+        .is_ok_and(|number| (1..=MAX_TABLE_NUMBER).contains(&number))
 }
 
 /// 画像として表示してよい参照か判定する。
@@ -573,6 +598,108 @@ mod tests {
         assert!(sanitized.contains("<table>"));
         assert!(sanitized.contains(r#"<th colspan="2">h</th>"#));
         assert!(sanitized.contains("<td>v</td>"));
+    }
+
+    #[test]
+    fn keeps_valid_table_numbers() {
+        let sanitized = sanitize_epub_html(
+            r#"<table><colgroup span="2"><col span="3"></colgroup><tr><td colspan="3" rowspan="2">cell</td><th colspan="4" rowspan="1">head</th></tr></table><ol start="5"><li value="2">item</li></ol>"#,
+        );
+        assert!(sanitized.contains(r#"colspan="3""#), "{sanitized}");
+        assert!(sanitized.contains(r#"colspan="4""#), "{sanitized}");
+        assert!(sanitized.contains(r#"rowspan="2""#), "{sanitized}");
+        assert!(sanitized.contains(r#"rowspan="1""#), "{sanitized}");
+        assert!(sanitized.contains(r#"start="5""#), "{sanitized}");
+        assert!(sanitized.contains(r#"value="2""#), "{sanitized}");
+        assert!(sanitized.contains(r#"span="2""#), "{sanitized}");
+        assert!(sanitized.contains(r#"span="3""#), "{sanitized}");
+        assert!(sanitized.contains(">cell<"), "{sanitized}");
+        assert!(sanitized.contains(">head<"), "{sanitized}");
+        assert!(sanitized.contains(">item<"), "{sanitized}");
+    }
+
+    #[test]
+    fn removes_invalid_table_numbers() {
+        let huge = "9".repeat(10_000);
+        for value in ["0", "-1", "1001", "１２３", "3px", huge.as_str()] {
+            let cases = [
+                (
+                    format!(r#"<table><tr><td colspan="{value}">cell</td></tr></table>"#),
+                    "colspan",
+                ),
+                (
+                    format!(r#"<table><tr><td rowspan="{value}">cell</td></tr></table>"#),
+                    "rowspan",
+                ),
+                (
+                    format!(r#"<table><tr><th colspan="{value}">cell</th></tr></table>"#),
+                    "colspan",
+                ),
+                (
+                    format!(r#"<table><tr><th rowspan="{value}">cell</th></tr></table>"#),
+                    "rowspan",
+                ),
+                (
+                    format!(r#"<ol start="{value}"><li>item</li></ol>"#),
+                    "start",
+                ),
+                (
+                    format!(r#"<ol><li value="{value}">item</li></ol>"#),
+                    "value",
+                ),
+                (
+                    format!(
+                        r#"<table><colgroup span="{value}"></colgroup><tr><td>cell</td></tr></table>"#
+                    ),
+                    "span",
+                ),
+                (
+                    format!(
+                        r#"<table><colgroup><col span="{value}"></colgroup><tr><td>cell</td></tr></table>"#
+                    ),
+                    "span",
+                ),
+            ];
+            for (html, attribute) in cases {
+                let sanitized = sanitize_epub_html(&html);
+                assert!(
+                    !sanitized.contains(&format!("{attribute}=")),
+                    "kept {attribute}={value}: {sanitized}"
+                );
+                assert!(
+                    sanitized.contains("cell") || sanitized.contains("item"),
+                    "lost body text: {value} -> {sanitized}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn keeps_non_numeric_table_attributes() {
+        let sanitized = sanitize_epub_html(
+            r#"<table summary="s"><tr><th scope="col" headers="h" abbr="a">head</th><td scope="row">cell</td></tr></table><ol type="a" reversed start="3"><li value="4">item</li></ol>"#,
+        );
+        assert!(sanitized.contains(r#"summary="s""#), "{sanitized}");
+        assert!(sanitized.contains(r#"scope="col""#), "{sanitized}");
+        assert!(sanitized.contains(r#"headers="h""#), "{sanitized}");
+        assert!(sanitized.contains(r#"abbr="a""#), "{sanitized}");
+        assert!(sanitized.contains(r#"type="a""#), "{sanitized}");
+        assert!(sanitized.contains("reversed"), "{sanitized}");
+        assert!(sanitized.contains(r#"start="3""#), "{sanitized}");
+        assert!(sanitized.contains(r#"value="4""#), "{sanitized}");
+    }
+
+    #[test]
+    fn table_number_boundaries() {
+        assert!(is_valid_table_number("1"));
+        assert!(is_valid_table_number("1000"));
+        assert!(is_valid_table_number("0003"));
+        assert!(!is_valid_table_number("0"));
+        assert!(!is_valid_table_number("1001"));
+        assert!(!is_valid_table_number("00001"));
+        assert!(!is_valid_table_number(""));
+        assert!(!is_valid_table_number("3px"));
+        assert!(!is_valid_table_number("１２"));
     }
 
     #[test]
