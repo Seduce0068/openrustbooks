@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 157 件）。
+openrustbooks の ADR 一覧（全 158 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -316,3 +316,5 @@ openrustbooks の ADR 一覧（全 157 件）。
   - status: accepted — ブラウザで AI/lint が成功を偽装していた Wasm API を明示的なエラーに変更する決定を記録する。
 - [ADR-0157: インポート時の設定・履歴保護](0157-import-preservation.md)
   - status: accepted — インポートが現在の設定と履歴を破壊しないよう、現在値が存在する場合は維持する決定を記録する。
+- [ADR-0158: 部分設定インポートの調査結果](0158-partial-settings-import.md)
+  - status: accepted — 部分設定インポートの bool false リセットが現行ガード下では再現しないことを記録する。
