@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 192 件）。
+openrustbooks の ADR 一覧（全 193 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -386,3 +386,5 @@ openrustbooks の ADR 一覧（全 192 件）。
   - status: accepted — Google Fonts の preconnect / stylesheet を廃止し、CSP とフォントスタックをローカル完結にする決定を記録する。
 - [ADR-0192: Reader 終了時の Blob URL 解放](0192-blob-url-cleanup.md)
   - status: accepted — Reader アンマウント時に残余の object URL を revoke し、SPA 往復によるメモリ残存を防ぐ決定を記録する。
+- [ADR-0193: 設定フォームの読み取り専用化](0193-settings-form-readonly.md)
+  - status: accepted — ブラウザ版の設定フォームを契約どおり読み取り専用にし、変更できると誤解させない決定を記録する。
