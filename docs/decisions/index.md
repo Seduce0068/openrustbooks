@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 173 件）。
+openrustbooks の ADR 一覧（全 174 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -348,3 +348,5 @@ openrustbooks の ADR 一覧（全 173 件）。
   - status: accepted — バックアップの取り込み前に window.confirm() の確認を求める決定を記録する。
 - [ADR-0173: WriteOptions.overwrite の実効化](0173-overwrite-guard.md)
   - status: accepted — overwrite=false のとき既存ファイルへの書き込みを拒否し、黙って上書きされる問題を解消する決定を記録する。
+- [ADR-0174: read_text の不正 UTF-8 扱い](0174-read-text-utf8.md)
+  - status: accepted — 不正 UTF-8 の内容をエラー文言へ埋め込まず、U+FFFD 置換で返す決定を記録する。

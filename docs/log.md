@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- `read_text` の不正 UTF-8 を U+FFFD 置換へ変更し、エラー内容漏洩を解消（ADR-0174）。
 - `WriteOptions.overwrite=false` の既存ファイル拒否を実装し、unit を 206→208 件へ拡充（ADR-0173）。
 - インポート前に確認ダイアログを追加し、E2E を 245→246 に更新（ADR-0172）。
 - Clear data に window.confirm() の確認を追加し、E2E を 244→245 に更新（ADR-0171）。
