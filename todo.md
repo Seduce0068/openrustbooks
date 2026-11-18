@@ -198,6 +198,8 @@ status: current
 
 ## 完了
 
+- [x] cargo-audit 未インストール時に audit ゲートを fail-closed 化。
+      PATH 隠し検証で HIDDEN_RC=1、E2E 未実行を確認。E2E 249 件・全ゲート成功 / ADR-0185。
 - [x] 【TD-M01】image_dimensions に JPEG / VP8X / VP8 と境界値テストを追加。
       imagesize 0.15 のヘッダー配置と突合、core 220 件・E2E 249 件・全ゲート成功 / ADR-0184。
 - [x] 【TD-M02】wait_until の Python 例外を再送出するよう変更。
