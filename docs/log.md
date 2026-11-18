@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- 未使用の pulldown-cmark 直接依存を削除し、Cargo.lock も整理（ADR-0163、推移依存は残存）。
 - Markdown Preview を comrak + 二段サニタイズで実装し、E2E を 237→238 に更新（ADR-0162）。
 - Web エディタを textarea + リアルタイム Preview の最小構成へ配線し、E2E を 235→237 に更新（ADR-0161）。
 - WasmMarkdownLinter を featureless rumdl の実 lint へ配線し、wasm テストを 6→10 件に拡充（ADR-0160）。
