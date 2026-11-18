@@ -77,8 +77,6 @@ status: current
   根拠 `web/src/lib.rs:3656,3765,3876,3896,3930`。
 - 【PR-M12】THIRD_PARTY_NOTICES が imagesize のみで配布依存を網羅していない。
   根拠 `THIRD_PARTY_NOTICES.md:1-4,32-59`。
-- 【TD-M01】image_dimensions の JPEG/WebP ヘッダーと境界値テストが欠落。
-  根拠 `core/src/image_dimensions.rs:9-18,46-72`。
 - 【TD-M05】wasm-pack test --node が CI ゲートに含まれていない。
   根拠 `.github/workflows/ci.yml:42-43` / `docs/decisions/0119`。
 - 【TD-M06】rumdl の `default-features=false` が CI で静的検査されていない。
@@ -200,6 +198,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M01】image_dimensions に JPEG / VP8X / VP8 と境界値テストを追加。
+      imagesize 0.15 のヘッダー配置と突合、core 220 件・E2E 249 件・全ゲート成功 / ADR-0184。
 - [x] 【TD-M02】wait_until の Python 例外を再送出するよう変更。
       一時スクリプト 4 ケース成功、E2E 249 件・全ゲート成功 / ADR-0183。
       JS 例外の Python 例外化は根本課題として未決定に記録。
