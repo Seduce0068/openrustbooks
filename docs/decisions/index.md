@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 134 件）。
+openrustbooks の ADR 一覧（全 135 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -270,3 +270,5 @@ openrustbooks の ADR 一覧（全 134 件）。
   - status: accepted — 初期1回のみ実行される挙動をテストで固定し、ADR-0118/0120 の未決定を解消する。
 - [ADR-0134: 秘密情報の個別削除コマンド](0134-secret-removal-command.md)
   - status: accepted — reset_config を使わずに API キー等だけを削除する clear_secrets コマンドを追加する決定を記録する。
+- [ADR-0135: 秘密削除の監査ログ](0135-secret-clear-audit-log.md)
+  - status: accepted — clear_secrets が削除対象名だけをログに残す決定を記録する。
