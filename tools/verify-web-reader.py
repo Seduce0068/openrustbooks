@@ -447,8 +447,16 @@ class Checker:
         self.expected = expected
         self.failures: list[str] = []
         self.passed = 0
+        # 同名 check の重複を検出する（R6 TD-M03）。総数だけでは取りこぼしを
+        # 検知できないため、使用済みの名前を覚えて重複を failures に記録する。
+        self.names: set[str] = set()
 
     def check(self, name: str, condition: bool, detail: str = "") -> None:
+        if name in self.names:
+            self.failures.append(f"{name} (duplicate check name)")
+            print(f"FAIL {name} (duplicate check name)")
+            return
+        self.names.add(name)
         if condition:
             self.passed += 1
             print(f"ok   {name}")
