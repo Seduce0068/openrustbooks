@@ -1,35 +1,35 @@
 # Goal
 
-秘密削除時に削除対象名だけをログに残す（ADR-0134 の未決定）。
+EPUB 画像の自然寸法を取得して HTML に埋め込む方法を調査・判断する（ADR-0112 の第一段）。
 
 ## Scope
 
 ### 背景
 
-`clear_secrets` は削除対象の値を一切ログに出さないが、
-「いつ・どの種類の秘密が消えたか」という事実も残っていない。
-値を出さずに対象名（api_key 等）だけをログに残せば、
-監査性を高めつつ秘密を漏らさない。
+ADR-0112 は画像遅延読み込みの前に「自然寸法を `width` / `height` で予約」する方針を決定した。
+現在 `EpubCoverImage` はバイト列のみを保持し、寸法は保持しない。
+Web 側の `resolve_images()` は Blob URL 化のみで、属性付与は行わない。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 変更（ログ追加）
-- `docs/decisions/0135-secret-clear-audit-log.md`: 追加
+- `docs/decisions/0136-image-dimension-reservation.md`: 追加（調査と判断）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 実際に消えた対象名のみをログに残す（値・パス・キーは出さない）。
-2. no-op のときはログを出さない。
-3. ログは `log` クレート（`log::info!` 等、既存依存）を使う。
-4. 既存の 240 テスト + wasm 3、E2E 229 項目を壊さない。
+1. 既存依存（image クレート等）で PNG / JPEG / WebP / GIF の寸法を取得できるか確認する。
+2. 取得した寸法を `img` の `width` / `height` 属性として埋め込む層（core のサニタイズ後／web の resolve_images）を比較する。
+3. SVG の寸法（width/height 属性、viewBox）の扱いを決める。
+4. 実装／見送り／段階導入を判断し記録する。
+5. コード変更は行わない（調査と決定のみ）。
 
 ## Acceptance criteria
 
-- 6 ゲート + audit + wasm-test + E2E が成功する。
+- 判断が ADR に記録される。
+- markdownlint が通る。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- ログに秘密の値を含めない。
+- コードを変更しない。
+- 新規依存を追加しない（調査のみ）。
 - `master` へ push する。force push はしない。
