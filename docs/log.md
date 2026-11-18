@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- wasm-pack test を CI extra_gates へ追加し、verify.sh と単一情報源化（ADR-0196）。
 - rumdl featureless 検査を独立スクリプト化し verify.sh と CI へ接続（ADR-0195）。
 - auto_fix 分岐を lint.rs の共通関数へ集約し core を 246→248 件へ拡充（ADR-0194）。
 - 設定フォームを読み取り専用化し、E2E を 249→250 に更新（ADR-0193）。
