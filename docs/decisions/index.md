@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 183 件）。
+openrustbooks の ADR 一覧（全 184 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -368,3 +368,5 @@ openrustbooks の ADR 一覧（全 183 件）。
   - status: accepted — Checker に check 名の重複検知を追加し、総数ゲートの形骸化を防ぐ決定を記録する。
 - [ADR-0183: wait_until の例外伝播](0183-wait-until-failclosed.md)
   - status: accepted — E2E 待機ヘルパーで握り潰していた Python 例外を再送出する決定を記録する。
+- [ADR-0184: 画像寸法パーサのテスト拡充](0184-image-dimension-tests.md)
+  - status: accepted — image_dimensions の JPEG / WebP ヘッダーと境界値テストを追加する決定を記録する。

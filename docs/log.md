@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- image_dimensions に JPEG / WebP / 境界値テストを追加し core を 216→220 件へ拡充（ADR-0184）。
 - E2E wait_until の Python 例外を再送出するよう変更し、基盤失敗の隠蔽を防止（ADR-0183）。
 - E2E Checker に check 名の一意性検証を追加し、総数ゲートの形骸化を防止（ADR-0182）。
 - SVG サニタイズを core の ammonia 共通実装へ一本化し、unit を 212→216 件へ拡充（ADR-0181）。
