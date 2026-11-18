@@ -1,36 +1,32 @@
 # Goal
 
-SettingsForm を Tauri `get_config` / `update_config` に接続する（ADR-0127 の第 1 段）。
+`desktop/src/commands/document.rs` の `tokio::fs` 直呼びにパス検証を追加する（todo.md 最優先の残り）。
 
 ## Scope
 
 ### 背景
 
-SettingsForm の 11 要素はすべて静的で、submit ハンドラも無い。
-desktop 側には `get_config` / `update_config` が登録済みで、
-DTO (`ConfigView`) は secret / パス情報を除外している。
-Web 側に Tauri invoke は無い。
+ADR-0097 で `LocalStorage::resolve_path()` を fail-closed 化したが、
+`document.rs:25` (`read_to_string`) と `:102` (`write`) は backend を通さず
+`tokio::fs` を直呼びする。UI 未接続のため顕在化していないが、
+接続時に任意パス読書きのリスクがある。
+以前は backend 経由に置換すると `local_roots` が空で回帰すると判断したが、
+**backend を使わずに root 検証だけを追加する**方法なら回帰せずに守れる。
 
 ### 成果物
 
-- `desktop/tauri.conf.json`: 変更（`app.withGlobalTauri: true`）
-- `web/src/lib.rs`: 変更（invoke ラッパ、SettingsForm の状態と submit）
-- `tools/verify-web-reader.py`: 変更（ブラウザ版で壊れないことの検証）
-- `docs/decisions/0128-settings-form-wiring.md`: 追加
+- `desktop/src/commands/document.rs`: 変更（パス検証ヘルパーと適用）
+- `docs/decisions/0129-document-path-validation.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `window.__TAURI__` が無い環境（ブラウザ単体）ではエラーにせず、
-   「デスクトップ版のみ利用可能」と表示する。
-2. `get_config` で DTO を取得し、フォームへ初期値を設定する。
-3. submit でフォーム内容を `update_config` に渡す。
-   DTO から除外されたフィールド（secret / パス）は desktop 側の
-   `merge_secrets` が保持するため、Web 側では送らない。
-4. API Key は実値を表示せず、`has_api_key` フラグのみを表示する
-   （ADR-0098 / 0103 の方針）。
-5. 既存の E2E 228 項目を壊さない（期待総数の更新は必要なら行う）。
-6. 新規 npm 依存は追加しない（global Tauri 経由）。
+1. `AppConfig.storage.local_roots[].path` を root として、
+   canonicalize + `..` 拒否 + root 配下チェックを行うヘルパーを追加する。
+2. 既存の backend 経由 command の挙動は変えない。
+3. `local_roots` が空の場合の挙動を決める（安全側で拒否／現状維持）。
+4. テストを追加する。
+5. 既存の 216 テスト + wasm 3、E2E 229 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -38,6 +34,6 @@ Web 側に Tauri invoke は無い。
 
 ## Constraints
 
-- `desktop/src/commands/config.rs` の DTO / merge_secrets は変更しない。
-- 新規クレートは追加しない。
+- 新規依存を追加しない。
+- `core/src/io.rs` の `resolve_path()` は変更しない。
 - `master` へ push する。force push はしない。
