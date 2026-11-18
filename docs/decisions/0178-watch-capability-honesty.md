@@ -20,6 +20,7 @@ status: accepted
 呼び出すと常に失敗する（R6: TD-H04）。
 
 監査で次を確認:
+
 - フロントエンドからの `watch_directory` / `fs-event` 参照は 0 件。
 - Tauri capability は `{}` で独自コマンドは ACL 非対象。
 - 既存の失败的 API を残すより、宣言と IPC 表面を一致させる方が安全。
@@ -67,6 +68,6 @@ status: accepted
 
 ## 未決定
 
-- `watch` を実際に実装するか、 nécessité な依存（notify 等）の選定。
+- `watch` を実際に実装するか、 必要な依存（notify 等）の選定。
 - wasm 側の watch 扱い（native only、io.rs:248）。
 - capability.json `{}` の実挙動（**推測**、実ビルド未確認）。
