@@ -1,12 +1,12 @@
 //! Configuration commands.
 
 use crate::state::AppState;
-use openrustbooks_core::CoreError;
 use openrustbooks_core::ai_markdown::client::{ProviderKind, validate_base_url};
 use openrustbooks_core::config::{
     AiConfig, AppConfig, EditorConfig, GeneralConfig, GoogleDriveConfig, LintConfig,
     LocalRootConfig, OllamaConfig, OpenAiConfig, REDACTED_SECRET, ReaderConfig, StorageConfig,
 };
+use openrustbooks_core::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -505,6 +505,26 @@ pub(crate) fn ai_or_lint_changed(current: &AppConfig, merged: &AppConfig) -> boo
     json_differs(&current.ai, &merged.ai) || json_differs(&current.lint, &merged.lint)
 }
 
+/// 検証済みの候補設定をコミットする共通経路。
+///
+/// 差分がある時だけ候補設定から service を準備し、成功した場合のみ
+/// 設定と service をまとめて保存する。生成失敗時はコミットしないため
+/// config / ディスク / service は不変。`merge_secrets` は呼び出し側の責務で、
+/// ここでは行わない（clear_secrets の契約を守るため）。
+async fn commit_validated_config(
+    state: &AppState,
+    merged: AppConfig,
+    changed: bool,
+) -> CoreResult<()> {
+    let service = if changed {
+        state.prepare_ai_service(&merged).await?
+    } else {
+        // 差分なし: 現在の service を維持する（無効設定なら None）。
+        state.ai_service()
+    };
+    state.commit_config(merged, service)
+}
+
 /// Get current configuration (secrets redacted)
 #[command]
 pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
@@ -521,11 +541,9 @@ pub async fn update_config(
     let merged = merge_secrets(&current, &config);
     validate_ai_base_urls(&merged.ai)?;
     let changed = ai_or_lint_changed(&current, &merged);
-    state.update_config(merged).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
-    if changed {
-        state.refresh_ai_service().await.map_err(map_err)?;
-    }
+    commit_validated_config(state.inner(), merged, changed)
+        .await
+        .map_err(map_err)?;
     Ok(())
 }
 
@@ -541,11 +559,9 @@ pub async fn update_config_patch(
     let merged = merge_secrets(&current, &applied);
     validate_ai_base_urls(&merged.ai)?;
     let changed = ai_or_lint_changed(&current, &merged);
-    state.update_config(merged).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
-    if changed {
-        state.refresh_ai_service().await.map_err(map_err)?;
-    }
+    commit_validated_config(state.inner(), merged, changed)
+        .await
+        .map_err(map_err)?;
     Ok(ConfigView::from(&state.config()))
 }
 
@@ -562,13 +578,10 @@ pub async fn update_ai_config(
     validate_ai_base_urls(&config.ai)?;
     let changed = ai_or_lint_changed(&current, &config);
 
-    state.update_config(config).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
-
-    // 差分がある時だけ再初期化。エラーは握り潰さず Err として返す。
-    if changed {
-        state.refresh_ai_service().await.map_err(map_err)?;
-    }
+    // 差分がある時だけ再準備。失敗時はコミットしないため状態は不変。
+    commit_validated_config(state.inner(), config, changed)
+        .await
+        .map_err(map_err)?;
     Ok(())
 }
 
@@ -584,11 +597,9 @@ pub async fn update_lint_config(
     // DTO から除外した config_file / rule_config を消さないようマージを通す。
     let config = merge_secrets(&current, &incoming);
     let changed = ai_or_lint_changed(&current, &config);
-    state.update_config(config).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
-    if changed {
-        state.refresh_ai_service().await.map_err(map_err)?;
-    }
+    commit_validated_config(state.inner(), config, changed)
+        .await
+        .map_err(map_err)?;
     Ok(())
 }
 
@@ -596,10 +607,10 @@ pub async fn update_lint_config(
 #[command]
 pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
     let config = AppConfig::default();
-    state.update_config(config.clone()).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
-    // 既定は AI 無効。他コマンドと一貫性を持たせるため refresh を待つ。
-    state.refresh_ai_service().await.map_err(map_err)?;
+    // 既定は AI 無効。prepare は None を返し、保存後に service もクリアされる。
+    commit_validated_config(state.inner(), config.clone(), true)
+        .await
+        .map_err(map_err)?;
     Ok(ConfigView::from(&config))
 }
 
@@ -652,12 +663,12 @@ pub async fn clear_secrets(
         return Ok(ConfigView::from(&state.config()));
     }
     // merge_secrets は意図的に通さない。通すと消した値が現在値として復元される。
-    state.update_config(config.clone()).map_err(map_err)?;
-    state.save_config().map_err(map_err)?;
+    // 共有コミット経路にも merge は入れていないため、消した値は復元されない。
+    commit_validated_config(state.inner(), config, true)
+        .await
+        .map_err(map_err)?;
     // 保存成功後にのみ記録する。対象名だけを出力し、値やパスは出さない。
     log::info!("cleared secrets: {}", cleared.join(", "));
-    // 他コマンドと一貫して保存後に AI service を同期する。
-    state.refresh_ai_service().await.map_err(map_err)?;
     Ok(ConfigView::from(&state.config()))
 }
 

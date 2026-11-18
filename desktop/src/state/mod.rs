@@ -1,7 +1,7 @@
 //! Application state management.
 
 use openrustbooks_core::{
-    AppConfig, CoreResult,
+    AppConfig, CoreError, CoreResult,
     ai_markdown::AiMarkdownService,
     document::{Document, DocumentId},
 };
@@ -38,14 +38,57 @@ impl AppState {
         Ok(())
     }
 
-    /// Initialize AI service
-    pub async fn init_ai_service(&self) -> CoreResult<()> {
-        let config = self.config();
-        if config.ai.enabled {
-            let service = AiMarkdownService::new(&config).await?;
-            *self.ai_service.write().unwrap() = Some(Arc::new(service));
+    /// 候補設定から AI service を準備する（状態を一切変更しない）。
+    ///
+    /// 無効設定なら `Ok(None)`、有効設定なら生成結果を `Ok(Some(...))` で返す。
+    /// 生成失敗時は `Err` を返すだけなので、config / ディスク / service は不変。
+    /// ロックは保持せず、生成は呼び出し側のコミット前に完了する。
+    pub async fn prepare_ai_service(
+        &self,
+        config: &AppConfig,
+    ) -> CoreResult<Option<Arc<AiMarkdownService>>> {
+        if !config.ai.enabled {
+            return Ok(None);
         }
+        let service = AiMarkdownService::new(config).await?;
+        Ok(Some(Arc::new(service)))
+    }
+
+    /// 設定と AI service をまとめてコミットする。
+    ///
+    /// 保存成功時のみ新しい設定と service を反映する。保存失敗時はメモリ上の
+    /// 設定を旧値へ戻し、旧設定での再保存を試みる。再保存も失敗した場合は
+    /// ディスク状態が不定であることを明示するエラーを返す（設定値は出さない）。
+    pub fn commit_config(
+        &self,
+        config: AppConfig,
+        service: Option<Arc<AiMarkdownService>>,
+    ) -> CoreResult<()> {
+        let previous = self.config();
+        self.update_config(config)?;
+
+        if let Err(save_error) = self.save_config() {
+            // update_config は失敗しないため、旧 config の復元は確実に行える。
+            let _ = self.update_config(previous);
+            // ディスクも旧値へ戻す試み（2 次失敗あり得る）。
+            if let Err(restore_error) = self.save_config() {
+                // エラーの表示文字列だけを連結し、設定値（シークレット含む）は出さない。
+                return Err(CoreError::internal(format!(
+                    "config save failed and rollback re-save also failed: {save_error}; {restore_error}"
+                )));
+            }
+            return Err(save_error);
+        }
+
+        // 保存成功後のみ service を置換する。生成失敗時はここに到達しないため、
+        // 古い service が復活することも、意図せず消えることもない。
+        *self.ai_service.write().unwrap() = service;
         Ok(())
+    }
+
+    /// Initialize AI service（起動時）。fail-closed の refresh 処理を共用する。
+    pub async fn init_ai_service(&self) -> CoreResult<()> {
+        self.refresh_ai_service().await
     }
 
     /// Get AI service if available
@@ -75,10 +118,11 @@ impl AppState {
     /// 生成に失敗しても None のままなので、古い service は残らない。
     pub async fn refresh_ai_service(&self) -> CoreResult<()> {
         self.disable_ai_service();
-        if !self.is_ai_enabled() {
-            return Ok(());
+        let config = self.config();
+        if let Some(service) = self.prepare_ai_service(&config).await? {
+            *self.ai_service.write().unwrap() = Some(service);
         }
-        self.init_ai_service().await
+        Ok(())
     }
 
     /// Add a document
@@ -143,6 +187,47 @@ impl AppState {
 mod tests {
     use super::*;
     use openrustbooks_core::document::{DocumentContent, DocumentFormat, DocumentMetadata};
+    use std::path::PathBuf;
+
+    /// commit_config が触れる config.toml をテスト前後で保護する。
+    /// 既存ファイルは内容を復元し、無ければ削除して環境を汚さない。
+    struct ConfigFileGuard {
+        path: Option<PathBuf>,
+        original: Option<Vec<u8>>,
+    }
+
+    impl ConfigFileGuard {
+        fn new() -> Self {
+            let path = directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+                .map(|dirs| dirs.config_dir().join("config.toml"));
+            let original = path.as_ref().and_then(|p| std::fs::read(p).ok());
+            Self { path, original }
+        }
+    }
+
+    impl Drop for ConfigFileGuard {
+        fn drop(&mut self) {
+            let Some(path) = &self.path else {
+                return;
+            };
+            match &self.original {
+                Some(bytes) => {
+                    let _ = std::fs::write(path, bytes);
+                }
+                None => {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+    }
+
+    /// AppConfig は PartialEq 未 derive のため JSON 表現で比較する。
+    fn assert_config_eq(actual: &AppConfig, expected: &AppConfig) {
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+    }
 
     fn sample_document(id: &str) -> Document {
         Document {
@@ -237,6 +322,76 @@ mod tests {
 
         // 生成失敗は呼び出し側へ伝播し、service は None のまま（fail-closed）。
         assert!(state.refresh_ai_service().await.is_err());
+        assert!(state.ai_service().is_none());
+    }
+
+    #[tokio::test]
+    async fn prepare_ai_service_failure_keeps_config_and_service_unchanged() {
+        let state = AppState::new(AppConfig::default());
+        let mut valid = AppConfig::default();
+        valid.ai.enabled = true;
+        valid.ai.default_provider = "ollama".to_string(); // 初期化時に HTTP 要求なし
+        state.update_config(valid.clone()).unwrap();
+        state.init_ai_service().await.unwrap();
+        let before = state.ai_service();
+        assert!(before.is_some());
+
+        let mut invalid = valid.clone();
+        invalid.ai.default_provider = "unknown".to_string();
+
+        // 生成失敗は Err のみ。コミット（＝保存）に進まないため disk も不変。
+        assert!(state.prepare_ai_service(&invalid).await.is_err());
+
+        assert_config_eq(&state.config(), &valid);
+        let after = state.ai_service();
+        assert!(after.is_some());
+        // 古い service は廃棄も復活もされず、同じ Arc が残る。
+        assert!(Arc::ptr_eq(
+            before.as_ref().unwrap(),
+            after.as_ref().unwrap()
+        ));
+    }
+
+    #[tokio::test]
+    async fn prepare_ai_service_disabled_returns_none() {
+        let state = AppState::new(AppConfig::default());
+        assert!(
+            state
+                .prepare_ai_service(&AppConfig::default())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.ai_service().is_none());
+    }
+
+    #[tokio::test]
+    async fn commit_config_success_replaces_config_and_service() {
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new(AppConfig::default());
+        assert!(state.ai_service().is_none());
+
+        let mut candidate = AppConfig::default();
+        candidate.ai.enabled = true;
+        candidate.ai.default_provider = "ollama".to_string();
+        candidate.general.theme = "dark".to_string();
+        let prepared = state.prepare_ai_service(&candidate).await.unwrap();
+        assert!(prepared.is_some());
+
+        state
+            .commit_config(candidate.clone(), prepared.clone())
+            .unwrap();
+
+        assert_config_eq(&state.config(), &candidate);
+        let committed = state.ai_service().unwrap();
+        assert!(Arc::ptr_eq(prepared.as_ref().unwrap(), &committed));
+
+        // 無効設定をコミットすると service は None に置換される。
+        let disabled = AppConfig::default();
+        let none_service = state.prepare_ai_service(&disabled).await.unwrap();
+        assert!(none_service.is_none());
+        state.commit_config(disabled.clone(), none_service).unwrap();
+        assert_config_eq(&state.config(), &disabled);
         assert!(state.ai_service().is_none());
     }
 }
