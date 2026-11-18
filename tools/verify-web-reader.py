@@ -776,13 +776,15 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 218 + checker.equal 17 = 235。
+    # 期待 check 総数: checker.check 220 + checker.equal 17 = 237。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
     # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1、
-    # 画像読み込み後の CLS 直接計測 +1（ADR-0149 の残項目）。
-    checker = Checker(expected=235)
+    # 画像読み込み後の CLS 直接計測 +1（ADR-0149 の残項目）、
+    # エディタの textarea 入力→Preview 反映とデスクトップ専用操作の disabled 化 +2
+    # （ADR-0127 の最小構成）。
+    checker = Checker(expected=237)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -812,7 +814,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 235 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 237 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3733,9 +3735,53 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f"(mounted={settings_mounted}, notice={offline_notice}, errors={settings_errors!r})",
     )
 
+    # エディタ画面 (ADR-0127): textarea の入力が content シグナルを経由して
+    # Preview に反映されることと、ブラウザ版で使えない操作が disabled かつ
+    # 理由（desktop only / not implemented）付きであることを確認する。
+    # About チェックが /about へ遷移するため、元の画面へ戻す必要はない。
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/editor/e2e"})
+    editor_mounted = await wait_until(cdp, "document.querySelector('#editor-input') !== null")
+    if editor_mounted:
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            " input.value = '<h1>E2E Preview Heading</h1>';"
+            " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        )
+        # Leptos のシグナル→DOM 反映は同期的だが、描画ズレを避けて少し待つ。
+        await asyncio.sleep(0.4)
+        preview_heading = await cdp.evaluate(
+            "document.querySelector('.preview-pane .preview h1')?.textContent ?? ''"
+        )
+    else:
+        preview_heading = ""
+    checker.check(
+        "エディタの textarea 入力が Preview に反映される",
+        editor_mounted and preview_heading == "E2E Preview Heading",
+        f"(mounted={editor_mounted}, heading={preview_heading!r})",
+    )
+
+    toolbar_controls = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('.editor-toolbar button, .editor-toolbar select'))"
+        ".map((el) => ({ tag: el.tagName.toLowerCase(), label: el.textContent.trim(),"
+        " disabled: el.disabled, reason: ((el.getAttribute('title') || '') + ' '"
+        " + (el.getAttribute('aria-label') || '')).toLowerCase() }))"
+    )
+    checker.check(
+        "エディタのデスクトップ専用操作が disabled で理由付き",
+        isinstance(toolbar_controls, list)
+        and len(toolbar_controls) == 5
+        and all(item.get("disabled") is True for item in toolbar_controls)
+        and all(
+            "desktop only" in item.get("reason", "")
+            and "not implemented" in item.get("reason", "")
+            for item in toolbar_controls
+        ),
+        f"(controls={toolbar_controls!r})",
+    )
+
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
-    # 分けて表示されることを確認する。設定画面チェックの直後に遷移する最後のチェック
-    # なので、後続の画面状態に影響しない（元の画面へ戻る遷移は不要）。
+    # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の
+    # チェックなので、後続の画面状態に影響しない（元の画面へ戻る遷移は不要）。
     await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/about"})
     about_mounted = await wait_until(cdp, "document.querySelector('.about-page') !== null")
     about_lines = await cdp.evaluate(

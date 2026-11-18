@@ -216,26 +216,35 @@
 
         .editor-pane,
         .preview-pane {
-            display: flex;
-            flex-direction: column;
             border: 1px solid var(--color-border);
             border-radius: var(--radius-md);
             overflow: hidden;
-        }
-
-        .editor-pane {
             background: var(--color-bg);
-        }
-
-        #editor {
-            flex: 1;
-            font-family: var(--font-mono);
-            font-size: 14px;
-            line-height: 1.6;
         }
 
         .preview-pane {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ADR-0127: CodeMirror を見送り、textarea をグリッドの子として配置する。
+           flex 子ではないため height は 100% でセルいっぱいに広げる。 */
+        #editor-input {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+            min-height: 240px;
+            padding: var(--spacing-md);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            resize: vertical;
+            overflow: auto;
             background: var(--color-bg);
+            color: var(--color-fg);
+            font-family: var(--font-mono);
+            font-size: 14px;
+            line-height: 1.6;
         }
 
         .preview {

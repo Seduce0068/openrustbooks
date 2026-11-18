@@ -3,7 +3,6 @@
 //! This crate compiles to WebAssembly and provides the browser-based
 //! version of the application using Leptos.
 
-use leptos::html::Div;
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::hooks::use_params_map;
@@ -202,42 +201,76 @@ fn FileTree() -> impl IntoView {
     }
 }
 
-/// Editor component with CodeMirror
+/// 最小構成のエディタ（ADR-0127: CodeMirror は導入しない）。
+///
+/// `on:input` で textarea の値を `content` シグナルへ反映し、`<Preview/>`
+/// が同じシグナルを読むためリアルタイムに更新される。`prop:value` は
+/// 意図的に使わない: 同じ文字列を再代入するとブラウザがキャレットを
+/// 末尾へ戻すため、textarea 自身を入力値の唯一の保持元とする。
+/// デスクトップ専用の操作はブラウザ版では disabled にする。
 #[component]
 fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
-    let (saving, set_saving) = signal(false);
-    let editor_ref = NodeRef::<Div>::new();
-
-    // Initialize CodeMirror once the editor pane is mounted.
-    // CodeMirror 6 integration via wasm-bindgen will hook in here.
-    Effect::new(move |_| {
-        if editor_ref.get().is_some() {
-            tracing::debug!("editor pane mounted for {}", doc_id.get());
-        }
-    });
-
-    let save = move |_| {
-        set_saving.set(true);
-        // Save logic
-        set_saving.set(false);
-    };
 
     view! {
-        <div class="editor-container">
+        <div class="editor-container" data-doc-id=move || doc_id.get()>
             <div class="editor-toolbar">
-                <button class="btn" on:click=save disabled=move || saving.get()>
-                    {move || if saving.get() { "Saving..." } else { "Save" }}
+                <button
+                    class="btn"
+                    disabled=true
+                    title="Save (desktop only, not implemented in the browser build)"
+                    aria-label="Save (desktop only, not implemented in the browser build)"
+                >
+                    "Save (desktop only)"
                 </button>
-                <button class="btn">"AI Generate"</button>
-                <button class="btn">"AI Refine"</button>
-                <button class="btn">"Lint"</button>
-                <select class="format-select">
+                <button
+                    class="btn"
+                    disabled=true
+                    title="AI Generate (desktop only, not implemented in the browser build)"
+                    aria-label="AI Generate (desktop only, not implemented in the browser build)"
+                >
+                    "AI Generate"
+                </button>
+                <button
+                    class="btn"
+                    disabled=true
+                    title="AI Refine (desktop only, not implemented in the browser build)"
+                    aria-label="AI Refine (desktop only, not implemented in the browser build)"
+                >
+                    "AI Refine"
+                </button>
+                <button
+                    class="btn"
+                    disabled=true
+                    title="Lint (desktop only, not implemented in the browser build)"
+                    aria-label="Lint (desktop only, not implemented in the browser build)"
+                >
+                    "Lint"
+                </button>
+                <select
+                    class="format-select"
+                    disabled=true
+                    title="Format selection (desktop only, not implemented in the browser build)"
+                    aria-label="Format selection (desktop only, not implemented in the browser build)"
+                >
                     <option value="markdown">"Markdown"</option>
                     <option value="txt">"Plain Text"</option>
                 </select>
             </div>
-            <div class="editor-pane" id="editor" node_ref=editor_ref></div>
+            <textarea
+                id="editor-input"
+                class="editor-pane"
+                aria-label="Document editor"
+                placeholder="Type text to preview it here..."
+                on:input=move |event: web_sys::Event| {
+                    if let Some(textarea) = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
+                    {
+                        set_content.set(textarea.value());
+                    }
+                }
+            ></textarea>
             <div class="preview-pane">
                 <Preview content=content set_content=set_content/>
             </div>
