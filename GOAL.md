@@ -1,26 +1,38 @@
 # Goal
 
-バックアップのインポートに `window.confirm()` の確認ダイアログを追加する（ADR-0172）。
+`WriteOptions.overwrite` を実効化し、既存ファイルの黙って上書きを防ぐ（R6 最優先 PR-H01/TD-H01）。
 
 ## Scope
 
 ### 背景
 
-ADR-0157 で現在の設定／履歴は保護されたが、読書位置は `savedAt` マージで上書きされ得た。
-Clear data には確認を追加済み（ADR-0171）だが、import は未確認だった。
+`LocalStorage::write()` は `options.overwrite` を参照せず常に `tokio_fs::write` で上書きする。
+`desktop/src/commands/fs.rs::create_file()` は `WriteOptions::default()`（overwrite=false）を
+渡すため、「新規作成」操作が既存データを破壊し得る。
 
 ### 成果物
 
-- `docs/decisions/0172-import-confirmation.md`: 追加
-- `GOAL.md`: 最終契約へ更新
+- `core/src/io.rs`: 変更（overwrite 判定）
+- `desktop/src/commands/fs.rs`: 変更（意図の明示、必要なら）
+- `GOAL.md`: 本契約
+- `todo.md`: 完了反映
 
-### 決定
+### 必須事項
 
-- ファイル取得後・読み込み前に confirm を呼び、false なら input をリセットして return。
-- 成功時も input をリセットし同一ファイルを再選択可能にする。
-- E2E は既存 import 11 箇所を `select_import_file()` ヘルパーに統一し、
-  実ダイアログを回避。期待総数 245 → 246。
+1. `write()` で `overwrite=false` かつ対象が存在する場合、
+   `CoreError::Storage`（例 `"File already exists: ..."`）を返す。
+2. `atomic=true` でも同じ判定を `set_item` 前に適用する。
+3. 既存の `write_text` / `create_file` の挙動を壊さない
+   （新規作成は成功、既存は拒否）。
+4. unit test を追加（既存拒否／上書き許可／atomic 分岐）。
+5. 全ゲート成功（E2E 246 項目維持）。
 
 ## Acceptance criteria
 
-- E2E 246 項目、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 246 項目成功。
+
+## Constraints
+
+- 新規依存を追加しない。
+- エラー文言にファイル内容を載せない（パスのみ、必要なら相対パス）。
+- `master` へ push する。force push はしない。
