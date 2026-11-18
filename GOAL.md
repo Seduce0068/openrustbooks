@@ -1,21 +1,36 @@
 # Goal
 
-image_dimensions の JPEG / WebP と境界値テストを追加する（R6 TD-M01、ADR-0184）。
+`cargo-audit` 未インストール時に脆弱性ゲートを警告だけでスキップする問題を修正する（R4 指摘）。
 
 ## Scope
 
+### 背景
+
+`scripts/verify.sh` は `command -v cargo-audit` が失敗すると
+`WARNING` を出すだけで `fail=1` にしない。
+ローカルにツールが無いだけで脆弱性検査が黙ってスキップされ、
+CI（`audit: true`）と結果が食い違う。
+
 ### 成果物
 
-- `core/src/image_dimensions.rs`: テストのみ追加（production 不変）
-- `docs/decisions/0184-image-dimension-tests.md`: 追加
-- `todo.md`: TD-M01 を完了へ移動
+- `scripts/verify.sh`: 変更（未インストール時もゲート失敗）
+- `README.md`: 必要なら導入手順の明記
+- `docs/decisions/0185-audit-tool-failclosed.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- JPEG SOF0 / WebP VP8X / VP8 lossy のヘッダー形式を imagesize 0.15 源码と突合。
-- PNG の 0 / 1 / MAX / MAX+1 を表駆動で検証。
-- E2E 249 件維持。
+1. `cargo-audit` が無い場合、明確なエラーを出して `fail=1` にする。
+2. advisory DB が無い／古い場合の fail-closed 契約は維持する。
+3. 既知 baseline（警告 10 件）は従来どおり許可する。
+4. `./scripts/verify.sh` が成功すること（ローカルに cargo-audit が入っている前提）。
 
 ## Acceptance criteria
 
-- core 220 件、E2E 249 件、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 249 項目成功。
+
+## Constraints
+
+- 新規依存を追加しない。
+- CI 共通ワークフロー変更は行わない。
+- `master` へ push する。force push はしない。
