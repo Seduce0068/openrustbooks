@@ -129,10 +129,6 @@ status: current
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 -->
-- 【PR-L01 / TD-L01】本文領域に `aria-label` と `aria-labelledby` を併記。
-  根拠 `web/src/lib.rs:3628` / ADR-0058。aria-label を削除。
-- 【PR-L02】ダーク切替に `aria-pressed` が無く隣接トグルと不一致。
-  根拠 `web/src/lib.rs:3509-3511`。
 - 【PR-L03】build_app が desktop/mobile で 7 プラグイン重複。
   根拠 `desktop/src/main.rs:16-18,42-44`。共通関数へ抽出。
 - 【TD-L04】Reader の CoverImage.id / media_type が allow(dead_code) で捨てられる。
@@ -170,6 +166,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-L01 / L02】Reader の ARIA 属性を修正。aria-labelledby へ一本化し、
+      aria-pressed/可視ラベルを effective_dark へ。E2E 251 件・全ゲート成功 / ADR-0198。
 - [x] 【TD-L02 / L03】未使用 trait メソッド is_done / available_space を削除。
       ADR-0189 の回帰は next_token シーケンスで担保。残存参照 0、E2E 250 件・全ゲート成功 / ADR-0197。
 - [x] 【TD-M05】wasm-pack test を CI extra_gates へ追加。
