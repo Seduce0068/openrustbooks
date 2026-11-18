@@ -1,21 +1,36 @@
 # Goal
 
-table の数値属性に fail-closed 検証を追加する（R6 PR-M02、ADR-0187）。
+atomic write の一時ファイル名を一意化する（R6 PR-M06）。
 
 ## Scope
 
+### 背景
+
+`LocalStorage::write()` の atomic 分岐は
+`full_path.with_extension("tmp")` という固定名を使う。
+同一ファイルへの並行書き込みや既存の `.tmp` ファイルと衝突し、
+片方のデータが他方の rename で上書きされる可能性がある。
+
 ### 成果物
 
-- `core/src/sanitize.rs`: MAX_TABLE_NUMBER / is_valid_table_number / attribute_filter 拡張、unit 4 件
-- `docs/decisions/0187-table-attribute-validation.md`: 追加
-- `todo.md`: PR-M02 を完了へ移動
+- `core/src/io.rs`: 変更（一意な tmp 名、unit test）
+- `docs/decisions/0188-atomic-tmp-uniqueness.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- colspan / rowspan / start / value / span を ASCII 数字 1..=1000 に制限。
-- 不正値は属性のみ削除、本文は維持。
-- img の 1..=16384 契約は維持。
+1. tmp 名に PID とプロセス内カウンタ（AtomicUsize）を含める。
+2. 既存の `.tmp` ファイルを上書きしない（create_new 相当の安全性）。
+3. rename 成功後、tmp が残らないこと。
+4. unit test を追加（並行 2 書き込みで衝突しない、tmp 残存なし）。
+5. 全ゲート成功（E2E 249 維持）。
 
 ## Acceptance criteria
 
-- core 224 / E2E 249、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 249 項目成功。
+
+## Constraints
+
+- 新規依存を追加しない。
+- overwrite ガード（ADR-0173）は維持する。
+- `master` へ push する。force push はしない。
