@@ -469,6 +469,90 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
     return False
 
 
+# ---- スクロール軸非依存ヘルパー ------------------------------------------------
+# ADR-0145 の縦書き導入に備え、.reader-content のスクロール読み書きをここへ集約する。
+# computed writing-mode が vertical-* / sideways-* なら横軸（scrollLeft）、
+# それ以外は縦軸（scrollTop）。横書きでは既存 E2E と同じ値・同じ挙動になる。
+READER_CONTENT = "document.querySelector('.reader-content')"
+
+
+def _scroll_axis_js(target: str) -> str:
+    """対象要素の writing-mode から軸名（'scrollLeft' / 'scrollTop'）を選ぶ JS 式。"""
+    return (
+        "(() => {"
+        f" const wm = getComputedStyle({target}).writingMode;"
+        " return (wm.includes('vertical') || wm.includes('sideways'))"
+        " ? 'scrollLeft' : 'scrollTop';"
+        " })()"
+    )
+
+
+def scroll_axis_expr(target: str = READER_CONTENT) -> str:
+    """要素のスクロール軸名を返す JS 式（要素が無い／要素でない場合は scrollTop）。"""
+    return (
+        "(() => {"
+        f" const el = {target};"
+        " if (!el || el.nodeType !== 1) return 'scrollTop';"
+        f" return {_scroll_axis_js('el')};"
+        " })()"
+    )
+
+
+def scroll_read_expr(target: str = READER_CONTENT, missing: str = "0") -> str:
+    """要素のスクロール量を読む JS 式（横書きでは scrollTop）。"""
+    return (
+        "(() => {"
+        f" const el = {target};"
+        f" if (!el) return {missing};"
+        f" return el[{_scroll_axis_js('el')}] ?? {missing};"
+        " })()"
+    )
+
+
+def scroll_set_expr(value: str, target: str = READER_CONTENT) -> str:
+    """要素のスクロール量を value に設定する JS 式（横書きでは scrollTop）。"""
+    return (
+        "(() => {"
+        f" const el = {target};"
+        " if (!el) return null;"
+        f" el[{_scroll_axis_js('el')}] = {value};"
+        " return true;"
+        " })()"
+    )
+
+
+def scroll_reset_expr(target: str = READER_CONTENT) -> str:
+    """スクロール位置を先頭へ戻す JS 式（横書きでは scrollTop = 0）。"""
+    return scroll_set_expr("0", target)
+
+
+def scroll_offset_expr(marker: str, container: str = READER_CONTENT) -> str:
+    """スクロール軸に対応する marker の offsetTop / offsetLeft を返す JS 式。"""
+    return (
+        "(() => {"
+        f" const el = {marker};"
+        f" return el[{_scroll_axis_js(container)} === 'scrollTop'"
+        " ? 'offsetTop' : 'offsetLeft'];"
+        " })()"
+    )
+
+
+def scroll_delta_expr(marker: str, container: str = READER_CONTENT) -> str:
+    """container の先頭から marker までのスクロール軸方向の距離を返す JS 式。
+
+    横書きでは `rect.top` の差、縦書きでは `rect.left` の差を使う。
+    """
+    return (
+        "(() => {"
+        f" const a = {marker};"
+        f" const b = {container};"
+        f" return {_scroll_axis_js('b')} === 'scrollTop'"
+        " ? a.getBoundingClientRect().top - b.getBoundingClientRect().top"
+        " : a.getBoundingClientRect().left - b.getBoundingClientRect().left;"
+        " })()"
+    )
+
+
 async def open_sample(cdp: Cdp) -> bool:
     """サンプル EPUB をファイル入力にセットして change を発火する。"""
     document = await cdp.send("DOM.getDocument", {"depth": -1})
@@ -806,9 +890,9 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
     )
     scrolled = await wait_until(
-        cdp, "document.querySelector('.reader-content')?.scrollTop > 0", timeout=5
+        cdp, f"{scroll_read_expr()} > 0", timeout=5
     )
-    scroll_top = await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? 0")
+    scroll_top = await cdp.evaluate(scroll_read_expr())
     checker.check("フラグメント付きリンクで移動先へスクロールする", scrolled, f"(scrollTop={scroll_top})")
 
     # 解決できない相対リンク。
@@ -889,7 +973,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Part two text.')"
     )
     scrolled = await wait_until(
-        cdp, "document.querySelector('.reader-content')?.scrollTop > 0", timeout=5
+        cdp, f"{scroll_read_expr()} > 0", timeout=5
     )
     checker.check("フラグメント付きの位置が復元される", bool(restored_fragment))
     checker.check("復元時にフラグメントへスクロールする", scrolled)
@@ -931,7 +1015,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     # 描画後のスクロール適用（先頭へ戻す）が終わるのを待ってからスクロールする。
     await asyncio.sleep(0.3)
-    await cdp.evaluate("document.querySelector('.reader-content').scrollTop = 400")
+    await cdp.evaluate(scroll_set_expr("400"))
     saved = await wait_saved(cdp, lambda position: position.get("scrollTop", 0) > 0)
     checker.check(
         "スクロール位置が保存される",
@@ -942,10 +1026,10 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await reload_reader(cdp)
     reopened = await open_sample(cdp)
     restored_scroll = reopened and await wait_until(
-        cdp, "document.querySelector('.reader-content')?.scrollTop > 300", timeout=5
+        cdp, f"{scroll_read_expr()} > 300", timeout=5
     )
     checker.check("リロード後にスクロール位置が復元される", bool(restored_scroll))
-    restored_top = await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? 0")
+    restored_top = await cdp.evaluate(scroll_read_expr())
     expected_top = saved.get("scrollTop", 0) if saved else 0
     checker.check(
         "復元後のスクロール位置が保存値と一致する",
@@ -964,7 +1048,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await asyncio.sleep(1.0)
     checker.check(
         "章の切り替えでスクロール位置が先頭になる",
-        (await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? -1")) == 0,
+        (await cdp.evaluate(scroll_read_expr(missing="-1"))) == 0,
     )
 
     # scrollTop の無い旧形式の保存値でも章は復元される。
@@ -987,7 +1071,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     await asyncio.sleep(0.3)
 
-    await cdp.evaluate("document.querySelector('.reader-content').scrollTop = 150")
+    await cdp.evaluate(scroll_set_expr("150"))
     await asyncio.sleep(0.3)
     await cdp.evaluate("document.querySelector('#back').click()")
     await wait_until(
@@ -1010,7 +1094,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "1",
     )
     back_scrolled = await wait_until(
-        cdp, "document.querySelector('.reader-content')?.scrollTop > 100", timeout=5
+        cdp, f"{scroll_read_expr()} > 100", timeout=5
     )
     checker.check("Back でスクロール位置が復元される", back_scrolled)
     checker.check(
@@ -1068,11 +1152,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
 
     # 画像より後ろの見出しへスクロールし、その位置を保存する。
     await cdp.evaluate(
-        "(() => {"
-        " const content = document.querySelector('.reader-content');"
-        " const part = document.querySelector('#part');"
-        " content.scrollTop = part.offsetTop;"
-        " })()"
+        scroll_set_expr(scroll_offset_expr("document.querySelector('#part')"))
     )
     before = await wait_saved(
         cdp, lambda position: position.get("scrollTop", 0) > 0
@@ -1082,7 +1162,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "(() => {"
         " const content = document.querySelector('.reader-content');"
         " const part = document.querySelector('#part');"
-        " return part.getBoundingClientRect().top - content.getBoundingClientRect().top;"
+        f" return {scroll_delta_expr('part', 'content')};"
         " })()"
     )
     saved_top = before.get("scrollTop", 0) if before else 0
@@ -1094,10 +1174,12 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         " window.__scrollOrder = {attempts: []};"
         " document.addEventListener('scroll', (event) => {"
         "  const target = event.target;"
-        "  if (!target || target.scrollTop === undefined) return;"
+        f"  const axis = {scroll_axis_expr('target')};"
+        "  const scrollValue = target ? target[axis] : undefined;"
+        "  if (scrollValue === undefined) return;"
         "  if (window.__scrollOrder.attempts.length > 20) return;"
         "  const image = document.querySelector('#tall');"
-        "  window.__scrollOrder.attempts.push({top: target.scrollTop,"
+        "  window.__scrollOrder.attempts.push({top: scrollValue,"
         "   complete: image ? image.complete : null, t: performance.now()});"
         " }, true);"
         " const mark = () => { const image = document.querySelector('#tall');"
@@ -1132,10 +1214,10 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "(() => {"
         " const content = document.querySelector('.reader-content');"
         " const part = document.querySelector('#part');"
-        " return part.getBoundingClientRect().top - content.getBoundingClientRect().top;"
+        f" return {scroll_delta_expr('part', 'content')};"
         " })()"
     )
-    restored_top = await cdp.evaluate("document.querySelector('.reader-content')?.scrollTop ?? 0")
+    restored_top = await cdp.evaluate(scroll_read_expr())
     checker.check(
         "画像読み込み後も復元位置が同じ内容を指す",
         abs(marker_after - marker_before) <= 30,
@@ -2529,9 +2611,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     # 戻ると #part 付近へ戻る。
     await cdp.evaluate("document.querySelector('#reader-back').click()")
     await asyncio.sleep(1.0)
-    restored_scroll = await cdp.evaluate(
-        "document.querySelector('.reader-content')?.scrollTop ?? 0"
-    )
+    restored_scroll = await cdp.evaluate(scroll_read_expr())
     checker.check(
         "戻るでフラグメント移動前の位置へ戻る",
         restored_scroll > 0,
