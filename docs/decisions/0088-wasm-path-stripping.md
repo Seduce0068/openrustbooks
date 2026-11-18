@@ -23,7 +23,7 @@ status: accepted
 
 - `scripts/verify.sh` の trunk build 時に
   `RUSTFLAGS="--remap-path-prefix=$HOME=~"` を指定する。
-- ビルド後に WASM を走査し、`/home/` が含まれていれば失敗とする。
+- ビルド後に WASM と JS グルーを走査し、開発ホーム絶対パスが含まれていれば失敗とする（ADR-0152 で fail-closed 化）。
 - `strip = true`（release）と `debug = "line-tables-only"（dev）` の既存設定は維持する。
 - 開発パスをリポジトリにハードコードしないため、Cargo 設定ではなく
   スクリプトで `$HOME` を使う。
