@@ -47,6 +47,16 @@ pub fn image_dimensions_wasm(bytes: &[u8]) -> Option<Vec<u32>> {
     crate::image_dimensions(bytes).map(|(width, height)| vec![width, height])
 }
 
+/// Markdown をサニタイズ済み HTML へ変換する Wasm 公開 API。
+///
+/// 純粋関数 [`crate::render_markdown`] の薄いラッパー。ネイティブの
+/// `cargo check --all-targets` でも web クレートから参照できるよう、
+/// `wasm_bindgen` 属性は wasm32 のときだけ付与する。
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+pub fn render_markdown_wasm(md: &str) -> String {
+    crate::render_markdown(md)
+}
+
 /// EPUB 読み取り API を JavaScript に公開するラッパー。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]

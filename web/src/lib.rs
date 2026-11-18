@@ -10,7 +10,9 @@ use leptos_router::path;
 #[cfg(target_arch = "wasm32")]
 use openrustbooks_core::WasmEpubBook;
 use openrustbooks_core::init;
+#[cfg(target_arch = "wasm32")]
 use openrustbooks_core::sanitize::sanitize_epub_html;
+use openrustbooks_core::wasm::render_markdown_wasm;
 use wasm_bindgen::prelude::*;
 
 /// E2E の起動診断用に Wasm の実行段階へタイムスタンプを付ける。
@@ -3421,7 +3423,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 fn Preview(content: ReadSignal<String>, set_content: WriteSignal<String>) -> impl IntoView {
     let _ = set_content;
     view! {
-        <div class="preview" inner_html=move || sanitize_epub_html(&content.get())/>
+        <div class="preview" inner_html=move || render_markdown_wasm(&content.get())/>
     }
 }
 

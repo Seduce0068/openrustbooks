@@ -776,15 +776,15 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 220 + checker.equal 17 = 237。
+    # 期待 check 総数: checker.check 221 + checker.equal 17 = 238。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
     # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1、
     # 画像読み込み後の CLS 直接計測 +1（ADR-0149 の残項目）、
     # エディタの textarea 入力→Preview 反映とデスクトップ専用操作の disabled 化 +2
-    # （ADR-0127 の最小構成）。
-    checker = Checker(expected=237)
+    # （ADR-0127 の最小構成）、Markdown 見出しの描画と script 除去 +1。
+    checker = Checker(expected=238)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -814,7 +814,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 237 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 238 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3744,7 +3744,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     if editor_mounted:
         await cdp.evaluate(
             "(() => { const input = document.querySelector('#editor-input');"
-            " input.value = '<h1>E2E Preview Heading</h1>';"
+            " input.value = '# E2E Preview Heading';"
             " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
         )
         # Leptos のシグナル→DOM 反映は同期的だが、描画ズレを避けて少し待つ。
@@ -3758,6 +3758,35 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "エディタの textarea 入力が Preview に反映される",
         editor_mounted and preview_heading == "E2E Preview Heading",
         f"(mounted={editor_mounted}, heading={preview_heading!r})",
+    )
+
+    # Markdown レンダリング: `# Heading` が h1 として描画され、入力中の
+    # <script> は comrak の既定（raw HTML 不使用）で除去され、さらに
+    # sanitize_epub_html を通るため実行可能な要素が残らないことを確認する。
+    markdown_preview = {}
+    if editor_mounted:
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            " input.value = '# Heading\\n\\n<script>alert(1)</script>';"
+            " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        )
+        # Leptos のシグナル→DOM 反映は同期的だが、描画ズレを避けて少し待つ。
+        await asyncio.sleep(0.4)
+        markdown_preview = await cdp.evaluate(
+            "(() => { const preview = document.querySelector('.preview-pane .preview');"
+            " return { heading: preview?.querySelector('h1')?.textContent ?? '',"
+            "          scripts: preview?.querySelectorAll('script').length ?? -1,"
+            "          html: preview?.innerHTML ?? '' }; })()"
+        ) or {}
+    preview_html = str(markdown_preview.get("html", ""))
+    checker.check(
+        "Markdown の見出しが Preview に描画され script が除去される",
+        editor_mounted
+        and markdown_preview.get("heading") == "Heading"
+        and markdown_preview.get("scripts") == 0
+        and "<script" not in preview_html.lower()
+        and "alert(1)" not in preview_html,
+        f"(mounted={editor_mounted}, preview={markdown_preview!r})",
     )
 
     toolbar_controls = await cdp.evaluate(
