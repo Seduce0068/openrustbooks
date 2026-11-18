@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 146 件）。
+openrustbooks の ADR 一覧（全 148 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -294,3 +294,7 @@ openrustbooks の ADR 一覧（全 146 件）。
   - status: accepted — 縦書き表示とページ送りを即座に実装せず、E2E の軸非依存化から始める段階導入方針を記録する。
 - [ADR-0146: E2E スクロール読み書きの軸非依存化](0146-axis-independent-e2e-scroll.md)
   - status: accepted — E2E の DOM スクロール読み書きを writing-mode に応じて軸を選ぶヘルパーへ集約する決定を記録する。
+- [ADR-0147: オプトイン縦書きの一旦見送り](0147-opt-in-vertical-writing-rejected.md)
+  - status: rejected — 縦書きのアプリ側実装を試行したが、位置保存・復元を検証できなかったため見送った決定を記録する。
+- [ADR-0148: 画像縮小の完了シグナルとリトライ](0148-downscale-completion-signal.md)
+  - status: accepted — 画像縮小の完了を data-downscaled で明示し、未確定画像のリトライと MIME 属性化で E2E フレークを解消する決定を記録する。
