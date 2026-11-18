@@ -211,6 +211,8 @@ fn FileTree() -> impl IntoView {
 /// 意図的に使わない: 同じ文字列を再代入するとブラウザがキャレットを
 /// 末尾へ戻すため、textarea 自身を入力値の唯一の保持元とする（ADR-0161）。
 /// そのため下書きの復元時は `textarea.set_value` と `set_content` の両方を行う。
+/// 上限超の下書きを復元した場合は本文をそのまま戻し、固定文言の警告だけを
+/// status へ出す（本文・サイズ値は出さない）。
 /// Save はブラウザ内の localStorage へ下書きを保存し、失敗は ADR-0154 の
 /// 共通通知で利用者へ伝える。他のデスクトップ専用操作は disabled にする。
 #[component]
@@ -250,6 +252,11 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
             return;
         };
         set_content.set(draft.clone());
+        // 上限超の下書きでも本文はそのまま復元し、固定文言だけで警告する。
+        // 本文・サイズ値は status / console へ出さない。
+        if draft.len() > EDITOR_DRAFT_MAX_BYTES {
+            set_status.set(EDITOR_DRAFT_TOO_LARGE_RESTORED_MESSAGE.to_string());
+        }
         let Some(window) = web_sys::window() else {
             return;
         };
@@ -1382,6 +1389,10 @@ const EDITOR_DRAFT_MAX_BYTES: usize = 1_048_576;
 
 /// 下書きが上限を超えたときの固定文言。本文・サイズ値は載せない。
 const EDITOR_DRAFT_TOO_LARGE_MESSAGE: &str = "下書きが大きすぎて保存できません";
+
+/// 上限超の下書きを復元したときの固定文言。本文・サイズ値は載せない。
+const EDITOR_DRAFT_TOO_LARGE_RESTORED_MESSAGE: &str =
+    "保存済みの下書きが大きすぎます。編集して保存してください。";
 
 /// エディタの下書きを保存する localStorage キーの接頭辞。
 const EDITOR_DRAFT_KEY_PREFIX: &str = "openrustbooks:editor:";

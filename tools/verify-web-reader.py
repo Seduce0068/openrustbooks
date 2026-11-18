@@ -776,7 +776,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 226 + checker.equal 17 = 243。
+    # 期待 check 総数: checker.check 227 + checker.equal 17 = 244。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -787,10 +787,11 @@ async def run_checks(cdp: Cdp) -> int:
     # エディタ下書きの localStorage 保存→リロード復元 +1 と保存失敗の status /
     # console 通知 +1（ADR-0154 / ADR-0161）、
     # 1 MiB 超の下書きが setItem されず固定文言 status になる検証 +1、
+    # 1 MiB 超の保存済み下書きが本文ごと復元され固定文言の警告が出る検証 +1（ADR-0170）、
     # 保存失敗イベントの送信先分離（旧共通名が status を書き換えない）+1（ADR-0164）。
     # removeItem 一時失敗時の全消去保存失敗通知（status + console の分類文言、
     # 複数件でも 1 回だけ）+1。
-    checker = Checker(expected=243)
+    checker = Checker(expected=244)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -820,7 +821,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 243 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 244 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3924,6 +3925,57 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         draft_saved and draft_restored,
         f"(saved={draft_saved}, restored={draft_restored}, status={draft_status!r})",
     )
+
+    # ADR-0170: 上限超の下書きが保存済みだった場合、本文はそのまま textarea へ
+    # 復元され、固定文言の警告だけが status に出ることを確認する。自キーへ直接
+    # 1 MiB 超を書き、Page.navigate で /editor/e2e を再オープンして復元を発火させる。
+    # 復元で localStorage の自キーが消えていないことも確認する（データ損失の回帰検知）。
+    # 本文・サイズ値は status / console へ出さない。後始末は自キーの removeItem のみ。
+    oversize_restore_length = -1
+    oversize_restore_stored_length = -1
+    oversize_restore_status = ""
+    try:
+        await cdp.evaluate(
+            "(() => { localStorage.setItem('openrustbooks:editor:e2e', 'x'.repeat(1048577));"
+            " return true; })()"
+        )
+        await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/editor/e2e"})
+        restore_mounted = await wait_until(cdp, "document.querySelector('#editor-input') !== null")
+        # 保存→復元テストと同じく、リロード前の古い DOM を読まないよう描画待ちを入れる。
+        await asyncio.sleep(0.5)
+        oversize_restored = await wait_until(
+            cdp,
+            "document.querySelector('.editor-status')?.textContent.includes('保存済みの下書きが大きすぎます。編集して保存してください。')",
+            timeout=5,
+        )
+        oversize_restore_length = await cdp.evaluate(
+            "document.querySelector('#editor-input')?.value.length ?? -1"
+        )
+        oversize_restore_status = await cdp.evaluate(
+            "document.querySelector('.editor-status')?.textContent ?? ''"
+        )
+        oversize_restore_stored_length = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:editor:e2e')?.length ?? -1"
+        )
+        checker.check(
+            "1 MiB 超の保存済み下書きが本文ごと復元され固定文言の警告が出る",
+            restore_mounted
+            and oversize_restored
+            and oversize_restore_length > 1048576
+            and oversize_restore_status
+            == "保存済みの下書きが大きすぎます。編集して保存してください。"
+            and oversize_restore_stored_length > 1048576,
+            f"(mounted={restore_mounted}, length={oversize_restore_length},"
+            f" stored_length={oversize_restore_stored_length}, status={oversize_restore_status!r})",
+        )
+    finally:
+        # textarea も空に戻し、後続テストが前の本文に依存しないようにする。
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            " if (input) { input.value = '';"
+            " input.dispatchEvent(new Event('input', {bubbles: true})); }"
+            " localStorage.removeItem('openrustbooks:editor:e2e'); return true; })()"
+        )
 
     # 下書きのサイズ上限 (1 MiB): 上限超の本文を Save しても setItem が呼ばれず、
     # 自キーの既存値がそのまま残ることと固定文言の status が出ることを確認する。
