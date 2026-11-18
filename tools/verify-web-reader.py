@@ -3057,10 +3057,18 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     checker.check("画像縮小トグルが有効になる", pressed == "true")
     await open_wide()
-    # 縮小は spawn_local の非同期処理（Canvas → Blob → src 差し替え）で
-    # 完了時刻に揺れがある。wait_until の戻り値を確認し、タイムアウト時は
-    # 診断情報を出してから再待機する（期待値・チェック数は変更しない）。
-    downscaled = "document.querySelector('#wide')?.naturalWidth <= 2000"
+    # 縮小は spawn_local の非同期処理（Canvas → Blob → src 差し替え → load）で
+    # 完了時刻に揺れがある。Wasm 側が差し替え後の load で付与する
+    # data-downscaled シグナルを待ってから naturalWidth を読む。
+    # wait_until の戻り値を確認し、タイムアウト時は診断情報を出してから
+    # 再待機する（期待値・チェック数は変更しない）。
+    downscaled = (
+        "(() => {"
+        " const img = document.querySelector('#wide');"
+        " return img?.getAttribute('data-downscaled') === '1'"
+        " && img.naturalWidth > 0 && img.naturalWidth <= 2000;"
+        " })()"
+    )
     resized = await wait_until(cdp, downscaled, timeout=10)
     if not resized:
         diag = await cdp.evaluate(

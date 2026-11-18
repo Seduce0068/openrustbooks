@@ -531,19 +531,18 @@ fn export_filename() -> String {
     )
 }
 
-/// Blob URL から元画像の MIME を取得する（失敗時は None）。
+/// 縮小後の Blob URL を `src` に設定し、実際に読み込まれた後に完了シグナルを付与する。
+///
+/// `load` リスナーを `src` の差し替えより前に登録することで、差し替えた画像の
+/// 読み込み完了を取りこぼさない。E2E は `data-downscaled="1"` を待つ。
 #[cfg(target_arch = "wasm32")]
-async fn fetch_blob_type(url: &str) -> Option<String> {
-    let window = web_sys::window()?;
-    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
-        .await
-        .ok()?;
-    let response: web_sys::Response = response.dyn_into().ok()?;
-    let blob = wasm_bindgen_futures::JsFuture::from(response.blob().ok()?)
-        .await
-        .ok()?;
-    let blob: web_sys::Blob = blob.dyn_into().ok()?;
-    Some(blob.type_())
+fn set_downscaled_src(image: &web_sys::HtmlImageElement, url: &str) {
+    let target = image.clone();
+    let on_load = Closure::once_into_js(move || {
+        let _ = target.set_attribute("data-downscaled", "1");
+    });
+    let _ = image.add_event_listener_with_callback("load", on_load.unchecked_ref());
+    let _ = image.set_attribute("src", url);
 }
 
 /// 巨大画像を Canvas で縮小し、Blob URL を差し替える。
@@ -555,9 +554,12 @@ async fn fetch_blob_type(url: &str) -> Option<String> {
 async fn downscale_large_images(
     object_urls: std::rc::Rc<std::cell::RefCell<Vec<String>>>,
     jpeg_quality: usize,
+    attempt: u32,
 ) {
     const DOWNSCALE_THRESHOLD: u32 = 4000;
     const MIN_MAX_DIMENSION: u32 = 2000;
+    const NATURAL_SIZE_RETRY_LIMIT: u32 = 20;
+    const NATURAL_SIZE_RETRY_MS: i32 = 100;
     let Some(window) = web_sys::window() else {
         return;
     };
@@ -572,6 +574,9 @@ async fn downscale_large_images(
     };
     let content_width = content.client_width().max(0) as u32;
     let max_dimension = MIN_MAX_DIMENSION.max(content_width);
+    // 自然サイズが未確定の巨大画像候補が一枚でもあれば、今回はスキップして
+    // 呼び出し単位で高々一度だけ再スケジュールする。
+    let mut needs_retry = false;
 
     for index in 0..images.length() {
         let Some(node) = images.get(index) else {
@@ -580,13 +585,23 @@ async fn downscale_large_images(
         let Ok(image) = node.dyn_into::<web_sys::HtmlImageElement>() else {
             continue;
         };
+        // 縮小済みの画像は対象外（再試行時の二重縮小を防ぐ）。
+        if image.get_attribute("data-downscaled").as_deref() == Some("1") {
+            continue;
+        }
         let width = image.natural_width();
         let height = image.natural_height();
+        // 4000px 超の候補でも、自然サイズが未確定（読み込み中）なら縮小できない。
+        // 永久スキップを避けるため、今回は見送って後で再スケジュールする。
+        if width == 0 || height == 0 {
+            needs_retry = true;
+            continue;
+        }
         if width <= DOWNSCALE_THRESHOLD && height <= DOWNSCALE_THRESHOLD {
             continue;
         }
         // 表示幅が自然幅に依存する画像は縮小しない（レイアウト変化を避ける）。
-        if width <= content_width || width == 0 || height == 0 {
+        if width <= content_width {
             continue;
         }
         let scale = max_dimension as f64 / width.max(height) as f64;
@@ -619,19 +634,18 @@ async fn downscale_large_images(
             continue;
         }
         let old_url = image.get_attribute("src").unwrap_or_default();
-        // 元画像の MIME を取得し、JPEG / PNG / WebP なら同じ形式で再エンコードする。
-        let original_mime = if old_url.is_empty() {
-            None
-        } else {
-            fetch_blob_type(&old_url).await
-        };
-        let mime = original_mime
-            .filter(|value| matches!(value.as_str(), "image/jpeg" | "image/png" | "image/webp"));
+        // 元画像の MIME は resolve_images が付けた属性から得る。blob URL の
+        // fetch はハングし得るため使わない。属性が無い/不正なら PNG を既定とし、
+        // JPEG / WebP は属性経由で同じ形式のまま再エンコードする。
+        let mime = image
+            .get_attribute("data-source-mime")
+            .filter(|value| matches!(value.as_str(), "image/jpeg" | "image/png" | "image/webp"))
+            .unwrap_or_else(|| "image/png".to_string());
         let urls = std::rc::Rc::clone(&object_urls);
         let target = image.clone();
         let callback = Closure::once_into_js(move |blob: web_sys::Blob| {
             if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
-                target.set_attribute("src", &url).ok();
+                set_downscaled_src(&target, &url);
                 urls.borrow_mut().push(url);
                 if !old_url.is_empty() {
                     let _ = web_sys::Url::revoke_object_url(&old_url);
@@ -639,29 +653,39 @@ async fn downscale_large_images(
             }
         });
         let callback: js_sys::Function = callback.unchecked_into();
-        if let Some(mime) = mime {
-            if mime == "image/jpeg" {
-                // JPEG は品質を明示してブラウザ依存の既定値を避ける。
-                let options = js_sys::Object::new();
-                if js_sys::Reflect::set(
-                    &options,
-                    &JsValue::from_str("quality"),
-                    &JsValue::from_f64(jpeg_quality as f64 / 100.0),
-                )
-                .is_ok()
-                {
-                    let _ = canvas.to_blob_with_type_and_encoder_options(
-                        &callback,
-                        &mime,
-                        &JsValue::from(options),
-                    );
-                }
-            } else {
-                let _ = canvas.to_blob_with_type(&callback, &mime);
+        if mime == "image/jpeg" {
+            // JPEG は品質を明示してブラウザ依存の既定値を避ける。
+            let options = js_sys::Object::new();
+            if js_sys::Reflect::set(
+                &options,
+                &JsValue::from_str("quality"),
+                &JsValue::from_f64(jpeg_quality as f64 / 100.0),
+            )
+            .is_ok()
+            {
+                let _ = canvas.to_blob_with_type_and_encoder_options(
+                    &callback,
+                    &mime,
+                    &JsValue::from(options),
+                );
             }
         } else {
-            let _ = canvas.to_blob(&callback);
+            let _ = canvas.to_blob_with_type(&callback, &mime);
         }
+    }
+
+    if needs_retry && attempt < NATURAL_SIZE_RETRY_LIMIT {
+        let urls = std::rc::Rc::clone(&object_urls);
+        let retry = Closure::once_into_js(move || {
+            let urls = std::rc::Rc::clone(&urls);
+            wasm_bindgen_futures::spawn_local(async move {
+                downscale_large_images(urls, jpeg_quality, attempt + 1).await;
+            });
+        });
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            retry.unchecked_ref(),
+            NATURAL_SIZE_RETRY_MS,
+        );
     }
 }
 
@@ -778,7 +802,7 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
             let urls = std::rc::Rc::clone(&ctx.object_urls);
             let quality = ctx.jpeg_quality;
             wasm_bindgen_futures::spawn_local(async move {
-                downscale_large_images(urls, quality).await;
+                downscale_large_images(urls, quality, 0).await;
             });
         }
         ctx.last_apply_time.set(now_millis());
@@ -957,6 +981,9 @@ fn resolve_images(
                     // `loading="lazy"` は付けない（位置補正が `complete` を
                     // 待つため、画面外の画像が永久に未完了になる）。
                     let _ = image.set_attribute("decoding", "async");
+                    // 縮小時の MIME 判定は blob URL の fetch に依存せず、この属性から得る
+                    // （fetch はハングし得るため）。
+                    let _ = image.set_attribute("data-source-mime", mime_for_path(&src));
                     image.set_attribute("src", &url)?;
                     urls.push(url);
                 }
