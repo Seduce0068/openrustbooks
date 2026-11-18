@@ -75,7 +75,7 @@ pub struct ReadOptions {
     pub offset: Option<u64>,
     /// Maximum bytes to read
     pub limit: Option<u64>,
-    /// Whether to read as text (with encoding detection)
+    /// Whether to read as text (bytes are decoded as UTF-8; invalid sequences become U+FFFD)
     pub as_text: bool,
 }
 
@@ -127,7 +127,7 @@ pub trait StorageBackend: Send + Sync {
     /// Read a file
     async fn read(&self, path: &Path, options: ReadOptions) -> CoreResult<Vec<u8>>;
 
-    /// Read a file as text with encoding detection
+    /// Read a file as UTF-8 text, replacing invalid sequences with U+FFFD
     async fn read_text(&self, path: &Path, options: ReadOptions) -> CoreResult<String>;
 
     /// Write a file
@@ -431,14 +431,14 @@ pub mod local {
 
         async fn read_text(&self, path: &Path, options: ReadOptions) -> CoreResult<String> {
             let bytes = self.read(path, options).await?;
-            // Try UTF-8 first, then fall back to lossy conversion
-            String::from_utf8(bytes).map_err(|e| {
-                let lossy = String::from_utf8_lossy(e.as_bytes()).to_string();
-                CoreError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid UTF-8, using lossy: {}", lossy),
-                ))
-            })
+            // 有効 UTF-8 はバッファを再利用してゼロコピーで返す。
+            // 不正時のみ lossy フォールバックで U+FFFD へ置換する。
+            // 元バイト列をエラー文言へ埋め込むと Tauri IPC 経由で漏れるため、
+            // いずれの経路でもエラーは生成しない。
+            match String::from_utf8(bytes) {
+                Ok(text) => Ok(text),
+                Err(error) => Ok(String::from_utf8_lossy(error.as_bytes()).into_owned()),
+            }
         }
 
         async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()> {
@@ -833,6 +833,44 @@ pub mod local {
 
             assert_eq!(fs::read(&existing).unwrap(), b"replacement".to_vec());
             assert!(!temp.path.join("existing.tmp").exists());
+        }
+
+        #[tokio::test]
+        async fn read_text_returns_valid_utf8_unchanged() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            fs::write(temp.path.join("valid.txt"), "こんにちは").unwrap();
+
+            let text = storage
+                .read_text(Path::new("valid.txt"), ReadOptions::default())
+                .await
+                .unwrap();
+
+            assert_eq!(text, "こんにちは");
+        }
+
+        #[tokio::test]
+        async fn read_text_replaces_invalid_utf8_without_error() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            // 'A' + 不正な UTF-8 バイト 0xFF + 'B'
+            fs::write(temp.path.join("invalid.txt"), [b'A', 0xff, b'B']).unwrap();
+
+            let text = storage
+                .read_text(Path::new("invalid.txt"), ReadOptions::default())
+                .await
+                .expect("不正 UTF-8 でもエラーにせず lossy 変換する");
+
+            assert_eq!(text, "A\u{FFFD}B");
+            assert!(text.contains('A'), "有効な文字を保持する: {text:?}");
+            assert!(
+                text.contains('\u{FFFD}'),
+                "不正バイトは U+FFFD に置換される: {text:?}"
+            );
+            assert!(
+                !text.contains("Invalid UTF-8"),
+                "エラー文言へ元内容を埋め込まない: {text:?}"
+            );
         }
     }
 }
