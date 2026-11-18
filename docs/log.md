@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- 4 つのイベントリスナーを on_cleanup + SendWrapper で解除し、forget() を 0 件化（ADR-0166）。
 - 保存失敗通知を reader / editor 別イベントへ分離し、E2E を 240→241 に更新（ADR-0165）。
 - README / architecture の依存一覧を comrak / ammonia / rumdl の実装事実へ更新（ADR-0163 の未決定を解消）。
 - 未使用の pulldown-cmark 直接依存を削除し、Cargo.lock も整理（ADR-0163、推移依存は残存）。
