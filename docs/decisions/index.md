@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 166 件）。
+openrustbooks の ADR 一覧（全 167 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -334,3 +334,5 @@ openrustbooks の ADR 一覧（全 166 件）。
   - status: accepted — 保存失敗通知を送信先別イベント名へ分離し、Editor / Reader の status 競合を解消する決定を記録する。
 - [ADR-0166: イベントリスナーの cleanup](0166-listener-cleanup.md)
   - status: accepted — forget() によるリスナー蓄積を on_cleanup + SendWrapper による解除へ変更する決定を記録する。
+- [ADR-0167: エディタ下書きの容量上限](0167-draft-size-limit.md)
+  - status: accepted — 下書き保存に 1 MiB の UTF-8 バイト上限を設け、超過時は保存せず固定文言で通知する決定を記録する。

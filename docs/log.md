@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- エディタ下書きに 1 MiB の UTF-8 バイト上限を追加し、E2E を 241→242 に更新（ADR-0167）。
 - 4 つのイベントリスナーを on_cleanup + SendWrapper で解除し、forget() を 0 件化（ADR-0166）。
 - 保存失敗通知を reader / editor 別イベントへ分離し、E2E を 240→241 に更新（ADR-0165）。
 - README / architecture の依存一覧を comrak / ammonia / rumdl の実装事実へ更新（ADR-0163 の未決定を解消）。
