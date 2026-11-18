@@ -800,7 +800,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 229 + checker.equal 17 = 246。
+    # 期待 check 総数: checker.check 230 + checker.equal 17 = 247。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -817,7 +817,8 @@ async def run_checks(cdp: Cdp) -> int:
     # 複数件でも 1 回だけ）+1。
     # Clear data を confirm=false でキャンセルしたときに削除も status 変更もしない検証 +1。
     # Import を confirm=false でキャンセルしたときに取り込みも status 変更もしない検証 +1。
-    checker = Checker(expected=246)
+    # リセット時の設定保存失敗で成功文言を出さず失敗通知だけを出す検証 +1（ADR-0165）。
+    checker = Checker(expected=247)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -847,7 +848,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 245 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 247 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3464,6 +3465,71 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "settings reset" in str(reset_status).lower(),
         f"(status={reset_status!r})",
     )
+
+    # リセット時の設定保存失敗: setItem を一時的に失敗させ、成功文言を出さずに
+    # status と console.error の固定分類文言だけが出ることを確認する（ADR-0165）。
+    # 設定キーは後続テストも使うため、try/finally でオーバーライドとキーの値を戻す。
+    settings_key_js = json.dumps("openrustbooks:settings")
+    settings_before_failed_reset = await cdp.evaluate(
+        f"localStorage.getItem({settings_key_js})"
+    )
+    try:
+        await cdp.evaluate("""(() => {
+          window.__orbResetOriginalSetItem = Storage.prototype.setItem;
+          window.__orbResetOriginalConsoleError = console.error;
+          window.__orbResetSaveErrors = [];
+          Storage.prototype.setItem = function () {
+            throw new Error('QuotaExceededError (E2E reset)');
+          };
+          console.error = function (...args) {
+            window.__orbResetSaveErrors.push(args.map(String).join(' '));
+            return window.__orbResetOriginalConsoleError.apply(console, args);
+          };
+          return true;
+        })()""")
+        await cdp.evaluate("document.querySelector('#reader-reset-settings').click()")
+        reset_fail_shown = await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('保存に失敗しました')",
+            timeout=5,
+        )
+        reset_fail_status = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent ?? ''"
+        )
+        reset_fail_logs = await cdp.evaluate(
+            "JSON.stringify(window.__orbResetSaveErrors ?? [])"
+        )
+        reset_fail_console = json.loads(reset_fail_logs) if reset_fail_logs else []
+        checker.check(
+            "リセット保存失敗時に成功文言を出さず status と console へ通知する",
+            reset_fail_shown
+            and "ブラウザの設定または空き容量" in reset_fail_status
+            and "Display settings reset." not in reset_fail_status
+            and any("表示設定 の保存に失敗しました" in line for line in reset_fail_console),
+            f"(status={reset_fail_status!r}, console={reset_fail_console!r})",
+        )
+    finally:
+        await cdp.evaluate("""(() => {
+          if (window.__orbResetOriginalSetItem) {
+            Storage.prototype.setItem = window.__orbResetOriginalSetItem;
+            delete window.__orbResetOriginalSetItem;
+          }
+          if (window.__orbResetOriginalConsoleError) {
+            console.error = window.__orbResetOriginalConsoleError;
+            delete window.__orbResetOriginalConsoleError;
+          }
+          delete window.__orbResetSaveErrors;
+          return true;
+        })()""")
+        # 保存に失敗したリセットでは設定キーが更新されないため、
+        # テスト前の値を書き戻して後続チェックへ影響させない。
+        if settings_before_failed_reset is None:
+            await cdp.evaluate(f"localStorage.removeItem({settings_key_js})")
+        else:
+            await cdp.evaluate(
+                f"localStorage.setItem({settings_key_js},"
+                f" {json.dumps(settings_before_failed_reset)})"
+            )
 
     # JPEG 品質設定。
     checker.check(

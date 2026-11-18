@@ -1613,22 +1613,26 @@ fn load_settings() -> ReaderSettings {
         .unwrap_or_default()
 }
 
-/// 表示設定を保存する。localStorage が使えない場合は通知して諦める。
+/// 表示設定を保存する。成否を返し、全ての失敗経路で通知する（ADR-0165）。
 #[cfg(target_arch = "wasm32")]
-fn save_settings(settings: &ReaderSettings) {
+fn save_settings(settings: &ReaderSettings) -> bool {
     let Some(window) = web_sys::window() else {
         report_save_failure("表示設定", SaveErrorTarget::Reader);
-        return;
+        return false;
     };
     let Ok(Some(storage)) = window.local_storage() else {
         report_save_failure("表示設定", SaveErrorTarget::Reader);
-        return;
+        return false;
     };
-    if let Ok(raw) = serde_json::to_string(settings) {
-        if storage.set_item(SETTINGS_KEY, &raw).is_err() {
-            report_save_failure("表示設定", SaveErrorTarget::Reader);
-        }
+    let Ok(raw) = serde_json::to_string(settings) else {
+        report_save_failure("表示設定", SaveErrorTarget::Reader);
+        return false;
+    };
+    if storage.set_item(SETTINGS_KEY, &raw).is_err() {
+        report_save_failure("表示設定", SaveErrorTarget::Reader);
+        return false;
     }
+    true
 }
 
 /// `<html>` に dark クラスを付け外しする。
@@ -3262,8 +3266,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         set_vertical_scroll_threshold.set(30);
         set_downscale_images.set(false);
         set_jpeg_quality.set(85);
-        save_settings(&ReaderSettings::default());
-        set_status.set("Display settings reset.".to_string());
+        // 失敗時は report_save_failure のリスナーが status を更新済みなので
+        // 成功文言で上書きしない（ADR-0165）。
+        if save_settings(&ReaderSettings::default()) {
+            set_status.set("Display settings reset.".to_string());
+        }
     };
     let on_clear_data = move |_| {
         // confirm が使える環境ではキャンセルを尊重する。window が無い / confirm が
