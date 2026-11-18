@@ -122,6 +122,7 @@ openrustbooks/
 - `wasm-bindgen` CLI (Trunk は通常自動取得する。取得できない環境では
   `cargo install wasm-bindgen-cli --version <Cargo.lock の wasm-bindgen と同一>`)
 - Tauri CLI: `cargo install tauri-cli` (デスクトップアプリ開発時)
+- cargo-audit: `cargo install cargo-audit --locked` (一括検証の audit ゲートで必須)
 
 ### ビルド
 

@@ -41,14 +41,19 @@ run wasm-test bash -c 'cd core && wasm-pack test --node --locked'
 # -n/--no-fetch がオフライン／キャッシュ優先のオプション（git fetch を実行しない）。
 # --deny warnings は意図的に使わない（unmaintained 等 10 件は既知 baseline の警告）。
 # 脆弱性が 1 件でもあれば cargo audit は rc!=0 を返し、run ヘルパーがゲートを失敗させる。
-# cargo-audit 未インストール時は run せず、警告を出して他ゲートは続行する。
-# ネットワーク障害等で advisory DB が無い／古い場合は「スキップせずゲート失敗」とする
-# （安全側。DB が無い状態でスキップすると脆弱性を見逃すため。DB 更新は明示的な
-#  `cargo audit update-db` に委ね、--stale も指定しない）。
+# advisory DB が無い場合も cargo audit が rc!=0 を返してゲート失敗（fail-closed）。
+# --no-fetch は stale 判定を無効化するため、鮮度は定期的な `cargo audit update-db` の
+# 運用責任とし、--stale は指定しない（ADR-0125 / ADR-0086）。
+# cargo-audit 未インストール時もスキップせず、ERROR を出してゲートを失敗させる
+# （未インストールを理由に fail-open にしない）。
 if command -v cargo-audit >/dev/null 2>&1; then
 	run audit cargo audit --no-fetch
 else
-	echo "WARNING: cargo-audit not installed; skipping audit gate"
+	# run ヘルパーと同じ START/END 形式で失敗を記録し、fail を立てる。
+	echo "===== START: audit ====="
+	echo "ERROR: cargo-audit is required; install with: cargo install cargo-audit --locked"
+	echo "===== END: audit rc=127 ====="
+	fail=1
 fi
 
 if [[ $fail -ne 0 ]]; then
