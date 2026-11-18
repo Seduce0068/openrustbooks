@@ -64,6 +64,6 @@ status: accepted
 - 上限 10 の客観的根拠（実測コスト等）。
 - `PipelineConfig` を直接生成する経路はクランプされない
   （pub struct / pub field）。型レベルでの制約は将来課題。
-- `max_retries = 0` の pipeline 回帰テスト（`attempts == 1`）未追加
+- ~~`max_retries = 0` の pipeline 回帰テスト未追加~~ ADR-0133 で追加済み
   （ADR-0118 から継続）。
 - ~~環境変数 `OPENRUSTBOOKS_AI_MAX_RETRIES` のマッピング問題~~ ADR-0122 で手動読み込みにより解消済み。
