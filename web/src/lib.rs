@@ -276,6 +276,11 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                         let text = content.get();
                         if save_editor_draft(&id, &text) {
                             set_status.set("下書きを保存しました".to_string());
+                        } else if text.len() > EDITOR_DRAFT_MAX_BYTES {
+                            // 本文・サイズ値は status へ出さず、理由は固定文言だけで伝える。
+                            set_status.set(EDITOR_DRAFT_TOO_LARGE_MESSAGE.to_string());
+                        } else {
+                            set_status.set(SAVE_ERROR_MESSAGE.to_string());
                         }
                     }
                 >
@@ -1372,6 +1377,12 @@ fn report_save_failure(context: &str, target: SaveErrorTarget) {
     }
 }
 
+/// 下書きの最大サイズ（UTF-8 バイト数）。これを超える本文は保存しない。
+const EDITOR_DRAFT_MAX_BYTES: usize = 1_048_576;
+
+/// 下書きが上限を超えたときの固定文言。本文・サイズ値は載せない。
+const EDITOR_DRAFT_TOO_LARGE_MESSAGE: &str = "下書きが大きすぎて保存できません";
+
 /// エディタの下書きを保存する localStorage キーの接頭辞。
 const EDITOR_DRAFT_KEY_PREFIX: &str = "openrustbooks:editor:";
 
@@ -1389,6 +1400,11 @@ fn load_editor_draft(doc_id: &str) -> Option<String> {
 /// 下書き本文を保存する。本文は status / console に出さず、失敗時は
 /// ADR-0154 の共通通知（カスタムイベント + console.error）だけを発行する。
 fn save_editor_draft(doc_id: &str, content: &str) -> bool {
+    // 上限超は set_item を一切呼ばずに失敗通知だけ出す（本文・サイズは渡さない）。
+    if content.len() > EDITOR_DRAFT_MAX_BYTES {
+        report_save_failure("下書き", SaveErrorTarget::Editor);
+        return false;
+    }
     let Some(window) = web_sys::window() else {
         report_save_failure("下書き", SaveErrorTarget::Editor);
         return false;

@@ -776,7 +776,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 224 + checker.equal 17 = 241。
+    # 期待 check 総数: checker.check 225 + checker.equal 17 = 242。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -786,8 +786,9 @@ async def run_checks(cdp: Cdp) -> int:
     # （ADR-0127 の最小構成）、Markdown 見出しの描画と script 除去 +1、
     # エディタ下書きの localStorage 保存→リロード復元 +1 と保存失敗の status /
     # console 通知 +1（ADR-0154 / ADR-0161）、
+    # 1 MiB 超の下書きが setItem されず固定文言 status になる検証 +1、
     # 保存失敗イベントの送信先分離（旧共通名が status を書き換えない）+1（ADR-0164）。
-    checker = Checker(expected=241)
+    checker = Checker(expected=242)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -817,7 +818,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 241 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 242 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3861,6 +3862,55 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         draft_saved and draft_restored,
         f"(saved={draft_saved}, restored={draft_restored}, status={draft_status!r})",
     )
+
+    # 下書きのサイズ上限 (1 MiB): 上限超の本文を Save しても setItem が呼ばれず、
+    # 自キーの既存値がそのまま残ることと固定文言の status が出ることを確認する。
+    # 本文・サイズ値は status / console へ出さない。後始末は自キーの removeItem のみ。
+    try:
+        # 更新されないことを判定できるよう、先に自キーへ番兵を入れておく。
+        await cdp.evaluate(
+            "(() => { localStorage.setItem('openrustbooks:editor:e2e', 'E2E oversize baseline');"
+            " return true; })()"
+        )
+        oversize_value_before = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:editor:e2e')"
+        )
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            " input.value = 'x'.repeat(1048577);"
+            " input.dispatchEvent(new Event('input', {bubbles: true}));"
+            " return true; })()"
+        )
+        # 1 MiB の本文をシグナルと Preview へ反映する時間を待つ。
+        await asyncio.sleep(0.5)
+        await cdp.evaluate(
+            "(() => { const save = Array.from(document.querySelectorAll('.editor-toolbar button'))"
+            ".find((b) => (b.getAttribute('aria-label') || '').includes('Save draft'));"
+            " if (save) save.click(); return true; })()"
+        )
+        oversize_shown = await wait_until(
+            cdp,
+            "document.querySelector('.editor-status')?.textContent.includes('下書きが大きすぎて保存できません')",
+            timeout=5,
+        )
+        oversize_status = await cdp.evaluate(
+            "document.querySelector('.editor-status')?.textContent ?? ''"
+        )
+        oversize_value_after = await cdp.evaluate(
+            "localStorage.getItem('openrustbooks:editor:e2e')"
+        )
+        checker.check(
+            "1 MiB 超の下書きは保存されず固定文言の status が出る",
+            oversize_shown
+            and oversize_value_before == "E2E oversize baseline"
+            and oversize_value_after == "E2E oversize baseline"
+            and oversize_status == "下書きが大きすぎて保存できません",
+            f"(before={oversize_value_before!r}, after={oversize_value_after!r}, status={oversize_status!r})",
+        )
+    finally:
+        await cdp.evaluate(
+            "(() => { localStorage.removeItem('openrustbooks:editor:e2e'); return true; })()"
+        )
 
     # 保存失敗 (ADR-0154): setItem を一時的に失敗させ、status と console.error
     # へ利用者向け文言が出ることを確認する。オーバーライドは finally で復元し、
