@@ -23,11 +23,13 @@ UI 未接続のため顕在化していないが、接続時に任意パス読�
 
 - `AppConfig.storage.local_roots` を root として、入力パスを検証する
   `resolve_within_roots()` を追加する（ADR-0097 と同じ方針）。
-  - root を `canonicalize()`（正規化できない root はスキップ）。
-  - 有効な root が無ければ `CoreError::storage("No storage root configured")`
-    で fail-closed 拒否。
-  - `Component::ParentDir`（`..`）は機械的に拒否。
+  - root は **絶対・存在・ディレクトリ**のみ受理。相対／不存在／ファイルは
+    明確なエラーで拒否（無効 root が混在しても操作全体を fail-closed）。
+  - root を `canonicalize()`。`Component::ParentDir`（`..`）は機械的に拒否。
   - 絶対パスも root 配下なら許可。相対パスは root に join して判定。
+  - `ResolvedPath { path, read_only }` を返し、一致した root の
+    `read_only` フラグを `save_document` で確認（read-only なら拒否）。
+  - エラー文言にパスを含めない（ADR-0103 の方針）。
 - 既存部分を canonicalize し、存在しない末尾を lexical に連結する
   `canonicalize_existing_prefix()` を使い、**未作成の書き込み先にも対応**。
 - 検証で得た解決済みパスを I/O にそのまま使用する（相対パスを検証だけして
@@ -53,9 +55,11 @@ UI 未接続のため顕在化していないが、接続時に任意パス読�
 
 ## 検証
 
-- 追加テスト 5 件（root 配下相対許可、`..` 拒否、root 外絶対拒否、
-  root 配下絶対許可、空 root 拒否）。
-- `cargo test --all-targets --locked`: core 186 + desktop 33 + web 2、
+- 追加テスト 11 件（root 配下相対許可、`..` 拒否、root 外絶対拒否、
+  root 配下絶対許可、空 root 拒否、新規ファイル許可、相対 root 拒否、
+  不存在 root 拒否、ファイル root 拒否、read_only 伝播、
+  エラー文言にパス不含）。
+- `cargo test --all-targets --locked`: core 186 + desktop 39 + web 2、
   wasm-test 3、audit 脆弱性 0 件、E2E 229 項目すべて成功。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
@@ -64,10 +68,10 @@ UI 未接続のため顕在化していないが、接続時に任意パス読�
 - ファイルダイアログの scope（`$HOME/*` 等）と local_roots の信頼境界を
   一体で設計する（ダイアログ開始ディレクトリを root に制限するか、
   root 外選択時に明示同意で追加するか等）。
-- `local_roots[].path` が相対／存在しない場合の扱い（今回はスキップ、
-  fs 側は `create_dir_all` で暗黙作成、という挙動差が残る）。
-- `save_document` の `read_only` フラグ反映（今回は未実装）。
+- `local_roots[].path` が相対／存在しない場合の扱いは今回「拒否」とし、
+  fs 側（`create_dir_all` で暗黙作成）との挙動差が残る。
 - TOCTOU（check と I/O の間の symlink 差し替え）は ADR-0097 と同様に未解決。
+  - 終端が root 外 symlink の既存ファイルは拒否するガードを維持。
 - 実行中に root が変更された場合の、開済み document の save 扱い。
 - エラー文言への絶対パス含有（core/src/io.rs の既存メッセージは
   パスを露出しており ADR-0103 の方針と緊張関係にある）。
