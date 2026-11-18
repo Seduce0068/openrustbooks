@@ -603,6 +603,55 @@ pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView,
     Ok(ConfigView::from(&config))
 }
 
+/// 個別に消すシークレットの指定。既定はすべて false（消さない fail-closed）。
+#[derive(Deserialize, Clone, Copy, Default)]
+#[serde(default)]
+pub struct SecretTargets {
+    api_key: bool,
+    client_secret: bool,
+    refresh_token: bool,
+}
+
+/// 指定されたシークレットだけを消す純粋ヘルパー。
+/// `merge_secrets` を通すと消した値が復元されるため、ここでは使わない。
+/// 実際に値を消した場合のみ true を返す（保存・再初期化の判定用）。
+fn clear_targeted_secrets(config: &mut AppConfig, targets: SecretTargets) -> bool {
+    let mut cleared = false;
+    if targets.api_key && config.ai.openai.api_key.take().is_some() {
+        cleared = true;
+    }
+    if let Some(drive) = config.storage.google_drive.as_mut() {
+        if targets.client_secret && !drive.client_secret.is_empty() {
+            // String は空文字が未設定を表す（has_client_secret も false になる）。
+            drive.client_secret.clear();
+            cleared = true;
+        }
+        if targets.refresh_token && drive.refresh_token.take().is_some() {
+            cleared = true;
+        }
+    }
+    cleared
+}
+
+/// 指定されたシークレットだけを消す（他設定は維持）。
+#[command]
+pub async fn clear_secrets(
+    state: State<'_, Arc<AppState>>,
+    targets: SecretTargets,
+) -> Result<ConfigView, String> {
+    let mut config = state.config();
+    if !clear_targeted_secrets(&mut config, targets) {
+        // 消す値がなければディスク書込みも再初期化も不要（no-op）。
+        return Ok(ConfigView::from(&state.config()));
+    }
+    // merge_secrets は意図的に通さない。通すと消した値が現在値として復元される。
+    state.update_config(config.clone()).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
+    // 他コマンドと一貫して保存後に AI service を同期する。
+    state.refresh_ai_service().await.map_err(map_err)?;
+    Ok(ConfigView::from(&state.config()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1191,5 +1240,164 @@ mod tests {
             merged.storage.local_roots[0].path,
             PathBuf::from("/secret/root-a")
         );
+    }
+
+    #[test]
+    fn clear_targeted_secrets_only_removes_api_key() {
+        let original = config_with_secrets();
+        let mut config = original.clone();
+
+        let cleared = clear_targeted_secrets(
+            &mut config,
+            SecretTargets {
+                api_key: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(cleared);
+        assert!(config.ai.openai.api_key.is_none());
+        let original_drive = original.storage.google_drive.as_ref().unwrap();
+        let drive = config.storage.google_drive.as_ref().unwrap();
+        assert_eq!(drive.client_secret, original_drive.client_secret);
+        assert_eq!(drive.refresh_token, original_drive.refresh_token);
+
+        // 他設定が不変であることを JSON 全体で確認する。
+        let mut expected = original;
+        expected.ai.openai.api_key = None;
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+        assert!(!ConfigView::from(&config).ai.openai.has_api_key);
+    }
+
+    #[test]
+    fn clear_targeted_secrets_all_false_is_noop() {
+        let original = config_with_secrets();
+        let mut config = original.clone();
+
+        let cleared = clear_targeted_secrets(&mut config, SecretTargets::default());
+
+        assert!(!cleared);
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+    }
+
+    #[test]
+    fn clear_targeted_secrets_without_google_drive_does_not_panic() {
+        let mut config = config_with_secrets();
+        config.storage.google_drive = None;
+
+        // drive だけ指定して drive が None なら no-op（panic せず、更新なし）。
+        let cleared = clear_targeted_secrets(
+            &mut config,
+            SecretTargets {
+                client_secret: true,
+                refresh_token: true,
+                ..Default::default()
+            },
+        );
+        assert!(!cleared);
+        assert!(config.storage.google_drive.is_none());
+        assert!(config.ai.openai.api_key.is_some());
+
+        // api_key も指定されていれば、そちらだけ消える。
+        let cleared = clear_targeted_secrets(
+            &mut config,
+            SecretTargets {
+                api_key: true,
+                client_secret: true,
+                refresh_token: true,
+            },
+        );
+        assert!(cleared);
+        assert!(config.ai.openai.api_key.is_none());
+        assert!(config.storage.google_drive.is_none());
+    }
+
+    #[test]
+    fn clear_targeted_secrets_removes_drive_secrets_only() {
+        let original = config_with_secrets();
+        let mut config = original.clone();
+
+        let cleared = clear_targeted_secrets(
+            &mut config,
+            SecretTargets {
+                client_secret: true,
+                refresh_token: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(cleared);
+        let original_drive = original.storage.google_drive.as_ref().unwrap();
+        let drive = config.storage.google_drive.as_ref().unwrap();
+        assert!(drive.client_secret.is_empty());
+        assert!(drive.refresh_token.is_none());
+        assert_eq!(config.ai.openai.api_key, original.ai.openai.api_key);
+
+        // client_id / root_folder_id / use_app_data_folder / scopes は不変。
+        assert_eq!(drive.client_id, original_drive.client_id);
+        assert_eq!(drive.root_folder_id, original_drive.root_folder_id);
+        assert_eq!(
+            drive.use_app_data_folder,
+            original_drive.use_app_data_folder
+        );
+        assert_eq!(drive.scopes, original_drive.scopes);
+        // JSON 全体でもシークレット以外の変更がないことを確認する。
+        let mut expected = original.clone();
+        let expected_drive = expected.storage.google_drive.as_mut().unwrap();
+        expected_drive.client_secret.clear();
+        expected_drive.refresh_token = None;
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+
+        let view = ConfigView::from(&config);
+        let drive_view = view.storage.google_drive.as_ref().unwrap();
+        assert!(!drive_view.has_client_secret);
+        assert!(!drive_view.has_refresh_token);
+        assert!(view.ai.openai.has_api_key);
+    }
+
+    #[test]
+    fn clear_targeted_secrets_already_empty_is_noop() {
+        let mut config = config_with_secrets();
+        config.ai.openai.api_key = None;
+        let drive = config.storage.google_drive.as_mut().unwrap();
+        drive.client_secret.clear();
+        drive.refresh_token = None;
+        let before = serde_json::to_value(&config).unwrap();
+
+        // 指定されていても消す値がなければ false（保存・再初期化をしない）。
+        let cleared = clear_targeted_secrets(
+            &mut config,
+            SecretTargets {
+                api_key: true,
+                client_secret: true,
+                refresh_token: true,
+            },
+        );
+
+        assert!(!cleared);
+        assert_eq!(serde_json::to_value(&config).unwrap(), before);
+    }
+
+    #[test]
+    fn secret_targets_missing_fields_default_to_false() {
+        // JSON で項目が欠けても消さない方向に倒れること（fail-closed）。
+        let empty: SecretTargets = serde_json::from_str("{}").unwrap();
+        assert!(!empty.api_key);
+        assert!(!empty.client_secret);
+        assert!(!empty.refresh_token);
+
+        let partial: SecretTargets = serde_json::from_str(r#"{"api_key":true}"#).unwrap();
+        assert!(partial.api_key);
+        assert!(!partial.client_secret);
+        assert!(!partial.refresh_token);
     }
 }

@@ -123,6 +123,7 @@ pub fn run() {
             commands::config::update_ai_config,
             commands::config::update_lint_config,
             commands::config::reset_config,
+            commands::config::clear_secrets,
             // Window commands
             commands::window::close_window,
             commands::window::set_title,
