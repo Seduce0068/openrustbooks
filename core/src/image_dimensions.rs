@@ -43,6 +43,59 @@ mod tests {
         bytes
     }
 
+    /// SOI + SOF0 からなる最小 JPEG ヘッダー（12 バイト）。
+    ///
+    /// imagesize 0.15 は SOF0 マーカーの後、長さ 2 バイト + 精度 1 バイトを
+    /// 飛ばし、オフセット 7-8 を height、9-10 を width として読む
+    /// （PNG と逆の big-endian u16 順序）。形式判定に 12 バイト必要なため
+    /// 末尾を 1 バイト埋める。
+    fn jpeg_header(width: u16, height: u16) -> Vec<u8> {
+        let mut bytes = b"\xFF\xD8\xFF\xC0\x00\x11\x08".to_vec();
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.push(0x00);
+        bytes
+    }
+
+    /// little-endian の下位 24 ビットを 3 バイトにする（WebP VP8X 用）。
+    fn u24_le(value: u32) -> [u8; 3] {
+        let bytes = value.to_le_bytes();
+        [bytes[0], bytes[1], bytes[2]]
+    }
+
+    /// RIFF + WEBP + VP8X チャンクからなる最小ヘッダー（30 バイト）。
+    ///
+    /// imagesize 0.15 はオフセット 24-26 を (width - 1)、27-29 を
+    /// (height - 1) として読む（little-endian u24、+1 エンコード）。
+    fn webp_vp8x_header(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = b"RIFF".to_vec();
+        bytes.extend_from_slice(&22u32.to_le_bytes()); // ダミーのファイルサイズ
+        bytes.extend_from_slice(b"WEBP");
+        bytes.extend_from_slice(b"VP8X");
+        bytes.extend_from_slice(&10u32.to_le_bytes()); // ダミーのチャンクサイズ
+        bytes.extend_from_slice(&[0x00; 4]); // フラグ + 予約
+        bytes.extend_from_slice(&u24_le(width - 1));
+        bytes.extend_from_slice(&u24_le(height - 1));
+        bytes
+    }
+
+    /// RIFF + WEBP + VP8 (lossy) チャンクからなる最小ヘッダー（30 バイト）。
+    ///
+    /// imagesize 0.15 はオフセット 26-27 を width、28-29 を height として
+    /// 読む（little-endian u16、+1 エンコードなし）。
+    fn webp_vp8_header(width: u16, height: u16) -> Vec<u8> {
+        let mut bytes = b"RIFF".to_vec();
+        bytes.extend_from_slice(&22u32.to_le_bytes()); // ダミーのファイルサイズ
+        bytes.extend_from_slice(b"WEBP");
+        bytes.extend_from_slice(b"VP8 ");
+        bytes.extend_from_slice(&10u32.to_le_bytes()); // ダミーのチャンクサイズ
+        // フレームタグ + 同期コード（imagesize は参照しない）。
+        bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x9D, 0x01, 0x2A]);
+        bytes.extend_from_slice(&width.to_le_bytes());
+        bytes.extend_from_slice(&height.to_le_bytes());
+        bytes
+    }
+
     #[test]
     fn png_dimensions() {
         assert_eq!(image_dimensions(&png_header(1, 1)), Some((1, 1)));
@@ -55,6 +108,53 @@ mod tests {
     #[test]
     fn gif_dimensions() {
         assert_eq!(image_dimensions(&gif_header(20, 10)), Some((20, 10)));
+    }
+
+    #[test]
+    fn jpeg_dimensions_from_sof0() {
+        assert_eq!(image_dimensions(&jpeg_header(20, 10)), Some((20, 10)));
+        assert_eq!(
+            image_dimensions(&jpeg_header(3000, 4000)),
+            Some((3000, 4000))
+        );
+    }
+
+    #[test]
+    fn webp_dimensions_from_vp8x() {
+        assert_eq!(image_dimensions(&webp_vp8x_header(20, 10)), Some((20, 10)));
+        assert_eq!(
+            image_dimensions(&webp_vp8x_header(MAX_DIMENSION, 1)),
+            Some((MAX_DIMENSION, 1))
+        );
+    }
+
+    #[test]
+    fn webp_dimensions_from_vp8_lossy() {
+        assert_eq!(image_dimensions(&webp_vp8_header(20, 10)), Some((20, 10)));
+        assert_eq!(
+            image_dimensions(&webp_vp8_header(3000, 4000)),
+            Some((3000, 4000))
+        );
+    }
+
+    #[test]
+    fn png_boundaries_table_driven() {
+        let cases = [
+            (0, 10, None),
+            (10, 0, None),
+            (1, 1, Some((1, 1))),
+            (MAX_DIMENSION, 1, Some((MAX_DIMENSION, 1))),
+            (1, MAX_DIMENSION, Some((1, MAX_DIMENSION))),
+            (MAX_DIMENSION + 1, 10, None),
+            (10, MAX_DIMENSION + 1, None),
+        ];
+        for (width, height, expected) in cases {
+            assert_eq!(
+                image_dimensions(&png_header(width, height)),
+                expected,
+                "width={width}, height={height}"
+            );
+        }
     }
 
     #[test]
