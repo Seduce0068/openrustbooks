@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- read の要求サイズへ 256 MiB 上限を fail-closed 適用し core を 241→246 件へ拡充（ADR-0190）。
 - Ollama ストリームに行バッファ・fail-closed エラー・timeout 配線を追加し core を 228→241 件へ拡充（ADR-0189）。
 - atomic write の tmp 名を PID + counter で一意化し、core を 224→228 件へ拡充（ADR-0188）。
 - table 数値属性を fail-closed 検証し core を 220→224 件へ拡充（ADR-0187）。

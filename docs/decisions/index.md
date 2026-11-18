@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 189 件）。
+openrustbooks の ADR 一覧（全 190 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -380,3 +380,5 @@ openrustbooks の ADR 一覧（全 189 件）。
   - status: accepted — atomic 書き込みの tmp 名に PID とカウンタを付与し、並行書き込みの衝突を防ぐ決定を記録する。
 - [ADR-0189: Ollama ストリームの行境界とタイムアウト](0189-ollama-stream-boundary.md)
   - status: accepted — Ollama の JSONL ストリームをバッファリングし、HTTP タイムアウトとエラーを fail-closed で扱う決定を記録する。
+- [ADR-0190: read 上限の fail-closed 化](0190-read-limit-hardening.md)
+  - status: accepted — StorageBackend::read の要求サイズに上限を設け、超過時は黙って切り詰めずエラーにする決定を記録する。
