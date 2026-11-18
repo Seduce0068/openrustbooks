@@ -3,6 +3,7 @@
 //! This crate compiles to WebAssembly and provides the browser-based
 //! version of the application using Leptos.
 
+use leptos::__reexports::send_wrapper::SendWrapper;
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::hooks::use_params_map;
@@ -222,15 +223,24 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     // dispatch_event は同期なので、Save ハンドラの report_save_failure の
     // 直後にこのリスナーが走る。本文はイベントにも status にも載せない。
     if let Some(window) = web_sys::window() {
+        let event_name = SaveErrorTarget::Editor.event_name();
         let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
             set_status.set(SAVE_ERROR_MESSAGE.to_string());
         }) as Box<dyn FnMut(web_sys::Event)>);
-        let _ = window.add_event_listener_with_callback(
-            SaveErrorTarget::Editor.event_name(),
-            on_save_error.as_ref().unchecked_ref(),
-        );
-        // ページ寿命まで有効にするため保持する。
-        on_save_error.forget();
+        let _ = window
+            .add_event_listener_with_callback(event_name, on_save_error.as_ref().unchecked_ref());
+        // SPA 再マウントで古い signal への set が残らないよう、Owner 破棄時に解除する。
+        // on_cleanup は Send + Sync を要求するため、!Send な Window/Closure を
+        // SendWrapper で包んだ Option で保持し、remove の後に drop する。
+        let listener = SendWrapper::new(Some((window, event_name, on_save_error)));
+        on_cleanup(move || {
+            if let Some((window, event_name, callback)) = listener.take() {
+                let _ = window.remove_event_listener_with_callback(
+                    event_name,
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+        });
     }
 
     // エディタ表示時に下書きを復元する。prop:value を使わない契約を保つため
@@ -1322,8 +1332,8 @@ const SAVE_ERROR_MESSAGE: &str =
 
 /// 保存失敗通知の送信先（ADR-0164 のリスナー競合を解消する）。
 ///
-/// 送信先ごとにイベント名を分ける。SPA 遷移後も `forget()` したリスナーは
-/// window に残るため、同じイベントを両画面が購読すると status が競合する。
+/// 送信先ごとにイベント名を分ける。リスナーは Owner 破棄時に解除するが、
+/// 同じイベントを両画面が購読すると status が競合するため送信先で分ける。
 /// イベントへ載せるのは送信先を表すイベント名だけで、本文・値・キー名は
 /// 含めない（ADR-0154 の redaction 方針を維持）。
 #[derive(Clone, Copy)]
@@ -2115,21 +2125,41 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             on_image_load.as_ref().unchecked_ref(),
             true,
         );
-        // ページ寿命まで有効にするため保持する。
-        on_image_load.forget();
+        // 再マウント時に古い document の load リスナーが残らないよう cleanup で解除する。
+        // on_cleanup は Send + Sync を要求するため、!Send な Document/Closure を
+        // SendWrapper で包んだ Option で保持し、remove の後に drop する。
+        let listener = SendWrapper::new(Some((document, on_image_load)));
+        on_cleanup(move || {
+            if let Some((document, callback)) = listener.take() {
+                let _ = document.remove_event_listener_with_callback_and_bool(
+                    "load",
+                    callback.as_ref().unchecked_ref(),
+                    true,
+                );
+            }
+        });
     }
     // save 関数からの Reader 向け保存失敗通知だけを受け取り status に表示する。
     // Editor 向けイベントは受け取らず、status を競合させない（ADR-0164）。
     if let Some(window) = web_sys::window() {
+        let event_name = SaveErrorTarget::Reader.event_name();
         let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
             set_status.set(SAVE_ERROR_MESSAGE.to_string());
         }) as Box<dyn FnMut(web_sys::Event)>);
-        let _ = window.add_event_listener_with_callback(
-            SaveErrorTarget::Reader.event_name(),
-            on_save_error.as_ref().unchecked_ref(),
-        );
-        // ページ寿命まで有効にするため保持する。
-        on_save_error.forget();
+        let _ = window
+            .add_event_listener_with_callback(event_name, on_save_error.as_ref().unchecked_ref());
+        // SPA 再マウントで古い signal への set が残らないよう、Owner 破棄時に解除する。
+        // on_cleanup は Send + Sync を要求するため、!Send な Window/Closure を
+        // SendWrapper で包んだ Option で保持し、remove の後に drop する。
+        let listener = SendWrapper::new(Some((window, event_name, on_save_error)));
+        on_cleanup(move || {
+            if let Some((window, event_name, callback)) = listener.take() {
+                let _ = window.remove_event_listener_with_callback(
+                    event_name,
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+        });
     }
     let (cover_url, set_cover_url) = signal(None::<String>);
     // 本文の言語（EPUB の metadata.language）。スクリーンリーダーの発音用。
@@ -2170,8 +2200,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_system_dark.set(system_prefers_dark());
         }) as Box<dyn FnMut(web_sys::Event)>);
         let _ = mq.add_event_listener_with_callback("change", callback.as_ref().unchecked_ref());
-        // Closure をリークしないよう保持する（ページ寿命まで）。
-        callback.forget();
+        // 再マウント時に古い MediaQueryList のリスナーが残らないよう cleanup で解除する。
+        // on_cleanup は Send + Sync を要求するため、!Send な MediaQueryList/Closure を
+        // SendWrapper で包んだ Option で保持し、remove の後に drop する。
+        let listener = SendWrapper::new(Some((mq, callback)));
+        on_cleanup(move || {
+            if let Some((mq, callback)) = listener.take() {
+                let _ = mq.remove_event_listener_with_callback(
+                    "change",
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+        });
     }
 
     let scroll_save_timer = Rc::new(Cell::new(None::<i32>));
