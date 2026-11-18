@@ -53,8 +53,6 @@ status: current
 ### 優先度: 中
 
 <!-- R6-2026-11-19 中優先度 -->
-- 【PR-M07】Google Fonts への preconnect が CSP 対象外で外部送信される。
-  根拠 `web/index.html:12-14`。
 - 【PR-M08 / TD-M08】設定モデルが AppConfig / WasmConfig / ReaderSettings / SettingsView の 4 重。
   根拠 `core/src/config.rs:14` / `core/src/wasm.rs:645` / `web/src/lib.rs:1501`。
 - 【PR-M09】auto_fix 分岐の validate_content が native と wasm で重複。
@@ -186,6 +184,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M07】Google Fonts の preconnect / stylesheet を削除し CSP をローカル完結化。
+      verify.sh に no-external-font-refs ゲートを追加。E2E 249 件・全ゲート成功 / ADR-0191。
 - [x] 【PR-M04】read の上限を 256 MiB（または capabilities 指定）へ fail-closed 適用。
       clamp せず validation エラー、1 byte probe で全読も検出。unit 5 件（core 246）。
       E2E 249 件・全ゲート成功 / ADR-0190。
