@@ -22,8 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【PR-H03 / TD-H03】EPUB 非同期ロードに世代管理が無く、古いファイルが新しい選択を上書きする。
-  根拠 `web/src/lib.rs:2628,2660,2788,2805`。
 - 【PR-H04】設定保存と AI 再初期化が分かれてコミットされ、失敗時に中途半端な状態になる。
   根拠 `desktop/src/commands/config.rs:524,544,565,655`。
 - 【TD-H04】`can_watch=true` を報告しつつ `LocalStorage::watch()` は常に未実装エラー。
@@ -219,6 +217,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-H03 / TD-H03】EPUB ロードへ独立した load_generation を導入し、
+      古い完了の UI 上書きを遮断（ガード 10 箇所）。E2E 247 件・全ゲート成功
+      / ADR-0176。E2E 追加は再現フックが無く 247 維持（理由は ADR 記載）。
 - [x] 【PR-H05】設定リセットの保存失敗上書きを修正。save_settings を bool 化し、
       成功時のみ成功文言を表示。E2E 247 件・全ゲート成功 / ADR-0175。
       旧 :3883-3924 の setItem オーバーライド try/finally 欠如は未決定として継続。
