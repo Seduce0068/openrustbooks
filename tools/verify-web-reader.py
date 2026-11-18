@@ -475,6 +475,30 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
     return False
 
 
+async def select_import_file(cdp: Cdp, node_id: int, path: Path, confirm: bool = True) -> None:
+    """Import のファイル選択と change 発火を confirm 固定で行い、必ず元へ戻す。
+
+    on_import_change は上書き確認に window.confirm を使うため、E2E では
+    結果を固定する（既定 true）。CDP はダイアログを自動処理しないため、
+    オーバーライドを忘れると Runtime.evaluate がタイムアウトする。
+    try/finally で元の confirm を復元し、後続チェックへ影響させない。
+    """
+    await cdp.evaluate(
+        "window.__orbOriginalConfirm = window.confirm; "
+        f"window.confirm = () => {str(confirm).lower()};"
+    )
+    try:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+    finally:
+        await cdp.evaluate(
+            "window.confirm = window.__orbOriginalConfirm; delete window.__orbOriginalConfirm;"
+        )
+
+
 # ---- スクロール軸非依存ヘルパー ------------------------------------------------
 # ADR-0145 の縦書き導入に備え、.reader-content のスクロール読み書きをここへ集約する。
 # computed writing-mode が vertical-* / sideways-* なら横軸（scrollLeft）、
@@ -776,7 +800,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 228 + checker.equal 17 = 245。
+    # 期待 check 総数: checker.check 229 + checker.equal 17 = 246。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -792,7 +816,8 @@ async def run_checks(cdp: Cdp) -> int:
     # removeItem 一時失敗時の全消去保存失敗通知（status + console の分類文言、
     # 複数件でも 1 回だけ）+1。
     # Clear data を confirm=false でキャンセルしたときに削除も status 変更もしない検証 +1。
-    checker = Checker(expected=245)
+    # Import を confirm=false でキャンセルしたときに取り込みも status 変更もしない検証 +1。
+    checker = Checker(expected=246)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -1927,10 +1952,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node_id = node["result"]["nodeId"]
     checker.check("Import 用のファイル入力が存在する", node_id != 0)
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(import_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, import_path)
         imported = await wait_until(
             cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
         )
@@ -1957,10 +1979,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
     node_id = node["result"]["nodeId"]
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(bad_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, bad_path)
         await asyncio.sleep(0.5)
         bad_status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
         checker.check(
@@ -1986,15 +2005,58 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
     node_id = node["result"]["nodeId"]
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(old_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, old_path)
         await asyncio.sleep(0.5)
         old_value = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:position:sample.epub:9:9')"
         )
         checker.check("旧形式の JSON もインポートできる", old_value is not None and "9" in str(old_value))
+
+    # confirm=false ならキャンセル扱いで、取り込みも status 変更もしない。
+    # 位置キーに番兵を入れ、上書きされないことを確認する。
+    # try/finally で注入キーと confirm オーバーライドを必ず元へ戻す。
+    cancel_key_js = json.dumps("openrustbooks:position:e2e-import-cancel")
+    cancel_payload = {"positions": {
+        "openrustbooks:position:e2e-import-cancel": {
+            "chapterIndex": 0, "fragment": None, "scrollTop": 456, "savedAt": 1000,
+        }
+    }}
+    cancel_path = SAMPLE.parent / "import-cancel.json"
+    cancel_path.write_text(_json.dumps(cancel_payload), encoding="utf-8")
+    status_before_cancel = await cdp.evaluate(
+        "document.querySelector('.reader-status')?.textContent ?? ''"
+    )
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    try:
+        await cdp.evaluate(
+            f"localStorage.setItem({cancel_key_js},"
+            " JSON.stringify({chapterIndex:0, fragment:null, scrollTop:1, savedAt:0}));"
+        )
+        value_before = await cdp.evaluate(f"localStorage.getItem({cancel_key_js})")
+        if node_id != 0:
+            await select_import_file(cdp, node_id, cancel_path, confirm=False)
+            await asyncio.sleep(0.5)
+            value_after = await cdp.evaluate(f"localStorage.getItem({cancel_key_js})")
+            status_after_cancel = await cdp.evaluate(
+                "document.querySelector('.reader-status')?.textContent ?? ''"
+            )
+            checker.check(
+                "confirm=false ではインポートせず位置キーと status が変わらない",
+                value_after == value_before and status_after_cancel == status_before_cancel,
+                f"(before={value_before!r}, after={value_after!r},"
+                f" status_before={status_before_cancel!r}, status_after={status_after_cancel!r})",
+            )
+    finally:
+        await cdp.evaluate(
+            f"localStorage.removeItem({cancel_key_js});"
+            " if (window.__orbOriginalConfirm) {"
+            "   window.confirm = window.__orbOriginalConfirm;"
+            "   delete window.__orbOriginalConfirm;"
+            " }"
+        )
 
     # Landmarks。
     checker.check(
@@ -2142,10 +2204,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
     node_id = node["result"]["nodeId"]
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(hist_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, hist_path)
         await wait_until(
             cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
         )
@@ -2235,10 +2294,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
     node_id = node["result"]["nodeId"]
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(merge_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, merge_path)
         await wait_until(
             cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
         )
@@ -2310,10 +2366,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
     node_id = node["result"]["nodeId"]
     if node_id != 0:
-        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(preserve_path)]})
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node_id, preserve_path)
         await wait_until(
             cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
         )
@@ -2562,14 +2615,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"}
     )
     if node["result"]["nodeId"] != 0:
-        await cdp.send(
-            "DOM.setFileInputFiles",
-            {"nodeId": node["result"]["nodeId"], "files": [str(version_path)]},
-        )
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent("
-            "new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node["result"]["nodeId"], version_path)
         await wait_until(
             cdp,
             "document.querySelector('.reader-status')?.textContent.includes('Imported')",
@@ -2596,14 +2642,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"}
     )
     if node["result"]["nodeId"] != 0:
-        await cdp.send(
-            "DOM.setFileInputFiles",
-            {"nodeId": node["result"]["nodeId"], "files": [str(unknown_path)]},
-        )
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent("
-            "new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node["result"]["nodeId"], unknown_path)
         await wait_until(
             cdp,
             "document.querySelector('.reader-status')?.textContent.includes('Unsupported')",
@@ -2843,14 +2882,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             {"nodeId": root_id2, "selector": "#reader-import-file"},
         )
         if node["result"]["nodeId"] != 0:
-            await cdp.send(
-                "DOM.setFileInputFiles",
-                {"nodeId": node["result"]["nodeId"], "files": [str(exported)]},
-            )
-            await cdp.evaluate(
-                "document.querySelector('#reader-import-file').dispatchEvent("
-                "new Event('change', {bubbles: true}))"
-            )
+            await select_import_file(cdp, node["result"]["nodeId"], exported)
             await wait_until(
                 cdp,
                 "document.querySelector('.reader-status')?.textContent.includes('Imported')",
@@ -3080,14 +3112,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     if node["result"]["nodeId"] != 0:
         # 旧形式をインポートする。
-        await cdp.send(
-            "DOM.setFileInputFiles",
-            {"nodeId": node["result"]["nodeId"], "files": [str(legacy_path)]},
-        )
-        await cdp.evaluate(
-            "document.querySelector('#reader-import-file').dispatchEvent("
-            "new Event('change', {bubbles: true}))"
-        )
+        await select_import_file(cdp, node["result"]["nodeId"], legacy_path)
         await wait_until(
             cdp,
             "document.querySelector('.reader-status')?.textContent.includes('Imported')",
@@ -3134,17 +3159,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
                 {"nodeId": root_id_legacy, "selector": "#reader-import-file"},
             )
             if node["result"]["nodeId"] != 0:
-                await cdp.send(
-                    "DOM.setFileInputFiles",
-                    {
-                        "nodeId": node["result"]["nodeId"],
-                        "files": [str(exported_path)],
-                    },
-                )
-                await cdp.evaluate(
-                    "document.querySelector('#reader-import-file').dispatchEvent("
-                    "new Event('change', {bubbles: true}))"
-                )
+                await select_import_file(cdp, node["result"]["nodeId"], exported_path)
                 await wait_until(
                     cdp,
                     "document.querySelector('.reader-status')?.textContent.includes('Imported')",

@@ -3310,6 +3310,20 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let Some(file) = input.files().and_then(|files| files.item(0)) else {
             return;
         };
+        // confirm が使える環境ではキャンセルを尊重する。window が無い / confirm が
+        // 例外を投げる環境では None となり、既存どおり取り込む（fail-safe）。
+        let confirmed = (|| {
+            web_sys::window()?
+                .confirm_with_message(
+                    "バックアップを取り込みます。現在の読書位置を上書きする場合があります。よろしいですか？",
+                )
+                .ok()
+        })();
+        // 結果にかかわらずクリアし、同じファイルを再選択できるようにする。
+        input.set_value("");
+        if confirmed == Some(false) {
+            return;
+        }
         let file_clone = file.clone();
         spawn_local(async move {
             let Ok(buffer) = JsFuture::from(file_clone.text()).await else {
