@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 196 件）。
+openrustbooks の ADR 一覧（全 197 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -394,3 +394,5 @@ openrustbooks の ADR 一覧（全 196 件）。
   - status: accepted — core/Cargo.toml の rumdl default-features=false をローカルと CI の両方で静的検査する決定を記録する。
 - [ADR-0196: wasm-pack test の CI ゲート化](0196-ci-wasm-test-gate.md)
   - status: accepted — wasm-bindgen-test を CI でも実行するため、共通スクリプトを verify.sh と extra_gates から呼ぶ決定を記録する。
+- [ADR-0197: 未使用 trait メソッドの削除](0197-dead-trait-methods.md)
+  - status: accepted — TokenStream::is_done と StorageBackend::available_space を削除し、未実装 API への誤依存を防ぐ決定を記録する。
