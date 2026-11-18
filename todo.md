@@ -53,8 +53,6 @@ status: current
 ### 優先度: 中
 
 <!-- R6-2026-11-19 中優先度 -->
-- 【PR-M04】`read` の offset/limit に上限が無く `max_file_size` も未適用。
-  根拠 `core/src/io.rs:34,108`。
 - 【PR-M07】Google Fonts への preconnect が CSP 対象外で外部送信される。
   根拠 `web/index.html:12-14`。
 - 【PR-M08 / TD-M08】設定モデルが AppConfig / WasmConfig / ReaderSettings / SettingsView の 4 重。
@@ -188,6 +186,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M04】read の上限を 256 MiB（または capabilities 指定）へ fail-closed 適用。
+      clamp せず validation エラー、1 byte probe で全読も検出。unit 5 件（core 246）。
+      E2E 249 件・全ゲート成功 / ADR-0190。
 - [x] 【PR-M01 / TD-M04】Ollama ストリームをバイト累積＋行キューへ変更。
       error / 不正 JSON / 不正 UTF-8 / 1 MiB 超過を fail-closed、AiConfig.timeout_secs を配線。
       unit 14 件、core 241・E2E 249・全ゲート成功 / ADR-0189。
