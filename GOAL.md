@@ -1,40 +1,31 @@
 # Goal
 
-EPUB 画像の自然寸法を取得して `width` / `height` 属性を付与する（ADR-0136 / 0137 の実装）。
+EPUB HTML の `img` の作者指定 `width` / `height` をサニタイザで数値検証する（ADR-0149 の未決定）。
 
 ## Scope
 
 ### 背景
 
-ADR-0136 で「core で自然寸法を取得し、web の `resolve_images()` で
-`width` / `height` 属性を付与する」方針を決定し、
-ADR-0137 で `imagesize 0.15.0` の wasm32 互換性を検証済み。
-位置復元 E2E のベースライン（ADR-0140 / 0146）と
-画像縮小の安定化（ADR-0148）も完了している。
+`core/src/sanitize.rs:94` は `img` に `width` / `height` を許可するが、
+`attribute_filter` は `src` のみ検証している（:133-139）。
+ADR-0149 の実装ではラスター画像は自然寸法で上書きするが、
+SVG は既存属性を尊重するため、非数値・極端な値が残り得る。
 
 ### 成果物
 
-- `core/Cargo.toml` / `Cargo.lock`: 変更（`imagesize` 依存を追加）
-- `core/src/wasm.rs`: 変更（自然寸法取得の Wasm API）
-- `web/src/lib.rs`: 変更（`resolve_images()` での属性付与）
-- `tools/verify-web-reader.py`: 変更（属性チェックを追加、期待総数を更新）
-- `THIRD_PARTY_NOTICES.md`: 変更（MIT 通知）
-- `docs/decisions/0149-image-dimension-reservation.md`: 追加
+- `core/src/sanitize.rs`: 変更（`img` の width/height 検証）
+- `docs/decisions/0150-img-dimension-validation.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `imagesize = { version = "0.15", default-features = false, features = ["png","jpeg","gif","webp"] }` を core に追加する（新版・ライセンス・脆弱性調査は ADR-0137 済み）。
-2. core に自然寸法取得の純粋関数を追加し、wasm32 / native の両方でビルドできるようにする。
-3. `resolve_images()` で PNG / JPEG / WebP / GIF の画像に
-   `width` / `height` を自然ピクセルで付与する。SVG は既存属性を尊重し、
-   viewBox のみの場合は付与しない。
-4. 0 / 非数 / 16384px 超の値は拒否（fail-closed）。取得失敗時は属性を付けない。
-5. 既存の画像セトリング・警告・縮小ロジックを壊さない。
-6. E2E に 2 件追加（`img` に自然寸法と一致する属性が付くこと、
-   SVG の既存属性が維持されること）、期待総数を 229 → 231 に更新。
-7. `cargo audit --no-fetch` で脆弱性 0 件・警告 baseline 10 のまま。
-8. 全ゲート成功、E2E 231 項目 5 回連続 0 失敗。
+1. `img` の `width` / `height` 属性が ASCII 数字のみで、
+   1〜16384 の範囲にある場合のみ保持する。
+2. それ以外（空 / 単位付き / 負 / 小数 / 0 / 上限超 / 非 ASCII 数字）は
+   属性ごと削除する（fail-closed）。
+3. 上限は `image_dimensions::MAX_DIMENSION` を再利用する（重複定義しない）。
+4. テストを追加（有効値維持、不正値削除、svg の既存属性は別経路なので影響なし）。
+5. 既存の 250 テスト + wasm 4、E2E 231 を壊さない。
 
 ## Acceptance criteria
 
@@ -42,7 +33,6 @@ ADR-0137 で `imagesize 0.15.0` の wasm32 互換性を検証済み。
 
 ## Constraints
 
-- 新規依存は `imagesize` のみ（MIT・実行時依存 0・ADR-0137 で調査済み）。
-- `unsafe` 禁止。
-- 属性は「縦横比の予約」専用とし、警告・縮小判定には使わない。
+- 新規依存を追加しない。
+- `src` のローカル参照検証は維持する。
 - `master` へ push する。force push はしない。
