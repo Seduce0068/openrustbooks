@@ -1,32 +1,28 @@
 # Goal
 
-秘密情報だけを削除する dedicated command を追加する（ADR-0131 / 0132 の未決定）。
+秘密削除時に削除対象名だけをログに残す（ADR-0134 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`has_api_key` 等は読み取り専用で、`ConfigPatch` で受け取っても無視される。
-そのため API キー／クライアントシークレット／リフレッシュトークンを
-個別に削除する手段が無い（`reset_config` は全設定を既定に戻す）。
+`clear_secrets` は削除対象の値を一切ログに出さないが、
+「いつ・どの種類の秘密が消えたか」という事実も残っていない。
+値を出さずに対象名（api_key 等）だけをログに残せば、
+監査性を高めつつ秘密を漏らさない。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 変更（`clear_secrets` command とテスト）
-- `desktop/src/main.rs`: 変更（command 登録）
-- `docs/decisions/0134-secret-removal-command.md`: 追加
+- `desktop/src/commands/config.rs`: 変更（ログ追加）
+- `docs/decisions/0135-secret-clear-audit-log.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `clear_secrets(state, targets: SecretTargets)` を追加し、指定された
-   秘密フィールドだけを `None` / 空文字にして保存する。
-2. `SecretTargets` は `api_key` / `client_secret` / `refresh_token` の
-   bool フィールドを持つ（既定 false＝消さない、fail-closed）。
-3. 既存 `merge_secrets` が `None` / 空を「未変更」とみなして復元するため、
-   この command は merge を通さずに直接 state を更新する。
-4. テストを追加する（指定したものだけ消えること、他設定は不変）。
-5. 既存の 234 テスト + wasm 3、E2E 229 項目を壊さない。
+1. 実際に消えた対象名のみをログに残す（値・パス・キーは出さない）。
+2. no-op のときはログを出さない。
+3. ログは `log` クレート（`log::info!` 等、既存依存）を使う。
+4. 既存の 240 テスト + wasm 3、E2E 229 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -35,5 +31,5 @@
 ## Constraints
 
 - 新規依存を追加しない。
-- Web UI への接続は今回行わない（command の準備のみ）。
+- ログに秘密の値を含めない。
 - `master` へ push する。force push はしない。
