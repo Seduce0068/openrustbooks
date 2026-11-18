@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- Wasm AI/lint の偽成功スタブを明示的エラーへ変更し、wasm テストを 4→6 件に追加（ADR-0156）。
 - rumdl を featureless 化して依存 28 個を削減（ADR-0155）。serde_yaml / jemalloc は non-optional のため残存。
 - localStorage 保存失敗を固定文言の status と console.error で可視化し、E2E を 232→233 に更新（ADR-0154）。
 - About 画面のライセンスと対応形式を実装事実に合わせ、E2E を 231→232 に更新（ADR-0153）。
