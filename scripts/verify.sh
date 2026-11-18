@@ -50,8 +50,15 @@ check_no_external_font_refs() {
 	return 0
 }
 
+# core/Cargo.toml の rumdl 2 行が featureless であることを検査する。
+# 実体は専用スクリプトに置き、CI の extra_gates からも同じ検査を呼べるようにする。
+check_rumdl_featureless() {
+	bash "$SCRIPT_DIR/check-rumdl-featureless.sh"
+}
+
 run fmt cargo fmt --all -- --check
 run no-external-font-refs check_no_external_font_refs
+run rumdl-featureless check_rumdl_featureless
 run check cargo check --all-targets --locked
 run test cargo test --all-targets --locked
 run clippy cargo clippy --all-targets --locked -- -D warnings
