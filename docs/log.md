@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- atomic write の tmp 名を PID + counter で一意化し、core を 224→228 件へ拡充（ADR-0188）。
 - table 数値属性を fail-closed 検証し core を 220→224 件へ拡充（ADR-0187）。
 - 設定 IPC 境界を DTO 正規化へ統一し、extra_headers / 機微値の注入を遮断（ADR-0186）。
 - cargo-audit 未インストール時に audit ゲートを fail-closed 化（ADR-0185）。
