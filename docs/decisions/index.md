@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 158 件）。
+openrustbooks の ADR 一覧（全 160 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -318,3 +318,7 @@ openrustbooks の ADR 一覧（全 158 件）。
   - status: accepted — インポートが現在の設定と履歴を破壊しないよう、現在値が存在する場合は維持する決定を記録する。
 - [ADR-0158: 部分設定インポートの調査結果](0158-partial-settings-import.md)
   - status: accepted — 部分設定インポートの bool false リセットが現行ガード下では再現しないことを記録する。
+- [ADR-0159: CLS の E2E 直接計測](0159-cls-e2e-measurement.md)
+  - status: accepted — PerformanceObserver('layout-shift') で CLS を計測し、画像章オープン時のレイアウトシフトをゲートする決定を記録する。
+- [ADR-0160: Wasm Markdown linter の実配線](0160-real-wasm-lint.md)
+  - status: accepted — fail-closed スタブだった WasmMarkdownLinter を featureless rumdl の実 lint に接続する決定を記録する。
