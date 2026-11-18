@@ -119,6 +119,7 @@ pub fn run() {
             // Configuration commands
             commands::config::get_config,
             commands::config::update_config,
+            commands::config::update_config_patch,
             commands::config::update_ai_config,
             commands::config::update_lint_config,
             commands::config::reset_config,

@@ -5,10 +5,11 @@ use openrustbooks_core::CoreError;
 use openrustbooks_core::ai_markdown::client::{ProviderKind, validate_base_url};
 use openrustbooks_core::config::{
     AiConfig, AppConfig, EditorConfig, GeneralConfig, GoogleDriveConfig, LintConfig,
-    LocalRootConfig, OllamaConfig, REDACTED_SECRET, ReaderConfig, StorageConfig,
+    LocalRootConfig, OllamaConfig, OpenAiConfig, REDACTED_SECRET, ReaderConfig, StorageConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{State, command};
 
@@ -237,6 +238,175 @@ impl From<&GoogleDriveConfig> for GoogleDriveConfigView {
     }
 }
 
+/// Web から送られる部分更新 DTO。[`ConfigView`] と同じ公開フィールドだけを持つ。
+/// `has_*` フラグはデシリアライズのために受け取るが、更新時は無視して現在値を保持する。
+#[derive(Clone, Deserialize)]
+pub struct ConfigPatch {
+    pub general: GeneralConfigView,
+    pub ai: AiConfigView,
+    pub lint: LintConfigView,
+    pub storage: StorageConfigView,
+    pub editor: EditorConfig,
+    pub reader: ReaderConfig,
+}
+
+impl From<&AppConfig> for ConfigPatch {
+    fn from(config: &AppConfig) -> Self {
+        let view = ConfigView::from(config);
+        Self {
+            general: view.general,
+            ai: view.ai,
+            lint: view.lint,
+            storage: view.storage,
+            editor: view.editor,
+            reader: view.reader,
+        }
+    }
+}
+
+impl ConfigPatch {
+    /// 公開フィールドだけを上書きし、隠しフィールドは `current` から維持する。
+    pub fn apply_to(self, current: &AppConfig) -> AppConfig {
+        let mut merged = current.clone();
+        merged.general = self.general.into_config(&current.general);
+        merged.ai = self.ai.into_config(&current.ai);
+        merged.lint = self.lint.into_config(&current.lint);
+        merged.storage = self.storage.into_config(&current.storage);
+        merged.editor = self.editor;
+        merged.reader = self.reader;
+        merged
+    }
+}
+
+// 以下は View -> core の逆変換。DTO に無いフィールドはすべて `current` から補う。
+impl GeneralConfigView {
+    fn into_config(self, current: &GeneralConfig) -> GeneralConfig {
+        GeneralConfig {
+            language: self.language,
+            theme: self.theme,
+            telemetry: self.telemetry,
+            check_updates: self.check_updates,
+            log_level: self.log_level,
+            data_dir: current.data_dir.clone(),
+            cache_dir: current.cache_dir.clone(),
+        }
+    }
+}
+
+impl AiConfigView {
+    fn into_config(self, current: &AiConfig) -> AiConfig {
+        AiConfig {
+            enabled: self.enabled,
+            default_provider: self.default_provider,
+            openai: self.openai.into_config(&current.openai),
+            ollama: self.ollama.into_config(&current.ollama),
+            max_tokens_per_request: self.max_tokens_per_request,
+            max_tokens_per_month: self.max_tokens_per_month,
+            max_retries: current.max_retries,
+            prefer_local: self.prefer_local,
+            timeout_secs: self.timeout_secs,
+            streaming: self.streaming,
+            model_overrides: current.model_overrides.clone(),
+        }
+    }
+}
+
+impl OpenAiConfigView {
+    fn into_config(self, current: &OpenAiConfig) -> OpenAiConfig {
+        OpenAiConfig {
+            base_url: self.base_url,
+            // has_api_key は無視して実値を保持する。
+            api_key: current.api_key.clone(),
+            model: self.model,
+            organization: self.organization,
+            extra_headers: current.extra_headers.clone(),
+        }
+    }
+}
+
+impl OllamaConfigView {
+    fn into_config(self, current: &OllamaConfig) -> OllamaConfig {
+        OllamaConfig {
+            base_url: self.base_url,
+            model: self.model,
+            keep_alive_minutes: self.keep_alive_minutes,
+            options: current.options.clone(),
+        }
+    }
+}
+
+impl LintConfigView {
+    fn into_config(self, current: &LintConfig) -> LintConfig {
+        LintConfig {
+            enabled: self.enabled,
+            config_file: current.config_file.clone(),
+            enable_rules: self.enable_rules,
+            disable_rules: self.disable_rules,
+            auto_fix: self.auto_fix,
+            warnings_as_errors: self.warnings_as_errors,
+            rule_config: current.rule_config.clone(),
+        }
+    }
+}
+
+impl StorageConfigView {
+    fn into_config(self, current: &StorageConfig) -> StorageConfig {
+        StorageConfig {
+            default_backend: self.default_backend,
+            local_roots: self
+                .local_roots
+                .into_iter()
+                .map(|root| root.into_config(&current.local_roots))
+                .collect(),
+            google_drive: self
+                .google_drive
+                .map(|drive| drive.into_config(current.google_drive.as_ref())),
+            recent_paths: current.recent_paths.clone(),
+            max_recent: self.max_recent,
+        }
+    }
+}
+
+impl LocalRootView {
+    fn into_config(self, current_roots: &[LocalRootConfig]) -> LocalRootConfig {
+        // merge_secrets と同じ規則で、id が一意に一致した場合だけ path を復元する。
+        let path = if self.id.is_empty() {
+            PathBuf::new()
+        } else {
+            let mut matches = current_roots.iter().filter(|root| root.id == self.id);
+            match (matches.next(), matches.next()) {
+                (Some(root), None) => root.path.clone(),
+                _ => PathBuf::new(),
+            }
+        };
+        LocalRootConfig {
+            id: self.id,
+            name: self.name,
+            path,
+            read_only: self.read_only,
+            watch: self.watch,
+        }
+    }
+}
+
+impl GoogleDriveConfigView {
+    fn into_config(self, current: Option<&GoogleDriveConfig>) -> GoogleDriveConfig {
+        // has_client_secret / has_refresh_token は無視して現在値を保持する。
+        let (client_secret, refresh_token) = match current {
+            Some(current) => (current.client_secret.clone(), current.refresh_token.clone()),
+            None => (String::new(), None),
+        };
+        GoogleDriveConfig {
+            client_id: self.client_id,
+            client_secret,
+            refresh_token,
+            root_folder_id: self.root_folder_id,
+            use_app_data_folder: self.use_app_data_folder,
+            scopes: self.scopes,
+        }
+    }
+}
+
 /// A secret coming back from JS is a placeholder when it is missing, empty or
 /// the same mask sentinel used by [`ConfigView`] / `Debug` output.
 fn is_placeholder(secret: Option<&str>) -> bool {
@@ -358,6 +528,25 @@ pub async fn update_config(
     Ok(())
 }
 
+/// Update configuration from a DTO patch, returning the resulting view.
+#[command]
+pub async fn update_config_patch(
+    state: State<'_, Arc<AppState>>,
+    patch: ConfigPatch,
+) -> Result<ConfigView, String> {
+    let current = state.config();
+    let applied = patch.apply_to(&current);
+    let merged = merge_secrets(&current, &applied);
+    validate_ai_base_urls(&merged.ai)?;
+    let changed = ai_or_lint_changed(&current, &merged);
+    state.update_config(merged).map_err(map_err)?;
+    state.save_config().map_err(map_err)?;
+    if changed {
+        state.refresh_ai_service().await.map_err(map_err)?;
+    }
+    Ok(ConfigView::from(&state.config()))
+}
+
 /// Update AI configuration
 #[command]
 pub async fn update_ai_config(
@@ -415,7 +604,6 @@ pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn config_with_secrets() -> AppConfig {
         let mut config = AppConfig::default();
@@ -862,5 +1050,101 @@ mod tests {
         let merged = merge_secrets(&current, &incoming);
 
         assert!(merged.storage.local_roots[0].path.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn config_patch_preserves_hidden_fields() {
+        let current = config_with_paths();
+        let merged = ConfigPatch::from(&current).apply_to(&current);
+
+        // パス系 / secret 系 / マップ系の除外フィールドがすべて現在値のまま。
+        assert_eq!(merged.general.data_dir, current.general.data_dir);
+        assert_eq!(merged.general.cache_dir, current.general.cache_dir);
+        assert_eq!(merged.lint.config_file, current.lint.config_file);
+        assert_eq!(merged.lint.rule_config, current.lint.rule_config);
+        assert_eq!(merged.storage.recent_paths, current.storage.recent_paths);
+        assert_eq!(merged.ai.ollama.options, current.ai.ollama.options);
+        assert_eq!(merged.ai.model_overrides, current.ai.model_overrides);
+        assert_eq!(merged.ai.max_retries, current.ai.max_retries);
+        assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            current.ai.openai.extra_headers
+        );
+        let drive = merged.storage.google_drive.as_ref().unwrap();
+        let current_drive = current.storage.google_drive.as_ref().unwrap();
+        assert_eq!(drive.client_secret, current_drive.client_secret);
+        assert_eq!(drive.refresh_token, current_drive.refresh_token);
+        for (actual, expected) in merged
+            .storage
+            .local_roots
+            .iter()
+            .zip(&current.storage.local_roots)
+        {
+            assert_eq!(actual.path, expected.path);
+        }
+    }
+
+    #[test]
+    fn config_patch_updates_public_fields() {
+        let current = config_with_paths();
+        let mut patch = ConfigPatch::from(&current);
+        patch.ai.enabled = true;
+        patch.lint.enabled = false;
+        patch.general.theme = "dark".to_string();
+        patch.editor.font_size = 20.0;
+        patch.reader.theme = "sepia".to_string();
+
+        let merged = patch.apply_to(&current);
+
+        assert!(merged.ai.enabled);
+        assert!(!merged.lint.enabled);
+        assert_eq!(merged.general.theme, "dark");
+        assert_eq!(merged.editor.font_size, 20.0);
+        assert_eq!(merged.reader.theme, "sepia");
+        // 公開フィールドを変えても隠しフィールドは維持される。
+        assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
+        assert_eq!(merged.general.data_dir, current.general.data_dir);
+        assert_eq!(
+            merged.storage.local_roots[0].path,
+            current.storage.local_roots[0].path
+        );
+    }
+
+    #[test]
+    fn config_patch_from_view_json_restores_paths_by_id() {
+        let current = config_with_paths();
+        // Web が get_config の DTO をそのまま送り返すケースを模擬する。
+        let json = serde_json::to_string(&ConfigView::from(&current)).unwrap();
+        let mut patch: ConfigPatch = serde_json::from_str(&json).unwrap();
+        patch.storage.local_roots.push(LocalRootView {
+            id: "root-new".to_string(),
+            name: "New".to_string(),
+            read_only: false,
+            watch: false,
+        });
+        patch.storage.local_roots.push(LocalRootView {
+            id: String::new(),
+            name: "NoId".to_string(),
+            read_only: false,
+            watch: false,
+        });
+
+        let merged = patch.apply_to(&current);
+
+        assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
+        assert_eq!(merged.general.data_dir, current.general.data_dir);
+        assert_eq!(merged.storage.recent_paths, current.storage.recent_paths);
+        assert_eq!(
+            merged.storage.local_roots[0].path,
+            PathBuf::from("/secret/root-a")
+        );
+        assert_eq!(
+            merged.storage.local_roots[1].path,
+            PathBuf::from("/secret/root-b")
+        );
+        // 不一致 / 空 id の新規ルートは path を持たない。
+        assert!(merged.storage.local_roots[2].path.as_os_str().is_empty());
+        assert!(merged.storage.local_roots[3].path.as_os_str().is_empty());
     }
 }
