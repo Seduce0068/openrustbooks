@@ -811,7 +811,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 233 + checker.equal 17 = 250。
+    # 期待 check 総数: checker.check 234 + checker.equal 17 = 251。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -834,7 +834,9 @@ async def run_checks(cdp: Cdp) -> int:
     # 下書きは除外）+1（ADR-0167 / ADR-0180）。
     # 設定フォームの読み取り専用化（text/number が readonly、checkbox/select が
     # disabled、常時説明の settings-notice が表示される）+1（ADR-0128 / R6 PR-M11）。
-    checker = Checker(expected=250)
+    # Reader の ARIA 整合（可視ラベルは aria-labelledby を優先し aria-label を外す、
+    # トグル状態は aria-pressed で dark と同期）+1（R6 PR-L02 / modern-web-guidance: accessibility）。
+    checker = Checker(expected=251)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -864,7 +866,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 250 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 251 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -1573,10 +1575,9 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         ),
     )
     checker.check(
-        "本文領域に role・aria-label・tabindex が付く",
+        "本文領域に role・tabindex が付く",
         await cdp.evaluate(
             "document.querySelector('.reader-content')?.getAttribute('role') === 'region'"
-            " && document.querySelector('.reader-content')?.getAttribute('aria-label') === 'Chapter content'"
             " && document.querySelector('.reader-content')?.getAttribute('tabindex') === '0'"
         ),
     )
@@ -3161,6 +3162,35 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "参照先の章タイトルが入っている",
         "Chapter" in str(label_text),
         f"(text={label_text!r})",
+    )
+
+    # R6 PR-L02: 可視ラベルが存在する場合は aria-labelledby を優先し、
+    # aria-label の重複を避ける。トグル状態は aria-pressed で告知し、
+    # 実効ダーク状態（effective_dark = <html> の dark クラス）と同期させる。
+    reader_a11y = await cdp.evaluate(
+        "(() => {"
+        " const content = document.querySelector('.reader-content');"
+        " const theme = document.querySelector('#reader-theme');"
+        " const label = content?.getAttribute('aria-label');"
+        " const labelledBy = content?.getAttribute('aria-labelledby');"
+        " const pressed = theme?.getAttribute('aria-pressed');"
+        " const dark = document.documentElement.classList.contains('dark');"
+        " return {"
+        "  label: label ?? null, labelledBy: labelledBy ?? null,"
+        "  pressed: pressed ?? null, dark: dark,"
+        "  noDuplicateLabel: label === null || label === '',"
+        "  namedByTitle: labelledBy === 'reader-chapter-title',"
+        "  pressedMatchesDark: pressed === (dark ? 'true' : 'false')"
+        " }; })()"
+    )
+    checker.check(
+        "Reader の ARIA 属性が可視ラベルとトグル状態に整合する",
+        reader_a11y["noDuplicateLabel"]
+        and reader_a11y["namedByTitle"]
+        and reader_a11y["pressedMatchesDark"],
+        f"(aria-label={reader_a11y['label']!r},"
+        f" aria-labelledby={reader_a11y['labelledBy']!r},"
+        f" aria-pressed={reader_a11y['pressed']!r}, dark={reader_a11y['dark']!r})",
     )
 
     # 縦スクロール閾値の設定。

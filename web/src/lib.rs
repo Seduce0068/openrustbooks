@@ -3659,7 +3659,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-font-smaller" class="btn" title="Smaller text" aria-label="Smaller text" aria-keyshortcuts="-" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
                 <button id="reader-font-larger" class="btn" title="Larger text" aria-label="Larger text" aria-keyshortcuts="+" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
                 <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
-                <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if dark.get() { "Light" } else { "Dark" }}</button>
+                // aria-pressed はボタン操作対象のダーク表示が実際に有効か（effective_dark）を示す。
+                // 可視ラベルも同じ実効値に揃え、OS 追従中に状態表示と告知が食い違わないようにする。
+                // 追従の ON/OFF は隣の #reader-theme-auto が follow_system で担う。
+                <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed=move || if effective_dark.get() { "true" } else { "false" } aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if effective_dark.get() { "Light" } else { "Dark" }}</button>
                 <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
                 <button id="reader-downscale" class="btn" title="Downscale oversized images" aria-label="Downscale oversized images" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "Downscale:on" } else { "Downscale:off" }}</button>
                 <input id="reader-jpeg-quality" class="reader-chapter-select" type="number" min="50" max="100" aria-label="JPEG quality" title="JPEG quality (%)" on:change=on_jpeg_quality_change style="max-width: 6rem;" prop:value=move || jpeg_quality.get().to_string()/>
@@ -3778,7 +3781,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
                     </aside>
                 </Show>
-                <div class="reader-content" role="region" aria-label="Chapter content" aria-labelledby="reader-chapter-title" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
+                <div class="reader-content" role="region" aria-labelledby="reader-chapter-title" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
                     <div class="document-content reader-html" inner_html=move || content.get() lang=move || content_lang.get()></div>
                 </div>
             </div>
