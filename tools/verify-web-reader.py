@@ -800,7 +800,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 230 + checker.equal 17 = 247。
+    # 期待 check 総数: checker.check 231 + checker.equal 17 = 248。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -818,7 +818,8 @@ async def run_checks(cdp: Cdp) -> int:
     # Clear data を confirm=false でキャンセルしたときに削除も status 変更もしない検証 +1。
     # Import を confirm=false でキャンセルしたときに取り込みも status 変更もしない検証 +1。
     # リセット時の設定保存失敗で成功文言を出さず失敗通知だけを出す検証 +1（ADR-0165）。
-    checker = Checker(expected=247)
+    # Save クリックなしのデバウンス自動保存→リロード復元の検証 +1（R6 TD-H05）。
+    checker = Checker(expected=248)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -848,7 +849,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 247 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 248 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -4075,6 +4076,55 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         draft_saved and draft_restored,
         f"(saved={draft_saved}, restored={draft_restored}, status={draft_status!r})",
     )
+
+    # R6 TD-H05: Save クリックなしのデバウンス自動保存。入力直後に未保存表示が
+    # 出て、800ms のデバウンス後に localStorage へ書き込まれ、Page.reload で
+    # /editor/e2e を再オープンすると本文が復元されることを確認する。
+    # 後始末は自キーの removeItem のみ（localStorage.clear はしない）。
+    autosave_text = "E2E autosave body without Save click"
+    autosave_unsaved_shown = False
+    autosave_saved = False
+    autosave_status = ""
+    autosave_restored = ""
+    try:
+        if editor_mounted:
+            await cdp.evaluate(
+                "(() => { const input = document.querySelector('#editor-input');"
+                f" input.value = '{autosave_text}';"
+                " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+            )
+            autosave_unsaved_shown = await wait_until(
+                cdp,
+                "document.querySelector('.editor-status')?.textContent.includes('未保存の変更があります')",
+                timeout=5,
+            )
+            # デバウンス (800ms) より長く待つ。Save ボタンはクリックしない。
+            await asyncio.sleep(1.0)
+            autosave_status = await cdp.evaluate(
+                "document.querySelector('.editor-status')?.textContent ?? ''"
+            )
+            autosave_saved = (
+                await cdp.evaluate(f"localStorage.getItem('{draft_key}')")
+                == autosave_text
+            )
+            await cdp.send("Page.reload", {"ignoreCache": True})
+            await wait_until(cdp, "document.querySelector('#editor-input') !== null")
+            # リロード前の古い DOM を読まないよう、描画が落ち着くまで待つ。
+            await asyncio.sleep(0.5)
+            autosave_restored = await cdp.evaluate(
+                "document.querySelector('#editor-input')?.value ?? ''"
+            )
+        checker.check(
+            "Save クリックなしの自動保存でリロード後に本文が復元される",
+            autosave_unsaved_shown
+            and autosave_saved
+            and autosave_status == "下書きを自動保存しました"
+            and autosave_restored == autosave_text,
+            f"(saved={autosave_saved}, restored={autosave_restored!r},"
+            f" status={autosave_status!r}, unsaved={autosave_unsaved_shown})",
+        )
+    finally:
+        await cdp.evaluate(f"localStorage.removeItem('{draft_key}')")
 
     # ADR-0170: 上限超の下書きが保存済みだった場合、本文はそのまま textarea へ
     # 復元され、固定文言の警告だけが status に出ることを確認する。自キーへ直接

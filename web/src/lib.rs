@@ -214,7 +214,9 @@ fn FileTree() -> impl IntoView {
 /// 上限超の下書きを復元した場合は本文をそのまま戻し、固定文言の警告だけを
 /// status へ出す（本文・サイズ値は出さない）。
 /// Save はブラウザ内の localStorage へ下書きを保存し、失敗は ADR-0154 の
-/// 共通通知で利用者へ伝える。他のデスクトップ専用操作は disabled にする。
+/// 共通通知で利用者へ伝える。入力後は 800ms のデバウンスでも自動保存し、
+/// 保存が完了するまで status に未保存状態を出す（R6 TD-H05）。
+/// 他のデスクトップ専用操作は disabled にする。
 #[component]
 fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
@@ -244,6 +246,50 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
             }
         });
     }
+
+    // 入力を EDITOR_AUTOSAVE_DELAY_MS だけデバウンスして自動保存する。
+    // タイマーは doc_id 変更時と Owner 破棄時に必ず解除し、別ドキュメントへ
+    // 本文を書き込まないようにする。世代カウンタで、解除直前にキューされた
+    // 古いコールバックの発火も無効化する。
+    let autosave_timer = std::rc::Rc::new(std::cell::Cell::new(None::<i32>));
+    let autosave_generation = std::rc::Rc::new(std::cell::Cell::new(0_u32));
+    // 直前の自動保存で試行した本文。同一本文の再試行で console.error が
+    // 連発するのを防ぐ（上限超・保存失敗の両方で同じ本文を保持する）。
+    let autosave_last_text = std::rc::Rc::new(std::cell::RefCell::new(None::<String>));
+
+    {
+        let timer = std::rc::Rc::clone(&autosave_timer);
+        let generation = std::rc::Rc::clone(&autosave_generation);
+        Effect::new(move |_| {
+            let _ = doc_id.get(); // doc_id 変更を購読するためだけに読む
+            if let Some(window) = web_sys::window()
+                && let Some(handle) = timer.take()
+            {
+                window.clear_timeout_with_handle(handle);
+            }
+            generation.set(generation.get() + 1);
+        });
+    }
+
+    {
+        let timer = std::rc::Rc::clone(&autosave_timer);
+        // on_cleanup は Send + Sync を要求するため、!Send な Rc を
+        // SendWrapper で包んで保持する（既存のイベントリスナーと同じ方式）。
+        let state = SendWrapper::new(timer);
+        on_cleanup(move || {
+            if let Some(window) = web_sys::window()
+                && let Some(handle) = (**state).take()
+            {
+                window.clear_timeout_with_handle(handle);
+            }
+        });
+    }
+
+    // view! 内の各ハンドラへ個別に clone を渡し、move による所有権競合を避ける。
+    let save_click_timer = std::rc::Rc::clone(&autosave_timer);
+    let input_timer = std::rc::Rc::clone(&autosave_timer);
+    let input_generation = std::rc::Rc::clone(&autosave_generation);
+    let input_last_text = std::rc::Rc::clone(&autosave_last_text);
 
     // エディタ表示時に下書きを復元する。prop:value を使わない契約を保つため
     // textarea 自身へ set_value し、シグナルも同じ本文で揃える。
@@ -279,6 +325,13 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                     title="Save draft (browser local)"
                     aria-label="Save draft (browser local)"
                     on:click=move |_| {
+                        // 手動保存が保留中の自動保存に置き換わるためタイマーを解除する。
+                        // これで「下書きを保存しました」が自動保存の文言へ上書きされない。
+                        if let Some(window) = web_sys::window()
+                            && let Some(handle) = save_click_timer.take()
+                        {
+                            window.clear_timeout_with_handle(handle);
+                        }
                         let id = doc_id.get();
                         let text = content.get();
                         if save_editor_draft(&id, &text) {
@@ -339,6 +392,62 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                         .and_then(|target| target.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
                     {
                         set_content.set(textarea.value());
+                        // 保存が完了するまでは未保存状態を伝える。aria-live="polite" の
+                        // 既存領域なので、同じ文言の再 set は読み上げの無駄を避け
+                        // スキップする（modern-web-guidance: accessibility）。
+                        if status.get() != EDITOR_UNSAVED_MESSAGE {
+                            set_status.set(EDITOR_UNSAVED_MESSAGE.to_string());
+                        }
+
+                        // 古いタイマーを解除してから作り直す（デバウンス）。
+                        if let Some(window) = web_sys::window() {
+                            if let Some(handle) = input_timer.take() {
+                                window.clear_timeout_with_handle(handle);
+                            }
+                            let generation = input_generation.get();
+                            let timer = std::rc::Rc::clone(&input_timer);
+                            let generation_cell = std::rc::Rc::clone(&input_generation);
+                            let last_text = std::rc::Rc::clone(&input_last_text);
+                            let id = doc_id.get();
+                            let callback = Closure::once_into_js(move || {
+                                timer.set(None); // 発火済みなのでハンドルを破棄する
+                                // doc_id 変更 / cleanup で無効化された古い発火は捨てる。
+                                if generation_cell.get() != generation || doc_id.get() != id {
+                                    return;
+                                }
+                                let text = content.get();
+                                // 同一本文の再試行は保存も通知もしない（失敗時の
+                                // console.error 連発を防ぐ）。
+                                if last_text.borrow().as_deref() == Some(text.as_str()) {
+                                    return;
+                                }
+                                *last_text.borrow_mut() = Some(text.clone());
+                                // 上限超は自動保存しない（setItem も共通通知も出さず、
+                                // 手動 Save と同じ固定文言だけを表示する）。
+                                if text.len() > EDITOR_DRAFT_MAX_BYTES {
+                                    if status.get() != EDITOR_DRAFT_TOO_LARGE_MESSAGE {
+                                        set_status.set(EDITOR_DRAFT_TOO_LARGE_MESSAGE.to_string());
+                                    }
+                                    return;
+                                }
+                                if save_editor_draft(&id, &text)
+                                    && status.get() != EDITOR_AUTOSAVED_MESSAGE
+                                {
+                                    set_status.set(EDITOR_AUTOSAVED_MESSAGE.to_string());
+                                }
+                                // 失敗時は save_editor_draft の共通通知（イベント
+                                // リスナーが SAVE_ERROR_MESSAGE を status へ出す）に任せ、
+                                // 自動保存固有の成功文言は出さない。
+                            });
+                            if let Ok(handle) = window
+                                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                    callback.unchecked_ref(),
+                                    EDITOR_AUTOSAVE_DELAY_MS,
+                                )
+                            {
+                                input_timer.set(Some(handle));
+                            }
+                        }
                     }
                 }
             ></textarea>
@@ -1393,6 +1502,17 @@ const EDITOR_DRAFT_TOO_LARGE_MESSAGE: &str = "下書きが大きすぎて保存�
 /// 上限超の下書きを復元したときの固定文言。本文・サイズ値は載せない。
 const EDITOR_DRAFT_TOO_LARGE_RESTORED_MESSAGE: &str =
     "保存済みの下書きが大きすぎます。編集して保存してください。";
+
+/// 入力から自動保存までの固定遅延（ms）。Web 側から設定が渡されていないため
+/// 固定値を使う（設定連携は将来の契約変更として ADR に記録する）。
+/// 連続入力で status の aria-live 通知が溢れないようデバウンスする。
+const EDITOR_AUTOSAVE_DELAY_MS: i32 = 800;
+
+/// 入力直後に未保存状態を伝える文言。
+const EDITOR_UNSAVED_MESSAGE: &str = "未保存の変更があります";
+
+/// 自動保存に成功したことを伝える文言。
+const EDITOR_AUTOSAVED_MESSAGE: &str = "下書きを自動保存しました";
 
 /// エディタの下書きを保存する localStorage キーの接頭辞。
 const EDITOR_DRAFT_KEY_PREFIX: &str = "openrustbooks:editor:";
