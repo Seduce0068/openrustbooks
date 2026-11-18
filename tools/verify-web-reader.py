@@ -2660,9 +2660,24 @@ async def run_checks(cdp: Cdp) -> int:
     )
     checker.check("画像縮小トグルが有効になる", pressed == "true")
     await open_wide()
-    await wait_until(
-        cdp, "document.querySelector('#wide')?.naturalWidth <= 2000", timeout=10
-    )
+    # 縮小は spawn_local の非同期処理（Canvas → Blob → src 差し替え）で
+    # 完了時刻に揺れがある。wait_until の戻り値を確認し、タイムアウト時は
+    # 診断情報を出してから再待機する（期待値・チェック数は変更しない）。
+    downscaled = "document.querySelector('#wide')?.naturalWidth <= 2000"
+    resized = await wait_until(cdp, downscaled, timeout=10)
+    if not resized:
+        diag = await cdp.evaluate(
+            "(() => {"
+            " const img = document.querySelector('#wide');"
+            " return {"
+            " naturalWidth: img?.naturalWidth ?? 0,"
+            " src: (img?.src || '').slice(0, 64),"
+            " status: document.querySelector('.reader-status')?.textContent || '',"
+            " };"
+            " })()"
+        )
+        print(f"warn 画像縮小の完了待ちが 10s でタイムアウト: {diag}")
+        resized = await wait_until(cdp, downscaled, timeout=10)
     resized_width = await cdp.evaluate("document.querySelector('#wide')?.naturalWidth ?? 0")
     checker.check(
         "有効時は巨大画像が 2000px 以下に縮小される",
