@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 175 件）。
+openrustbooks の ADR 一覧（全 176 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -352,3 +352,5 @@ openrustbooks の ADR 一覧（全 175 件）。
   - status: accepted — 不正 UTF-8 の内容をエラー文言へ埋め込まず、U+FFFD 置換で返す決定を記録する。
 - [ADR-0175: 設定リセット時の保存失敗表示](0175-reset-settings-failure.md)
   - status: accepted — 設定リセットが保存失敗通知を成功文言で上書きしないようにする決定を記録する。
+- [ADR-0176: EPUB ロード世代の分離](0176-epub-load-generation.md)
+  - status: accepted — 非同期 EPUB ロードに独立した世代カウンタを導入し、古いロード完了による状態上書きを防ぐ決定を記録する。
