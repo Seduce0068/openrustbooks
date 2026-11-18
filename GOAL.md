@@ -1,40 +1,41 @@
 # Goal
 
-インポート時の設定・履歴の上書きを保護する（ADR-0151 / ADR-0032 の残課題）。
+部分設定のインポートで bool が false にリセットされる問題を修正する（ADR-0157 の未決定）。
 
 ## Scope
 
 ### 背景
 
-ADR-0032 は読書位置の `savedAt` マージを実装したが、
-`settings` と `history` は従来どおり無条件上書きとしている。
-ADR-0151 の監査で、古いバックアップのインポートが現在の設定・履歴を
-破壊し得ることが指摘された。
+`web/src/lib.rs` の `import_positions()` は設定の
+`dark` / `followSystem` / `downscaleImages` を `unwrap_or(false)` で読む。
+バックアップに这些キーが欠ける場合、現在設定の true が false へ
+リセットされる（ADR-0151 / ADR-0157 の未決定）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（設定・履歴の保護）
-- `tools/verify-web-reader.py`: 変更（E2E 追加、233 → 234）
-- `docs/decisions/0157-import-preservation.md`: 追加
+- `web/src/lib.rs`: 変更（`unwrap_or_else(|| load_settings().xxx)` に統一）
+- `tools/verify-web-reader.py`: 変更（E2E 1 件追加、234 → 235）
+- `docs/decisions/0158-partial-settings-import.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. 現在の設定／履歴が存在し、インポート元が古い（または同一）場合に
-   無条件上書きしない仕組みを入れる。
-2. エクスポート形式にタイムスタンプを追加する場合は後方互換を維持する
-   （旧 JSON も読める）。
-3. 新規／空の環境ではインポートが従来どおり機能する。
-4. E2E に 1 件追加し、期待総数を 233 → 234 に更新する。
-5. 既存 233 項目と全ゲートを壊さない。
+1. 3 つの bool フィールドについて、キー欠落時は
+   `load_settings()` の現在値をフォールバックにする。
+2. 5 つの数値フィールドは既に現在値フォールバックのため維持。
+3. E2E に 1 件追加（現在設定 dark=true / followSystem=true /
+   downscaleImages=true の状態で、それら 3 キーを除くバックアップを
+   新規環境へインポートしても true が維持される）。
+   期待総数 234 → 235。
+4. 既存 234 項目と全ゲートを壊さない。
 
 ## Acceptance criteria
 
-- E2E 234 項目が成功する。
+- E2E 235 項目が成功する。
 - 6 ゲート + audit + wasm-test が成功する。
 
 ## Constraints
 
 - 新規依存を追加しない。
-- 既存のエクスポート／インポート API の利用者を壊さない。
+- 設定スキーマは変更しない。
 - `master` へ push する。force push はしない。
