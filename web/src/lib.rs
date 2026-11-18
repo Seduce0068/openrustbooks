@@ -2130,6 +2130,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     }
 
     let book = Rc::new(RefCell::new(None::<WasmEpubBook>));
+    // 非同期 EPUB ロードの世代。新しいファイル選択ごとにインクリメントし、
+    // 完了が遅れた古いタスクが UI state を上書きするのを防ぐ（R6 PR-H03/TD-H03）。
+    let load_generation = Rc::new(Cell::new(0_u64));
     let object_urls = Rc::new(RefCell::new(Vec::<String>::new()));
     let cover_url_state = Rc::new(RefCell::new(None::<String>));
     let position_key_state = Rc::new(RefCell::new(None::<String>));
@@ -2604,6 +2607,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
     let on_file_change = {
         let book = Rc::clone(&book);
+        let load_generation = Rc::clone(&load_generation);
         let object_urls = Rc::clone(&object_urls);
         let cover_url_state = Rc::clone(&cover_url_state);
         let position_key_state = Rc::clone(&position_key_state);
@@ -2629,6 +2633,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 ));
                 return;
             }
+            // 有効なファイルが選ばれた時点で世代を進め、この選択に対応する
+            // 非同期タスクだけを残す（不正な選択で進行中のロードを破棄しない）。
+            // gen は Rust 2024 の予約語のため load_gen という名前を使う。
+            load_generation.set(load_generation.get() + 1);
+            let load_gen = load_generation.get();
             let key = position_key(&file);
             *position_key_state.borrow_mut() = Some(key.clone());
             // 別の本を開いたら履歴をリセットする。
@@ -2656,30 +2665,50 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             set_remote_resources_warning.set(None);
 
             let book = Rc::clone(&book);
+            let load_generation = Rc::clone(&load_generation);
             let cover_url_state = Rc::clone(&cover_url_state);
             let render_chapter = Rc::clone(&render_chapter);
             let history = Rc::clone(&history);
             let history_index = Rc::clone(&history_index);
             let sync_history = Rc::clone(&sync_history);
             spawn_local(async move {
+                // 古い選択のタスクは、ここで即座に終了する。
+                if load_gen != load_generation.get() {
+                    return;
+                }
                 let buffer = match JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => buffer,
                     Err(error) => {
-                        set_status.set(format!("File read failed: {error:?}"));
+                        // await 中に新しい選択が入っていれば status を書かない。
+                        if load_gen == load_generation.get() {
+                            set_status.set(format!("File read failed: {error:?}"));
+                        }
                         return;
                     }
                 };
+                if load_gen != load_generation.get() {
+                    return;
+                }
                 let bytes = Uint8Array::new(&buffer).to_vec();
                 let opened = match WasmEpubBook::new(bytes) {
                     Ok(opened) => opened,
                     Err(error) => {
+                        if load_gen != load_generation.get() {
+                            return;
+                        }
                         set_status.set(format!("EPUB open failed: {error:?}"));
                         return;
                     }
                 };
+                if load_gen != load_generation.get() {
+                    return;
+                }
 
                 let count = opened.chapter_count();
                 if count == 0 {
+                    if load_gen != load_generation.get() {
+                        return;
+                    }
                     set_status.set("This EPUB has no readable chapters.".to_string());
                     return;
                 }
@@ -2688,6 +2717,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     match opened.chapter_href(index) {
                         Ok(href) => spine.push((index, href)),
                         Err(error) => {
+                            if load_gen != load_generation.get() {
+                                return;
+                            }
                             set_status.set(format!("Chapter list failed: {error:?}"));
                             return;
                         }
@@ -2732,6 +2764,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
 
                 let language = opened.language();
                 let has_remote_resources = opened.has_remote_resources();
+                // ここから先は UI state を書くので、直前に世代を確認する。
+                // （cover の object URL 生成もここで行うため、無駄な URL を作らない。）
+                if load_gen != load_generation.get() {
+                    return;
+                }
                 let cover = opened
                     .cover_image()
                     .ok()
@@ -2785,6 +2822,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     )
                 });
 
+                // 履歴・book などの UI state 適用直前に再確認する。
+                if load_gen != load_generation.get() {
+                    return;
+                }
                 *history.borrow_mut() = history_entries;
                 history_index.set(history_idx);
                 sync_history();
@@ -2806,6 +2847,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     .collect();
                 set_landmark_options.set(lopts);
                 set_page_list.set(page_list);
+                // render_chapter は object_urls を差し替えるため、古いタスクから呼ばせない。
+                if load_gen != load_generation.get() {
+                    return;
+                }
                 render_chapter(start_index, start_fragment, Some(start_scroll));
                 // 章描画で status がクリアされるため、その後に警告を出す。
                 if let Some(message) = remote_resources_warning.get() {
