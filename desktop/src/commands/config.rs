@@ -409,11 +409,6 @@ fn is_placeholder(secret: Option<&str>) -> bool {
     secret.is_none_or(|value| value.is_empty() || value == REDACTED_SECRET)
 }
 
-/// 追加ヘッダが空またはマスク値なら「未変更」とみなす。
-fn are_headers_placeholder(headers: &HashMap<String, String>) -> bool {
-    headers.is_empty() || headers.values().any(|value| value == REDACTED_SECRET)
-}
-
 /// Merge currently held secrets into an incoming config.
 ///
 /// The DTO sent to JS contains presence flags instead of secret values, so an
@@ -427,10 +422,28 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
         merged.ai.openai.api_key = current.ai.openai.api_key.clone();
     }
 
-    // headers は DTO から除外したため、GUI の往復で空／マスク値が来ても現在値を保持する。
-    // 削除する手段は config.toml の直接編集に限定する。
-    if are_headers_placeholder(&merged.ai.openai.extra_headers) {
+    // extra_headers は DTO から除外している。空 map は「未変更」として全件を現在値で
+    // 維持する（ConfigPatch 往復 / 既存契約）。非空ならキー単位でマージし、
+    // マスク値（***）のキーだけ現在値を復元し、それ以外のキーは incoming を採用する
+    // （PR-M05: 一部マスクでヘッダ全体が捨てられる問題の修正）。
+    // 現在側に存在しないマスクキーは sentinel を実値として保存しないため破棄する。
+    if merged.ai.openai.extra_headers.is_empty() {
         merged.ai.openai.extra_headers = current.ai.openai.extra_headers.clone();
+    } else {
+        let current_headers = &current.ai.openai.extra_headers;
+        let incoming_headers = std::mem::take(&mut merged.ai.openai.extra_headers);
+        merged.ai.openai.extra_headers = incoming_headers
+            .into_iter()
+            .filter_map(|(key, value)| {
+                if value == REDACTED_SECRET {
+                    current_headers
+                        .get(&key)
+                        .map(|current| (key, current.clone()))
+                } else {
+                    Some((key, value))
+                }
+            })
+            .collect();
     }
 
     if let (Some(current_drive), Some(incoming_drive)) = (
@@ -482,6 +495,29 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     }
 
     merged
+}
+
+/// JS から届いた生の [`AppConfig`] を [`ConfigView`] / [`ConfigPatch`] と同じ DTO 境界へ正規化する。
+///
+/// `update_config` は `AppConfig` 全体を受け取るため、JS が DTO 外の
+/// `extra_headers` / ローカルパス / 秘密値を直接注入できる。ここで
+/// `ConfigPatch::apply_to()` と同じプレースホルダ化を通し、現在値の復元を
+/// [`merge_secrets`] に一本化する（ADR-0132 の不変条件を維持）。
+/// 公開フィールドは `ConfigView` の allow-list を通るためそのまま保持される。
+///
+/// `apply_to()` は現在 `current` を参照しないが、将来復元処理が移っても挙動が
+/// 変わらないよう、呼び出し側の現在値をそのまま渡す。
+fn normalize_to_dto_boundary(raw: &AppConfig, current: &AppConfig) -> AppConfig {
+    ConfigPatch::from(raw).apply_to(current)
+}
+
+/// JS から届いた生の [`AiConfig`] のうち、DTO 外の `extra_headers` だけを落とす。
+///
+/// `api_key` は ADR-0098 の契約で明示的新値を受け入れるため維持する。
+/// 空にした `extra_headers` は [`merge_secrets`] が現在値を復元する（既存契約）。
+fn normalize_ai_from_js(mut ai: AiConfig) -> AiConfig {
+    ai.openai.extra_headers.clear();
+    ai
 }
 
 /// 保存・再初期化前に両プロバイダの base_url を検証する。
@@ -538,7 +574,10 @@ pub async fn update_config(
     config: AppConfig,
 ) -> Result<(), String> {
     let current = state.config();
-    let merged = merge_secrets(&current, &config);
+    // 生 AppConfig の DTO 外フィールドは JS の注入を許さない。境界まで落としてから
+    // merge_secrets() に渡し、現在値の復元は従来どおり merge_secrets() に任せる。
+    let normalized = normalize_to_dto_boundary(&config, &current);
+    let merged = merge_secrets(&current, &normalized);
     validate_ai_base_urls(&merged.ai)?;
     let changed = ai_or_lint_changed(&current, &merged);
     commit_validated_config(state.inner(), merged, changed)
@@ -573,7 +612,9 @@ pub async fn update_ai_config(
 ) -> Result<(), String> {
     let current = state.config();
     let mut incoming = current.clone();
-    incoming.ai = ai_config;
+    // extra_headers は DTO 外。JS の注入を許さず空にし、merge_secrets() の
+    // 現在値復元に任せる。api_key は ADR-0098 の明示的新値契約を維持する。
+    incoming.ai = normalize_ai_from_js(ai_config);
     let config = merge_secrets(&current, &incoming);
     validate_ai_base_urls(&config.ai)?;
     let changed = ai_or_lint_changed(&current, &config);
@@ -872,6 +913,151 @@ mod tests {
             merged.ai.openai.extra_headers,
             incoming.ai.openai.extra_headers
         );
+    }
+
+    /// `update_config` 相当の正規化＋マージで、JS が DTO 外に注入した値が保存されないこと。
+    #[test]
+    fn update_config_normalization_drops_js_injected_hidden_fields() {
+        let mut current = config_with_paths();
+        current.ai.openai.extra_headers.insert(
+            "X-Real-Header".to_string(),
+            "real-value-from-config-toml".to_string(),
+        );
+
+        // JS が完全な AppConfig に詰めて送ってきた想定の生入力。
+        let mut raw = current.clone();
+        raw.ai.openai.extra_headers.insert(
+            "X-Js-Injected".to_string(),
+            "attacker-controlled".to_string(),
+        );
+        raw.ai.openai.api_key = Some("attacker-key".to_string());
+        raw.general.data_dir = Some(PathBuf::from("/js/injected/data"));
+        raw.storage
+            .recent_paths
+            .push(PathBuf::from("/js/injected/book.epub"));
+
+        // 正規化単体で DTO 外フィールドが落ちること。
+        let normalized = normalize_to_dto_boundary(&raw, &current);
+        assert!(normalized.ai.openai.extra_headers.is_empty());
+        assert!(normalized.ai.openai.api_key.is_none());
+        assert!(normalized.general.data_dir.is_none());
+        assert!(normalized.storage.recent_paths.is_empty());
+        // 公開フィールドは allow-list を通して保持されること。
+        assert_eq!(normalized.general.theme, raw.general.theme);
+        assert_eq!(normalized.ai.openai.base_url, raw.ai.openai.base_url);
+
+        let merged = merge_secrets(&current, &normalized);
+
+        // 注入ヘッダは保存されず、config.toml 側の実ヘッダだけが残る。
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            current.ai.openai.extra_headers
+        );
+        assert!(!merged.ai.openai.extra_headers.contains_key("X-Js-Injected"));
+        assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
+        assert_eq!(merged.general.data_dir, current.general.data_dir);
+        assert_eq!(merged.storage.recent_paths, current.storage.recent_paths);
+    }
+
+    /// `update_ai_config` 相当の正規化＋マージで、JS が送った extra_headers が
+    /// 保存されず現在値が残ること。api_key の明示的新値は受け入れられること。
+    #[test]
+    fn update_ai_normalization_drops_js_headers_but_accepts_new_api_key() {
+        let mut current = config_with_secrets();
+        current.ai.openai.extra_headers.insert(
+            "X-Real-Header".to_string(),
+            "real-value-from-config-toml".to_string(),
+        );
+
+        // JS が生 AiConfig に詰めて送ってきた想定の入力。
+        let mut js_ai = current.ai.clone();
+        js_ai.openai.extra_headers.insert(
+            "X-Js-Injected".to_string(),
+            "attacker-controlled".to_string(),
+        );
+        js_ai.openai.api_key = Some("sk-explicit-new-key".to_string());
+
+        let normalized = normalize_ai_from_js(js_ai);
+        assert!(normalized.openai.extra_headers.is_empty());
+        assert_eq!(
+            normalized.openai.api_key.as_deref(),
+            Some("sk-explicit-new-key")
+        );
+
+        let mut incoming = current.clone();
+        incoming.ai = normalized;
+        let merged = merge_secrets(&current, &incoming);
+
+        // 注入ヘッダは保存されず、config.toml 側の実ヘッダだけが残る。
+        assert_eq!(
+            merged.ai.openai.extra_headers,
+            current.ai.openai.extra_headers
+        );
+        assert!(!merged.ai.openai.extra_headers.contains_key("X-Js-Injected"));
+        // api_key は ADR-0098 の契約どおり明示的新値が採用される。
+        assert_eq!(
+            merged.ai.openai.api_key.as_deref(),
+            Some("sk-explicit-new-key")
+        );
+    }
+
+    /// マスク値キーは現在値を復元し、それ以外のキーは incoming を採用すること。
+    #[test]
+    fn merge_secrets_restores_masked_header_keys_and_keeps_other_updates() {
+        let mut current = config_with_secrets();
+        current
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Kept".to_string(), "current-value".to_string());
+        current
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Old".to_string(), "old-value".to_string());
+
+        let mut incoming = current.clone();
+        incoming.ai.openai.extra_headers.clear();
+        incoming
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Kept".to_string(), REDACTED_SECRET.to_string());
+        incoming
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-New".to_string(), "new-value".to_string());
+        // 現在側に存在しないマスクキーは sentinel を保存しないため破棄される。
+        incoming
+            .ai
+            .openai
+            .extra_headers
+            .insert("X-Unknown".to_string(), REDACTED_SECRET.to_string());
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert_eq!(merged.ai.openai.extra_headers.len(), 2);
+        assert_eq!(
+            merged
+                .ai
+                .openai
+                .extra_headers
+                .get("X-Kept")
+                .map(String::as_str),
+            Some("current-value")
+        );
+        assert_eq!(
+            merged
+                .ai
+                .openai
+                .extra_headers
+                .get("X-New")
+                .map(String::as_str),
+            Some("new-value")
+        );
+        assert!(!merged.ai.openai.extra_headers.contains_key("X-Old"));
+        assert!(!merged.ai.openai.extra_headers.contains_key("X-Unknown"));
     }
 
     #[test]
