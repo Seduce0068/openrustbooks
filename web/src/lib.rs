@@ -1849,9 +1849,26 @@ fn export_positions() -> usize {
             positions.insert(key, serde_json::Value::String(value));
         }
     }
-    let count = positions.len();
+    // エディタの下書きも含める。1 MiB 超の値は復元側で受け付けないため、
+    // エクスポート側でも除外する（ADR-0167 の上限を維持）。
+    let mut drafts = serde_json::Map::new();
+    for index in 0..length {
+        let Ok(Some(key)) = storage.key(index) else {
+            continue;
+        };
+        if !key.starts_with(EDITOR_DRAFT_KEY_PREFIX) {
+            continue;
+        }
+        if let Ok(Some(value)) = storage.get_item(&key)
+            && value.len() <= EDITOR_DRAFT_MAX_BYTES
+        {
+            drafts.insert(key, serde_json::Value::String(value));
+        }
+    }
+    let count = positions.len() + drafts.len();
     if count == 0 {
-        // 保存済み位置が無い場合は空ファイルを出力しない（呼び出し側が警告を表示する）。
+        // 保存済み位置・下書きが無い場合は空ファイルを出力しない
+        // （呼び出し側が警告を表示する）。
         return 0;
     }
 
@@ -1899,6 +1916,7 @@ fn export_positions() -> usize {
         settings.unwrap_or(serde_json::Value::Null),
     );
     root.insert("history".to_string(), serde_json::Value::Object(history));
+    root.insert("drafts".to_string(), serde_json::Value::Object(drafts));
 
     let Ok(raw) = serde_json::to_string_pretty(&root) else {
         return 0;
@@ -1940,8 +1958,9 @@ fn export_positions() -> usize {
 
 /// JSON 文字列を検証して取り込む。(読書位置の件数, 履歴の件数) を返す。
 ///
-/// 位置／履歴の set_item が 1 件でも失敗した場合は `save_failed` に true を
-/// 書き、呼び出し側が成功文言で失敗通知を上書きしないようにする。
+/// 下書きは復元するが、上記の件数には含めない。
+/// 位置／履歴／下書きの set_item が 1 件でも失敗した場合は `save_failed` に
+/// true を書き、呼び出し側が成功文言で失敗通知を上書きしないようにする。
 /// 通知自体はこの関数が 1 回だけ発行する。
 #[cfg(target_arch = "wasm32")]
 fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize), String> {
@@ -2091,13 +2110,46 @@ fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize),
         }
     }
 
+    // エディタ下書きの取り込み。現在同じキーが存在する場合は維持し
+    // （ADR-0157）、値が文字列で 1 MiB 以下のものだけ復元する（ADR-0167）。
+    // 復元件数は位置・履歴の戻り値に含めず、set_item の失敗は save_failed
+    // にだけ反映する。下書きだけのバックアップを「データなし」と誤判定
+    // しないよう、空判定用に成功件数だけ数える。
+    let mut imported_drafts = 0_usize;
+    if let Some(serde_json::Value::Object(drafts)) = map.get("drafts") {
+        for (key, value) in drafts {
+            if !key.starts_with(EDITOR_DRAFT_KEY_PREFIX) {
+                continue;
+            }
+            let serde_json::Value::String(text) = value else {
+                continue;
+            };
+            if text.len() > EDITOR_DRAFT_MAX_BYTES {
+                continue;
+            }
+            if storage.get_item(key).ok().flatten().is_some() {
+                continue;
+            }
+            if storage.set_item(key, text).is_ok() {
+                imported_drafts += 1;
+            } else {
+                *save_failed = true;
+            }
+        }
+    }
+
     if *save_failed {
-        // 位置・履歴の set_item 失敗は複数件でも 1 回だけ通知する。
+        // 位置・履歴・下書きの set_item 失敗は複数件でも 1 回だけ通知する。
         // キー名・値・件数・生エラーは載せない（ADR-0154 / ADR-0165）。
         report_save_failure("インポート", SaveErrorTarget::Reader);
     }
 
-    if imported == 0 && imported_history == 0 && positions.is_empty() && settings.is_none() {
+    if imported == 0
+        && imported_history == 0
+        && imported_drafts == 0
+        && positions.is_empty()
+        && settings.is_none()
+    {
         return Err("取り込めるデータがありませんでした".to_string());
     }
     Ok((imported, imported_history))

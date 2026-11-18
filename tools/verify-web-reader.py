@@ -800,7 +800,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 231 + checker.equal 17 = 248。
+    # 期待 check 総数: checker.check 232 + checker.equal 17 = 249。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -819,7 +819,9 @@ async def run_checks(cdp: Cdp) -> int:
     # Import を confirm=false でキャンセルしたときに取り込みも status 変更もしない検証 +1。
     # リセット時の設定保存失敗で成功文言を出さず失敗通知だけを出す検証 +1（ADR-0165）。
     # Save クリックなしのデバウンス自動保存→リロード復元の検証 +1（R6 TD-H05）。
-    checker = Checker(expected=248)
+    # 下書きの Export→localStorage clear→Import ラウンドトリップ（1 MiB 超の
+    # 下書きは除外）+1（ADR-0167 / ADR-0180）。
+    checker = Checker(expected=249)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -849,7 +851,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 248 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 249 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -2911,6 +2913,117 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
                 restored["position"] is not None,
             )
     shutil.rmtree(download_dir, ignore_errors=True)
+
+    # 下書きのエクスポート→インポートのラウンドトリップ。
+    # エクスポート JSON に drafts が含まれること（1 MiB 超は除外）、
+    # バックアップ関連キーを片付けた後で下書きが復元されること、改ざん JSON の
+    # 1 MiB 超 drafts がインポート側でも拒否されることを 1 check で検証する。
+    draft_key = "openrustbooks:editor:e2e-export"
+    oversized_key = "openrustbooks:editor:e2e-oversized"
+    tampered_key = "openrustbooks:editor:e2e-tampered-valid"
+    draft_text = "E2E draft body for export/import"
+    tampered_text = "tampered valid draft"
+    tampered_path = SAMPLE.parent / "draft-tampered.json"
+    await cdp.evaluate(
+        f"localStorage.setItem({json.dumps(draft_key)}, {json.dumps(draft_text)})"
+    )
+    # 1 MiB 超の下書きはバックアップに含めない（ADR-0167 / ADR-0180）。
+    await cdp.evaluate(
+        f"localStorage.setItem({json.dumps(oversized_key)}, 'x'.repeat(1048577))"
+    )
+    draft_dl = SAMPLE.parent / "draft-downloads"
+    draft_dl.mkdir(parents=True, exist_ok=True)
+    await cdp.send(
+        "Browser.setDownloadBehavior",
+        {"behavior": "allow", "downloadPath": str(draft_dl), "eventsEnabled": True},
+    )
+    await cdp.evaluate("document.querySelector('#reader-export').click()")
+    draft_exported = None
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        candidates = sorted(draft_dl.glob("*.json"))
+        if candidates:
+            draft_exported = candidates[0]
+            break
+        await asyncio.sleep(0.2)
+    draft_roundtrip = False
+    if draft_exported is not None:
+        draft_payload = _json.loads(draft_exported.read_text(encoding="utf-8"))
+        exported_drafts = draft_payload.get("drafts", {})
+        # localStorage.clear() の代わりに、このラウンドトリップが対象とする
+        # バックアップ関連キーだけを片付ける（後続テストの状態を汚さない）。
+        await cdp.evaluate(
+            "localStorage.removeItem('openrustbooks:settings');"
+            "localStorage.removeItem('openrustbooks:position:sample.epub:1:1');"
+            "localStorage.removeItem('openrustbooks:history:sample.epub:1:1');"
+            f"localStorage.removeItem({json.dumps(draft_key)});"
+            f"localStorage.removeItem({json.dumps(oversized_key)})"
+        )
+        document = await cdp.send("DOM.getDocument", {"depth": -1})
+        root_id3 = document["result"]["root"]["nodeId"]
+        node = await cdp.send(
+            "DOM.querySelector",
+            {"nodeId": root_id3, "selector": "#reader-import-file"},
+        )
+        if node["result"]["nodeId"] != 0:
+            await select_import_file(cdp, node["result"]["nodeId"], draft_exported)
+            await wait_until(
+                cdp,
+                "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                timeout=5,
+            )
+            restored_draft = await cdp.evaluate(
+                f"localStorage.getItem({json.dumps(draft_key)})"
+            )
+            oversized_restored = await cdp.evaluate(
+                f"localStorage.getItem({json.dumps(oversized_key)})"
+            )
+            # 改ざん JSON を直接インポートし、import 側の 1 MiB ガードを確認する。
+            # positions は空で settings/history は含めないため、下書きだけでも
+            # 「データなし」エラーにならないことも同時に確認できる。
+            tampered_path.write_text(
+                _json.dumps(
+                    {
+                        "version": 1,
+                        "positions": {},
+                        "drafts": {
+                            oversized_key: "x" * 1048577,
+                            tampered_key: tampered_text,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            await select_import_file(cdp, node["result"]["nodeId"], tampered_path)
+            tampered_valid_restored = await wait_until(
+                cdp,
+                f"localStorage.getItem({json.dumps(tampered_key)}) === {json.dumps(tampered_text)}",
+                timeout=5,
+            )
+            tampered_oversized_restored = await cdp.evaluate(
+                f"localStorage.getItem({json.dumps(oversized_key)})"
+            )
+            draft_roundtrip = (
+                exported_drafts.get(draft_key) == draft_text
+                and oversized_key not in exported_drafts
+                and restored_draft == draft_text
+                and oversized_restored is None
+                and tampered_valid_restored
+                and tampered_oversized_restored is None
+            )
+    checker.check(
+        "下書きがエクスポートされバックアップキー削除後にインポートで復元される",
+        draft_roundtrip,
+        f"(exported={draft_exported is not None})",
+    )
+    # 自キーだけ片付ける（後続テストが同じ localStorage を使うため clear しない）。
+    await cdp.evaluate(
+        f"localStorage.removeItem({json.dumps(draft_key)});"
+        f"localStorage.removeItem({json.dumps(oversized_key)});"
+        f"localStorage.removeItem({json.dumps(tampered_key)})"
+    )
+    shutil.rmtree(draft_dl, ignore_errors=True)
+    tampered_path.unlink(missing_ok=True)
 
     # 同一章内のフラグメント移動も履歴に記録される。
     await open_sample(cdp)
