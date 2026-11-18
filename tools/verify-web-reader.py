@@ -310,7 +310,11 @@ async def select_page_target(browser_ws_url: str, known_ids: set[str]) -> dict:
     async with websockets.connect(browser_ws_url, max_size=None) as ws:
         cdp = Cdp(ws)
         while time.time() < deadline:
-            response = await cdp.send("Target.getTargets")
+            # recv の既定 10s が 8s の deadline を飲み込まないよう、残時間以内に抑える。
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            response = await cdp.send("Target.getTargets", timeout=min(2.0, remaining))
             targets = response.get("result", {}).get("targetInfos", [])
             pages = [t for t in targets if t.get("type") == "page"]
             # 差分はヒント: 起動前に存在しなかった id を優先する。
@@ -353,6 +357,10 @@ DIAGNOSTIC_EVENTS = {
 MAX_DIAGNOSTIC_EVENTS = 500
 MAX_REQUEST_URLS = 500
 
+# CDP の 1 メッセージ受信あたりのタイムアウト（秒）。wait_until の既定 20s より短い値に
+# して、CDP が無応答でもデッドラインが効くようにする（ADR-0142 / 0143 は未決定の暫定値）。
+CDP_RECV_TIMEOUT = 10.0
+
 
 class Cdp:
     def __init__(self, ws):
@@ -390,12 +398,31 @@ class Cdp:
         self.dropped_diagnostic_events = 0
         return events, urls, dropped
 
-    async def send(self, method: str, params: dict | None = None) -> dict:
+    async def send(
+        self, method: str, params: dict | None = None, timeout: float = CDP_RECV_TIMEOUT
+    ) -> dict:
         self.counter += 1
         request_id = self.counter
         await self.ws.send(json.dumps({"id": request_id, "method": method, "params": params or {}}))
         while True:
-            message = json.loads(await self.ws.recv())
+            try:
+                raw = await asyncio.wait_for(self.ws.recv(), timeout=timeout)
+            except asyncio.TimeoutError as exc:
+                # CDP が沈黙したら待ちを打ち切る（fail-closed）。診断用にメソッド名、
+                # request_id、退避済み／破棄済みのイベント数と内容の抜粋を添える。
+                # 抜粋は non-destructive（take_diagnostics はここでは呼ばない）。
+                preview = [
+                    f"{event.get('method', '')}: {str(event.get('params', {}))[:160]}"
+                    for event in self.diagnostic_events[:3]
+                ]
+                raise RuntimeError(
+                    f"CDP 応答タイムアウト: method={method}, request_id={request_id}, "
+                    f"timeout={timeout}s, "
+                    f"buffered_diagnostic_events={len(self.diagnostic_events)}, "
+                    f"dropped_diagnostic_events={self.dropped_diagnostic_events}, "
+                    f"diagnostic_event_preview={preview!r}"
+                ) from exc
+            message = json.loads(raw)
             if message.get("id") == request_id:
                 return message
             if "method" in message:
@@ -433,6 +460,9 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
         try:
             if await cdp.evaluate(expression):
                 return True
+        except RuntimeError:
+            # CDP 無応答は検証基盤の失敗。リトライで隠さず fail-closed で伝播させる。
+            raise
         except Exception:
             pass
         await asyncio.sleep(0.25)
@@ -631,9 +661,22 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 
 async def run_checks(cdp: Cdp) -> int:
+    """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
     # 期待 check 総数: checker.check 212 + checker.equal 17 = 229。
     checker = Checker(expected=229)
+    try:
+        return await _run_checks(cdp, checker)
+    except RuntimeError as exc:
+        print(f"--- CDP エラー: {exc} ---", flush=True)
+        print("--- startup diagnostics [CDP タイムアウト] ---", flush=True)
+        for line in format_cdp_diagnostics(cdp):
+            print(f"  {line}", flush=True)
+        print("--- end startup diagnostics ---", flush=True)
+        finish(checker)
+        raise
 
+
+async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
     await cdp.send("Log.enable")
@@ -3476,6 +3519,10 @@ async def main() -> int:
         async with websockets.connect(target["webSocketDebuggerUrl"], max_size=None) as ws:
             cdp = Cdp(ws)
             return await run_checks(cdp)
+    except RuntimeError as exc:
+        # run_checks 側で診断とサマリは出力済み。traceback を出さず rc=1 で終える。
+        print(f"E2E 失敗 (RuntimeError): {exc}", file=sys.stderr, flush=True)
+        return 1
     finally:
         chrome.send_signal(signal.SIGTERM)
         try:
