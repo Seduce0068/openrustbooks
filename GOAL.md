@@ -1,39 +1,23 @@
 # Goal
 
-設定保存と AI サービス再初期化を 1 トランザクション化する（R6 PR-H04）。
+設定保存と AI サービス再初期化をトランザクション化する（R6 PR-H04、ADR-0177）。
 
 ## Scope
 
-### 背景
-
-`update_config` / `update_config_patch` / `update_ai_config` / `update_lint_config` /
-`clear_secrets` は `state.update_config()` → `state.save_config()` →
-`state.refresh_ai_service()` の順でコミットする。`refresh_ai_service()` が失敗すると
-メモリと config.toml には新設定が残る一方 AI service だけ None になり、
-利用者には失敗が返るが再起動後は新設定が有効という中途半端な状態になる。
-
 ### 成果物
 
-- `desktop/src/state/mod.rs`: 変更（候補設定で service を準備し、保存成功後にコミット）
-- `desktop/src/commands/config.rs`: 変更（全更新コマンドを新 API へ統一）
+- `desktop/src/state/mod.rs`: prepare_ai_service / commit_config、unit 3 件
+- `desktop/src/commands/config.rs`: 6 コマンドを新 API 化
 - `docs/decisions/0177-config-commit-transaction.md`: 追加
-- `GOAL.md` / `todo.md`: 契約・完了反映
+- `todo.md`: PR-H04 を完了へ移動
 
-### 必須事項
+### 決定
 
-1. AI service の生成を候補 `AppConfig` に対して先に行い、失敗時はメモリ・ディスク・service を一切変更しない。
-2. ディスク保存が失敗した場合はメモリ設定を旧値へロールバックし、旧 service を維持する。
-3. 保存成功後にのみ新設定と新 service をコミットする（無効化なら service は None）。
-4. 既存の validation / merge_secrets / no-op 判定を維持する。
-5. unit test を追加（service 生成失敗時に設定不変、成功時に service 更新）。
-6. 全ゲート成功（E2E 247 維持）。
+- 生成失敗時は config / disk / service の 3 状態が不変。
+- 保存成功後にのみ service を置換。
+- clear_secrets の merge_secrets 回避契約を維持。
+- save の原子化は未決定として ADR に記録。
 
 ## Acceptance criteria
 
-- 全ゲート成功、E2E 247 項目成功。
-
-## Constraints
-
-- 新規依存を追加しない。
-- 既存の fail-closed（service 生成失敗時 None）を維持する。
-- `master` へ push する。force push はしない。
+- E2E 247 項目、全ゲート成功（検証済み）。
