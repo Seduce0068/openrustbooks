@@ -33,8 +33,6 @@ status: current
   根拠 `web/src/lib.rs:219-220,248-272,281-292` / `docs/requirements.md:159`。
 - 【TD-H06】エディタ下書きがバックアップのエクスポート／インポート対象外。
   根拠 `web/src/lib.rs:1397-1409,1716-1777,1843-1855,1988`。
-- 【PR-H05】設定リセットが保存失敗 status を成功メッセージで上書きする。
-  根拠 `web/src/lib.rs:3256-3267` / `web/src/lib.rs:2190-2211`。
 - 【PR-H06】SVG サニタイズが core（ammonia）と web（DomParser + 手動）で二重実装され drift リスク。
   根拠 `core/src/sanitize.rs:124` / `web/src/lib.rs:940,1040,2298`。
 - 【PR-H07】README の ADR 一覧で 0098〜0131 の説明が ADR-0132 に入れ子になっている。
@@ -221,6 +219,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-H05】設定リセットの保存失敗上書きを修正。save_settings を bool 化し、
+      成功時のみ成功文言を表示。E2E 247 件・全ゲート成功 / ADR-0175。
+      旧 :3883-3924 の setItem オーバーライド try/finally 欠如は未決定として継続。
 - [x] 【PR-H02 / TD-H02】`read_text` の不正 UTF-8 を U+FFFD 置換で返すよう修正。
       有効 UTF-8 はゼロコピー、エラー文言への内容埋め込みを廃止。
       unit 2 件追加（core 210 件）、`./scripts/verify.sh` rc=0 / E2E 246 件成功
