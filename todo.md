@@ -57,8 +57,6 @@ status: current
   根拠 `core/src/ai_markdown/client.rs:332,437-452`。行バッファと timeout を追加。
 - 【PR-M04】`read` の offset/limit に上限が無く `max_file_size` も未適用。
   根拠 `core/src/io.rs:34,108`。
-- 【PR-M06】atomic write の tmp パスが固定で並行書き込みが衝突する。
-  根拠 `core/src/io.rs:453-456`。
 - 【PR-M07】Google Fonts への preconnect が CSP 対象外で外部送信される。
   根拠 `web/index.html:12-14`。
 - 【PR-M08 / TD-M08】設定モデルが AppConfig / WasmConfig / ReaderSettings / SettingsView の 4 重。
@@ -192,6 +190,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M06】atomic write の tmp 名を `<file>.<pid>.<counter>.tmp` へ一意化。
+      create_new + 128 回リトライ、失敗時削除。unit 4 件（core 228）。
+      E2E 249 件・全ゲート成功 / ADR-0188。
 - [x] 【PR-M02】table 数値属性（colspan/rowspan/start/value/span）を fail-closed 検証。
       不正値は属性のみ削除、unit 4 件追加（core 224）。E2E 249 件・全ゲート成功 / ADR-0187。
 - [x] 【PR-M03 / PR-M05】設定 IPC 境界を DTO 正規化へ統一。
