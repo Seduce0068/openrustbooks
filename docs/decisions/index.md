@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 193 件）。
+openrustbooks の ADR 一覧（全 194 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -388,3 +388,5 @@ openrustbooks の ADR 一覧（全 193 件）。
   - status: accepted — Reader アンマウント時に残余の object URL を revoke し、SPA 往復によるメモリ残存を防ぐ決定を記録する。
 - [ADR-0193: 設定フォームの読み取り専用化](0193-settings-form-readonly.md)
   - status: accepted — ブラウザ版の設定フォームを契約どおり読み取り専用にし、変更できると誤解させない決定を記録する。
+- [ADR-0194: lint 検証分岐の一元化](0194-lint-validation-unification.md)
+  - status: accepted — native と wasm で重複していた auto_fix 分岐を lint.rs の共通関数へ集約する決定を記録する。
