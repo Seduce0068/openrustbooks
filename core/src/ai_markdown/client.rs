@@ -83,7 +83,6 @@ pub struct AiResponse {
 #[async_trait]
 pub trait TokenStream: Send + Unpin + 'static {
     async fn next_token(&mut self) -> CoreResult<Option<String>>;
-    fn is_done(&self) -> bool;
 }
 
 /// Provider whose base URL is being validated.
@@ -315,10 +314,6 @@ impl TokenStream for OpenAiTokenStream {
         }
         Ok(None)
     }
-
-    fn is_done(&self) -> bool {
-        false // Simplified
-    }
 }
 
 /// Ollama local LLM client
@@ -538,11 +533,6 @@ impl TokenStream for OllamaTokenStream {
             }
         }
     }
-
-    fn is_done(&self) -> bool {
-        // キューに未配信トークンがある間は、まだ完了ではない。
-        self.done && self.responses.is_empty()
-    }
 }
 
 #[cfg(test)]
@@ -721,22 +711,21 @@ mod tests {
         let mut stream = ollama_stream(vec![bytes::Bytes::from(data)]);
 
         assert_eq!(stream.next_token().await.unwrap().as_deref(), Some("A"));
-        // done 行を読み込んでいても、キューに残りがある間は is_done() は false。
-        assert!(!stream.is_done());
+        // done 行を読み込んでいても、キューに残りがある間は next_token() は
+        // None を返さず、A → B → C の順に配信される（ADR-0189 の回帰検知）。
         assert_eq!(stream.next_token().await.unwrap().as_deref(), Some("B"));
-        assert!(!stream.is_done());
         assert_eq!(stream.next_token().await.unwrap().as_deref(), Some("C"));
+        // キューが空になった後に初めて完了（None）を返す。
         assert_eq!(stream.next_token().await.unwrap(), None);
-        assert!(stream.is_done());
+        assert_eq!(stream.next_token().await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn ollama_done_in_same_line_keeps_response() {
         let mut stream = ollama_stream(vec![json_line("final", true)]);
 
-        // done フラグよりキューの response を先に返す。
+        // done フラグよりキューの response を先に返し、その後 None で完了する。
         assert_eq!(stream.next_token().await.unwrap().as_deref(), Some("final"));
-        assert!(stream.is_done());
         assert_eq!(stream.next_token().await.unwrap(), None);
     }
 
@@ -867,8 +856,9 @@ mod tests {
     async fn ollama_empty_response_is_not_queued() {
         let mut stream = ollama_stream(vec![json_line("", true)]);
 
+        // 空 response はキューされないため、トークンを返さずに完了する。
         assert_eq!(stream.next_token().await.unwrap(), None);
-        assert!(stream.is_done());
+        assert_eq!(stream.next_token().await.unwrap(), None);
     }
 
     #[tokio::test]

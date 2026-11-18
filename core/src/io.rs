@@ -157,9 +157,6 @@ pub trait StorageBackend: Send + Sync {
     /// Check if path exists
     async fn exists(&self, path: &Path) -> CoreResult<bool>;
 
-    /// Get available space (if applicable)
-    async fn available_space(&self) -> CoreResult<Option<u64>>;
-
     /// Open the path in system file manager (if local)
     async fn open_in_system(&self, path: &Path) -> CoreResult<()>;
 
@@ -663,11 +660,6 @@ pub mod local {
 
         async fn exists(&self, path: &Path) -> CoreResult<bool> {
             Ok(self.resolve_path(path)?.exists())
-        }
-
-        async fn available_space(&self) -> CoreResult<Option<u64>> {
-            // Simplified - would need platform-specific implementation
-            Ok(None)
         }
 
         async fn open_in_system(&self, path: &Path) -> CoreResult<()> {
