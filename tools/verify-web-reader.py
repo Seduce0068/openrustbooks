@@ -746,9 +746,10 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 214 + checker.equal 17 = 231。
-    # +2 は自然寸法の検証（ラスターの width/height 付与と SVG 既存寸法の維持）。
-    checker = Checker(expected=231)
+    # 期待 check 総数: checker.check 215 + checker.equal 17 = 232。
+    # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
+    # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）。
+    checker = Checker(expected=232)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -777,7 +778,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 231 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 232 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3548,6 +3549,30 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "ブラウザ版の設定画面は例外なくデスクトップ版のみと表示する",
         settings_mounted and offline_notice and settings_errors == [],
         f"(mounted={settings_mounted}, notice={offline_notice}, errors={settings_errors!r})",
+    )
+
+    # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
+    # 分けて表示されることを確認する。設定画面チェックの直後に遷移する最後のチェック
+    # なので、後続の画面状態に影響しない（元の画面へ戻る遷移は不要）。
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/about"})
+    about_mounted = await wait_until(cdp, "document.querySelector('.about-page') !== null")
+    about_lines = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('.about-page .about-content p'))"
+        ".map((el) => el.textContent.trim())"
+    )
+    expected_about_lines = [
+        "EPUB reading: available",
+        "TXT / Markdown / PDF / ZIP: planned",
+        "License: AGPL-3.0-or-later",
+    ]
+    checker.check(
+        "About 画面に正しいライセンスと対応形式が表示される",
+        about_mounted
+        and isinstance(about_lines, list)
+        and all(line in about_lines for line in expected_about_lines)
+        and "License: MIT" not in about_lines
+        and "Supports: EPUB, PDF, Markdown, TXT, ZIP" not in about_lines,
+        f"(mounted={about_mounted}, lines={about_lines!r})",
     )
 
     return finish(checker)

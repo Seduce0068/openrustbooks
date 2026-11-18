@@ -169,10 +169,11 @@ fn AboutPage() -> impl IntoView {
                     <h2>"openrustbooks"</h2>
                     <p>"Version: " {env!("CARGO_PKG_VERSION")}</p>
                     <p>"A Rust-powered document reader and editor"</p>
-                    <p>"Supports: EPUB, PDF, Markdown, TXT, ZIP"</p>
+                    <p>"EPUB reading: available"</p>
+                    <p>"TXT / Markdown / PDF / ZIP: planned"</p>
                     <hr/>
                     <p>"Built with: Tauri, Leptos, Rust"</p>
-                    <p>"License: MIT"</p>
+                    <p>"License: AGPL-3.0-or-later"</p>
                 </div>
             </main>
         </div>
