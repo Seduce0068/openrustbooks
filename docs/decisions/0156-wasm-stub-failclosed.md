@@ -69,7 +69,7 @@ Web UI からは未参照だが、将来接続された際に誤った成功を�
 - JS 文字列エラーを `js_sys::Error` へ変更し `e.message` を提供するか
   （テスト契約 `as_string()` の変更を伴う）。
 - エラー文言の i18n（固定英語のまま）。
-- 実 lint の設計（設定変換、issue 変換、未収束情報、バンドルサイズ計測）。
+- ~~実 lint の設計~~ ADR-0160 で featureless rumdl 接続を実装（未収束情報とサイズ計測は未決定）。
 - `lint_enabled` / `auto_fix` 既定値の扱い、能力フラグの追加。
 - JS 側で catch / reject ハンドリングを接続する際のテスト追加
   （同期 throw と非同期 reject の取り違え注意）。
