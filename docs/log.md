@@ -2,6 +2,8 @@
 
 ## 2026-11-18
 
+- 残タスクを 5 観点のエージェントで探索し、成果を ADR-0151 に集約。
+- `verify.sh` の WASM パス検査を fail-closed 化（WASM＋JS グルー、ADR-0152）。
 - ADR を ADR-0091〜0150 まで追加し、`docs/decisions/index.md` を全 150 件に更新。
 - 画像寸法予約: EPUB の HTML へ自然な width/height を埋め込み、img 属性を fail-closed 検証（ADR-0136/0149/0150）。
 - E2E 期待総数を 229→231 に変更（寸法予約でチェック 2 件追加、ADR-0149）。

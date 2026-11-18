@@ -146,7 +146,7 @@ cargo tauri dev
 
 ### CI
 
-push（`master`）と pull request では、GitHub Actions がローカルの 6 ゲートと
+push（`master`）と pull request では、GitHub Actions がローカルのゲートと
 同じ検証を実行する。検証本体は個人リポジトリ共通の再利用ワークフロー
 （`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）に委譲しており、
 `.github/workflows/ci.yml` は Tauri のビルド依存と wasm32 ゲートを渡す
@@ -164,7 +164,7 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 
 ### 一括検証
 
-`./scripts/verify.sh` で、上記 6 ゲート・`trunk build`・E2E をまとめて実行できる
+`./scripts/verify.sh` で、上記ゲート・wasm-test・audit・`trunk build`・パス検査・E2E をまとめて実行できる
 （一時出力先は自動で削除される）。
 
 ### 手動の E2E 検証

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 150 件）。
+openrustbooks の ADR 一覧（全 152 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -302,3 +302,7 @@ openrustbooks の ADR 一覧（全 150 件）。
   - status: accepted — EPUB 画像の自然寸法を core で取得し、web で width/height 属性として付与する実装を記録する。
 - [ADR-0150: img 寸法属性のサニタイズ検証](0150-img-dimension-validation.md)
   - status: accepted — EPUB HTML の img の width/height を数値検証し、不正値を削除する決定を記録する。
+- [ADR-0151: 残タスク探索結果（R1）](0151-remaining-task-discovery.md)
+  - status: accepted — 5 観点のエージェント探索で発見した残タスクを集約し、次に実行するタスクを記録する。
+- [ADR-0152: WASM パス検査の fail-closed 化](0152-wasm-path-check-failclosed.md)
+  - status: accepted — 配布 WASM の開発ホスト絶対パス検査を、glob 非マッチと grep エラーでも失敗するようにする決定を記録する。
