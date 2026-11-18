@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- E2E wait_until の Python 例外を再送出するよう変更し、基盤失敗の隠蔽を防止（ADR-0183）。
 - E2E Checker に check 名の一意性検証を追加し、総数ゲートの形骸化を防止（ADR-0182）。
 - SVG サニタイズを core の ammonia 共通実装へ一本化し、unit を 212→216 件へ拡充（ADR-0181）。
 - エディタ下書きをバックアップの optional `drafts` field へ追加し、E2E を 248→249 に更新（ADR-0180）。

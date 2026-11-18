@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 182 件）。
+openrustbooks の ADR 一覧（全 183 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -366,3 +366,5 @@ openrustbooks の ADR 一覧（全 182 件）。
   - status: accepted — Web 側の DomParser 手動サニタイズを廃止し、core の ammonia ベース実装へ一本化する決定を記録する。
 - [ADR-0182: E2E check 名の一意性検証](0182-e2e-unique-check-names.md)
   - status: accepted — Checker に check 名の重複検知を追加し、総数ゲートの形骸化を防ぐ決定を記録する。
+- [ADR-0183: wait_until の例外伝播](0183-wait-until-failclosed.md)
+  - status: accepted — E2E 待機ヘルパーで握り潰していた Python 例外を再送出する決定を記録する。
