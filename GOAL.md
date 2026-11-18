@@ -1,36 +1,23 @@
 # Goal
 
-`core/Cargo.toml` の rumdl `default-features = false` を静的ゲートで保護する（R6 TD-M06）。
+rumdl の default-features=false をローカルと CI の両方で静的検査する（R6 TD-M06、ADR-0195）。
 
 ## Scope
 
-### 背景
-
-rumdl の feature は Cargo.lock に記録されないため、
-`core/Cargo.toml` の 2 行（native / wasm）が唯一の担保。
-将来 `default-features = true` に戻ると tower-lsp / notify / jemalloc 等が
-再加入し、CI ディスク・ビルドが劣化しても lock 差分で気付けない。
-
 ### 成果物
 
-- `scripts/verify.sh`: 変更（rumdl feature 静的検査ゲート追加）
+- `scripts/check-rumdl-featureless.sh`: 独立検査スクリプト（引数対応）
+- `scripts/verify.sh`: 薄いラッパーへ置換
+- `.github/workflows/ci.yml`: extra_gates に追加
 - `docs/decisions/0195-rumdl-feature-gate.md`: 追加
-- `GOAL.md` / `todo.md`: 契約・完了反映
+- `todo.md`: TD-M06 を完了へ移動
 
-### 必須事項
+### 決定
 
-1. `core/Cargo.toml` の rumdl 宣言が 2 行とも `default-features = false` であることを検査する。
-2. 宣言が無い／期待と異なる場合は fail-closed でゲート失敗。
-3. 既存の `no-external-font-refs` ゲートと同じ `run` ヘルパー形式を使う。
-4. bash -n / shellcheck / shfmt -d / ./scripts/verify.sh（E2E 250）が成功。
-5. ネガティブテスト（一時的な改変 Cargo.toml で rc=1）を確認。
+- 単一情報源のスクリプトを verify.sh と CI から呼ぶ。
+- 共通ワークフロー自体は変更しない。
+- 期待値固定（version 0.3 / 2 行）、不一致は fail-closed。
 
 ## Acceptance criteria
 
-- 全ゲート成功、E2E 250 項目成功。
-
-## Constraints
-
-- 新規依存を追加しない。
-- `core/Cargo.toml` 自体は変更しない（期待値の固定のみ）。
-- `master` へ push する。force push はしない。
+- E2E 250 項目、全ゲート成功（検証済み）。
