@@ -746,10 +746,11 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 215 + checker.equal 17 = 232。
+    # 期待 check 総数: checker.check 216 + checker.equal 17 = 233。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
-    # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）。
-    checker = Checker(expected=232)
+    # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
+    # localStorage 保存失敗時の status / console 通知の検証 +1。
+    checker = Checker(expected=233)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -778,7 +779,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 232 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 233 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3521,6 +3522,49 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         timeout=5,
     )
     checker.check("- キーで文字サイズが小さくなる", minus_shrunk, f"(before={before_minus!r})")
+
+    # localStorage の setItem を一時的に失敗させ、設定保存の失敗が利用者向け
+    # status と console.error の両方へ出ることを確認する。オーバーライドは
+    # 後続チェックへ影響しないよう必ず元に戻す。
+    await cdp.evaluate("""(() => {
+      window.__orbOriginalSetItem = Storage.prototype.setItem;
+      window.__orbOriginalConsoleError = console.error;
+      window.__orbSaveErrors = [];
+      Storage.prototype.setItem = function () {
+        throw new Error('QuotaExceededError (E2E)');
+      };
+      console.error = function (...args) {
+        window.__orbSaveErrors.push(args.map(String).join(' '));
+        return window.__orbOriginalConsoleError.apply(console, args);
+      };
+      return true;
+    })()""")
+    await cdp.evaluate("document.querySelector('#reader-font-larger').click()")
+    save_error_shown = await wait_until(
+        cdp,
+        "document.querySelector('.reader-status')?.textContent.includes('保存に失敗しました')",
+        timeout=5,
+    )
+    save_error_status = await cdp.evaluate(
+        "document.querySelector('.reader-status')?.textContent ?? ''"
+    )
+    save_error_logs = await cdp.evaluate("JSON.stringify(window.__orbSaveErrors ?? [])")
+    save_error_console = json.loads(save_error_logs) if save_error_logs else []
+    checker.check(
+        "保存失敗時に status と console へ通知する",
+        save_error_shown
+        and "ブラウザの設定または空き容量" in save_error_status
+        and any("保存に失敗" in line for line in save_error_console),
+        f"(status={save_error_status!r}, console={save_error_console!r})",
+    )
+    await cdp.evaluate("""(() => {
+      Storage.prototype.setItem = window.__orbOriginalSetItem;
+      console.error = window.__orbOriginalConsoleError;
+      delete window.__orbOriginalSetItem;
+      delete window.__orbOriginalConsoleError;
+      delete window.__orbSaveErrors;
+      return true;
+    })()""")
 
     # 設定画面: ブラウザ単体では window.__TAURI__ が無いため invoke せず、
     # 例外ではなく「デスクトップ版のみ利用可能」が表示されることを確認する。

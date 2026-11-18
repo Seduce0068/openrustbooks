@@ -1234,16 +1234,41 @@ fn prune_positions(storage: &web_sys::Storage, keep: &str) {
     }
 }
 
-/// 読書位置を保存する。localStorage が使えない場合は何もしない。
+/// 保存失敗を利用者へ通知する共通メッセージ（機微情報は含めない）。
+#[cfg(target_arch = "wasm32")]
+const SAVE_ERROR_MESSAGE: &str =
+    "保存に失敗しました。ブラウザの設定または空き容量を確認してください。";
+
+/// localStorage の保存失敗をコンソールと Reader の status に通知する。
+///
+/// wasm では tracing の出力が確認しづらいため `console.error` を使う。
+/// save 関数は `set_status` を直接持たないので、window へのカスタムイベントで
+/// Reader に伝え、そこで status を更新する。文言は固定なのでイベントに
+/// 機微情報を載せる必要はない。
+#[cfg(target_arch = "wasm32")]
+fn report_save_failure(context: &str) {
+    web_sys::console::error_1(&JsValue::from_str(&format!(
+        "openrustbooks: {context} の保存に失敗しました"
+    )));
+    if let Some(window) = web_sys::window()
+        && let Ok(event) = web_sys::Event::new("openrustbooks:save-error")
+    {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
+/// 読書位置を保存する。localStorage が使えない場合は通知して諦める。
 ///
 /// 保存のたびに古いエントリを掃除する。容量超過で失敗した場合は件数を
-/// 減らして再試行し、それでも失敗したら諦めて読書を妨げない。
+/// 減らして再試行し、それでも失敗したら読書を妨げずに通知する。
 #[cfg(target_arch = "wasm32")]
 fn save_position(key: &str, position: &SavedPosition) {
     let Some(window) = web_sys::window() else {
+        report_save_failure("読書位置");
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
+        report_save_failure("読書位置");
         return;
     };
     let position = SavedPosition {
@@ -1272,6 +1297,7 @@ fn save_position(key: &str, position: &SavedPosition) {
             return;
         }
     }
+    report_save_failure("読書位置");
 }
 
 /// 表示設定の localStorage キー。
@@ -1412,17 +1438,21 @@ fn load_settings() -> ReaderSettings {
         .unwrap_or_default()
 }
 
-/// 表示設定を保存する。localStorage が使えない場合は何もしない。
+/// 表示設定を保存する。localStorage が使えない場合は通知して諦める。
 #[cfg(target_arch = "wasm32")]
 fn save_settings(settings: &ReaderSettings) {
     let Some(window) = web_sys::window() else {
+        report_save_failure("表示設定");
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
+        report_save_failure("表示設定");
         return;
     };
     if let Ok(raw) = serde_json::to_string(settings) {
-        let _ = storage.set_item(SETTINGS_KEY, &raw);
+        if storage.set_item(SETTINGS_KEY, &raw).is_err() {
+            report_save_failure("表示設定");
+        }
     }
 }
 
@@ -1799,13 +1829,15 @@ fn load_history(key: &str, chapter_count: usize) -> Option<SavedHistory> {
     Some(saved)
 }
 
-/// 履歴を保存する。localStorage が使えない場合は何もしない。
+/// 履歴を保存する。localStorage が使えない場合は通知して諦める。
 #[cfg(target_arch = "wasm32")]
 fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
     let Some(window) = web_sys::window() else {
+        report_save_failure("履歴");
         return;
     };
     let Ok(Some(storage)) = window.local_storage() else {
+        report_save_failure("履歴");
         return;
     };
     let saved = SavedHistory {
@@ -1821,7 +1853,9 @@ fn save_history(key: &str, history: &[HistoryEntry], index: usize) {
         index,
     };
     if let Ok(raw) = serde_json::to_string(&saved) {
-        let _ = storage.set_item(key, &raw);
+        if storage.set_item(key, &raw).is_err() {
+            report_save_failure("履歴");
+        }
     }
 }
 
@@ -1931,6 +1965,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         );
         // ページ寿命まで有効にするため保持する。
         on_image_load.forget();
+    }
+    // save 関数からの保存失敗通知を受け取り status に表示する。
+    if let Some(window) = web_sys::window() {
+        let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            set_status.set(SAVE_ERROR_MESSAGE.to_string());
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = window.add_event_listener_with_callback(
+            "openrustbooks:save-error",
+            on_save_error.as_ref().unchecked_ref(),
+        );
+        // ページ寿命まで有効にするため保持する。
+        on_save_error.forget();
     }
     let (cover_url, set_cover_url) = signal(None::<String>);
     // 本文の言語（EPUB の metadata.language）。スクリーンリーダーの発音用。
