@@ -32,7 +32,7 @@ status: accepted
 - OS 追従時にダーク切替ボタン文言が実表示と矛盾し得る
   （`web/src/lib.rs:1952-1957,3187-3188`）。
 - localStorage 保存失敗が黙視される（例: `web/src/lib.rs:1241-1270`）。
-- Clear data / import の確認・保護不足（例: `web/src/lib.rs:2277-2291,1658-1737`）。
+- ~~Clear data の確認不足~~ ADR-0171 で confirm 追加済み（import は残存）。
 - `verify.sh` の WASM パス検査が glob 非マッチ時に fail-open
   （旧 `scripts/verify.sh:71`）。
 
