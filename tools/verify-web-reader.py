@@ -19,6 +19,8 @@ import asyncio
 import base64
 import json
 import os
+import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -232,6 +234,109 @@ def wait_for_debug_port(timeout: float = 20.0) -> None:
         except OSError:
             time.sleep(0.2)
     raise RuntimeError("Chrome のデバッグポートが開きませんでした")
+
+
+# --- 起動した Chrome のターゲットを決定的に特定するための支援関数 --------------------
+# 方針（優先順）:
+#   1. 起動 Chrome 自身の stderr に出る `DevTools listening on ws://.../devtools/browser/<id>`
+#      を捕捉し、その browser-level WS に接続する。port が既存 Chrome に占有されていても
+#      Chrome は [::1] にフォールバックするため、この行は起動プロセス固有の WS を指す。
+#   2. その browser WS で Target.getTargets を呼び、属する page target だけを候補にする。
+#   3. 起動前に /json で採取した target id は「ヒント」（候補の優先順付け）としてのみ使う。
+# 候補が 0 件・複数件・deadline 超過のときは fail-closed で RuntimeError にする。
+BROWSER_WS_RE = re.compile(r"DevTools listening on (ws://[^\s]+/devtools/browser/[0-9a-fA-F-]+)")
+TARGET_SELECT_TIMEOUT = 8.0
+
+
+def fetch_json_targets() -> list[dict] | None:
+    """/json を 1 回だけ読み、失敗したら None を返す（起動前スナップショット用）。"""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{DEBUG_PORT}/json", timeout=1) as response:
+            targets = json.load(response)
+        return targets if isinstance(targets, list) else None
+    except (OSError, ValueError, TimeoutError):
+        return None
+
+
+def snapshot_target_ids() -> set[str]:
+    """差分ヒント用に、Chrome 起動前に見えていた target id を記録する。"""
+    targets = fetch_json_targets()
+    if targets is None:
+        return set()
+    return {t["id"] for t in targets if isinstance(t, dict) and isinstance(t.get("id"), str)}
+
+
+def drain_chrome_stderr(stderr, browser_ws_queue: queue.Queue[str]) -> None:
+    """Chrome の stderr を最後まで読み、browser WS URL をキューへ渡す。
+
+    stderr を PIPE にした以上、読み続けないとバッファが詰まるため専用スレッドで吸い出す。
+    """
+    try:
+        for raw in iter(stderr.readline, b""):
+            match = BROWSER_WS_RE.search(raw.decode("utf-8", errors="replace"))
+            if match:
+                browser_ws_queue.put(match.group(1))
+    except (OSError, ValueError):
+        pass
+    finally:
+        stderr.close()
+
+
+def wait_for_browser_ws(browser_ws_queue: queue.Queue[str], timeout: float = 10.0) -> str:
+    """起動 Chrome 自身が stderr に出した browser WS URL を待つ。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        try:
+            return browser_ws_queue.get(timeout=min(0.2, remaining))
+        except queue.Empty:
+            continue
+    raise RuntimeError(
+        f"起動した Chrome の DevTools listening 行を stderr から取得できませんでした"
+        f"（タイムアウト {timeout}s。デバッグポート {DEBUG_PORT} をバインドできなかった可能性があります）"
+    )
+
+
+async def select_page_target(browser_ws_url: str, known_ids: set[str]) -> dict:
+    """起動 Chrome の browser WS から about:blank の page target を一意に選ぶ（fail-closed）。"""
+    import websockets
+
+    # Target.getTargets の targetInfos には webSocketDebuggerUrl が無いため、
+    # 自身の browser WS と同じオリジンから page WS を組み立てる。
+    ws_base = browser_ws_url.rsplit("/devtools/browser/", 1)[0] + "/devtools/page/"
+    deadline = time.time() + TARGET_SELECT_TIMEOUT
+    async with websockets.connect(browser_ws_url, max_size=None) as ws:
+        cdp = Cdp(ws)
+        while time.time() < deadline:
+            response = await cdp.send("Target.getTargets")
+            targets = response.get("result", {}).get("targetInfos", [])
+            pages = [t for t in targets if t.get("type") == "page"]
+            # 差分はヒント: 起動前に存在しなかった id を優先する。
+            fresh = [t for t in pages if t.get("targetId") not in known_ids]
+            candidates = fresh or pages
+            blanks = [t for t in candidates if t.get("url") == "about:blank"]
+            if blanks:
+                candidates = blanks
+            if len(candidates) > 1:
+                raise RuntimeError(
+                    "起動 Chrome の page target が複数見つかり、接続先を一意に決められませんでした"
+                    f"（browser={browser_ws_url}, candidates="
+                    f"{[(t.get('targetId'), t.get('url')) for t in candidates]!r}）"
+                )
+            if len(candidates) == 1:
+                target = candidates[0]
+                return {
+                    "id": target["targetId"],
+                    "url": target.get("url"),
+                    "webSocketDebuggerUrl": ws_base + target["targetId"],
+                }
+            await asyncio.sleep(0.2)
+    raise RuntimeError(
+        f"起動 Chrome に about:blank の page target が見つかりませんでした"
+        f"（タイムアウト {TARGET_SELECT_TIMEOUT}s, browser={browser_ws_url}）"
+    )
 
 
 # 起動フレークの診断に使う CDP イベントだけを覚える。
@@ -3334,6 +3439,15 @@ async def main() -> int:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
+    # 差分はヒントとしてだけ記録する（決定的な特定は起動 Chrome 自身の browser WS で行う）。
+    known_ids = snapshot_target_ids()
+    if known_ids:
+        print(
+            f"既存 Chrome の target を {len(known_ids)} 件検出（ポート {DEBUG_PORT}）。"
+            "起動 Chrome 自身の browser WS を使って接続先を特定します。",
+            flush=True,
+        )
+
     profile = tempfile.mkdtemp(prefix="orb-chrome-")
     chrome = subprocess.Popen(
         [
@@ -3348,16 +3462,18 @@ async def main() -> int:
             "about:blank",
         ],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
+    browser_ws_queue: queue.Queue[str] = queue.Queue()
+    stderr_thread = threading.Thread(
+        target=drain_chrome_stderr, args=(chrome.stderr, browser_ws_queue), daemon=True
+    )
+    stderr_thread.start()
     try:
-        wait_for_debug_port()
-        with urllib.request.urlopen(f"http://127.0.0.1:{DEBUG_PORT}/json") as response:
-            targets = json.load(response)
-        pages = [target for target in targets if target["type"] == "page"]
-        if not pages:
-            raise RuntimeError("page ターゲットが見つかりませんでした")
-        async with websockets.connect(pages[0]["webSocketDebuggerUrl"], max_size=None) as ws:
+        browser_ws_url = wait_for_browser_ws(browser_ws_queue)
+        target = await select_page_target(browser_ws_url, known_ids)
+        print(f"接続先 page target: {target['id']} ({target['url']})", flush=True)
+        async with websockets.connect(target["webSocketDebuggerUrl"], max_size=None) as ws:
             cdp = Cdp(ws)
             return await run_checks(cdp)
     finally:
