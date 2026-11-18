@@ -208,22 +208,67 @@ fn FileTree() -> impl IntoView {
 /// `on:input` で textarea の値を `content` シグナルへ反映し、`<Preview/>`
 /// が同じシグナルを読むためリアルタイムに更新される。`prop:value` は
 /// 意図的に使わない: 同じ文字列を再代入するとブラウザがキャレットを
-/// 末尾へ戻すため、textarea 自身を入力値の唯一の保持元とする。
-/// デスクトップ専用の操作はブラウザ版では disabled にする。
+/// 末尾へ戻すため、textarea 自身を入力値の唯一の保持元とする（ADR-0161）。
+/// そのため下書きの復元時は `textarea.set_value` と `set_content` の両方を行う。
+/// Save はブラウザ内の localStorage へ下書きを保存し、失敗は ADR-0154 の
+/// 共通通知で利用者へ伝える。他のデスクトップ専用操作は disabled にする。
 #[component]
 fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
+    let (status, set_status) = signal(String::new());
+
+    // 保存失敗（ADR-0154）を受け取り、利用者向けの status に表示する。
+    // dispatch_event は同期なので、Save ハンドラの report_save_failure の
+    // 直後にこのリスナーが走る。本文はイベントにも status にも載せない。
+    if let Some(window) = web_sys::window() {
+        let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            set_status.set(SAVE_ERROR_MESSAGE.to_string());
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = window.add_event_listener_with_callback(
+            "openrustbooks:save-error",
+            on_save_error.as_ref().unchecked_ref(),
+        );
+        // ページ寿命まで有効にするため保持する。
+        on_save_error.forget();
+    }
+
+    // エディタ表示時に下書きを復元する。prop:value を使わない契約を保つため
+    // textarea 自身へ set_value し、シグナルも同じ本文で揃える。
+    Effect::new(move |_| {
+        let Some(draft) = load_editor_draft(&doc_id.get()) else {
+            return;
+        };
+        set_content.set(draft.clone());
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let Some(document) = window.document() else {
+            return;
+        };
+        let Some(element) = document.get_element_by_id("editor-input") else {
+            return;
+        };
+        if let Ok(textarea) = element.dyn_into::<web_sys::HtmlTextAreaElement>() {
+            textarea.set_value(&draft);
+        }
+    });
 
     view! {
         <div class="editor-container" data-doc-id=move || doc_id.get()>
             <div class="editor-toolbar">
                 <button
                     class="btn"
-                    disabled=true
-                    title="Save (desktop only, not implemented in the browser build)"
-                    aria-label="Save (desktop only, not implemented in the browser build)"
+                    title="Save draft (browser local)"
+                    aria-label="Save draft (browser local)"
+                    on:click=move |_| {
+                        let id = doc_id.get();
+                        let text = content.get();
+                        if save_editor_draft(&id, &text) {
+                            set_status.set("下書きを保存しました".to_string());
+                        }
+                    }
                 >
-                    "Save (desktop only)"
+                    "Save draft"
                 </button>
                 <button
                     class="btn"
@@ -259,6 +304,7 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                     <option value="txt">"Plain Text"</option>
                 </select>
             </div>
+            <p class="editor-status" role="status" aria-live="polite">{move || status.get()}</p>
             <textarea
                 id="editor-input"
                 class="editor-pane"
@@ -1270,17 +1316,15 @@ fn prune_positions(storage: &web_sys::Storage, keep: &str) {
 }
 
 /// 保存失敗を利用者へ通知する共通メッセージ（機微情報は含めない）。
-#[cfg(target_arch = "wasm32")]
 const SAVE_ERROR_MESSAGE: &str =
     "保存に失敗しました。ブラウザの設定または空き容量を確認してください。";
 
-/// localStorage の保存失敗をコンソールと Reader の status に通知する。
+/// localStorage の保存失敗をコンソールと status に通知する。
 ///
 /// wasm では tracing の出力が確認しづらいため `console.error` を使う。
 /// save 関数は `set_status` を直接持たないので、window へのカスタムイベントで
-/// Reader に伝え、そこで status を更新する。文言は固定なのでイベントに
-/// 機微情報を載せる必要はない。
-#[cfg(target_arch = "wasm32")]
+/// Reader / Editor に伝え、そこで status を更新する。文言は固定なので
+/// イベントに機微情報を載せる必要はない。
 fn report_save_failure(context: &str) {
     web_sys::console::error_1(&JsValue::from_str(&format!(
         "openrustbooks: {context} の保存に失敗しました"
@@ -1289,6 +1333,39 @@ fn report_save_failure(context: &str) {
         && let Ok(event) = web_sys::Event::new("openrustbooks:save-error")
     {
         let _ = window.dispatch_event(&event);
+    }
+}
+
+/// エディタの下書きを保存する localStorage キーの接頭辞。
+const EDITOR_DRAFT_KEY_PREFIX: &str = "openrustbooks:editor:";
+
+/// ドキュメント ID から下書きキーを作る。
+fn editor_draft_key(doc_id: &str) -> String {
+    format!("{EDITOR_DRAFT_KEY_PREFIX}{doc_id}")
+}
+
+/// 下書き本文を読み込む。localStorage が使えない・キーが無い場合は `None`。
+fn load_editor_draft(doc_id: &str) -> Option<String> {
+    let storage = web_sys::window()?.local_storage().ok()??;
+    storage.get_item(&editor_draft_key(doc_id)).ok()?
+}
+
+/// 下書き本文を保存する。本文は status / console に出さず、失敗時は
+/// ADR-0154 の共通通知（カスタムイベント + console.error）だけを発行する。
+fn save_editor_draft(doc_id: &str, content: &str) -> bool {
+    let Some(window) = web_sys::window() else {
+        report_save_failure("下書き");
+        return false;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        report_save_failure("下書き");
+        return false;
+    };
+    if storage.set_item(&editor_draft_key(doc_id), content).is_ok() {
+        true
+    } else {
+        report_save_failure("下書き");
+        false
     }
 }
 

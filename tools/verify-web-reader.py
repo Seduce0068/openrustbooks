@@ -776,15 +776,17 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 221 + checker.equal 17 = 238。
+    # 期待 check 総数: checker.check 223 + checker.equal 17 = 240。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
     # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1、
     # 画像読み込み後の CLS 直接計測 +1（ADR-0149 の残項目）、
     # エディタの textarea 入力→Preview 反映とデスクトップ専用操作の disabled 化 +2
-    # （ADR-0127 の最小構成）、Markdown 見出しの描画と script 除去 +1。
-    checker = Checker(expected=238)
+    # （ADR-0127 の最小構成）、Markdown 見出しの描画と script 除去 +1、
+    # エディタ下書きの localStorage 保存→リロード復元 +1 と保存失敗の status /
+    # console 通知 +1（ADR-0154 / ADR-0161）。
+    checker = Checker(expected=240)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -814,7 +816,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 238 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 240 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3789,24 +3791,137 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f"(mounted={editor_mounted}, preview={markdown_preview!r})",
     )
 
+    # Save は browser local の下書き保存へ有効化され、他の 4 操作は従来どおり
+    # desktop only で disabled（title / aria の文言は維持）。
     toolbar_controls = await cdp.evaluate(
         "Array.from(document.querySelectorAll('.editor-toolbar button, .editor-toolbar select'))"
         ".map((el) => ({ tag: el.tagName.toLowerCase(), label: el.textContent.trim(),"
         " disabled: el.disabled, reason: ((el.getAttribute('title') || '') + ' '"
         " + (el.getAttribute('aria-label') || '')).toLowerCase() }))"
     )
+    controls = toolbar_controls if isinstance(toolbar_controls, list) else []
+    save_controls = [item for item in controls if "save draft" in item.get("reason", "")]
+    desktop_controls = [item for item in controls if "save draft" not in item.get("reason", "")]
     checker.check(
-        "エディタのデスクトップ専用操作が disabled で理由付き",
+        "エディタの Save が有効でデスクトップ専用操作が disabled で理由付き",
         isinstance(toolbar_controls, list)
-        and len(toolbar_controls) == 5
-        and all(item.get("disabled") is True for item in toolbar_controls)
+        and len(controls) == 5
+        and len(save_controls) == 1
+        and save_controls[0].get("disabled") is False
+        and "browser local" in save_controls[0].get("reason", "")
+        and len(desktop_controls) == 4
+        and all(item.get("disabled") is True for item in desktop_controls)
         and all(
             "desktop only" in item.get("reason", "")
             and "not implemented" in item.get("reason", "")
-            for item in toolbar_controls
+            for item in desktop_controls
         ),
         f"(controls={toolbar_controls!r})",
     )
+
+    # 下書きの保存→リロード復元 (ADR-0161): textarea 入力を Save で localStorage
+    # に書き、Page.reload で /editor/e2e を再オープンして textarea へ本文が戻る
+    # ことを確認する。後始末は自キーの removeItem のみ（localStorage.clear はしない）。
+    draft_text = "E2E draft body for restore"
+    draft_key = "openrustbooks:editor:e2e"
+    draft_saved = False
+    draft_restored = False
+    draft_status = ""
+    if editor_mounted:
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            f" input.value = '{draft_text}';"
+            " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        )
+        await asyncio.sleep(0.4)
+        await cdp.evaluate(
+            "(() => { const save = Array.from(document.querySelectorAll('.editor-toolbar button'))"
+            ".find((b) => (b.getAttribute('aria-label') || '').includes('Save draft'));"
+            " if (save) save.click(); })()"
+        )
+        await asyncio.sleep(0.4)
+        saved_raw = await cdp.evaluate(f"localStorage.getItem('{draft_key}')")
+        draft_status = await cdp.evaluate(
+            "document.querySelector('.editor-status')?.textContent ?? ''"
+        )
+        draft_saved = saved_raw == draft_text and "下書きを保存しました" in str(draft_status)
+
+        await cdp.send("Page.reload", {"ignoreCache": True})
+        await wait_until(cdp, "document.querySelector('#editor-input') !== null")
+        # リロード前の古い DOM を読まないよう、描画が落ち着くまで待つ。
+        await asyncio.sleep(0.5)
+        restored_value = await cdp.evaluate(
+            "document.querySelector('#editor-input')?.value ?? ''"
+        )
+        draft_restored = restored_value == draft_text
+        await cdp.evaluate(f"localStorage.removeItem('{draft_key}')")
+    checker.check(
+        "エディタの下書きが保存されリロード後に textarea へ復元される",
+        draft_saved and draft_restored,
+        f"(saved={draft_saved}, restored={draft_restored}, status={draft_status!r})",
+    )
+
+    # 保存失敗 (ADR-0154): setItem を一時的に失敗させ、status と console.error
+    # へ利用者向け文言が出ることを確認する。オーバーライドは finally で復元し、
+    # 下書きキーも自キーのみ削除して後続チェックを汚さない。
+    editor_error_status = ""
+    editor_error_console: list[str] = []
+    try:
+        await cdp.evaluate("""(() => {
+          window.__orbEditorSetItem = Storage.prototype.setItem;
+          window.__orbEditorConsoleError = console.error;
+          window.__orbEditorErrors = [];
+          Storage.prototype.setItem = function () {
+            throw new Error('QuotaExceededError (E2E editor)');
+          };
+          console.error = function (...args) {
+            window.__orbEditorErrors.push(args.map(String).join(' '));
+            return window.__orbEditorConsoleError.apply(console, args);
+          };
+          return true;
+        })()""")
+        await cdp.evaluate(
+            "(() => { const input = document.querySelector('#editor-input');"
+            " input.value = 'E2E draft body for save failure';"
+            " input.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        )
+        await asyncio.sleep(0.3)
+        await cdp.evaluate(
+            "(() => { const save = Array.from(document.querySelectorAll('.editor-toolbar button'))"
+            ".find((b) => (b.getAttribute('aria-label') || '').includes('Save draft'));"
+            " if (save) save.click(); })()"
+        )
+        editor_error_shown = await wait_until(
+            cdp,
+            "document.querySelector('.editor-status')?.textContent.includes('保存に失敗しました')",
+            timeout=5,
+        )
+        editor_error_status = await cdp.evaluate(
+            "document.querySelector('.editor-status')?.textContent ?? ''"
+        )
+        error_logs = await cdp.evaluate("JSON.stringify(window.__orbEditorErrors ?? [])")
+        editor_error_console = json.loads(error_logs) if error_logs else []
+        checker.check(
+            "下書き保存失敗時に status と console へ通知する",
+            editor_error_shown
+            and "ブラウザの設定または空き容量" in editor_error_status
+            and any("保存に失敗" in line for line in editor_error_console),
+            f"(status={editor_error_status!r}, console={editor_error_console!r})",
+        )
+    finally:
+        await cdp.evaluate("""(() => {
+          if (window.__orbEditorSetItem) {
+            Storage.prototype.setItem = window.__orbEditorSetItem;
+            delete window.__orbEditorSetItem;
+          }
+          if (window.__orbEditorConsoleError) {
+            console.error = window.__orbEditorConsoleError;
+            delete window.__orbEditorConsoleError;
+          }
+          delete window.__orbEditorErrors;
+          localStorage.removeItem('openrustbooks:editor:e2e');
+          return true;
+        })()""")
 
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
     # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の
