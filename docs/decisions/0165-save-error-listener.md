@@ -71,8 +71,7 @@ ADR-0164 で Editor にも同じイベントのリスナーを追加した。
 
 ## 未決定
 
-- `forget()` リスナーの蓄積を `on_cleanup` + `remove_event_listener` で
-  解消するか。
+- ~~`forget()` リスナーの蓄積~~ ADR-0166 で on_cleanup + SendWrapper による解除を実装。
 - App レベルの単一 status へ集約するか。
 - 旧イベント名の後方互換（現状なし）。
 - E2E の positive side（`:reader` dispatch で reader-status が更新される）
