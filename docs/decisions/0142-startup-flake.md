@@ -67,7 +67,7 @@ ADR-0140 の 10 回連続実行で `Reader ルートが表示される` が 20 �
 
 - 真の原因（24MB Wasm のコールドスタート／fetch 失敗／execution context
   競合／固定ポート残存等）は未再現のため未特定。
-- CDP 接続先を起動 PID と照合する（ADR-0090 の未決定）。
+- ~~CDP 接続先を起動 PID と照合する~~ ADR-0143 で実装済み（browser-level WS）。
 - リトライ回数・バックオフ、リトライ前に `localStorage.clear()` するか。
 - エラー収集の置き先とリスナー名（`__orbSettingsErrors` は settings 固有）。
 - `Cdp.send()` の recv タイムアウト（現在は無しで、ハング時に 20 秒が効かない可能性）。
