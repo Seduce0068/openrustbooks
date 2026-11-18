@@ -1,32 +1,28 @@
 # Goal
 
-`desktop/src/commands/document.rs` の `tokio::fs` 直呼びにパス検証を追加する（todo.md 最優先の残り）。
+デスクトップ版の CSP を Web 版と整合させ、`'unsafe-eval'` を排除する（ADR-0091 / 0128 / 0129 の未決定）。
 
 ## Scope
 
 ### 背景
 
-ADR-0097 で `LocalStorage::resolve_path()` を fail-closed 化したが、
-`document.rs:25` (`read_to_string`) と `:102` (`write`) は backend を通さず
-`tokio::fs` を直呼びする。UI 未接続のため顕在化していないが、
-接続時に任意パス読書きのリスクがある。
-以前は backend 経由に置換すると `local_roots` が空で回帰すると判断したが、
-**backend を使わずに root 検証だけを追加する**方法なら回帰せずに守れる。
+`desktop/tauri.conf.json:29` の CSP は `script-src 'self' 'unsafe-inline' 'unsafe-eval'` で、
+Wasm に必要な `'wasm-unsafe-eval'` が無い。一方 `web/index.html:7` には
+`'wasm-unsafe-eval'` がある。ADR-0091 で nonce 対応は見送られており、
+`'unsafe-inline'` は残る。
 
 ### 成果物
 
-- `desktop/src/commands/document.rs`: 変更（パス検証ヘルパーと適用）
-- `docs/decisions/0129-document-path-validation.md`: 追加
+- `desktop/tauri.conf.json`: 変更（`'unsafe-eval'` → `'wasm-unsafe-eval'`）
+- `docs/decisions/0130-desktop-csp.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `AppConfig.storage.local_roots[].path` を root として、
-   canonicalize + `..` 拒否 + root 配下チェックを行うヘルパーを追加する。
-2. 既存の backend 経由 command の挙動は変えない。
-3. `local_roots` が空の場合の挙動を決める（安全側で拒否／現状維持）。
-4. テストを追加する。
-5. 既存の 216 テスト + wasm 3、E2E 229 項目を壊さない。
+1. `script-src` から `'unsafe-eval'` を削除し、`'wasm-unsafe-eval'` を追加する。
+2. `connect-src` 等は変更しない（Tauri IPC と既存送信先を維持）。
+3. ローカル検証（trunk build / E2E）が壊れないことを確認する。
+4. 実機での Tauri WebView 挙動は未検証であることを ADR に明記する。
 
 ## Acceptance criteria
 
@@ -34,6 +30,6 @@ ADR-0097 で `LocalStorage::resolve_path()` を fail-closed 化したが、
 
 ## Constraints
 
-- 新規依存を追加しない。
-- `core/src/io.rs` の `resolve_path()` は変更しない。
+- `withGlobalTauri` は今回追加しない（別タスク）。
+- `web/index.html` の CSP は変更しない。
 - `master` へ push する。force push はしない。
