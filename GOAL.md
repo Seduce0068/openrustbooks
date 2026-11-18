@@ -1,38 +1,35 @@
 # Goal
 
-EPUB HTML の `img` の作者指定 `width` / `height` をサニタイザで数値検証する（ADR-0149 の未決定）。
+`docs/log.md` を共通指示に沿って更新する。
 
 ## Scope
 
 ### 背景
 
-`core/src/sanitize.rs:94` は `img` に `width` / `height` を許可するが、
-`attribute_filter` は `src` のみ検証している（:133-139）。
-ADR-0149 の実装ではラスター画像は自然寸法で上書きするが、
-SVG は既存属性を尊重するため、非数値・極端な値が残り得る。
+`docs/log.md` は 2026-11-17 の 3 行のみで停止しており、
+その後の多数の変更コミット（ADR 0001〜0150、検証基盤・セキュリティ修正等）が
+反映されていない。末尾にはヒアドキュメントの `EOF` も残っている。
 
 ### 成果物
 
-- `core/src/sanitize.rs`: 変更（`img` の width/height 検証）
-- `docs/decisions/0150-img-dimension-validation.md`: 追加
+- `docs/log.md`: 変更（2026-11-18 の変更履歴を追記、`EOF` 削除）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `img` の `width` / `height` 属性が ASCII 数字のみで、
-   1〜16384 の範囲にある場合のみ保持する。
-2. それ以外（空 / 単位付き / 負 / 小数 / 0 / 上限超 / 非 ASCII 数字）は
-   属性ごと削除する（fail-closed）。
-3. 上限は `image_dimensions::MAX_DIMENSION` を再利用する（重複定義しない）。
-4. テストを追加（有効値維持、不正値削除、svg の既存属性は別経路なので影響なし）。
-5. 既存の 250 テスト + wasm 4、E2E 231 を壊さない。
+1. 末尾の `EOF` を削除する。
+2. `## 2026-11-18` 見出しを **新しい順**で追加し、当日の主要変更を簡潔に列挙する。
+3. 予約ファイル規約（フロントマター無し、単一 `# log`）を維持する。
+4. markdownlint が通る。
+5. コード変更は行わない。
 
 ## Acceptance criteria
 
-- 6 ゲート + audit + wasm-test + E2E 231 が成功する。
+- markdownlint（docs含む）が 0 issues。
+- モデル・git status に想定外の差分が無い。
 
 ## Constraints
 
-- 新規依存を追加しない。
-- `src` のローカル参照検証は維持する。
+- `todo.md` と `docs/investigation/` は別セッションの成果物のため触らない。
+- 既存の 2026-11-17 セクションは保持する。
 - `master` へ push する。force push はしない。
