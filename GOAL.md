@@ -1,34 +1,41 @@
 # Goal
 
-残タスクをエージェントチームで探索し、次に実行するタスクを選定する。
+`scripts/verify.sh` の配布 WASM パス検査を fail-closed にする。
 
 ## Scope
 
 ### 背景
 
-継続ゴールは「タスクが終わったら別のタスクを探して実行する」。
-現在は E2E 231 項目・全ゲートが緑で、直近の画像寸法予約・サニタイズ検証も完了した。
-`swarm-todo-discovery` の R1 考え方に従い、観点×対象を分割して未着手作業を発掘する。
+5 観点の残タスク探索で、現在の検査が
+`grep -a -q '/home/' "$DIST_DIR"/*_bg.wasm` であり、
+glob が非マッチなら `grep` が rc=2 を返すものの `if` 条件で偽として扱われ、
+ゲートを通過する fail-open 状態にあることが判明した（discovery-test / deps-001 系）。
 
 ### 成果物
 
+- `scripts/verify.sh`: 変更（ファイル存在確認と固定文字列検査）
+- `docs/decisions/0151-remaining-task-discovery.md`: 追加（探索結果の集約）
+- `docs/decisions/0152-wasm-path-check-failclosed.md`: 追加
 - `GOAL.md`: 本契約
-- 探索結果は ADR ではなく、次の実装タスクの選定材料として扱う。
-- `todo.md` は別セッションの成果物のため、更新しない。
 
 ### 必須事項
 
-1. 5 観点（静的シグナル / 機能ギャップ / テストギャップ / 依存・保守 / UX・運用）で探索する。
-2. 各発見に根拠（path:line）と confidence（fact/inference/idea）を付ける。
-3. 親が重複排除と妥当性判定を行い、翌ラウンドで実装するタスクを 1 つ選ぶ。
-4. コード変更・todo.md 変更は行わない。
+1. `nullglob` または配列代入で `*_bg.wasm` の一致ファイル数を確認し、
+   0 件なら明示的に失敗させる。
+2. 検査対象に生成 JS グルーコード（`*.js`）も含める。
+3. 開発ホスト絶対パスは `$HOME/` を固定文字列で検査し、
+   `$HOME` が `/home/` 配下でない環境でも検出できるようにする。
+4. 既存の E2E 231 項目と全ゲートを壊さない。
+5. `bash -n` / `shellcheck` / `shfmt -d` が通る。
+6. 負テスト（glob 非マッチ時に失敗すること）を確認する。
 
 ## Acceptance criteria
 
-- 探索結果が揃い、次タスクが 1 つ確定する。
+- 全ゲート成功、E2E 231 項目成功。
+- bash -n / shellcheck / shfmt が 0。
 
 ## Constraints
 
-- 子エージェントは読み取り専用。
-- `todo.md` と `docs/investigation/` は触らない。
-- `master` へ push する（GOAL 契約のみ）。force push はしない。
+- 新規依存を追加しない。
+- `todo.md` と `docs/investigation/` は別セッションの成果物のため触らない。
+- `master` へ push する。force push はしない。
