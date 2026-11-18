@@ -318,6 +318,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0129-document-path-validation](docs/decisions/0129-document-path-validation.md)
 - [0130-desktop-csp](docs/decisions/0130-desktop-csp.md)
 - [0131-config-patch-command](docs/decisions/0131-config-patch-command.md)
+- [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
+  - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
   - ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
   - desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
   - desktop の document command で AppConfig.local_roots によるパス検証を行う決定を記録する。

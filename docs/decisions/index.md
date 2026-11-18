@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 131 件）。
+openrustbooks の ADR 一覧（全 132 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -264,3 +264,5 @@ openrustbooks の ADR 一覧（全 131 件）。
   - status: accepted — desktop/tauri.conf.json の script-src から unsafe-eval を除外し wasm-unsafe-eval に置換する決定を記録する。
 - [ADR-0131: 設定更新用 patch command](0131-config-patch-command.md)
   - status: accepted — ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
+- [ADR-0132: 隠しフィールド保持の一元化](0132-preserve-logic-unification.md)
+  - status: accepted — ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
