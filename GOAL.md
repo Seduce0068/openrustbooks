@@ -1,44 +1,35 @@
 # Goal
 
-エディタの Save をブラウザ内 localStorage ドラフトとして接続する（ADR-0161 の未決定）。
+README / architecture の依存一覧を実装事実へ合わせる（ADR-0163 の未決定）。
 
 ## Scope
 
 ### 背景
 
-ADR-0161 で textarea と Preview を接続したが、Save は
-「desktop only / not implemented」の恒久 disabled。
-Tauri invoke は有効化しない方針（ADR-0128）を維持しつつ、
-ブラウザ単体でも明示保存によるドラフト保持を実現する。
+ADR-0163 で pulldown-cmark の直接依存を削除したが、
+README.md:74 と docs/architecture.md:178 は未使用の依存として記載したまま。
+README.md:271 の ADR-0086 タイトルは履歴なので変更しない。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（Save 有効化、ドラフト読み書き、status 表示）
-- `tools/verify-web-reader.py`: 変更（E2E 2 件追加、238 → 240）
-- `docs/decisions/0164-editor-draft-save.md`: 追加
+- `README.md`: 変更（依存一覧を `comrak` 中心に更新）
+- `docs/architecture.md`: 変更（Markdown 処理の記述を更新）
+- `docs/decisions/0163-remove-unused-markdown-dep.md`: 変更（未決定を解消）
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. キー `openrustbooks:editor:{doc_id}` に本文を保存する。
-2. Save ボタンを有効化し、クリック時に現在の `content` を保存し、
-   status に「下書きを保存しました」を表示する。失敗時は ADR-0154 の
-   保存失敗通知を再利用する。
-3. エディタ表示時に同じキーのドラフトがあれば textarea / content へ復元する。
-4. 保存は明示操作のみ（自動保存しない）。既存の読書位置／設定キーは触らない。
-5. E2E に 2 件追加:
-   - 入力→Save→localStorage に保存→リロード後に復元。
-   - 保存失敗通知が出ること（ADR-0154 の経路を再利用可）。
-6. 既存 238 項目と全ゲートを壊さない。期待総数 238 → 240。
+1. README.md:74 の技術スタック表を「`comrak`（Markdown→HTML）, `ammonia`（サニタイズ）, `rumdl`（lint）」等、実装に合わせる。
+2. docs/architecture.md:178 の `pulldown-cmark / comrak` も `comrak` 中心に更新（サニタイズと lint への言及を追加可）。
+3. ADR-0163 の未決定「README / architecture の依存一覧更新」を解消済みにする。
+4. markdownlint が通る。コード変更は行わない。
 
 ## Acceptance criteria
 
-- E2E 240 項目が成功する。
-- 6 ゲート + audit + wasm-test が成功する。
+- markdownlint（全 docs + README）が 0 issues。
 
 ## Constraints
 
-- Tauri invoke は有効化しない。
-- 新規依存を追加しない。
-- 機微情報（本文）を status / console に出さない。
+- ADR-0086 のタイトル（脆弱性修正の履歴）は変更しない。
+- `todo.md` と `docs/investigation/` は触らない。
 - `master` へ push する。force push はしない。
