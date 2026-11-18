@@ -11,6 +11,7 @@ pub mod config;
 pub mod document;
 pub mod epub;
 pub mod error;
+pub mod image_dimensions;
 pub mod io;
 pub mod sanitize;
 pub mod wasm;
@@ -24,6 +25,7 @@ pub use document::{Document, DocumentFormat, DocumentId, DocumentMetadata};
 pub use epub::{ChapterLink, EpubBook, EpubChapter, EpubCoverImage, EpubMetadata, EpubTocEntry};
 /// Re-export commonly used types
 pub use error::{CoreError, CoreResult};
+pub use image_dimensions::{MAX_DIMENSION, image_dimensions};
 pub use io::{FileEntry, StorageBackend, StorageCapabilities};
 pub use sanitize::sanitize_epub_html;
 

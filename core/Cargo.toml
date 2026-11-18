@@ -34,6 +34,10 @@ zip = { version = "9.0", default-features = false, features = ["deflate-flate2-z
 # 既定機能は空なので、そのまま `default-features = false` で使う。
 quick-xml = { version = "0.42", default-features = false }
 
+# 画像の自然寸法をデコードせずに取得する（ADR-0136 / 0137）。
+# 必要なラスター形式だけに絞り、wasm32 のコード量を抑える。
+imagesize = { version = "0.15", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
 # Additional core dependencies
 url = { version = "2.5", features = ["serde"] }
 walkdir = "2.5"

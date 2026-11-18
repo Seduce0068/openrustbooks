@@ -746,8 +746,9 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 212 + checker.equal 17 = 229。
-    checker = Checker(expected=229)
+    # 期待 check 総数: checker.check 214 + checker.equal 17 = 231。
+    # +2 は自然寸法の検証（ラスターの width/height 付与と SVG 既存寸法の維持）。
+    checker = Checker(expected=231)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -776,7 +777,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 229 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 231 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -845,6 +846,17 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "document.querySelector('#pic')?.naturalWidth === 1"
     )
     checker.check("Blob URL の画像が読み込まれる", image_loaded)
+    # 自然寸法の予約（ADR-0136）。サンプル PNG は 1x1 なので両属性が "1"。
+    # 属性は警告・縮小判定には使わず、既存の naturalWidth ロジックは不変。
+    pic_dims = await cdp.evaluate(
+        "(() => { const img = document.querySelector('#pic');"
+        " return [img?.getAttribute('width'), img?.getAttribute('height')]; })()"
+    )
+    checker.check(
+        "サンプル画像に自然寸法の width/height が付与される",
+        pic_dims == ["1", "1"],
+        f"(dims={pic_dims!r})",
+    )
 
     # 目次と章タイトル。
     checker.equal(
@@ -2434,6 +2446,20 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "fetch(document.querySelector('#evil-svg').src).then((r) => r.text())"
     )
     checker.check("SVG が Blob URL で表示される", str(svg_src or "").startswith("blob:"))
+    # SVG のルートには width="20" height="20" がある。img 側の属性は上書きせず
+    # 足りない分だけ埋めるため、#evil-svg には 20/20 が付き、サニタイズ済み
+    # Blob のルート属性も 20 のまま維持される。
+    svg_dims = await cdp.evaluate(
+        "(() => { const img = document.querySelector('#evil-svg');"
+        " return [img?.getAttribute('width'), img?.getAttribute('height')]; })()"
+    )
+    checker.check(
+        "SVG の既存 width/height が維持される",
+        svg_dims == ["20", "20"]
+        and 'width="20"' in str(svg_text)
+        and 'height="20"' in str(svg_text),
+        f"(dims={svg_dims!r}, svg={str(svg_text)[:120]!r})",
+    )
     lowered = str(svg_text or "").lower()
     checker.check(
         "SVG から script が除去される",

@@ -948,6 +948,71 @@ fn object_url_for(bytes: &[u8], href: &str) -> Result<String, JsValue> {
     web_sys::Url::create_object_url_with_blob(&blob)
 }
 
+/// SVG ルート要素の `width` / `height` を自然寸法として読む。
+///
+/// 数値のみ許容し、0・上限超え・単位付き・viewBox のみの場合は `None`
+/// （属性を付けない）。ADR-0136 の方針に従い、絶対サイズがブラウザ依存の
+/// viewBox からは寸法を推測しない。
+#[cfg(target_arch = "wasm32")]
+fn svg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let text = String::from_utf8(bytes.to_vec()).ok()?;
+    let parser = web_sys::DomParser::new().ok()?;
+    let document = parser
+        .parse_from_string(&text, web_sys::SupportedType::ImageSvgXml)
+        .ok()?;
+    let root = document.document_element()?;
+    let width = parse_svg_dimension(&root.get_attribute("width")?)?;
+    let height = parse_svg_dimension(&root.get_attribute("height")?)?;
+    Some((width, height))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_svg_dimension(value: &str) -> Option<u32> {
+    let value = value.trim().parse::<u32>().ok()?;
+    if value == 0 || value > openrustbooks_core::MAX_DIMENSION {
+        return None;
+    }
+    Some(value)
+}
+
+/// 解決できた画像に自然寸法の `width` / `height` を付与する（ADR-0136）。
+///
+/// ラスター形式は core の pure 関数（`imagesize`）でヘッダーから取得する。
+/// SVG は `imagesize` の対象外なのでルート要素の属性を読み、img 側の既存
+/// 属性は上書きしない。取得できない場合は何も付けない（fail-closed）。
+/// 付けた属性は縦横比の予約のみに使い、警告・縮小判定は naturalWidth に
+/// 依存した既存ロジックのまま変更しない。
+#[cfg(target_arch = "wasm32")]
+fn apply_image_dimensions(image: &web_sys::HtmlImageElement, bytes: &[u8], mime: &str) {
+    let dimensions = if mime == "image/svg+xml" {
+        svg_dimensions(bytes)
+    } else {
+        openrustbooks_core::wasm::image_dimensions_wasm(bytes).and_then(|values| {
+            match values.as_slice() {
+                [width, height] => Some((*width, *height)),
+                _ => None,
+            }
+        })
+    };
+    let Some((width, height)) = dimensions else {
+        return;
+    };
+    let respect_existing = mime == "image/svg+xml";
+    if !respect_existing || !image.has_attribute("width") {
+        let _ = image.set_attribute("width", &width.to_string());
+    }
+    if !respect_existing || !image.has_attribute("height") {
+        let _ = image.set_attribute("height", &height.to_string());
+    }
+}
+
+/// `src` を削除した画像からは予約寸法も落とす（ゴーストボックス対策）。
+#[cfg(target_arch = "wasm32")]
+fn clear_image_dimensions(image: &web_sys::HtmlImageElement) {
+    let _ = image.remove_attribute("width");
+    let _ = image.remove_attribute("height");
+}
+
 /// サニタイズ済み HTML の画像を Blob URL に置き換える。
 ///
 /// 解決できない画像は `src` を削除し、alt テキストだけを残す。
@@ -974,6 +1039,7 @@ fn resolve_images(
         let Some(src) = web_sys::Element::get_attribute(&image, "src") else {
             continue;
         };
+        let mime = mime_for_path(&src);
         match book.chapter_resource(index, src.clone()) {
             Ok(bytes) => match object_url_for(&bytes, &src) {
                 Ok(url) => {
@@ -983,16 +1049,19 @@ fn resolve_images(
                     let _ = image.set_attribute("decoding", "async");
                     // 縮小時の MIME 判定は blob URL の fetch に依存せず、この属性から得る
                     // （fetch はハングし得るため）。
-                    let _ = image.set_attribute("data-source-mime", mime_for_path(&src));
+                    let _ = image.set_attribute("data-source-mime", mime);
+                    apply_image_dimensions(&image, &bytes, mime);
                     image.set_attribute("src", &url)?;
                     urls.push(url);
                 }
                 Err(_) => {
                     image.remove_attribute("src").ok();
+                    clear_image_dimensions(&image);
                 }
             },
             Err(_) => {
                 image.remove_attribute("src").ok();
+                clear_image_dimensions(&image);
             }
         }
     }

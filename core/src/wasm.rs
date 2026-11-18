@@ -37,6 +37,16 @@ pub fn init() {
     console_log!("openrustbooks-core initialized");
 }
 
+/// 画像バイト列の自然寸法を `[width, height]` で返す（取得不可なら `undefined`）。
+///
+/// pure 関数 [`crate::image_dimensions`] の wasm-bindgen ラッパー。web の
+/// `resolve_images()` が `chapter_resource()` のバイト列を渡して使う。
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn image_dimensions_wasm(bytes: &[u8]) -> Option<Vec<u32>> {
+    crate::image_dimensions(bytes).map(|(width, height)| vec![width, height])
+}
+
 /// EPUB 読み取り API を JavaScript に公開するラッパー。
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -697,5 +707,15 @@ mod tests {
         let config = WasmConfig::default();
         assert!(config.lint_enabled());
         assert!(config.auto_fix());
+    }
+
+    #[wasm_bindgen_test]
+    fn image_dimensions_wrapper() {
+        // 1x1 PNG の最小ヘッダー。
+        let mut png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR".to_vec();
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&1u32.to_be_bytes());
+        assert_eq!(super::image_dimensions_wasm(&png), Some(vec![1, 1]));
+        assert_eq!(super::image_dimensions_wasm(b"not an image"), None);
     }
 }
