@@ -72,7 +72,7 @@ Tauri invoke を有効化するには `withGlobalTauri` と CSP の再設計が�
 
 - 自動保存／デバウンス、下書きの容量上限・寿命・prune。
 - 空 `doc_id`、`doc_id` 変更時の未保存データの扱い。
-- save-error リスナーの共通化（Reader / Editor の競合解消）。
+- ~~save-error リスナーの共通化~~ ADR-0165 で送信先別イベント名へ分離。
 - 本文の暗号化要否（同一オリジン JS から平文で読める）。
 - 複数タブ競合（ADR-0157 / 0158 から継続）。
 - IME / Undo の実機検証（ADR-0161 から継続）。
