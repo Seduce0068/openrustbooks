@@ -70,6 +70,6 @@ ADR-0140 の 10 回連続実行で `Reader ルートが表示される` が 20 �
 - ~~CDP 接続先を起動 PID と照合する~~ ADR-0143 で実装済み（browser-level WS）。
 - リトライ回数・バックオフ、リトライ前に `localStorage.clear()` するか。
 - エラー収集の置き先とリスナー名（`__orbSettingsErrors` は settings 固有）。
-- `Cdp.send()` の recv タイムアウト（現在は無しで、ハング時に 20 秒が効かない可能性）。
+- ~~`Cdp.send()` の recv タイムアウト~~ ADR-0144 で 10 秒＋fail-closed を実装済み。
 - アプリ側 ready シグナルの追加（ADR-0141 の `data-downscaled` と同種）。
 - 20 回連続実行、CLS 計測、5 ブラウザ実機検証（ADR-0140 から継続）。
