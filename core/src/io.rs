@@ -288,7 +288,8 @@ pub mod local {
         pub fn new(root: PathBuf) -> Self {
             let capabilities = StorageCapabilities {
                 is_local: true,
-                can_watch: true,
+                // `watch()` は未実装のため、利用可能と報告しない（R6 TD-H04）。
+                can_watch: false,
                 ..Default::default()
             };
             Self { root, capabilities }
@@ -621,6 +622,37 @@ pub mod local {
         impl Drop for TempRoot {
             fn drop(&mut self) {
                 let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+
+        /// 未実装の `watch()` を「利用可能」と報告しないこと（R6 TD-H04）。
+        #[test]
+        fn local_storage_reports_watch_as_unsupported() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+
+            // 公開 API（StorageBackend::capabilities）経由でも false が見える。
+            let capabilities = StorageBackend::capabilities(&storage);
+            assert!(
+                !capabilities.can_watch,
+                "watch() は未実装のため can_watch は false であるべき"
+            );
+            assert!(!storage.capabilities.can_watch);
+        }
+
+        /// capability と実際の挙動が矛盾しないこと（can_watch=false なら Err）。
+        #[tokio::test]
+        async fn watch_returns_error_because_it_is_not_implemented() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+
+            let result = storage.watch(Path::new(".")).await;
+            assert!(result.is_err(), "未実装の watch() は成功を返してはならない");
+            match result.err().expect("watch() は Err を返す") {
+                CoreError::Storage(message) => {
+                    assert_eq!(message, "Watch not implemented yet");
+                }
+                other => panic!("expected Storage error, got {other:?}"),
             }
         }
 

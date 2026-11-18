@@ -139,29 +139,3 @@ pub async fn rename_file(
 
     backend.metadata(&to_buf).await.map_err(map_err)
 }
-
-/// Watch a directory for changes
-#[command]
-pub async fn watch_directory(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
-    path: String,
-) -> Result<(), String> {
-    let path_buf = PathBuf::from(&path);
-    let storage = create_storage(&state).await?;
-
-    let backend = storage
-        .default_backend()
-        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
-
-    let mut stream = backend.watch(&path_buf).await.map_err(map_err)?;
-
-    // Spawn task to forward events
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = stream.next().await {
-            let _ = app.emit("fs-event", event);
-        }
-    });
-
-    Ok(())
-}

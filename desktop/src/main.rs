@@ -108,7 +108,7 @@ pub fn run() {
             commands::fs::create_file,
             commands::fs::delete_file,
             commands::fs::rename_file,
-            commands::fs::watch_directory,
+            // `watch_directory` は watch 未実装のため登録しない（UI から到達不能）。
             // AI Markdown commands
             commands::ai::generate_markdown,
             commands::ai::refine_markdown,
