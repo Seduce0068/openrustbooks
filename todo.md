@@ -71,8 +71,6 @@ status: current
   根拠 `docs/decisions/0166:28` / `web/src/lib.rs:224-242`。
 - 【TD-M08b】figment の env マッピングが手動上書きワークアラウンドのまま。
   根拠 `docs/decisions/0122:25,50,65`。
-- 【TD-M09】Reader アンマウント時に Blob URL が解放されない。
-  根拠 `web/src/lib.rs:2129,2303,3464`。
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
@@ -184,6 +182,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M09】Reader の on_cleanup で残余 object URL / cover URL を revoke。
+      SendWrapper パターンを再利用、既存 revoke 維持。E2E 249 件・全ゲート成功 / ADR-0192。
 - [x] 【PR-M07】Google Fonts の preconnect / stylesheet を削除し CSP をローカル完結化。
       verify.sh に no-external-font-refs ゲートを追加。E2E 249 件・全ゲート成功 / ADR-0191。
 - [x] 【PR-M04】read の上限を 256 MiB（または capabilities 指定）へ fail-closed 適用。
