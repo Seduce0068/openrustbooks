@@ -776,7 +776,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 227 + checker.equal 17 = 244。
+    # 期待 check 総数: checker.check 228 + checker.equal 17 = 245。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -791,7 +791,8 @@ async def run_checks(cdp: Cdp) -> int:
     # 保存失敗イベントの送信先分離（旧共通名が status を書き換えない）+1（ADR-0164）。
     # removeItem 一時失敗時の全消去保存失敗通知（status + console の分類文言、
     # 複数件でも 1 回だけ）+1。
-    checker = Checker(expected=244)
+    # Clear data を confirm=false でキャンセルしたときに削除も status 変更もしない検証 +1。
+    checker = Checker(expected=245)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -821,7 +822,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 244 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 245 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -1371,31 +1372,95 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     checker.check("リロード後もダーク表示が維持される", persisted_dark)
 
     # 読書データの削除。
+    # Clear data は window.confirm で確認するため、テスト中は true に固定する。
+    # オーバーライドは後続チェックへ影響しないよう try/finally で必ず戻す。
     position_keys = await cdp.evaluate(
         "Object.keys(localStorage).filter((key) => key.startsWith('openrustbooks:position:')).length"
     )
     checker.check("削除前に読書位置が保存されている", position_keys > 0)
-    removed_keys = await cdp.evaluate(
-        "(() => { document.querySelector('#reader-clear-data').click();"
-        " return Object.keys(localStorage).filter((key) => key.startsWith('openrustbooks:position:')).length; })()"
+    await cdp.evaluate("window.__orbOriginalConfirm = window.confirm; window.confirm = () => true;")
+    try:
+        removed_keys = await cdp.evaluate(
+            "(() => { document.querySelector('#reader-clear-data').click();"
+            " return Object.keys(localStorage).filter((key) => key.startsWith('openrustbooks:position:')).length; })()"
+        )
+        checker.equal("Clear data で読書位置が削除される", removed_keys, 0)
+        checker.check(
+            "Clear data で表示設定は残る",
+            await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
+        )
+        status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
+        checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
+    finally:
+        await cdp.evaluate(
+            "window.confirm = window.__orbOriginalConfirm; delete window.__orbOriginalConfirm;"
+        )
+
+    # confirm=false ならキャンセル扱いで、削除も status 変更も保存失敗通知も出さない。
+    # try/finally で confirm・console.error・挿入した位置キーを必ず元へ戻す。
+    cancel_key_js = json.dumps("openrustbooks:position:e2e-clear-cancel")
+    status_before_cancel = await cdp.evaluate(
+        "document.querySelector('.reader-status')?.textContent ?? ''"
     )
-    checker.equal("Clear data で読書位置が削除される", removed_keys, 0)
-    checker.check(
-        "Clear data で表示設定は残る",
-        await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
-    )
-    status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
-    checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
+    try:
+        await cdp.evaluate(
+            "(() => { window.__orbOriginalConfirm = window.confirm;"
+            " window.confirm = () => false;"
+            " window.__orbCancelOriginalConsoleError = console.error;"
+            " window.__orbCancelErrors = [];"
+            " console.error = function (...args) {"
+            "   window.__orbCancelErrors.push(args.map(String).join(' '));"
+            "   return window.__orbCancelOriginalConsoleError.apply(console, args);"
+            " };"
+            f" localStorage.setItem({cancel_key_js}, '{{}}');"
+            " return true; })()"
+        )
+        await cdp.evaluate("document.querySelector('#reader-clear-data').click()")
+        cancel_key_left = await cdp.evaluate(
+            f"localStorage.getItem({cancel_key_js}) !== null"
+        )
+        status_after_cancel = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent ?? ''"
+        )
+        cancel_error_logs = await cdp.evaluate("JSON.stringify(window.__orbCancelErrors ?? [])")
+        cancel_errors = json.loads(cancel_error_logs) if cancel_error_logs else []
+        cancel_failure_logs = [
+            line for line in cancel_errors
+            if "保存に失敗しました" in line or "全消去" in line
+        ]
+        checker.check(
+            "confirm=false では削除も status 変更も保存失敗通知も出ない",
+            cancel_key_left
+            and status_after_cancel == status_before_cancel
+            and not cancel_failure_logs,
+            f"(key_exists={cancel_key_left}, before={status_before_cancel!r},"
+            f" after={status_after_cancel!r}, failure_logs={cancel_failure_logs!r})",
+        )
+    finally:
+        await cdp.evaluate(
+            "(() => { window.confirm = window.__orbOriginalConfirm;"
+            " delete window.__orbOriginalConfirm;"
+            " if (window.__orbCancelOriginalConsoleError) {"
+            "   console.error = window.__orbCancelOriginalConsoleError;"
+            "   delete window.__orbCancelOriginalConsoleError;"
+            " }"
+            " delete window.__orbCancelErrors;"
+            f" localStorage.removeItem({cancel_key_js});"
+            " return true; })()"
+        )
 
     # removeItem を一時的に失敗させ、全消去の失敗が status と console.error の
     # 固定分類文言へ出ることを確認する。失敗が複数件でも通知は 1 回だけ。
-    # オーバーライドは後続チェックへ影響しないよう try/finally で必ず戻す。
+    # confirm / removeItem / console.error のオーバーライドは後続チェックへ影響しないよう
+    # try/finally で必ず戻す。
     await cdp.evaluate(
         "localStorage.setItem('openrustbooks:position:e2e-clear-failure-1', '{}');"
         "localStorage.setItem('openrustbooks:position:e2e-clear-failure-2', '{}');"
     )
     try:
         await cdp.evaluate("""(() => {
+          window.__orbOriginalConfirm = window.confirm;
+          window.confirm = () => true;
           window.__orbOriginalRemoveItem = Storage.prototype.removeItem;
           window.__orbOriginalConsoleError = console.error;
           window.__orbClearFailures = [];
@@ -1433,6 +1498,10 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         )
     finally:
         await cdp.evaluate("""(() => {
+          if (window.__orbOriginalConfirm) {
+            window.confirm = window.__orbOriginalConfirm;
+            delete window.__orbOriginalConfirm;
+          }
           if (window.__orbOriginalRemoveItem) {
             Storage.prototype.removeItem = window.__orbOriginalRemoveItem;
             delete window.__orbOriginalRemoveItem;

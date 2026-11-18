@@ -3266,6 +3266,16 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         set_status.set("Display settings reset.".to_string());
     };
     let on_clear_data = move |_| {
+        // confirm が使える環境ではキャンセルを尊重する。window が無い / confirm が
+        // 例外を投げる環境では None となり、既存どおり削除する（fail-safe）。
+        let confirmed = (|| {
+            web_sys::window()?
+                .confirm_with_message("すべての読書位置を削除します。よろしいですか？")
+                .ok()
+        })();
+        if confirmed == Some(false) {
+            return;
+        }
         let (removed, failed) = clear_reading_positions();
         if failed {
             // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
