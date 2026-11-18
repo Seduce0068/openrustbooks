@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 180 件）。
+openrustbooks の ADR 一覧（全 181 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -362,3 +362,5 @@ openrustbooks の ADR 一覧（全 180 件）。
   - status: accepted — 明示 Save に加えてデバウンス自動保存を導入し、画面遷移時の下書き損失を防ぐ決定を記録する。
 - [ADR-0180: エディタ下書きのバックアップ対応](0180-draft-backup.md)
   - status: accepted — バックアップ JSON に下書きを optional field として含め、復元時に現在値を保護する決定を記録する。
+- [ADR-0181: SVG サニタイズの共通化](0181-svg-sanitizer-unification.md)
+  - status: accepted — Web 側の DomParser 手動サニタイズを廃止し、core の ammonia ベース実装へ一本化する決定を記録する。
