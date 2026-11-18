@@ -77,8 +77,7 @@ ADR-0136 は PNG / JPEG / WebP / GIF の寸法取得に `imagesize 0.15.0`
 - 0 / 非数 / 単位付き / 上限超の拒否基準（実装側で明示）。
 - 縮小後の属性更新の有無、viewBox のみ SVG の扱い。
 - CLS 直接計測 E2E（`PerformanceObserver('layout-shift')`）の導入。
-- 実装前に整備すべき位置復元 E2E（ADR-0020 / 0037 / 0046 の 6 項目）を
-  5 回連続実行してベースラインを固定する。
+- ~~位置復元 E2E のベースライン整備~~ ADR-0140 / 0146 で実施済み。
 - `.reader-cover` を範囲に含めるか、`IMAGE_SETTLE_MS = 2000` の根拠。
 - 5 ブラウザ実機検証（現状は Chrome 157 のみ）。
 - 法務レビュー（MIT 通知の十分性）と CI 復帰後の audit パス確認。
