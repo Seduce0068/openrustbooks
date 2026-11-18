@@ -1,41 +1,37 @@
 # Goal
 
-部分設定のインポートで bool が false にリセットされる問題を修正する（ADR-0157 の未決定）。
+部分設定インポートの bool false リセット懸念を調査し、no-op と判断する（ADR-0158）。
 
 ## Scope
 
 ### 背景
 
-`web/src/lib.rs` の `import_positions()` は設定の
-`dark` / `followSystem` / `downscaleImages` を `unwrap_or(false)` で読む。
-バックアップに这些キーが欠ける場合、現在設定の true が false へ
-リセットされる（ADR-0151 / ADR-0157 の未決定）。
+当初は `dark` / `followSystem` / `downscaleImages` の
+`unwrap_or(false)` を `load_settings()` フォールバックへ変更し、
+E2E を 234 → 235 にする予定だった。
+しかし ADR-0157 の現在値保護ガードと `load_settings()` が同じ
+`SETTINGS_KEY` を読むため、问题的な状態は自然には成立しないことが判明した。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`unwrap_or_else(|| load_settings().xxx)` に統一）
-- `tools/verify-web-reader.py`: 変更（E2E 1 件追加、234 → 235）
-- `docs/decisions/0158-partial-settings-import.md`: 追加
-- `GOAL.md`: 本契約
+- `docs/decisions/0158-partial-settings-import.md`: 追加（調査結果）
+- `GOAL.md`: 最終契約へ更新
+- コード変更なし（`web/src/lib.rs` / `tools/verify-web-reader.py` は HEAD と同一）
 
-### 必須事項
+### 決定
 
-1. 3 つの bool フィールドについて、キー欠落時は
-   `load_settings()` の現在値をフォールバックにする。
-2. 5 つの数値フィールドは既に現在値フォールバックのため維持。
-3. E2E に 1 件追加（現在設定 dark=true / followSystem=true /
-   downscaleImages=true の状態で、それら 3 キーを除くバックアップを
-   新規環境へインポートしても true が維持される）。
-   期待総数 234 → 235。
-4. 既存 234 項目と全ゲートを壊さない。
+1. 3 bool の `unwrap_or(false)` は現行挙動を維持する。
+2. E2E 期待総数は 234 のまま。
+3. ADR-0157 の「現在設定キーがある場合はスキップ」ガードを維持する。
+4. 既定値を永続化する設計論点は ADR-0158 の未決定として記録する。
 
 ## Acceptance criteria
 
-- E2E 235 項目が成功する。
-- 6 ゲート + audit + wasm-test が成功する。
+- markdownlint が 0 issues。
+- 既存の全ゲート・E2E 234 項目が維持される。
 
 ## Constraints
 
 - 新規依存を追加しない。
-- 設定スキーマは変更しない。
+- `todo.md` と `docs/investigation/` は触らない。
 - `master` へ push する。force push はしない。
