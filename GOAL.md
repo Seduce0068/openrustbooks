@@ -1,21 +1,34 @@
 # Goal
 
-E2E Checker に check 名の一意性検証を追加する（R6 TD-M03、ADR-0182）。
+E2E `wait_until()` の JS 評価例外を握り潰さず fail-closed にする（R6 TD-M02）。
 
 ## Scope
 
+### 背景
+
+`wait_until()` は `RuntimeError` のみ再送出し、その他の例外を `pass` で無視する。
+JS 式の typo や定数未定義もタイムアウトまで放置され、後続 check が別経路で通れば
+E2E 全体が緑になり、検出力が静かに低下する。
+
 ### 成果物
 
-- `tools/verify-web-reader.py`: Checker に names 集合と重複検知を追加
-- `docs/decisions/0182-e2e-unique-check-names.md`: 追加
-- `todo.md`: TD-M03 を完了へ移動
+- `tools/verify-web-reader.py`: 変更（wait_until の例外伝播、必要なら呼び出し側）
+- `docs/decisions/0183-wait-until-failclosed.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- 同名 check は失敗として記録し、passed を増やさない。
-- equal() も同じ名前空間で検知。
-- 既存 249 件はすべて一意で件数維持。
+1. `cdp.evaluate()` 由来の例外は、種別を問わず再送出する（ExecutionContext 破壊など既知の一時例外は既存の retry ラッパー側で扱う）。
+2. 既存の E2E 249 項目が壊れないこと。
+3. 必要なら一時スクリプトで不正式が即例外になることを確認。
+4. 期待総数は 249 のまま。
 
 ## Acceptance criteria
 
-- E2E 249 項目、全ゲート成功（検証済み）。
+- E2E 249 項目、全ゲート成功。
+
+## Constraints
+
+- 新規依存を追加しない。
+- 既存 check 名・件数は変更しない。
+- `master` へ push する。force push はしない。
