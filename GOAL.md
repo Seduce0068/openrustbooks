@@ -1,39 +1,23 @@
 # Goal
 
-未実装の `watch` を「利用可能」と報告しないようにする（R6 TD-H04）。
+未実装の watch を利用可能と報告しないようにする（R6 TD-H04、ADR-0178）。
 
 ## Scope
 
-### 背景
-
-`LocalStorage::new()` は `can_watch: true` を報告するが、
-`watch()` 本体は `"Watch not implemented yet"` を返す。
-`watch_directory` コマンドも登録済みで、呼ぶと常に失敗する。
-
 ### 成果物
 
-- `core/src/io.rs`: 変更（`can_watch: false`、unit test）
-- `desktop/src/commands/fs.rs`: 変更（コマンドを明示的 unsupported に）
-- `desktop/src/main.rs`: 変更（invoke_handler から削除）
+- `core/src/io.rs`: can_watch=false、unit 2 件
+- `desktop/src/commands/fs.rs`: watch_directory 関数削除
+- `desktop/src/main.rs`: invoke_handler から削除
 - `docs/decisions/0178-watch-capability-honesty.md`: 追加
-- `GOAL.md` / `todo.md`: 契約・完了反映
+- `todo.md`: TD-H04 を完了へ移動
 
-### 必須事項
+### 決定
 
-1. `LocalStorage::new()` の `can_watch` を `false` にする。
-2. `watch_directory` コマンドを `invoke_handler` から外すか、
-   「not implemented」を返す明示スタブにする（方針を ADR に記録）。
-3. `StorageWatchStream` / `StorageEvent` 型や `watch()` トレイトは
-   将来実装のため残してよい。
-4. unit test を追加（capabilities.can_watch == false）。
-5. 全ゲート成功（E2E 247 維持）。
+- capability と IPC 表面を実装事実へ一致させる。
+- 型・トレイトは将来実装のため残す。
+- 新規依存を追加しない。
 
 ## Acceptance criteria
 
-- 全ゲート成功、E2E 247 項目成功。
-
-## Constraints
-
-- 新規依存（notify 等）を追加しない（今回は宣言整合のみ）。
-- 既存の storage 契约を壊さない。
-- `master` へ push する。force push はしない。
+- E2E 247 項目、全ゲート成功（検証済み）。
