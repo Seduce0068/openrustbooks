@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 140 件）。
+openrustbooks の ADR 一覧（全 141 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -282,3 +282,5 @@ openrustbooks の ADR 一覧（全 140 件）。
   - status: accepted — 位置適用の 2 秒 deadline を過ぎて読み込まれる巨大画像を load イベントで検出し、警告の取りこぼしを防ぐ決定を記録する。
 - [ADR-0140: 位置復元 E2E の延長ベースライン](0140-extended-position-baseline.md)
   - status: accepted — 画像寸法予約前に位置復元系 E2E を 10 回連続実行し、ベースラインと残るフレークを記録する。
+- [ADR-0141: 画像縮小 E2E のフレーク修正](0141-downscale-flake.md)
+  - status: accepted — 画像縮小の完了待ちを条件確認＋再待機にし、E2E の取りこぼしを防ぐ決定を記録する。
