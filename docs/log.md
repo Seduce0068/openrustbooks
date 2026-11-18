@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- 保存失敗通知を reader / editor 別イベントへ分離し、E2E を 240→241 に更新（ADR-0165）。
 - README / architecture の依存一覧を comrak / ammonia / rumdl の実装事実へ更新（ADR-0163 の未決定を解消）。
 - 未使用の pulldown-cmark 直接依存を削除し、Cargo.lock も整理（ADR-0163、推移依存は残存）。
 - Markdown Preview を comrak + 二段サニタイズで実装し、E2E を 237→238 に更新（ADR-0162）。

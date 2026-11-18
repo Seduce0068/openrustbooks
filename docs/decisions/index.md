@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 163 件）。
+openrustbooks の ADR 一覧（全 165 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -328,3 +328,7 @@ openrustbooks の ADR 一覧（全 163 件）。
   - status: accepted — エディタ Preview で comrak による Markdown レンダリングと二段構えのサニタイズを行う決定を記録する。
 - [ADR-0163: 未使用 Markdown 依存の削除](0163-remove-unused-markdown-dep.md)
   - status: accepted — 直接未使用となった pulldown-cmark をマニフェストから削除する決定を記録する。
+- [ADR-0164: エディタ下書きのローカル保存](0164-editor-draft-save.md)
+  - status: accepted — Tauri を有効化せず、エディタの Save をブラウザ内 localStorage ドラフトとして接続する決定を記録する。
+- [ADR-0165: save-error リスナーの送信先分離](0165-save-error-listener.md)
+  - status: accepted — 保存失敗通知を送信先別イベント名へ分離し、Editor / Reader の status 競合を解消する決定を記録する。
