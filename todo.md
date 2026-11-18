@@ -55,8 +55,6 @@ status: current
 <!-- R6-2026-11-19 中優先度 -->
 - 【PR-M08 / TD-M08】設定モデルが AppConfig / WasmConfig / ReaderSettings / SettingsView の 4 重。
   根拠 `core/src/config.rs:14` / `core/src/wasm.rs:645` / `web/src/lib.rs:1501`。
-- 【PR-M09】auto_fix 分岐の validate_content が native と wasm で重複。
-  根拠 `core/src/ai_markdown/mod.rs:190-192` / `core/src/wasm.rs:534-556`。
 - 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
   根拠 `desktop/src/state/mod.rs:12,76,136`。
 - 【PR-M12】THIRD_PARTY_NOTICES が imagesize のみで配布依存を網羅していない。
@@ -180,6 +178,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M09】auto_fix 分岐を lint.rs の validate_with_auto_fix へ集約。
+      native / wasm とも委譲し、直接テスト 2 件追加（core 248）。
+      E2E 250 件・全ゲート成功 / ADR-0194。
 - [x] 【PR-M11】設定フォームを readonly/disabled 化し常時説明を追加。
       setter 更新を削除し表示用 signal は維持。E2E 250 件・全ゲート成功 / ADR-0193。
 - [x] 【TD-M09】Reader の on_cleanup で残余 object URL / cover URL を revoke。
