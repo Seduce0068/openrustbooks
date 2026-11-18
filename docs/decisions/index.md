@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 186 件）。
+openrustbooks の ADR 一覧（全 187 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -374,3 +374,5 @@ openrustbooks の ADR 一覧（全 186 件）。
   - status: accepted — cargo-audit 未インストール時に検証をスキップせず失敗させる決定を記録する。
 - [ADR-0186: 設定 IPC 境界の強化](0186-config-ipc-boundary.md)
   - status: accepted — 生 config を受け取るコマンドでも DTO 境界へ正規化し、機微フィールドの注入を防ぐ決定を記録する。
+- [ADR-0187: table 数値属性の fail-closed 検証](0187-table-attribute-validation.md)
+  - status: accepted — EPUB サニタイズで table 関連の数値属性を検証し、不正値を削除する決定を記録する。
