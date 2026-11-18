@@ -1698,8 +1698,15 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
     }
 
     // 表示設定の取り込み。
+    // 現在の設定が localStorage に存在する場合は維持する。ADR-0032 では
+    // 設定を無条件上書きとしていたが、ADR-0151 の監査で古いバックアップに
+    // よる現在設定の破壊リスクが指摘されたため、存在する値は守る。
+    // 現在の設定が無い初回起動・クリア後のみインポート値で復元する。
+    // 設定の明示的な復元オプションは今回は UI を用意しないため未配線。
     let settings_obj = settings.clone();
-    if let Some(serde_json::Value::Object(settings)) = settings_obj {
+    if let Some(serde_json::Value::Object(settings)) = settings_obj
+        && storage.get_item(SETTINGS_KEY).ok().flatten().is_none()
+    {
         let merged = ReaderSettings {
             font_scale: settings
                 .get("fontScale")
@@ -1744,10 +1751,17 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
     }
 
     // 移動履歴の取り込み。値が SavedHistory として読めるものだけ書き込む。
+    // 現在同じキーの履歴が存在する場合は維持する（設定と同様に ADR-0151 の
+    // 古いバックアップによる破壊リスクへの防御）。履歴の savedAt による
+    // マージは今回行わず、現在値の維持で防御する。
     let mut imported_history = 0_usize;
     if let Some(serde_json::Value::Object(history)) = map.get("history") {
         for (key, value) in history {
             if !key.starts_with(HISTORY_KEY_PREFIX) {
+                continue;
+            }
+            // 現在の履歴が存在する場合は上書きしない。
+            if storage.get_item(key).ok().flatten().is_some() {
                 continue;
             }
             let text = match serde_json::to_string(value) {

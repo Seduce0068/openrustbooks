@@ -746,11 +746,12 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 216 + checker.equal 17 = 233。
+    # 期待 check 総数: checker.check 217 + checker.equal 17 = 234。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
-    # localStorage 保存失敗時の status / console 通知の検証 +1。
-    checker = Checker(expected=233)
+    # localStorage 保存失敗時の status / console 通知の検証 +1、
+    # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1。
+    checker = Checker(expected=234)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -779,7 +780,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 233 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 234 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -2065,6 +2066,85 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         await cdp.evaluate(
             "localStorage.removeItem('openrustbooks:position:merge-test');"
             "localStorage.removeItem('openrustbooks:position:merge-new')"
+        )
+
+    # 現在の設定／履歴が存在する状態で古い・未来のバックアップを流入させても
+    # 現在値が維持される（ADR-0151 の監査で指摘された破壊リスクへの防御）。
+    # 現在値のキーが存在することが保護の条件であり、savedAt の大小には依存しない。
+    await cdp.evaluate(
+        "(() => {"
+        " localStorage.setItem('openrustbooks:settings',"
+        "  JSON.stringify({fontScale: 4, lineHeight: 0, dark: false, followSystem: false,"
+        "    swipeThreshold: 30, verticalScrollThreshold: 10, downscaleImages: true,"
+        "    jpegQuality: 50}));"
+        " localStorage.setItem('openrustbooks:history:preserve-test',"
+        "  JSON.stringify({entries: [{chapterIndex: 0, fragment: null, scrollTop: 777,"
+        "    savedAt: 2000}], index: 0}));"
+        " })()"
+    )
+    preserve_payload = {
+        "version": 1,
+        "positions": {
+            "openrustbooks:position:preserve-test": {
+                "chapterIndex": 0,
+                "fragment": None,
+                "scrollTop": 42,
+                "savedAt": 9999999999999,
+            }
+        },
+        "settings": {
+            "fontScale": 1,
+            "lineHeight": 2,
+            "dark": True,
+            "followSystem": True,
+        },
+        "history": {
+            "openrustbooks:history:preserve-test": {
+                "entries": [
+                    {"chapterIndex": 1, "fragment": None, "scrollTop": 111, "savedAt": 100}
+                ],
+                "index": 0,
+            }
+        },
+    }
+    preserve_path = SAMPLE.parent / "preserve-current.json"
+    preserve_path.write_text(_json.dumps(preserve_payload), encoding="utf-8")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id = document["result"]["root"]["nodeId"]
+    node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#reader-import-file"})
+    node_id = node["result"]["nodeId"]
+    if node_id != 0:
+        await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(preserve_path)]})
+        await cdp.evaluate(
+            "document.querySelector('#reader-import-file').dispatchEvent(new Event('change', {bubbles: true}))"
+        )
+        await wait_until(
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+        )
+        await asyncio.sleep(1.0)
+        preserved = await cdp.evaluate(
+            "(() => ({"
+            " settings: JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}'),"
+            " history: JSON.parse(localStorage.getItem('openrustbooks:history:preserve-test') || '{}'),"
+            " position: JSON.parse(localStorage.getItem('openrustbooks:position:preserve-test') || '{}')"
+            " }))()"
+        )
+        checker.check(
+            "現在の設定／履歴がある状態で古い・未来のバックアップを入れても現在値が維持される",
+            preserved["settings"].get("fontScale") == 4
+            and preserved["settings"].get("dark") is False
+            and preserved["settings"].get("downscaleImages") is True
+            and preserved["settings"].get("jpegQuality") == 50
+            and preserved["history"].get("entries", [{}])[0].get("scrollTop") == 777
+            and preserved["position"].get("scrollTop") == 42,
+            f"(preserved={preserved!r})",
+        )
+        # 後続のテストに影響しないよう片付ける。
+        await cdp.evaluate(
+            "localStorage.removeItem('openrustbooks:history:preserve-test');"
+            "localStorage.removeItem('openrustbooks:position:preserve-test');"
+            "localStorage.setItem('openrustbooks:settings',"
+            " JSON.stringify({fontScale: 1, lineHeight: 1, dark: false, followSystem: false}))"
         )
 
     # OS のカラースキーム追従。
