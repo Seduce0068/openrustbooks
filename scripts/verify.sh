@@ -65,8 +65,8 @@ run clippy cargo clippy --all-targets --locked -- -D warnings
 run wasm-core cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 run wasm-web cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 # wasm-bindgen-test のテストは Node 上で実際に実行する（--no-run では不十分）。
-# wasm-pack が wasm-bindgen / test-runner を自動的に導入し、--locked でロックファイルを固定する。
-run wasm-test bash -c 'cd core && wasm-pack test --node --locked'
+# wasm-pack の導入とテスト実行は共通スクリプトに集約し、CI と単一情報源にする。
+run wasm-test bash scripts/ci-wasm-test.sh
 
 # 脆弱性ゲート: advisory DB をフェッチせずローカルキャッシュだけで監査する。
 # -n/--no-fetch がオフライン／キャッシュ優先のオプション（git fetch を実行しない）。
