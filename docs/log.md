@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+- インポート時に現在の設定／履歴を維持する二層マージを実装し、E2E を 233→234 に更新（ADR-0157）。
 - Wasm AI/lint の偽成功スタブを明示的エラーへ変更し、wasm テストを 4→6 件に追加（ADR-0156）。
 - rumdl を featureless 化して依存 28 個を削減（ADR-0155）。serde_yaml / jemalloc は non-optional のため残存。
 - localStorage 保存失敗を固定文言の status と console.error で可視化し、E2E を 232→233 に更新（ADR-0154）。
