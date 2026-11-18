@@ -135,10 +135,6 @@ status: current
   根拠 `web/src/lib.rs:3509-3511`。
 - 【PR-L03】build_app が desktop/mobile で 7 プラグイン重複。
   根拠 `desktop/src/main.rs:16-18,42-44`。共通関数へ抽出。
-- 【TD-L02】`TokenStream::is_done` が常に false で呼び出し側ゼロ。
-  根拠 `core/src/ai_markdown/client.rs:82-85,315-317,458-460`。削除または実装。
-- 【TD-L03】`available_space` が常に None で呼び出し側ゼロ。
-  根拠 `core/src/io.rs:154,543-546`。
 - 【TD-L04】Reader の CoverImage.id / media_type が allow(dead_code) で捨てられる。
   根拠 `web/src/lib.rs:2119-2126,2731-2738`。
 - 【TD-L05】E2E のコメントが期待総数 245 のまま（`Checker(expected=246)` と不整合）。
@@ -174,6 +170,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L02 / L03】未使用 trait メソッド is_done / available_space を削除。
+      ADR-0189 の回帰は next_token シーケンスで担保。残存参照 0、E2E 250 件・全ゲート成功 / ADR-0197。
 - [x] 【TD-M05】wasm-pack test を CI extra_gates へ追加。
       scripts/ci-wasm-test.sh を単一情報源とし verify.sh と同順で呼ぶ。
       E2E 250 件・全ゲート成功 / ADR-0196。
