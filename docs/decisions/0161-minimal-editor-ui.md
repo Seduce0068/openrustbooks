@@ -71,8 +71,7 @@ Preview へ入力が届かなかった。
 ## 未決定
 
 - ~~Markdown の本格レンダリング~~ ADR-0162 で comrak + 二段サニタイズを実装。
-- 保存先（localStorage / ファイル / Tauri command）と保存接続
-  （ADR-0127 から継続）。
+- ~~保存先と保存接続~~ ADR-0164 で localStorage ドラフト保存を実装（Tauri は未接続）。
 - disabled 理由の可視提示（`title` 依存で十分か、要実機確認）。
 - `withGlobalTauri` / CSP / capability（ADR-0128 から継続）。
 - 巨大入力のデバウンス、IME / Undo の実機検証。
