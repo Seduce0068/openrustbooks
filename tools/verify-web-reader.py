@@ -776,7 +776,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 225 + checker.equal 17 = 242。
+    # 期待 check 総数: checker.check 226 + checker.equal 17 = 243。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -788,7 +788,9 @@ async def run_checks(cdp: Cdp) -> int:
     # console 通知 +1（ADR-0154 / ADR-0161）、
     # 1 MiB 超の下書きが setItem されず固定文言 status になる検証 +1、
     # 保存失敗イベントの送信先分離（旧共通名が status を書き換えない）+1（ADR-0164）。
-    checker = Checker(expected=242)
+    # removeItem 一時失敗時の全消去保存失敗通知（status + console の分類文言、
+    # 複数件でも 1 回だけ）+1。
+    checker = Checker(expected=243)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -818,7 +820,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 242 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 243 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -1383,6 +1385,66 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
     checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
+
+    # removeItem を一時的に失敗させ、全消去の失敗が status と console.error の
+    # 固定分類文言へ出ることを確認する。失敗が複数件でも通知は 1 回だけ。
+    # オーバーライドは後続チェックへ影響しないよう try/finally で必ず戻す。
+    await cdp.evaluate(
+        "localStorage.setItem('openrustbooks:position:e2e-clear-failure-1', '{}');"
+        "localStorage.setItem('openrustbooks:position:e2e-clear-failure-2', '{}');"
+    )
+    try:
+        await cdp.evaluate("""(() => {
+          window.__orbOriginalRemoveItem = Storage.prototype.removeItem;
+          window.__orbOriginalConsoleError = console.error;
+          window.__orbClearFailures = [];
+          Storage.prototype.removeItem = function () {
+            throw new Error('QuotaExceededError (E2E clear)');
+          };
+          console.error = function (...args) {
+            window.__orbClearFailures.push(args.map(String).join(' '));
+            return window.__orbOriginalConsoleError.apply(console, args);
+          };
+          return true;
+        })()""")
+        await cdp.evaluate("document.querySelector('#reader-clear-data').click()")
+        clear_fail_shown = await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('保存に失敗しました')",
+            timeout=5,
+        )
+        clear_fail_status = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent ?? ''"
+        )
+        clear_fail_logs = await cdp.evaluate("JSON.stringify(window.__orbClearFailures ?? [])")
+        clear_fail_console = json.loads(clear_fail_logs) if clear_fail_logs else []
+        clear_error_count = await cdp.evaluate(
+            "window.__orbClearFailures.filter((line) => line.includes('全消去')).length"
+        )
+        checker.check(
+            "全消去の保存失敗時に status と console へ通知する",
+            clear_fail_shown
+            and "ブラウザの設定または空き容量" in clear_fail_status
+            and "Removed" not in clear_fail_status  # 成功文言で失敗通知が消えない
+            and clear_error_count == 1
+            and any("全消去 の保存に失敗しました" in line for line in clear_fail_console),
+            f"(status={clear_fail_status!r}, console={clear_fail_console!r}, count={clear_error_count})",
+        )
+    finally:
+        await cdp.evaluate("""(() => {
+          if (window.__orbOriginalRemoveItem) {
+            Storage.prototype.removeItem = window.__orbOriginalRemoveItem;
+            delete window.__orbOriginalRemoveItem;
+          }
+          if (window.__orbOriginalConsoleError) {
+            console.error = window.__orbOriginalConsoleError;
+            delete window.__orbOriginalConsoleError;
+          }
+          delete window.__orbClearFailures;
+          localStorage.removeItem('openrustbooks:position:e2e-clear-failure-1');
+          localStorage.removeItem('openrustbooks:position:e2e-clear-failure-2');
+          return true;
+        })()""")
 
     # ARIA 属性。
     checker.check(

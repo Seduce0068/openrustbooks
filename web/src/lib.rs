@@ -1654,17 +1654,17 @@ fn system_prefers_dark() -> bool {
     }
 }
 
-/// 保存した読書位置をすべて削除し、削除した件数を返す。
+/// 保存した読書位置をすべて削除し、(削除件数, 1 件でも失敗したか) を返す。
 #[cfg(target_arch = "wasm32")]
-fn clear_reading_positions() -> usize {
+fn clear_reading_positions() -> (usize, bool) {
     let Some(window) = web_sys::window() else {
-        return 0;
+        return (0, false);
     };
     let Ok(Some(storage)) = window.local_storage() else {
-        return 0;
+        return (0, false);
     };
     let Ok(length) = storage.length() else {
-        return 0;
+        return (0, false);
     };
     let mut keys = Vec::new();
     for index in 0..length {
@@ -1675,12 +1675,19 @@ fn clear_reading_positions() -> usize {
         }
     }
     let mut removed = 0;
+    let mut failed = false;
     for key in keys {
         if storage.remove_item(&key).is_ok() {
             removed += 1;
+        } else {
+            failed = true;
         }
     }
-    removed
+    if failed {
+        // 失敗が複数件でも通知は 1 回だけ。キー名・値・件数・生エラーは載せない。
+        report_save_failure("全消去", SaveErrorTarget::Reader);
+    }
+    (removed, failed)
 }
 
 /// 読書位置を JSON としてダウンロードする。
@@ -1797,8 +1804,12 @@ fn export_positions() -> usize {
 }
 
 /// JSON 文字列を検証して取り込む。(読書位置の件数, 履歴の件数) を返す。
+///
+/// 位置／履歴の set_item が 1 件でも失敗した場合は `save_failed` に true を
+/// 書き、呼び出し側が成功文言で失敗通知を上書きしないようにする。
+/// 通知自体はこの関数が 1 回だけ発行する。
 #[cfg(target_arch = "wasm32")]
-fn import_positions(raw: &str) -> Result<(usize, usize), String> {
+fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize), String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Err("JSON の解析に失敗しました".to_string());
     };
@@ -1858,6 +1869,8 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
         }
         if storage.set_item(key, &text).is_ok() {
             imported += 1;
+        } else {
+            *save_failed = true;
         }
     }
 
@@ -1937,8 +1950,16 @@ fn import_positions(raw: &str) -> Result<(usize, usize), String> {
             }
             if storage.set_item(key, &text).is_ok() {
                 imported_history += 1;
+            } else {
+                *save_failed = true;
             }
         }
+    }
+
+    if *save_failed {
+        // 位置・履歴の set_item 失敗は複数件でも 1 回だけ通知する。
+        // キー名・値・件数・生エラーは載せない（ADR-0154 / ADR-0165）。
+        report_save_failure("インポート", SaveErrorTarget::Reader);
     }
 
     if imported == 0 && imported_history == 0 && positions.is_empty() && settings.is_none() {
@@ -3234,7 +3255,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         set_status.set("Display settings reset.".to_string());
     };
     let on_clear_data = move |_| {
-        let removed = clear_reading_positions();
+        let (removed, failed) = clear_reading_positions();
+        if failed {
+            // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
+            return;
+        }
         set_status.set(format!("Removed {removed} saved reading positions."));
     };
     let on_export = move |_: web_sys::MouseEvent| {
@@ -3274,7 +3299,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 set_status.set("Failed to read the import file.".to_string());
                 return;
             };
-            match import_positions(&raw) {
+            let mut save_failed = false;
+            let result = import_positions(&raw, &mut save_failed);
+            if save_failed {
+                // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
+                return;
+            }
+            match result {
                 Ok((count, history_count)) => {
                     set_status.set(format!(
                         "Imported {count} reading positions and {history_count} histories."
