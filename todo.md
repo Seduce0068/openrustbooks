@@ -26,8 +26,6 @@ status: current
   根拠 `web/src/lib.rs:1397-1409,1716-1777,1843-1855,1988`。
 - 【PR-H06】SVG サニタイズが core（ammonia）と web（DomParser + 手動）で二重実装され drift リスク。
   根拠 `core/src/sanitize.rs:124` / `web/src/lib.rs:940,1040,2298`。
-- 【PR-H07】README の ADR 一覧で 0098〜0131 の説明が ADR-0132 に入れ子になっている。
-  根拠 `README.md:287-356` / `docs/decisions/index.md:199-268`。
 - 【CI-H01】CI が trunk build・配布パス検査・E2E(246件) をマージゲートに入れていない。
   根拠 `.github/workflows/ci.yml:24,42-44` / `scripts/verify.sh:64-121`。
   CI billing 解消後に共通ワークフロー側で対応。
@@ -210,6 +208,9 @@ status: current
 
 ## 完了
 
+- [x] 【PR-H07】README の ADR 一覧を `docs/decisions/index.md` と整合。
+      ADR-0098〜0131 の説明 34 件を正しい行へ移動し、0132 には自身の説明のみ。
+      markdownlint 0 issues / コード変更なし・E2E 248 維持。
 - [x] 【TD-H05】エディタ下書きを 800ms デバウンス自動保存し、未保存表示を追加。
       タイマー cleanup と世代ガードで古い発火を破棄。beforeunload は E2E 阻塞のため見送り。
       E2E 248 件・全ゲート成功 / ADR-0179。
