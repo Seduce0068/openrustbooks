@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- README の ADR 一覧（0098〜0131）を decisions 索引と整合させ、誤入れ子を解消（R6 PR-H07）。
 - エディタ下書きを 800ms デバウンス自動保存へ変更し、E2E を 247→248 に更新（ADR-0179）。
 - watch 未実装に合わせ can_watch=false 化と IPC 削除を実施（ADR-0178）。
 - 設定保存と AI service 初期化を prepare/commit に分離し、部分コミットを防止（ADR-0177）。
