@@ -57,8 +57,6 @@ status: current
   根拠 `core/src/config.rs:14` / `core/src/wasm.rs:645` / `web/src/lib.rs:1501`。
 - 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
   根拠 `desktop/src/state/mod.rs:12,76,136`。
-- 【PR-M12】THIRD_PARTY_NOTICES が imagesize のみで配布依存を網羅していない。
-  根拠 `THIRD_PARTY_NOTICES.md:1-4,32-59`。
 - 【TD-M07】Leptos の非公開 re-export `__reexports::send_wrapper` に依存。
   根拠 `docs/decisions/0166:28` / `web/src/lib.rs:224-242`。
 - 【TD-M08b】figment の env マッピングが手動上書きワークアラウンドのまま。
@@ -166,6 +164,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M12】第三者通知へ外部依存 781 件（dev 9 件除外）を自動生成。
+      旧 MIT / imagesize は履歴保持、markdownlint 0 issues / ADR-0199。
 - [x] 【PR-L01 / L02】Reader の ARIA 属性を修正。aria-labelledby へ一本化し、
       aria-pressed/可視ラベルを effective_dark へ。E2E 251 件・全ゲート成功 / ADR-0198。
 - [x] 【TD-L02 / L03】未使用 trait メソッド is_done / available_space を削除。
