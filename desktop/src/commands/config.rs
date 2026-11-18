@@ -265,124 +265,124 @@ impl From<&AppConfig> for ConfigPatch {
 }
 
 impl ConfigPatch {
-    /// 公開フィールドだけを上書きし、隠しフィールドは `current` から維持する。
-    pub fn apply_to(self, current: &AppConfig) -> AppConfig {
-        let mut merged = current.clone();
-        merged.general = self.general.into_config(&current.general);
-        merged.ai = self.ai.into_config(&current.ai);
-        merged.lint = self.lint.into_config(&current.lint);
-        merged.storage = self.storage.into_config(&current.storage);
-        merged.editor = self.editor;
-        merged.reader = self.reader;
-        merged
+    /// 公開フィールドだけを反映する。DTO 外のフィールドはプレースホルダ／既定値にする。
+    ///
+    /// 不変条件: `apply_to()` の結果は必ず `merge_secrets()` を通すこと。
+    /// 現在値の復元は `merge_secrets()` のみが行い、ここでは `current` を使わない。
+    pub fn apply_to(self, _current: &AppConfig) -> AppConfig {
+        AppConfig {
+            general: self.general.into_config(),
+            ai: self.ai.into_config(),
+            lint: self.lint.into_config(),
+            storage: self.storage.into_config(),
+            editor: self.editor,
+            reader: self.reader,
+        }
     }
 }
 
-// 以下は View -> core の逆変換。DTO に無いフィールドはすべて `current` から補う。
+// View -> core の逆変換。DTO に無いフィールドは既定値／空値を入れ、
+// 現在値の復元は merge_secrets() に任せる。
 impl GeneralConfigView {
-    fn into_config(self, current: &GeneralConfig) -> GeneralConfig {
+    fn into_config(self) -> GeneralConfig {
         GeneralConfig {
             language: self.language,
             theme: self.theme,
             telemetry: self.telemetry,
             check_updates: self.check_updates,
             log_level: self.log_level,
-            data_dir: current.data_dir.clone(),
-            cache_dir: current.cache_dir.clone(),
+            // DTO 外: merge_secrets() が現在値を復元する。
+            data_dir: None,
+            cache_dir: None,
         }
     }
 }
 
 impl AiConfigView {
-    fn into_config(self, current: &AiConfig) -> AiConfig {
+    fn into_config(self) -> AiConfig {
         AiConfig {
             enabled: self.enabled,
             default_provider: self.default_provider,
-            openai: self.openai.into_config(&current.openai),
-            ollama: self.ollama.into_config(&current.ollama),
+            openai: self.openai.into_config(),
+            ollama: self.ollama.into_config(),
             max_tokens_per_request: self.max_tokens_per_request,
             max_tokens_per_month: self.max_tokens_per_month,
-            max_retries: current.max_retries,
             prefer_local: self.prefer_local,
             timeout_secs: self.timeout_secs,
             streaming: self.streaming,
-            model_overrides: current.model_overrides.clone(),
+            // DTO 外: プレースホルダを入れ、現在値は merge_secrets() が復元する。
+            max_retries: 0,
+            model_overrides: HashMap::new(),
         }
     }
 }
 
 impl OpenAiConfigView {
-    fn into_config(self, current: &OpenAiConfig) -> OpenAiConfig {
+    fn into_config(self) -> OpenAiConfig {
         OpenAiConfig {
             base_url: self.base_url,
-            // has_api_key は無視して実値を保持する。
-            api_key: current.api_key.clone(),
+            // has_api_key は無視。空値を入れ、実値は merge_secrets() が復元する。
+            api_key: None,
             model: self.model,
             organization: self.organization,
-            extra_headers: current.extra_headers.clone(),
+            // DTO 外: 空のまま merge_secrets() に任せる。
+            extra_headers: HashMap::new(),
         }
     }
 }
 
 impl OllamaConfigView {
-    fn into_config(self, current: &OllamaConfig) -> OllamaConfig {
+    fn into_config(self) -> OllamaConfig {
         OllamaConfig {
             base_url: self.base_url,
             model: self.model,
             keep_alive_minutes: self.keep_alive_minutes,
-            options: current.options.clone(),
+            // DTO 外: merge_secrets() が現在値を復元する。
+            options: HashMap::new(),
         }
     }
 }
 
 impl LintConfigView {
-    fn into_config(self, current: &LintConfig) -> LintConfig {
+    fn into_config(self) -> LintConfig {
         LintConfig {
             enabled: self.enabled,
-            config_file: current.config_file.clone(),
+            // DTO 外: merge_secrets() が現在値を復元する。
+            config_file: None,
             enable_rules: self.enable_rules,
             disable_rules: self.disable_rules,
             auto_fix: self.auto_fix,
             warnings_as_errors: self.warnings_as_errors,
-            rule_config: current.rule_config.clone(),
+            rule_config: HashMap::new(),
         }
     }
 }
 
 impl StorageConfigView {
-    fn into_config(self, current: &StorageConfig) -> StorageConfig {
+    fn into_config(self) -> StorageConfig {
         StorageConfig {
             default_backend: self.default_backend,
             local_roots: self
                 .local_roots
                 .into_iter()
-                .map(|root| root.into_config(&current.local_roots))
+                .map(LocalRootView::into_config)
                 .collect(),
-            google_drive: self
-                .google_drive
-                .map(|drive| drive.into_config(current.google_drive.as_ref())),
-            recent_paths: current.recent_paths.clone(),
+            google_drive: self.google_drive.map(GoogleDriveConfigView::into_config),
+            // DTO 外: merge_secrets() が現在値を復元する。
+            recent_paths: Vec::new(),
             max_recent: self.max_recent,
         }
     }
 }
 
 impl LocalRootView {
-    fn into_config(self, current_roots: &[LocalRootConfig]) -> LocalRootConfig {
-        // merge_secrets と同じ規則で、id が一意に一致した場合だけ path を復元する。
-        let path = if self.id.is_empty() {
-            PathBuf::new()
-        } else {
-            let mut matches = current_roots.iter().filter(|root| root.id == self.id);
-            match (matches.next(), matches.next()) {
-                (Some(root), None) => root.path.clone(),
-                _ => PathBuf::new(),
-            }
-        };
+    fn into_config(self) -> LocalRootConfig {
+        // path は DTO 外なので常に空にする。merge_secrets() が id 一意一致時のみ
+        // 現在値を復元し、新規／不一致 id は incoming（空）のまま残す。
         LocalRootConfig {
             id: self.id,
             name: self.name,
-            path,
+            path: PathBuf::new(),
             read_only: self.read_only,
             watch: self.watch,
         }
@@ -390,16 +390,12 @@ impl LocalRootView {
 }
 
 impl GoogleDriveConfigView {
-    fn into_config(self, current: Option<&GoogleDriveConfig>) -> GoogleDriveConfig {
-        // has_client_secret / has_refresh_token は無視して現在値を保持する。
-        let (client_secret, refresh_token) = match current {
-            Some(current) => (current.client_secret.clone(), current.refresh_token.clone()),
-            None => (String::new(), None),
-        };
+    fn into_config(self) -> GoogleDriveConfig {
+        // has_* は無視。空値／None を入れ、実値は merge_secrets() が復元する。
         GoogleDriveConfig {
             client_id: self.client_id,
-            client_secret,
-            refresh_token,
+            client_secret: String::new(),
+            refresh_token: None,
             root_folder_id: self.root_folder_id,
             use_app_data_folder: self.use_app_data_folder,
             scopes: self.scopes,
@@ -423,6 +419,7 @@ fn are_headers_placeholder(headers: &HashMap<String, String>) -> bool {
 /// The DTO sent to JS contains presence flags instead of secret values, so an
 /// update round-trip would otherwise erase every stored credential. Keeping
 /// this a pure function makes the rule testable without an [`AppState`].
+/// DTO 外フィールド（パス・シークレット・マップ等）の復元はここが唯一の箇所。
 pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppConfig {
     let mut merged = incoming.clone();
 
@@ -460,10 +457,12 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     // max_retries は DTO から除外したため、JS 往復で現在値を保持する。
     merged.ai.max_retries = current.ai.max_retries;
 
-    // local_roots[].path は id が一意に一致した場合のみ復元する。
-    // id が空／不一致／現在側で重複している場合はマージせず安全にスキップする。
+    // local_roots[].path は id が一意に一致した場合のみ現在値を復元する。
+    // id が空／不一致／現在側で重複している場合は空 PathBuf に統一する
+    // （ADR-0129 の fail-closed に整合）。apply_to も同じ規則で空を返す。
     for root in &mut merged.storage.local_roots {
         if root.id.is_empty() {
+            root.path = PathBuf::new();
             continue;
         }
         let mut matches = current
@@ -472,10 +471,12 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
             .iter()
             .filter(|current_root| current_root.id == root.id);
         let Some(current_root) = matches.next() else {
-            continue; // 不一致の場合はマージしない
+            root.path = PathBuf::new(); // 不一致: 復元せず空にする
+            continue;
         };
         if matches.next().is_some() {
-            continue; // 現在側で id が重複している場合も安全のためスキップ
+            root.path = PathBuf::new(); // 現在側で id 重複: 誤マージを避け空にする
+            continue;
         }
         root.path = current_root.path.clone();
     }
@@ -535,6 +536,7 @@ pub async fn update_config_patch(
     patch: ConfigPatch,
 ) -> Result<ConfigView, String> {
     let current = state.config();
+    // 不変条件: apply_to() の結果は必ず merge_secrets() を通してから保存する。
     let applied = patch.apply_to(&current);
     let merged = merge_secrets(&current, &applied);
     validate_ai_base_urls(&merged.ai)?;
@@ -996,7 +998,7 @@ mod tests {
 
         // id が一致すれば path が空でも現在値が復元される。
         incoming.storage.local_roots[0].path.clear();
-        // 新規 id は現在値がないためマージせず incoming の値を維持する。
+        // 新規 id は現在値がないため空 PathBuf に統一する。
         incoming.storage.local_roots.push(LocalRootConfig {
             id: "root-new".to_string(),
             name: "New".to_string(),
@@ -1004,7 +1006,7 @@ mod tests {
             read_only: false,
             watch: false,
         });
-        // id が空のルートもマージ対象外。
+        // id が空のルートもマージ対象外（空 PathBuf に統一）。
         incoming.storage.local_roots.push(LocalRootConfig {
             id: String::new(),
             name: "NoId".to_string(),
@@ -1023,14 +1025,8 @@ mod tests {
             merged.storage.local_roots[1].path,
             PathBuf::from("/secret/root-b")
         );
-        assert_eq!(
-            merged.storage.local_roots[2].path,
-            PathBuf::from("/incoming/new")
-        );
-        assert_eq!(
-            merged.storage.local_roots[3].path,
-            PathBuf::from("/incoming/no-id")
-        );
+        assert!(merged.storage.local_roots[2].path.as_os_str().is_empty());
+        assert!(merged.storage.local_roots[3].path.as_os_str().is_empty());
     }
 
     #[test]
@@ -1053,11 +1049,42 @@ mod tests {
     }
 
     #[test]
+    fn config_patch_apply_to_emits_placeholders_for_hidden_fields() {
+        let current = config_with_paths();
+        let applied = ConfigPatch::from(&current).apply_to(&current);
+
+        // DTO 外の 13 項目はすべてプレースホルダ／既定値になる。
+        assert!(applied.general.data_dir.is_none());
+        assert!(applied.general.cache_dir.is_none());
+        assert_eq!(applied.ai.max_retries, 0);
+        assert!(applied.ai.model_overrides.is_empty());
+        assert!(applied.ai.openai.api_key.is_none());
+        assert!(applied.ai.openai.extra_headers.is_empty());
+        assert!(applied.ai.ollama.options.is_empty());
+        assert!(applied.lint.config_file.is_none());
+        assert!(applied.lint.rule_config.is_empty());
+        assert!(applied.storage.recent_paths.is_empty());
+        for root in &applied.storage.local_roots {
+            assert!(root.path.as_os_str().is_empty());
+        }
+        let drive = applied.storage.google_drive.as_ref().unwrap();
+        assert!(drive.client_secret.is_empty());
+        assert!(drive.refresh_token.is_none());
+    }
+
+    #[test]
     fn config_patch_preserves_hidden_fields() {
         let current = config_with_paths();
-        let merged = ConfigPatch::from(&current).apply_to(&current);
+        // apply_to は DTO 外を空にし、merge_secrets() が現在値を復元する。
+        let applied = ConfigPatch::from(&current).apply_to(&current);
+        let merged = merge_secrets(&current, &applied);
 
-        // パス系 / secret 系 / マップ系の除外フィールドがすべて現在値のまま。
+        // apply_to 単体では隠しフィールドが空／既定値になること。
+        assert!(applied.general.data_dir.is_none());
+        assert!(applied.ai.openai.api_key.is_none());
+        assert!(applied.ai.model_overrides.is_empty());
+
+        // update_config_patch 経路ではパス系 / secret 系 / マップ系が現在値のまま。
         assert_eq!(merged.general.data_dir, current.general.data_dir);
         assert_eq!(merged.general.cache_dir, current.general.cache_dir);
         assert_eq!(merged.lint.config_file, current.lint.config_file);
@@ -1095,14 +1122,14 @@ mod tests {
         patch.editor.font_size = 20.0;
         patch.reader.theme = "sepia".to_string();
 
-        let merged = patch.apply_to(&current);
+        let merged = merge_secrets(&current, &patch.apply_to(&current));
 
         assert!(merged.ai.enabled);
         assert!(!merged.lint.enabled);
         assert_eq!(merged.general.theme, "dark");
         assert_eq!(merged.editor.font_size, 20.0);
         assert_eq!(merged.reader.theme, "sepia");
-        // 公開フィールドを変えても隠しフィールドは維持される。
+        // 公開フィールドを変えても merge_secrets() で隠しフィールドは維持される。
         assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
         assert_eq!(merged.general.data_dir, current.general.data_dir);
         assert_eq!(
@@ -1130,7 +1157,7 @@ mod tests {
             watch: false,
         });
 
-        let merged = patch.apply_to(&current);
+        let merged = merge_secrets(&current, &patch.apply_to(&current));
 
         assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
         assert_eq!(merged.general.data_dir, current.general.data_dir);
@@ -1143,8 +1170,26 @@ mod tests {
             merged.storage.local_roots[1].path,
             PathBuf::from("/secret/root-b")
         );
-        // 不一致 / 空 id の新規ルートは path を持たない。
+        // 不一致 / 空 id の新規ルートは incoming（空）のまま残る。
         assert!(merged.storage.local_roots[2].path.as_os_str().is_empty());
         assert!(merged.storage.local_roots[3].path.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn config_patch_apply_to_leaves_local_root_paths_empty() {
+        let current = config_with_paths();
+        let patch = ConfigPatch::from(&current);
+
+        let applied = patch.apply_to(&current);
+
+        // 既存 id でも apply_to は空 path を返す。復元は merge_secrets() の責務。
+        for root in &applied.storage.local_roots {
+            assert!(root.path.as_os_str().is_empty());
+        }
+        let merged = merge_secrets(&current, &applied);
+        assert_eq!(
+            merged.storage.local_roots[0].path,
+            PathBuf::from("/secret/root-a")
+        );
     }
 }
