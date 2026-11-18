@@ -59,8 +59,6 @@ status: current
   根拠 `core/src/ai_markdown/mod.rs:190-192` / `core/src/wasm.rs:534-556`。
 - 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
   根拠 `desktop/src/state/mod.rs:12,76,136`。
-- 【PR-M11】設定フォームは読み取り専用契約なのに UI は双方向編集可能。
-  根拠 `web/src/lib.rs:3656,3765,3876,3896,3930`。
 - 【PR-M12】THIRD_PARTY_NOTICES が imagesize のみで配布依存を網羅していない。
   根拠 `THIRD_PARTY_NOTICES.md:1-4,32-59`。
 - 【TD-M05】wasm-pack test --node が CI ゲートに含まれていない。
@@ -182,6 +180,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M11】設定フォームを readonly/disabled 化し常時説明を追加。
+      setter 更新を削除し表示用 signal は維持。E2E 250 件・全ゲート成功 / ADR-0193。
 - [x] 【TD-M09】Reader の on_cleanup で残余 object URL / cover URL を revoke。
       SendWrapper パターンを再利用、既存 revoke 維持。E2E 249 件・全ゲート成功 / ADR-0192。
 - [x] 【PR-M07】Google Fonts の preconnect / stylesheet を削除し CSP をローカル完結化。
