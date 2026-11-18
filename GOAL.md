@@ -1,44 +1,38 @@
 # Goal
 
-native 側の rumdl 依存を `default-features = false` に絞り、不要な CLI/LSP スタックを除去する（ADR-0151 の残タスク）。
+Wasm AI / lint スタブの偽成功を排除し、未実装を明示する（ADR-0151 の高優先度残タスク）。
 
 ## Scope
 
 ### 背景
 
-`core/Cargo.toml:64` は `rumdl = { version = "0.3", default-features = true }`。
-rumdl 0.3.2 の default feature は `parallel` + `native` で、
-`native` は tower-lsp / tokio / notify / env_logger / blake3 / postcard /
-colored / ec4rs 等を引く。CI では tikv-jemalloc-sys のディスク問題を
-debuginfo 破棄で回避している（ci.yml:35-41）。
-core は `rumdl_lib::config::Config` と rules API のみを使用しており、
-LSP / CLI は不要（core/src/ai_markdown/lint.rs:4）。
+`core/src/wasm.rs` の `WasmAiMarkdownService` は固定文字列と
+`lint_passed: true`、架空の `tokens_used` を返し、
+`WasmMarkdownLinter` は常に空 issues / `passed: true` を返す。
+Web UI からは未参照だが、将来接続された際に誤った成功結果を返す危険がある。
 
 ### 成果物
 
-- `core/Cargo.toml`: 変更（native も `default-features = false`）
-- `Cargo.lock`: 変更（不要依存の除去）
-- `.github/workflows/ci.yml`: 変更（可能なら env_vars の debuginfo 回避を削除）
-- `docs/decisions/0155-rumdl-feature-reduction.md`: 追加
+- `core/src/wasm.rs`: 変更（stub を fail-closed な `Err(JsValue)` に変更、または real lint 接続）
+- `docs/decisions/0156-wasm-stub-failclosed.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. native の rumdl を `default-features = false` に変更し、
-   `cargo check --all-targets --locked` / `cargo test --all-targets --locked` /
-   `cargo clippy --all-targets --locked -- -D warnings` が通ることを確認。
-2. `serde_yaml 0.9.34+deprecated` がロックから消えるか確認（消えない場合は理由を記録）。
-3. `cargo audit --no-fetch` の警告数が baseline 10 から減るか確認（減らない場合も記録）。
-4. CI の `env_vars`（debuginfo 回避）が不要なら削除。必要なら維持して理由を記録。
-5. E2E 233 項目と全ゲートを壊さない。
+1. AI メソッド（`generate` / `refine` / `to_table` / `front_matter`）が
+   「ブラウザでは AI 機能を利用できません」系の明示的エラーを返す。
+2. `WasmMarkdownLinter::lint()` / `lint_and_fix()` も同様に fail-closed にするか、
+   rumdl を利用して実 lint を返す（実装可能ならこちらを優先）。
+3. 架空の `tokens_used` / `lint_passed: true` を返さない。
+4. 既存の 254 単体テスト + wasm 4、E2E 233 項目を壊さない。
 
 ## Acceptance criteria
 
 - 全ゲート成功、E2E 233 項目成功。
-- 依存削減の効果が ADR に記録される。
+- ADR に判断と根拠が記録される。
 
 ## Constraints
 
-- rumdl のバージョンは 0.3 のまま（アップグレードは別タスク）。
 - 新規依存を追加しない。
+- ブラウザ側 AI 送信（同意・API key）は本次で実装しない。
 - `master` へ push する。force push はしない。
