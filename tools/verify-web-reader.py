@@ -361,6 +361,12 @@ MAX_REQUEST_URLS = 500
 # して、CDP が無応答でもデッドラインが効くようにする（ADR-0142 / 0143 は未決定の暫定値）。
 CDP_RECV_TIMEOUT = 10.0
 
+# CLS の許容閾値。Web Vitals の "good" 境界 0.1 を採用する。
+# 根拠: ADR-0149 実装後の現行ビルドを /tmp の一時スクリプトで 5 回連続実測し、
+# いずれも CLS = 0（layout-shift entry 0 件）。observer 自体は意図的な
+# レイアウトシフトで 0.106 を捕捉できることを確認済み（陽性対照）。
+CLS_THRESHOLD = 0.1
+
 
 class Cdp:
     def __init__(self, ws):
@@ -665,6 +671,30 @@ BOOT_PROBE = r"""
 })()
 """
 
+# CLS 計測用の observer を文書生成前に登録する。buffered: true により登録前の
+# layout-shift も取りこぼさない。hadRecentInput は入力由来のシフトなので除外する。
+# 単純合計でよいのは、計測を Page.reload 直後の同一文書内で画像セトリング直後に
+# 読み、加算対象の窓を数秒に限定しているため（長い E2E 全体は加算しない）。
+CLS_PROBE = r"""
+(() => {
+  window.__orbCls = 0;
+  window.__orbClsEntries = 0;
+  window.__orbClsReady = false;
+  try {
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.hadRecentInput) continue;
+        window.__orbCls += entry.value;
+        window.__orbClsEntries += 1;
+      }
+    }).observe({type: 'layout-shift', buffered: true});
+    window.__orbClsReady = true;
+  } catch (e) {
+    window.__orbClsError = String(e);
+  }
+})()
+"""
+
 BOOT_STATE = """(() => {
   const boot = window.__orbBoot || {};
   return {
@@ -746,12 +776,13 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 217 + checker.equal 17 = 234。
+    # 期待 check 総数: checker.check 218 + checker.equal 17 = 235。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
-    # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1。
-    checker = Checker(expected=234)
+    # 現在の設定／履歴が存在する場合の古い・未来バックアップ流入からの保護 +1、
+    # 画像読み込み後の CLS 直接計測 +1（ADR-0149 の残項目）。
+    checker = Checker(expected=235)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -772,6 +803,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await cdp.send("DOM.enable")
     # イベントは send() が捨てずに退避するため、有効化は navigate より前に行う。
     await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": BOOT_PROBE})
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": CLS_PROBE})
     await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/reader/e2e"})
 
     reader_selector = "document.querySelector('.reader-container') !== null"
@@ -780,7 +812,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 234 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 235 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -1164,6 +1196,32 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "document.querySelector('#tall')?.naturalHeight === 4000"
     )
     checker.check("縦長画像が読み込まれる", bool(tall_loaded))
+
+    # CLS の直接計測（ADR-0149 の残項目）。observer は Page.reload で作り直された
+    # 文書内で動いており、ここまでに加算されたのは本を開いて画像が落ち着くまでの
+    # 数秒だけ。observer コールバックのフラッシュを 1 フレーム分だけ待つ。
+    await asyncio.sleep(0.1)
+    cls = await cdp.evaluate(
+        "typeof window.__orbCls === 'number' ? window.__orbCls : null"
+    )
+    cls_entries = await cdp.evaluate(
+        "typeof window.__orbClsEntries === 'number' ? window.__orbClsEntries : null"
+    )
+    # observer が登録済みで例外も出ていないことを明示的に確認する（0 件を誤って
+    # 合格させない）。陽性対照のシフト注入は E2E 本体には行わない。
+    cls_ready = await cdp.evaluate("window.__orbClsReady === true")
+    cls_error = await cdp.evaluate("window.__orbClsError ?? null")
+    checker.check(
+        "画像読み込み後の CLS が閾値以下に収まる",
+        bool(tall_loaded)
+        and cls_ready is True
+        and cls_error is None
+        and isinstance(cls, (int, float))
+        and isinstance(cls_entries, int)
+        and cls <= CLS_THRESHOLD,
+        f"(cls={cls!r}, entries={cls_entries!r}, ready={cls_ready}, "
+        f"error={cls_error!r}, threshold={CLS_THRESHOLD})",
+    )
 
     # 画像より後ろの見出しへスクロールし、その位置を保存する。
     await cdp.evaluate(
