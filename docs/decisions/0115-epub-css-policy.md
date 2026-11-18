@@ -28,7 +28,8 @@ CSP `style-src` との整合が必要。
   スタイルシートとして解釈・適用するコードは存在しない。
 - `resolve_images()` は `DOMParser` 後の `img[src]` だけを Blob URL 化し、
   `style` / `<link>` は扱わない。
-- CSP は `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` で、
+- CSP は旧 Google Fonts 許可を含むが ADR-0191 で削除済み。
+  `style-src 'self' 'unsafe-inline'` で、
   `'unsafe-inline'` があるため `<style>` を入れれば適用されてしまう
   （サニタイザが主防御）。
 - SVG 側では XML 処理命令による外部 CSS 読み込みを既に削除済み

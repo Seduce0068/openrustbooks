@@ -47,7 +47,7 @@ Web 側には設定済み）。ADR-0128 / 0129 の未決定。
   両方注入される場合、実効は交集合になると推測される。
   双方の `script-src` は一致するため Wasm は動作する見込み。
 - `style-src` / `font-src` / `connect-src` は web 側と desktop 側で
-  異なる（Google Fonts / IPC）。今回の変更とは無関係の既存差分。
+  異なる（旧 Google Fonts / IPC、フォントは ADR-0191 で削除）。今回の変更とは無関係の既存差分。
 
 ## 検証
 
