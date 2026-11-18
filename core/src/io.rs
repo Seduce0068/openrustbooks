@@ -444,6 +444,21 @@ pub mod local {
         async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()> {
             let full_path = self.resolve_path(path)?;
 
+            // overwrite=false のときは既存ファイルへの書き込みを拒否する。
+            // atomic 分岐の前で判定するため、atomic=true でも同じガードが効く。
+            // エラー文言には内容も呼び出し元の生パスも出さず、
+            // 正規化済み root からの相対パスのみを載せる（正規化不能なら固定文言）。
+            if !options.overwrite && full_path.exists() {
+                let message = self
+                    .root
+                    .canonicalize()
+                    .ok()
+                    .and_then(|root| full_path.strip_prefix(&root).ok().map(Path::to_path_buf))
+                    .map(|relative| format!("File already exists: {}", relative.display()))
+                    .unwrap_or_else(|| "File already exists".to_string());
+                return Err(CoreError::storage(message));
+            }
+
             if options.create_parents
                 && let Some(parent) = full_path.parent()
             {
@@ -667,6 +682,157 @@ pub mod local {
             }
             let result = storage.resolve_path(Path::new("link/secret.txt"));
             assert!(result.is_err());
+        }
+
+        /// 既存ファイルを用意して、そのフルパスを返すテストヘルパー。
+        fn seed_existing_file(temp: &TempRoot) -> PathBuf {
+            let file = temp.path.join("existing.txt");
+            fs::write(&file, b"original").unwrap();
+            file
+        }
+
+        /// Storage エラーの文言を検証する（root 相対パスのみ／元内容を含まない）。
+        fn assert_existing_file_error(error: CoreError) {
+            match error {
+                CoreError::Storage(message) => {
+                    assert_eq!(message, "File already exists: existing.txt");
+                    assert!(
+                        !message.contains("original"),
+                        "エラー文言にファイル内容を含めない"
+                    );
+                }
+                other => panic!("expected Storage error, got {other:?}"),
+            }
+        }
+
+        #[tokio::test]
+        async fn write_without_overwrite_rejects_existing_file() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let existing = seed_existing_file(&temp);
+
+            let result = storage
+                .write(
+                    Path::new("existing.txt"),
+                    b"replacement",
+                    WriteOptions::default(),
+                )
+                .await;
+
+            assert_existing_file_error(
+                result.expect_err("overwrite=false は既存ファイルを拒否する"),
+            );
+            assert_eq!(fs::read(&existing).unwrap(), b"original".to_vec());
+        }
+
+        #[tokio::test]
+        async fn write_without_overwrite_allows_new_file() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+
+            // overwrite=false でも新規ファイルは作成できる（GOAL の合格条件）。
+            storage
+                .write(Path::new("new.txt"), b"created", WriteOptions::default())
+                .await
+                .unwrap();
+            assert_eq!(
+                fs::read(temp.path.join("new.txt")).unwrap(),
+                b"created".to_vec()
+            );
+
+            // create_parents と組み合わせても新規作成は成功する。
+            let options = WriteOptions {
+                create_parents: true,
+                ..Default::default()
+            };
+            storage
+                .write(Path::new("sub/nested.txt"), b"nested", options)
+                .await
+                .unwrap();
+            assert_eq!(
+                fs::read(temp.path.join("sub/nested.txt")).unwrap(),
+                b"nested".to_vec()
+            );
+        }
+
+        #[tokio::test]
+        async fn write_error_exposes_only_root_relative_path() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let existing = seed_existing_file(&temp);
+
+            // 呼び出し元が絶対パスを渡しても、エラー文言は root 相対パスだけに正規化される。
+            let result = storage
+                .write(&existing, b"replacement", WriteOptions::default())
+                .await;
+
+            match result.expect_err("既存ファイルへの書き込みは拒否される") {
+                CoreError::Storage(message) => {
+                    assert_eq!(message, "File already exists: existing.txt");
+                    assert!(!message.contains("original"));
+                    assert!(!message.contains(existing.to_string_lossy().as_ref()));
+                }
+                other => panic!("expected Storage error, got {other:?}"),
+            }
+        }
+
+        #[tokio::test]
+        async fn write_with_overwrite_replaces_existing_file() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let existing = seed_existing_file(&temp);
+
+            let options = WriteOptions {
+                overwrite: true,
+                ..Default::default()
+            };
+            storage
+                .write(Path::new("existing.txt"), b"replacement", options)
+                .await
+                .unwrap();
+
+            assert_eq!(fs::read(&existing).unwrap(), b"replacement".to_vec());
+        }
+
+        #[tokio::test]
+        async fn atomic_write_without_overwrite_rejects_existing_file() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let existing = seed_existing_file(&temp);
+
+            let options = WriteOptions {
+                atomic: true,
+                ..Default::default()
+            };
+            let result = storage
+                .write(Path::new("existing.txt"), b"replacement", options)
+                .await;
+
+            assert_existing_file_error(
+                result.expect_err("atomic=true でも overwrite=false は既存ファイルを拒否する"),
+            );
+            assert_eq!(fs::read(&existing).unwrap(), b"original".to_vec());
+            assert!(!temp.path.join("existing.tmp").exists());
+        }
+
+        #[tokio::test]
+        async fn atomic_write_with_overwrite_replaces_existing_file() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let existing = seed_existing_file(&temp);
+
+            let options = WriteOptions {
+                atomic: true,
+                overwrite: true,
+                ..Default::default()
+            };
+            storage
+                .write(Path::new("existing.txt"), b"replacement", options)
+                .await
+                .unwrap();
+
+            assert_eq!(fs::read(&existing).unwrap(), b"replacement".to_vec());
+            assert!(!temp.path.join("existing.tmp").exists());
         }
     }
 }
