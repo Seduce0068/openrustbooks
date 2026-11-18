@@ -3601,9 +3601,21 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
         }
     };
+    // SPA 再マウント時に、章描画／ファイル切替で生成した object URL を確実に
+    // 解放する。on_cleanup は Send + Sync を要求するため、!Send な
+    // Rc<RefCell<...>> を SendWrapper で包んでキャプチャする（ADR-0166）。
+    // 章再描画・ファイル切替時の revoke は維持し、ここでは残余のみを扱う。
+    let cleanup_object_urls = SendWrapper::new(Rc::clone(&object_urls));
+    let cleanup_cover_url_state = SendWrapper::new(Rc::clone(&cover_url_state));
     let key_listener = window_event_listener(leptos::ev::keydown, key_handler);
     on_cleanup(move || {
         key_listener.remove();
+        for url in cleanup_object_urls.borrow_mut().drain(..) {
+            let _ = web_sys::Url::revoke_object_url(&url);
+        }
+        if let Some(url) = cleanup_cover_url_state.borrow_mut().take() {
+            let _ = web_sys::Url::revoke_object_url(&url);
+        }
     });
 
     // 章タイトルの部分一致で絞り込む。現在の章は選択状態を保つため残す。
