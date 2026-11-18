@@ -50,9 +50,8 @@ core は `rumdl_lib::config::Config` と rules API のみを使用
   FileIndex を破棄しているため観測されない（**推測**）。
 - `parallel`（rayon）削除による code_block_tools の直列化は
   既定無効機能のため体感差なしと推測されるが、**未計測**。
-- wasm feature を避ける理由（rumdl の `#[wasm_bindgen(start)]` が
-  web クレートと衝突）は ADR-0003:40-42 を前提としており、
-  本 ADR で supersede する。
+- wasm feature を避ける理由は、rumdl が公開する同名 export `init` との衝突
+  （0.2.129 では複数 start は連結実行）。ADR-0156 で補正済み。
 
 ## 検証（Runtime Proof）
 
