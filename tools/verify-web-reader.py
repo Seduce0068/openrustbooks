@@ -372,8 +372,8 @@ async def wait_saved(cdp: Cdp, predicate, timeout: float = 5.0):
 
 
 async def run_checks(cdp: Cdp) -> int:
-    # 期待 check 総数: checker.check 211 + checker.equal 17 = 228。
-    checker = Checker(expected=228)
+    # 期待 check 総数: checker.check 212 + checker.equal 17 = 229。
+    checker = Checker(expected=229)
 
     await cdp.send("Page.enable")
     await cdp.send("Runtime.enable")
@@ -3074,6 +3074,35 @@ async def run_checks(cdp: Cdp) -> int:
         timeout=5,
     )
     checker.check("- キーで文字サイズが小さくなる", minus_shrunk, f"(before={before_minus!r})")
+
+    # 設定画面: ブラウザ単体では window.__TAURI__ が無いため invoke せず、
+    # 例外ではなく「デスクトップ版のみ利用可能」が表示されることを確認する。
+    # エラーはページ読込前に注入したリスナーで収集する（SPA 遷移でも維持される）。
+    await cdp.send(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+            "source": "window.__orbSettingsErrors = [];"
+            "window.addEventListener('error', (e) => window.__orbSettingsErrors.push(String(e.message)));"
+            "window.addEventListener('unhandledrejection', (e) => window.__orbSettingsErrors.push(String(e.reason)));"
+        },
+    )
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/settings"})
+    settings_mounted = await wait_until(
+        cdp, "document.querySelector('.settings-form') !== null"
+    )
+    offline_notice = await wait_until(
+        cdp,
+        "document.querySelector('.settings-form')?.textContent.includes('デスクトップ版のみ利用可能')",
+        timeout=5,
+    )
+    settings_errors = await cdp.evaluate(
+        "Array.isArray(window.__orbSettingsErrors) ? window.__orbSettingsErrors : ['listener missing']"
+    )
+    checker.check(
+        "ブラウザ版の設定画面は例外なくデスクトップ版のみと表示する",
+        settings_mounted and offline_notice and settings_errors == [],
+        f"(mounted={settings_mounted}, notice={offline_notice}, errors={settings_errors!r})",
+    )
 
     return finish(checker)
 

@@ -3195,58 +3195,281 @@ fn Preview(content: ReadSignal<String>, set_content: WriteSignal<String>) -> imp
     }
 }
 
-/// Settings form component
+/// `get_config` (ConfigView) を Web 側で受け取る読み取り専用 DTO。
+///
+/// 秘密情報・パスフィールドは開示されない（API Key は `has_api_key` フラグのみ）。
+#[derive(serde::Deserialize, Clone)]
+struct SettingsGeneralView {
+    language: String,
+    theme: String,
+    telemetry: bool,
+    check_updates: bool,
+    log_level: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsOpenAiView {
+    model: String,
+    has_api_key: bool,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsOllamaView {
+    model: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsAiView {
+    enabled: bool,
+    default_provider: String,
+    openai: SettingsOpenAiView,
+    ollama: SettingsOllamaView,
+    max_tokens_per_request: usize,
+    max_tokens_per_month: Option<u64>,
+    prefer_local: bool,
+    timeout_secs: u64,
+    streaming: bool,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsLintView {
+    enabled: bool,
+    auto_fix: bool,
+    warnings_as_errors: bool,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsEditorView {
+    font_size: f32,
+    line_numbers: bool,
+    word_wrap: bool,
+    vim_mode: bool,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsReaderView {
+    font_family: String,
+    font_size: f32,
+    line_height: f32,
+    theme: String,
+    scroll_mode: String,
+    show_page_numbers: bool,
+    remember_position: bool,
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct SettingsView {
+    general: SettingsGeneralView,
+    ai: SettingsAiView,
+    lint: SettingsLintView,
+    editor: SettingsEditorView,
+    reader: SettingsReaderView,
+}
+
+/// Tauri IPC への薄いラッパ。
+///
+/// `window.__TAURI` が無いブラウザ単体では invoke を呼ばず `Err("desktop only")` を返す。
+/// 保存コマンドの接続は ADR 未決定のため、今は読み取り専用の下準備にとどめる。
+async fn invoke(command: &str, args: &JsValue) -> Result<JsValue, String> {
+    let window = web_sys::window().ok_or_else(|| "desktop only".to_string())?;
+    let window: JsValue = window.into();
+    let tauri = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI"))
+        .map_err(|_| "desktop only".to_string())?;
+    if tauri.is_undefined() || tauri.is_null() {
+        return Err("desktop only".to_string());
+    }
+    let core = js_sys::Reflect::get(&tauri, &JsValue::from_str("core"))
+        .map_err(|_| "desktop only".to_string())?;
+    if core.is_undefined() || core.is_null() {
+        return Err("desktop only".to_string());
+    }
+    let invoke_fn = js_sys::Reflect::get(&core, &JsValue::from_str("invoke"))
+        .map_err(|_| "desktop only".to_string())?;
+    let invoke_fn: js_sys::Function = invoke_fn
+        .dyn_into()
+        .map_err(|_| "desktop only".to_string())?;
+    let promise = invoke_fn
+        .call2(&core, &JsValue::from_str(command), args)
+        .map_err(|_| "desktop only".to_string())?;
+    let promise: js_sys::Promise = promise.dyn_into().map_err(|_| "desktop only".to_string())?;
+    wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .map_err(|err| format!("invoke failed: {err:?}"))
+}
+
+/// `get_config` を呼び出して DTO に変換する（ブラウザでは Err）。
+async fn fetch_config() -> Result<SettingsView, String> {
+    let args: JsValue = js_sys::Object::new().into();
+    let value = invoke("get_config", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|err| format!("config parse failed: {err}"))
+}
+
+/// Settings form component（読み取り表示のみ）。
+///
+/// 保存は行わない: DTO (ConfigView) をそのまま `update_config` (AppConfig) に渡すと
+/// デシリアライズに失敗し、完全な AppConfig を Web で再構成すると隠しフィールドを
+/// 既定値で上書きするリスクがあるため、submit は disabled のままとする。
 #[component]
 fn SettingsForm() -> impl IntoView {
+    let status = RwSignal::new(String::new());
+    let general_info = RwSignal::new(String::new());
+    let ai_enabled = RwSignal::new(false);
+    let provider = RwSignal::new(String::new());
+    let openai_model = RwSignal::new(String::new());
+    let api_key_state = RwSignal::new(String::new());
+    let ollama_model = RwSignal::new(String::new());
+    let ai_info = RwSignal::new(String::new());
+    let lint_enabled = RwSignal::new(false);
+    let auto_fix = RwSignal::new(false);
+    let lint_info = RwSignal::new(String::new());
+    let editor_font_size = RwSignal::new(String::new());
+    let line_numbers = RwSignal::new(false);
+    let word_wrap = RwSignal::new(false);
+    let vim_mode = RwSignal::new(false);
+    let reader_info = RwSignal::new(String::new());
+
+    // Leptos 0.8 に on_mount は無いため、Effect::new（初回のみ実行）で代替する。
+    Effect::new(move |_| {
+        wasm_bindgen_futures::spawn_local(async move {
+            match fetch_config().await {
+                Ok(cfg) => {
+                    general_info.set(format!(
+                        "言語: {} / テーマ: {} / テレメトリ: {} / 更新確認: {} / ログレベル: {}",
+                        cfg.general.language,
+                        cfg.general.theme,
+                        if cfg.general.telemetry {
+                            "有効"
+                        } else {
+                            "無効"
+                        },
+                        if cfg.general.check_updates {
+                            "有効"
+                        } else {
+                            "無効"
+                        },
+                        cfg.general.log_level,
+                    ));
+                    ai_enabled.set(cfg.ai.enabled);
+                    provider.set(cfg.ai.default_provider);
+                    openai_model.set(cfg.ai.openai.model);
+                    // 実値は signal / DOM に書かず、有無だけを表示する。
+                    api_key_state.set(
+                        if cfg.ai.openai.has_api_key {
+                            "設定済み"
+                        } else {
+                            "未設定"
+                        }
+                        .to_string(),
+                    );
+                    ollama_model.set(cfg.ai.ollama.model);
+                    ai_info.set(format!(
+                        "最大トークン/要求: {} / 月間上限: {} / ローカル優先: {} / タイムアウト: {}s / ストリーミング: {}",
+                        cfg.ai.max_tokens_per_request,
+                        cfg.ai.max_tokens_per_month.map_or_else(
+                            || "無制限".to_string(),
+                            |value| value.to_string()
+                        ),
+                        if cfg.ai.prefer_local { "有効" } else { "無効" },
+                        cfg.ai.timeout_secs,
+                        if cfg.ai.streaming { "有効" } else { "無効" },
+                    ));
+                    lint_enabled.set(cfg.lint.enabled);
+                    auto_fix.set(cfg.lint.auto_fix);
+                    lint_info.set(format!(
+                        "警告をエラーとして扱う: {}",
+                        if cfg.lint.warnings_as_errors {
+                            "有効"
+                        } else {
+                            "無効"
+                        }
+                    ));
+                    editor_font_size.set(cfg.editor.font_size.to_string());
+                    line_numbers.set(cfg.editor.line_numbers);
+                    word_wrap.set(cfg.editor.word_wrap);
+                    vim_mode.set(cfg.editor.vim_mode);
+                    reader_info.set(format!(
+                        "フォント: {} / サイズ: {} / 行間: {} / テーマ: {} / スクロール: {} / ページ番号: {} / 位置記憶: {}",
+                        cfg.reader.font_family,
+                        cfg.reader.font_size,
+                        cfg.reader.line_height,
+                        cfg.reader.theme,
+                        cfg.reader.scroll_mode,
+                        if cfg.reader.show_page_numbers { "表示" } else { "非表示" },
+                        if cfg.reader.remember_position { "有効" } else { "無効" },
+                    ));
+                }
+                Err(_) => {
+                    status.set("デスクトップ版のみ利用可能".to_string());
+                }
+            }
+        });
+    });
+
     view! {
         <form class="settings-form">
+            <p class="settings-notice" role="status" aria-live="polite">{move || status.get()}</p>
+            <section>
+                <h3>"General Settings"</h3>
+                <p class="settings-readonly">{move || general_info.get()}</p>
+            </section>
             <section>
                 <h3>"AI Settings"</h3>
                 <label>
-                    <input type="checkbox"/> "Enable AI Features"
+                    <input type="checkbox" prop:checked=move || ai_enabled.get() on:change=move |ev| ai_enabled.set(event_target_checked(&ev))/> "Enable AI Features"
                 </label>
                 <label>
                     "Provider: "
-                    <select>
+                    <select prop:value=move || provider.get() on:change=move |ev| provider.set(event_target_value(&ev))>
                         <option value="openai">"OpenAI"</option>
                         <option value="ollama">"Ollama (Local)"</option>
                     </select>
                 </label>
                 <label>
                     "Model: "
-                    <input type="text" placeholder="gpt-4o-mini"/>
+                    <input type="text" placeholder="gpt-4o-mini" prop:value=move || openai_model.get() on:input=move |ev| openai_model.set(event_target_value(&ev))/>
                 </label>
                 <label>
                     "API Key: "
-                    <input type="password" placeholder="sk-..."/>
+                    <input type="password" placeholder="設定済みの場合は変更不要"/>
+                    <span class="api-key-state">{move || api_key_state.get()}</span>
                 </label>
+                <label>
+                    "Ollama Model: "
+                    <input type="text" placeholder="llama3.1:8b" prop:value=move || ollama_model.get() on:input=move |ev| ollama_model.set(event_target_value(&ev))/>
+                </label>
+                <p class="settings-readonly">{move || ai_info.get()}</p>
             </section>
             <section>
                 <h3>"Editor Settings"</h3>
                 <label>
                     "Font Size: "
-                    <input type="number" value="14" min="10" max="24"/>
+                    <input type="number" prop:value=move || editor_font_size.get() on:input=move |ev| editor_font_size.set(event_target_value(&ev)) min="10" max="24"/>
                 </label>
                 <label>
-                    <input type="checkbox"/> "Line Numbers"
+                    <input type="checkbox" prop:checked=move || line_numbers.get() on:change=move |ev| line_numbers.set(event_target_checked(&ev))/> "Line Numbers"
                 </label>
                 <label>
-                    <input type="checkbox"/> "Word Wrap"
+                    <input type="checkbox" prop:checked=move || word_wrap.get() on:change=move |ev| word_wrap.set(event_target_checked(&ev))/> "Word Wrap"
                 </label>
                 <label>
-                    <input type="checkbox"/> "Vim Mode"
+                    <input type="checkbox" prop:checked=move || vim_mode.get() on:change=move |ev| vim_mode.set(event_target_checked(&ev))/> "Vim Mode"
                 </label>
             </section>
             <section>
                 <h3>"Lint Settings"</h3>
                 <label>
-                    <input type="checkbox"/> "Enable Linting"
+                    <input type="checkbox" prop:checked=move || lint_enabled.get() on:change=move |ev| lint_enabled.set(event_target_checked(&ev))/> "Enable Linting"
                 </label>
                 <label>
-                    <input type="checkbox"/> "Auto-fix on Save"
+                    <input type="checkbox" prop:checked=move || auto_fix.get() on:change=move |ev| auto_fix.set(event_target_checked(&ev))/> "Auto-fix on Save"
                 </label>
+                <p class="settings-readonly">{move || lint_info.get()}</p>
             </section>
-            <button type="submit" class="btn btn-primary">"Save Settings"</button>
+            <section>
+                <h3>"Reader Settings"</h3>
+                <p class="settings-readonly">{move || reader_info.get()}</p>
+            </section>
+            <button type="submit" class="btn btn-primary" disabled>"保存はデスクトップ版のみ（パス検証と CSP 強化後に接続）"</button>
         </form>
     }
 }
