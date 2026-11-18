@@ -3,7 +3,6 @@
 //! This crate compiles to WebAssembly and provides the browser-based
 //! version of the application using Leptos.
 
-use leptos::__reexports::send_wrapper::SendWrapper;
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::hooks::use_params_map;
@@ -16,6 +15,8 @@ use openrustbooks_core::sanitize::sanitize_epub_html;
 use openrustbooks_core::wasm::render_markdown_wasm;
 #[cfg(target_arch = "wasm32")]
 use openrustbooks_core::wasm::sanitize_svg_wasm;
+// Leptos の非公開 re-export ではなく、直接依存の send_wrapper クレートを使う（ADR-0166 / TD-M07）。
+use send_wrapper::SendWrapper;
 use wasm_bindgen::prelude::*;
 
 /// E2E の起動診断用に Wasm の実行段階へタイムスタンプを付ける。

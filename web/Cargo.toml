@@ -50,6 +50,8 @@ serde-wasm-bindgen = "0.6"
 # Frontend framework (Leptos)
 leptos = { version = "0.8", features = ["csr"] }
 leptos_router = "0.8"
+# Leptos の doc(hidden) re-export に依存せず、公開クレートを直接依存する（ADR-0166 / TD-M07）。
+send_wrapper = "0.6"
 
 # Editor - CodeMirror 6 via wasm-bindgen (manual binding)
 

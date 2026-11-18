@@ -4209,6 +4209,7 @@ dependencies = [
  "leptos",
  "leptos_router",
  "openrustbooks-core",
+ "send_wrapper",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
