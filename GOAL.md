@@ -1,25 +1,20 @@
 # Goal
 
-`WriteOptions.overwrite` を実効化し、既存ファイルの黙って上書きを防ぐ（R6 最優先 PR-H01/TD-H01、ADR-0173）。
+`read_text()` の不正 UTF-8 内容漏洩を修正する（R6 PR-H02/TD-H02、ADR-0174）。
 
 ## Scope
 
-### 背景
-
-`LocalStorage::write()` は `options.overwrite` を無視し、`create_file()` の新規作成操作が既存データを破壊し得た。
-
 ### 成果物
 
-- `core/src/io.rs`: 既存拒否ガードと unit test 6 件
-- `docs/decisions/0173-overwrite-guard.md`: 追加
-- `todo.md`: PR-H01/TD-H01 を完了へ移動
-- `GOAL.md`: 最終契約へ更新
+- `core/src/io.rs`: `match String::from_utf8(bytes)` + U+FFFD 置換、テスト 2 件、doc 修正
+- `docs/decisions/0174-read-text-utf8.md`: 追加
+- `todo.md`: PR-H02/TD-H02 を完了へ移動
 
 ### 決定
 
-- `resolve_path()` 直後、`create_parents` / `atomic` 分岐より前に overwrite 判定。
-- エラー文言は root 相対パスのみ（正規化不能なら固定文言）。
-- TOCTOU と固定 tmp 名の衝突は未決定として継続。
+- 有効 UTF-8 はゼロコピー、不正時のみ lossy 変換。
+- どちらの経路でもエラーを生成せず、内容をエラー文言へ載せない。
+- EPUB / ZIP の fail-closed は維持。
 
 ## Acceptance criteria
 
