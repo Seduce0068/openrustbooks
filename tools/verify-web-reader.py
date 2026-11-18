@@ -811,7 +811,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 232 + checker.equal 17 = 249。
+    # 期待 check 総数: checker.check 233 + checker.equal 17 = 250。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -832,7 +832,9 @@ async def run_checks(cdp: Cdp) -> int:
     # Save クリックなしのデバウンス自動保存→リロード復元の検証 +1（R6 TD-H05）。
     # 下書きの Export→localStorage clear→Import ラウンドトリップ（1 MiB 超の
     # 下書きは除外）+1（ADR-0167 / ADR-0180）。
-    checker = Checker(expected=249)
+    # 設定フォームの読み取り専用化（text/number が readonly、checkbox/select が
+    # disabled、常時説明の settings-notice が表示される）+1（ADR-0128 / R6 PR-M11）。
+    checker = Checker(expected=250)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -862,7 +864,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 249 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 250 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -4075,6 +4077,39 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "ブラウザ版の設定画面は例外なくデスクトップ版のみと表示する",
         settings_mounted and offline_notice and settings_errors == [],
         f"(mounted={settings_mounted}, notice={offline_notice}, errors={settings_errors!r})",
+    )
+
+    # ADR-0128 / R6 PR-M11: ブラウザ版の設定フォームは読み取り専用契約。
+    # text/number（と API Key の password）が readonly、checkbox/select が disabled
+    # で、常時説明の settings-notice が表示されることを確認する（既存 1 件は維持）。
+    settings_readonly = await cdp.evaluate("""(() => {
+      const form = document.querySelector('.settings-form');
+      if (!form) return { mounted: false };
+      const texts = Array.from(form.querySelectorAll(
+        'input[type="text"], input[type="number"]'));
+      const password = form.querySelector('input[type="password"]');
+      const toggles = Array.from(form.querySelectorAll(
+        'input[type="checkbox"], select'));
+      const notice = Array.from(form.querySelectorAll('.settings-notice'))
+        .some((el) => el.textContent.includes('ブラウザ版は表示のみです'));
+      return {
+        mounted: true,
+        textCount: texts.length,
+        textsReadonly: texts.length > 0 && texts.every((el) => el.readOnly === true),
+        passwordReadonly: password !== null && password.readOnly === true,
+        toggleCount: toggles.length,
+        togglesDisabled: toggles.length > 0 && toggles.every((el) => el.disabled === true),
+        notice: notice,
+      };
+    })()""") or {}
+    checker.check(
+        "ブラウザ版の設定フォームは入力不可で常時説明を表示する",
+        settings_readonly.get("mounted") is True
+        and settings_readonly.get("textsReadonly") is True
+        and settings_readonly.get("passwordReadonly") is True
+        and settings_readonly.get("togglesDisabled") is True
+        and settings_readonly.get("notice") is True,
+        f"(state={settings_readonly!r})",
     )
 
     # エディタ画面 (ADR-0127): textarea の入力が content シグナルを経由して

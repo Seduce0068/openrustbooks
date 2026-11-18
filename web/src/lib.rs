@@ -4018,6 +4018,9 @@ fn SettingsForm() -> impl IntoView {
 
     view! {
         <form class="settings-form">
+            // ADR-0128: ブラウザ版は読み取り専用。常時表示の説明と、fetch_config の
+            // 成否を伝える status（「デスクトップ版のみ利用可能」）を併記する。
+            <p class="settings-notice">"ブラウザ版は表示のみです。設定の変更・保存はデスクトップ版で行ってください。"</p>
             <p class="settings-notice" role="status" aria-live="polite">{move || status.get()}</p>
             <section>
                 <h3>"General Settings"</h3>
@@ -4026,27 +4029,27 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"AI Settings"</h3>
                 <label>
-                    <input type="checkbox" prop:checked=move || ai_enabled.get() on:change=move |ev| ai_enabled.set(event_target_checked(&ev))/> "Enable AI Features"
+                    <input type="checkbox" prop:checked=move || ai_enabled.get() disabled=true/> "Enable AI Features"
                 </label>
                 <label>
                     "Provider: "
-                    <select prop:value=move || provider.get() on:change=move |ev| provider.set(event_target_value(&ev))>
+                    <select prop:value=move || provider.get() disabled=true>
                         <option value="openai">"OpenAI"</option>
                         <option value="ollama">"Ollama (Local)"</option>
                     </select>
                 </label>
                 <label>
                     "Model: "
-                    <input type="text" placeholder="gpt-4o-mini" prop:value=move || openai_model.get() on:input=move |ev| openai_model.set(event_target_value(&ev))/>
+                    <input type="text" placeholder="gpt-4o-mini" prop:value=move || openai_model.get() readonly=true/>
                 </label>
                 <label>
                     "API Key: "
-                    <input type="password" placeholder="設定済みの場合は変更不要"/>
+                    <input type="password" placeholder="設定済みの場合は変更不要" readonly=true/>
                     <span class="api-key-state">{move || api_key_state.get()}</span>
                 </label>
                 <label>
                     "Ollama Model: "
-                    <input type="text" placeholder="llama3.1:8b" prop:value=move || ollama_model.get() on:input=move |ev| ollama_model.set(event_target_value(&ev))/>
+                    <input type="text" placeholder="llama3.1:8b" prop:value=move || ollama_model.get() readonly=true/>
                 </label>
                 <p class="settings-readonly">{move || ai_info.get()}</p>
             </section>
@@ -4054,25 +4057,25 @@ fn SettingsForm() -> impl IntoView {
                 <h3>"Editor Settings"</h3>
                 <label>
                     "Font Size: "
-                    <input type="number" prop:value=move || editor_font_size.get() on:input=move |ev| editor_font_size.set(event_target_value(&ev)) min="10" max="24"/>
+                    <input type="number" prop:value=move || editor_font_size.get() readonly=true min="10" max="24"/>
                 </label>
                 <label>
-                    <input type="checkbox" prop:checked=move || line_numbers.get() on:change=move |ev| line_numbers.set(event_target_checked(&ev))/> "Line Numbers"
+                    <input type="checkbox" prop:checked=move || line_numbers.get() disabled=true/> "Line Numbers"
                 </label>
                 <label>
-                    <input type="checkbox" prop:checked=move || word_wrap.get() on:change=move |ev| word_wrap.set(event_target_checked(&ev))/> "Word Wrap"
+                    <input type="checkbox" prop:checked=move || word_wrap.get() disabled=true/> "Word Wrap"
                 </label>
                 <label>
-                    <input type="checkbox" prop:checked=move || vim_mode.get() on:change=move |ev| vim_mode.set(event_target_checked(&ev))/> "Vim Mode"
+                    <input type="checkbox" prop:checked=move || vim_mode.get() disabled=true/> "Vim Mode"
                 </label>
             </section>
             <section>
                 <h3>"Lint Settings"</h3>
                 <label>
-                    <input type="checkbox" prop:checked=move || lint_enabled.get() on:change=move |ev| lint_enabled.set(event_target_checked(&ev))/> "Enable Linting"
+                    <input type="checkbox" prop:checked=move || lint_enabled.get() disabled=true/> "Enable Linting"
                 </label>
                 <label>
-                    <input type="checkbox" prop:checked=move || auto_fix.get() on:change=move |ev| auto_fix.set(event_target_checked(&ev))/> "Auto-fix on Save"
+                    <input type="checkbox" prop:checked=move || auto_fix.get() disabled=true/> "Auto-fix on Save"
                 </label>
                 <p class="settings-readonly">{move || lint_info.get()}</p>
             </section>
