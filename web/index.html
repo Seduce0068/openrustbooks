@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self' blob: data:">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' blob: data:; connect-src 'self' blob: data:">
     <title>openrustbooks</title>
     <meta name="description" content="Rust-powered document reader and editor">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link data-trunk rel="copy-file" href="favicon.svg"/>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -30,8 +27,8 @@
             --color-secondary-hover: #e5e7eb;
             --color-danger: #dc2626;
             --color-success: #16a34a;
-            --font-mono: 'JetBrains Mono', monospace;
-            --font-sans: 'Noto Sans JP', system-ui, sans-serif;
+            --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Consolas, monospace;
+            --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans JP', sans-serif;
             --spacing-xs: 4px;
             --spacing-sm: 8px;
             --spacing-md: 16px;

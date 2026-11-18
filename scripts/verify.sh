@@ -27,7 +27,31 @@ run() {
 	fi
 }
 
+# web/index.html に第三者フォント参照が混入していないことを静的に検査する。
+# Google Fonts の外部送信（preconnect / stylesheet）が再混入するのをゲートで防ぐ。
+check_no_external_font_refs() {
+	local file="web/index.html"
+	if [[ ! -f "$file" ]]; then
+		echo "ERROR: $file が見つかりません"
+		return 1
+	fi
+
+	# 一致なし (rc=1) は成功、読取不可などのエラー (rc>=2) は fail-closed とする。
+	local grep_rc=0
+	grep -n -F -e 'fonts.googleapis' -e 'fonts.gstatic' -e 'preconnect' "$file" || grep_rc=$?
+	if ((grep_rc == 0)); then
+		echo "ERROR: $file に第三者フォント参照（fonts.googleapis / fonts.gstatic / preconnect）が含まれています"
+		return 1
+	fi
+	if ((grep_rc >= 2)); then
+		echo "ERROR: $file の第三者フォント参照検査に失敗しました (grep rc=$grep_rc)"
+		return 1
+	fi
+	return 0
+}
+
 run fmt cargo fmt --all -- --check
+run no-external-font-refs check_no_external_font_refs
 run check cargo check --all-targets --locked
 run test cargo test --all-targets --locked
 run clippy cargo clippy --all-targets --locked -- -D warnings
