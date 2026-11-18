@@ -194,21 +194,7 @@ async fn validate_content(
     content: &str,
     auto_fix: bool,
 ) -> CoreResult<lint::LintResultWrapper> {
-    if auto_fix {
-        linter.lint_and_fix(content).await
-    } else {
-        let issues = linter.lint(content)?;
-        let passed = lint::lint_passed(&issues, linter.warnings_as_errors());
-        Ok(lint::LintResultWrapper {
-            passed,
-            issues,
-            fixed_content: content.to_string(),
-            fixes_applied: 0,
-            // lint のみの経路では修正を行わないため収束扱いとする
-            converged: true,
-            conflicting_rules: vec![],
-        })
-    }
+    lint::validate_with_auto_fix(linter, content, auto_fix).await
 }
 
 /// Pipeline request trait

@@ -266,6 +266,33 @@ pub(crate) fn lint_passed(issues: &[LintIssue], warnings_as_errors: bool) -> boo
     })
 }
 
+/// auto_fix に応じて lint のみ／自動修正付き lint を実行する。
+///
+/// native の `AiMarkdownPipeline::validate_content` と wasm の
+/// `WasmMarkdownLinter::lint_and_fix` が共有する唯一の実装。
+/// auto_fix=true は自動修正を行い、false は本文を変えずに lint するだけ。
+pub async fn validate_with_auto_fix(
+    linter: &MarkdownLinter,
+    content: &str,
+    auto_fix: bool,
+) -> CoreResult<LintResultWrapper> {
+    if auto_fix {
+        linter.lint_and_fix(content).await
+    } else {
+        let issues = linter.lint(content)?;
+        let passed = lint_passed(&issues, linter.warnings_as_errors());
+        Ok(LintResultWrapper {
+            passed,
+            issues,
+            fixed_content: content.to_string(),
+            fixes_applied: 0,
+            // lint のみの経路では修正を行わないため収束扱いとする
+            converged: true,
+            conflicting_rules: vec![],
+        })
+    }
+}
+
 /// FixResult を反映する。未収束なら修正を破棄し元本文へ戻す（fail-closed）。
 /// 戻り値は（採用する本文, 適用した修正数, 収束したか）。
 fn apply_fix_result<'a>(
@@ -648,5 +675,53 @@ mod tests {
         assert!(result.passed);
         assert!(result.converged);
         assert!(result.issues.is_empty());
+    }
+
+    #[tokio::test]
+    async fn validate_with_auto_fix_false_is_lint_only() {
+        let linter = linter();
+        let result = validate_with_auto_fix(&linter, DIRTY, false)
+            .await
+            .expect("validate should succeed");
+
+        assert_eq!(result.fixed_content, DIRTY, "本文を変更しないこと");
+        assert_eq!(result.fixes_applied, 0, "修正数は 0 であること");
+        assert!(result.converged, "lint のみの経路は収束扱いになること");
+        assert!(
+            result.conflicting_rules.is_empty(),
+            "lint のみの経路には競合ルールがないこと"
+        );
+        assert!(
+            result.issues.iter().any(|i| i.rule == "MD009"),
+            "問題は残ること: {:?}",
+            result.issues
+        );
+        assert_eq!(
+            result.passed,
+            lint_passed(&result.issues, linter.warnings_as_errors()),
+            "lint 結果と判定が整合すること"
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_with_auto_fix_true_matches_lint_and_fix() {
+        let linter = linter();
+        let shared = validate_with_auto_fix(&linter, DIRTY, true)
+            .await
+            .expect("validate should succeed");
+        let direct = linter
+            .lint_and_fix(DIRTY)
+            .await
+            .expect("lint_and_fix should succeed");
+
+        assert_eq!(shared.fixed_content, direct.fixed_content);
+        assert_eq!(shared.fixes_applied, direct.fixes_applied);
+        assert_eq!(shared.passed, direct.passed);
+        assert_eq!(shared.converged, direct.converged);
+        assert_eq!(shared.conflicting_rules, direct.conflicting_rules);
+        assert_eq!(shared.issues.len(), direct.issues.len());
+        assert_ne!(shared.fixed_content, DIRTY, "本文が修正されること");
+        assert!(shared.fixes_applied > 0, "修正が 1 以上あること");
+        assert!(shared.passed, "修正後に lint が通ること");
     }
 }

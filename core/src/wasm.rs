@@ -485,7 +485,7 @@ impl WasmAiMarkdownService {
 
 #[cfg(target_arch = "wasm32")]
 use crate::{
-    ai_markdown::lint::{LintIssue, LintResultWrapper, LintSeverity, MarkdownLinter, lint_passed},
+    ai_markdown::lint::{LintIssue, LintSeverity, MarkdownLinter},
     config::LintConfig,
 };
 
@@ -545,25 +545,14 @@ impl WasmMarkdownLinter {
 
     /// Lint し、`auto_fix` が有効なら自動修正して結果を返す。
     ///
-    /// ネイティブの `validate_content` と同じ分岐を wasm 側でも再現する
-    /// （`MarkdownLinter::lint_and_fix` 自体は auto_fix 引数を持たないため）。
+    /// 分岐そのものは `validate_with_auto_fix` に集約し、ここでは
+    /// `LintResultWrapper` を JS 公開用の `WasmLintFixResult` へ変換するだけ。
     #[wasm_bindgen]
     pub async fn lint_and_fix(&self, content: String) -> Result<WasmLintFixResult, JsValue> {
-        let result: LintResultWrapper = if self.auto_fix {
-            self.inner.lint_and_fix(&content).await.map_err(js_error)?
-        } else {
-            let issues = self.inner.lint(&content).map_err(js_error)?;
-            let passed = lint_passed(&issues, self.inner.warnings_as_errors());
-            LintResultWrapper {
-                passed,
-                issues,
-                fixed_content: content.clone(),
-                fixes_applied: 0,
-                // lint のみの経路では修正を行わないため収束扱いとする。
-                converged: true,
-                conflicting_rules: Vec::new(),
-            }
-        };
+        let result =
+            crate::ai_markdown::lint::validate_with_auto_fix(&self.inner, &content, self.auto_fix)
+                .await
+                .map_err(js_error)?;
 
         Ok(WasmLintFixResult {
             passed: result.passed,
