@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 127 件）。
+openrustbooks の ADR 一覧（全 128 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -256,3 +256,5 @@ openrustbooks の ADR 一覧（全 127 件）。
   - status: accepted — 共通ワークフローの audit 入力を有効化し、CI でも cargo audit を実行する決定を記録する。
 - [ADR-0127: エディタ UI と Tauri command の段階接続](0127-editor-ui-integration.md)
   - status: accepted — CodeMirror を導入せず、既存の Tauri command を段階的に Web UI へ接続する方針を記録する。
+- [ADR-0128: 設定フォームの読み取り表示と保存見送り](0128-settings-form-wiring.md)
+  - status: accepted — SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。

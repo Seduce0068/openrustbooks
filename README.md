@@ -314,6 +314,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0125-audit-gate](docs/decisions/0125-audit-gate.md)
 - [0126-ci-audit-gate](docs/decisions/0126-ci-audit-gate.md)
 - [0127-editor-ui-integration](docs/decisions/0127-editor-ui-integration.md)
+- [0128-settings-form-wiring](docs/decisions/0128-settings-form-wiring.md)
+  - SettingsForm に Tauri IPC の読み取り表示とブラウザ版 fallback を追加し、保存接続は安全性の観点から見送る決定を記録する。
   - CodeMirror を導入せず、既存の Tauri command を段階的に Web UI へ接続する方針を記録する。
   - 共通ワークフローの audit 入力を有効化し、CI でも cargo audit を実行する決定を記録する。
   - cargo audit をローカル検証スクリプトに追加し、既知脆弱性の回帰を防ぐ決定を記録する。
