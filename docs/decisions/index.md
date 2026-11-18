@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 170 件）。
+openrustbooks の ADR 一覧（全 171 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -342,3 +342,5 @@ openrustbooks の ADR 一覧（全 170 件）。
   - status: accepted — 読書位置の全消去・インポートの部分失敗を操作単位で通知する決定を記録する。
 - [ADR-0170: 上限超過下書きの復元時警告](0170-oversized-draft-restore.md)
   - status: accepted — 1 MiB 超の保存済み下書きは本文を保持したまま復元し、固定警告のみを表示する決定を記録する。
+- [ADR-0171: Clear data の確認ダイアログ](0171-clear-data-confirmation.md)
+  - status: accepted — 読書位置の全消去に window.confirm() の確認を追加する決定を記録する。
