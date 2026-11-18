@@ -1,28 +1,34 @@
 # Goal
 
-デスクトップ版の CSP を Web 版と整合させ、`'unsafe-eval'` を排除する（ADR-0091 / 0128 / 0129 の未決定）。
+設定保存用の patch DTO と `update_config_patch` command を追加する（ADR-0128 の未決定）。
 
 ## Scope
 
 ### 背景
 
-`desktop/tauri.conf.json:29` の CSP は `script-src 'self' 'unsafe-inline' 'unsafe-eval'` で、
-Wasm に必要な `'wasm-unsafe-eval'` が無い。一方 `web/index.html:7` には
-`'wasm-unsafe-eval'` がある。ADR-0091 で nonce 対応は見送られており、
-`'unsafe-inline'` は残る。
+`get_config` は `ConfigView`（secret / パス除外 DTO）を返すが、
+`update_config` は完全な `AppConfig` を要求する。
+Web 側が DTO をそのまま送るとデシリアライズ失敗し、
+完全な AppConfig を再構成すると隠しフィールドが既定値で上書きされる。
 
 ### 成果物
 
-- `desktop/tauri.conf.json`: 変更（`'unsafe-eval'` → `'wasm-unsafe-eval'`）
-- `docs/decisions/0130-desktop-csp.md`: 追加
+- `desktop/src/commands/config.rs`: 変更（`ConfigPatch` と `update_config_patch` を追加）
+- `desktop/src/main.rs`: 変更（command 登録）
+- `docs/decisions/0131-config-patch-command.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. `script-src` から `'unsafe-eval'` を削除し、`'wasm-unsafe-eval'` を追加する。
-2. `connect-src` 等は変更しない（Tauri IPC と既存送信先を維持）。
-3. ローカル検証（trunk build / E2E）が壊れないことを確認する。
-4. 実機での Tauri WebView 挙動は未検証であることを ADR に明記する。
+1. `ConfigView` と同じ公開フィールドを持つ `ConfigPatch`（Deserialize）を追加する
+   （secret は `has_*` ではなく実値を Option で受け取るか、今回は受け取らない）。
+2. `update_config_patch(state, patch: ConfigPatch)` を追加し、
+   現在の `AppConfig` に patch の公開フィールドだけを上書きしてから
+   既存の `merge_secrets` / `validate_ai_base_urls` / 差分検知 /
+   `refresh_ai_service()` と同じ処理を行う。
+3. 旧 `update_config` は互換性のため維持する。
+4. テストを追加する（patch が秘密 / パスフィールドを保持すること）。
+5. 既存の 227 テスト + wasm 3、E2E 229 項目を壊さない。
 
 ## Acceptance criteria
 
@@ -30,6 +36,6 @@ Wasm に必要な `'wasm-unsafe-eval'` が無い。一方 `web/index.html:7` に
 
 ## Constraints
 
-- `withGlobalTauri` は今回追加しない（別タスク）。
-- `web/index.html` の CSP は変更しない。
+- 新規依存を追加しない。
+- Web UI の接続は今回行わない（command の準備のみ）。
 - `master` へ push する。force push はしない。
