@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 154 件）。
+openrustbooks の ADR 一覧（全 155 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -310,3 +310,5 @@ openrustbooks の ADR 一覧（全 154 件）。
   - status: accepted — About 画面のライセンスと対応形式を実装事実に合わせる決定を記録する。
 - [ADR-0154: localStorage 保存失敗の可視化](0154-storage-failure-visibility.md)
   - status: accepted — localStorage への保存失敗時に固定文言の status 表示と console.error を出す決定を記録する。
+- [ADR-0155: rumdl の feature 削減](0155-rumdl-feature-reduction.md)
+  - status: accepted — native 側 rumdl を featureless にし、LSP / ファイル監視 / 並列処理スタックを依存ツリーから除去する決定を記録する。
