@@ -12,6 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use ammonia::Builder;
 
+use crate::image_dimensions::MAX_DIMENSION;
+
 /// 表示を許可する要素。
 ///
 /// `script`・`style`・`iframe`・`object`・`form` などの実行・埋め込み・
@@ -131,13 +133,29 @@ pub fn sanitize_epub_html(html: &str) -> String {
         .url_schemes(HashSet::from(["http", "https", "mailto"]))
         .link_rel(Some("noopener noreferrer"))
         .attribute_filter(|element, attribute, value| {
-            if element == "img" && attribute == "src" && !is_local_reference(value) {
+            let reject = element == "img"
+                && ((attribute == "src" && !is_local_reference(value))
+                    || (matches!(attribute, "width" | "height") && !is_valid_dimension(value)));
+            if reject {
                 None
             } else {
                 Some(Cow::Borrowed(value))
             }
         });
     builder.clean(html).to_string()
+}
+
+/// 画像の width/height 属性が安全な整数か判定する。
+///
+/// ASCII 数字 1〜5 桁だけを許し、`1..=MAX_DIMENSION` に収める。
+/// 単位・負数・全角数字・上限超えは fail-closed で拒否する。
+fn is_valid_dimension(value: &str) -> bool {
+    if value.is_empty() || value.len() > 5 || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    value
+        .parse::<u32>()
+        .is_ok_and(|dimension| (1..=MAX_DIMENSION).contains(&dimension))
 }
 
 /// 画像として表示してよい参照か判定する。
@@ -403,5 +421,40 @@ mod tests {
         }
         let sanitized = sanitize_epub_html(&html);
         assert!(sanitized.contains("very deep"));
+    }
+
+    #[test]
+    fn keeps_numeric_image_dimensions() {
+        let sanitized = sanitize_epub_html(r#"<img src="x.png" width="100" height="200" alt="x">"#);
+        assert!(sanitized.contains(r#"width="100""#), "{sanitized}");
+        assert!(sanitized.contains(r#"height="200""#), "{sanitized}");
+    }
+
+    #[test]
+    fn removes_invalid_image_dimensions() {
+        for value in ["100px", "-1", "0", "16385", "１２３"] {
+            let sanitized = sanitize_epub_html(&format!(
+                r#"<img src="x.png" width="{value}" height="{value}" alt="x">"#
+            ));
+            assert!(!sanitized.contains("width="), "kept width: {value}");
+            assert!(!sanitized.contains("height="), "kept height: {value}");
+        }
+    }
+
+    #[test]
+    fn keeps_max_and_leading_zero_dimensions() {
+        let sanitized = sanitize_epub_html(r#"<img src="x.png" width="16384" height="007">"#);
+        assert!(sanitized.contains(r#"width="16384""#), "{sanitized}");
+        assert!(sanitized.contains(r#"height="007""#), "{sanitized}");
+    }
+
+    #[test]
+    fn external_src_still_removed_with_dimensions() {
+        let sanitized = sanitize_epub_html(
+            r#"<img src="https://evil.com/x.png" width="100" height="50" alt="x">"#,
+        );
+        assert!(!sanitized.contains("src="), "{sanitized}");
+        assert!(sanitized.contains(r#"width="100""#), "{sanitized}");
+        assert!(sanitized.contains(r#"height="50""#), "{sanitized}");
     }
 }
