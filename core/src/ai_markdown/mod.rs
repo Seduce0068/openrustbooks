@@ -522,6 +522,8 @@ impl<Req: PipelineInput> PipelineInput for PipelineRequest<Req> {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     const DIRTY: &str = "# Title\n\nTrailing spaces here   \n";
 
@@ -607,5 +609,142 @@ mod tests {
         assert!(result.passed);
         assert!(result.converged);
         assert!(result.conflicting_rules.is_empty());
+    }
+
+    /// complete の呼び出し回数だけを記録するモック（外部 API は呼ばない）
+    struct CountingAiClient {
+        content: &'static str,
+        calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl client::AiClient for CountingAiClient {
+        async fn complete(
+            &self,
+            _prompt: &str,
+            _max_tokens: usize,
+            _streaming: bool,
+        ) -> CoreResult<client::AiResponse> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(client::AiResponse {
+                content: self.content.to_string(),
+                tokens_used: 11,
+                model: "mock".to_string(),
+            })
+        }
+
+        async fn stream_complete(
+            &self,
+            _prompt: &str,
+            _max_tokens: usize,
+        ) -> CoreResult<Box<dyn client::TokenStream + Send>> {
+            Err(CoreError::ai_pipeline(
+                "stream is unused in tests".to_string(),
+            ))
+        }
+
+        fn count_tokens(&self, text: &str) -> CoreResult<usize> {
+            Ok(text.len())
+        }
+
+        fn model_name(&self) -> &str {
+            "mock"
+        }
+    }
+
+    /// モックを直接差し込んで pipeline を組み立てる（本番コードは変更しない）
+    fn pipeline_with_mock(
+        mock: Arc<CountingAiClient>,
+        linter: lint::MarkdownLinter,
+        config: PipelineConfig,
+    ) -> AiMarkdownPipeline {
+        AiMarkdownPipeline {
+            client: mock,
+            linter,
+            prompt_registry: prompt::PromptRegistry::with_builtins()
+                .expect("built-in templates should load"),
+            config,
+        }
+    }
+
+    fn zero_retry_config() -> PipelineConfig {
+        PipelineConfig {
+            max_retries: 0,
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn zero_max_retries_runs_once_and_reports_lint_pass() {
+        // lint を通る生成物なら 1 回で完了し lint_passed=true
+        let clean = "# Title\n\nTrailing spaces here\n";
+        let mock = Arc::new(CountingAiClient {
+            content: clean,
+            calls: AtomicUsize::new(0),
+        });
+        let pipeline = pipeline_with_mock(mock.clone(), linter(), zero_retry_config());
+
+        let result = pipeline
+            .generate(GenerateRequest {
+                prompt: "タイトルを生成".to_string(),
+                context: None,
+                template: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(result.attempts, 1, "max_retries=0 は初期 1 回のみ");
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            1,
+            "complete は 1 回だけ呼ばれること"
+        );
+        assert!(
+            result.lint_passed,
+            "クリーンな生成物は lint 合格と報告すること"
+        );
+        assert_eq!(result.content, clean, "生成物がそのまま返ること");
+    }
+
+    #[tokio::test]
+    async fn zero_max_retries_keeps_ok_when_lint_fails() {
+        // 最終試行の lint 不合格でも Ok ＋ lint_passed=false（ADR-0116）
+        let html = "# Title\n\n<div>html</div>\n";
+        let mock = Arc::new(CountingAiClient {
+            content: html,
+            calls: AtomicUsize::new(0),
+        });
+        let config = PipelineConfig {
+            max_retries: 0,
+            auto_fix: false,
+            ..Default::default()
+        };
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), config);
+
+        let result = pipeline
+            .generate(GenerateRequest {
+                prompt: "HTML を含む生成".to_string(),
+                context: None,
+                template: None,
+            })
+            .await;
+        assert!(
+            result.is_ok(),
+            "最終 attempt の lint 不合格でも Ok を返すこと"
+        );
+        let result = result.expect("lint 不合格でも Ok を返すこと");
+
+        assert_eq!(result.attempts, 1, "lint 不合格でもリトライしないこと");
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            1,
+            "complete は 1 回だけ呼ばれること"
+        );
+        assert!(!result.lint_passed, "不合格をそのまま報告すること");
+        assert_eq!(result.content, html, "lint のみ経路は本文を変えないこと");
+        assert!(
+            result.diff.is_some(),
+            "show_diff 既定で差分が保持されること"
+        );
     }
 }
