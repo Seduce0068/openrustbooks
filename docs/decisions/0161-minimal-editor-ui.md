@@ -70,7 +70,7 @@ Preview へ入力が届かなかった。
 
 ## 未決定
 
-- Markdown の本格レンダリング（今回はサニタイズ表示のみ）。
+- ~~Markdown の本格レンダリング~~ ADR-0162 で comrak + 二段サニタイズを実装。
 - 保存先（localStorage / ファイル / Tauri command）と保存接続
   （ADR-0127 から継続）。
 - disabled 理由の可視提示（`title` 依存で十分か、要実機確認）。
