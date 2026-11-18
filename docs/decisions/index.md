@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 198 件）。
+openrustbooks の ADR 一覧（全 199 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -398,3 +398,5 @@ openrustbooks の ADR 一覧（全 198 件）。
   - status: accepted — TokenStream::is_done と StorageBackend::available_space を削除し、未実装 API への誤依存を防ぐ決定を記録する。
 - [ADR-0198: Reader の ARIA 属性修正](0198-reader-a11y-fixes.md)
   - status: accepted — 本文領域のアクセシブル名を aria-labelledby へ一本化し、ダーク切替の状態を実効値で告知する決定を記録する。
+- [ADR-0199: 第三者通知の網羅](0199-third-party-notices.md)
+  - status: accepted — 配布に関係する依存クレートを cargo metadata から網羅し、ライセンス ID と出典を第三者通知へ記載する決定を記録する。

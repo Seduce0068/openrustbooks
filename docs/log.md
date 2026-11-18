@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- 第三者通知へ配布依存 781 件のライセンス ID と出典を追加（ADR-0199）。
 - Reader の ARIA 属性を修正し E2E を 250→251 に更新（ADR-0198、ADR-0058 を supersede）。
 - 未使用 trait メソッド is_done / available_space を削除（ADR-0197）。
 - wasm-pack test を CI extra_gates へ追加し、verify.sh と単一情報源化（ADR-0196）。
