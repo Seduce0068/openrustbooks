@@ -1,37 +1,39 @@
 # Goal
 
-About 画面のライセンスと対応形式の表示を実装事実に合わせる（ADR-0151 の次候補）。
+localStorage への保存失敗を利用者とログに可視化する（ADR-0151 の残タスク）。
 
 ## Scope
 
 ### 背景
 
-`web/src/lib.rs:170-175` の About 画面は
-`License: MIT`、`Supports: EPUB, PDF, Markdown, TXT, ZIP` と表示する。
-実際は `Cargo.toml:12` が `AGPL-3.0-or-later` で、
-README.md:81 は EPUB 閲覧のみ実装済み、他形式は設計段階としている。
+`web/src/lib.rs` の `save_position()` / `save_settings()` / `save_history()` は
+`window.local_storage()` や `set_item()` の失敗で早期 return または `let _` で捨てる。
+ADR-0019 は容量超過時の縮退を決めているが、縮退後も失敗した場合の通知経路が無い。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（About 文言）
-- `tools/verify-web-reader.py`: 変更（E2E チェック 1 件追加、231 → 232）
-- `docs/decisions/0153-about-page-accuracy.md`: 追加
+- `web/src/lib.rs`: 変更（失敗時の status 表示と `web_sys::console::error_1`）
+- `tools/verify-web-reader.py`: 変更（E2E チェック 1 件追加、232 → 233）
+- `docs/decisions/0154-storage-failure-visibility.md`: 追加
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. ライセンス表示を `AGPL-3.0-or-later` に修正する。
-2. 対応形式は「EPUB 閲覧は実装済み、TXT / Markdown / PDF / ZIP は設計段階」と正確に表示する。
-3. E2E に About 画面へ遷移して表示を確認するチェックを 1 件追加し、期待総数を 232 に更新する。
-4. 既存の E2E 231 項目と全ゲートを壊さない。
+1. 3 つの save 関数が失敗した場合、`tracing::error!` または
+   `web_sys::console::error_1` でログに残す。
+2. 利用者向けには `set_status` 経由で「保存に失敗しました」系の文言を表示する
+   （既存の status シグナルを再利用）。
+3. E2E で localStorage の `setItem` を失敗させる（例: 容量を埋める／オーバーライド）
+   シナリオを 1 件追加し、status とログを確認する。
+4. 既存 E2E 232 項目と全ゲートを壊さない。
 
 ## Acceptance criteria
 
-- E2E 232 項目が成功する。
+- E2E 233 項目が成功する。
 - 6 ゲート + audit + wasm-test が成功する。
 
 ## Constraints
 
-- コードの機能は変更せず、表示文言のみ。
 - 新規依存を追加しない。
+- 保存スキーマとキー名は変更しない。
 - `master` へ push する。force push はしない。
