@@ -71,7 +71,7 @@ openrustbooks/
 | **共通コア** | Rust 2024, `rumdl` (markdownlint互換), `async-openai`, `tiktoken-rs` |
 | **デスクトップ** | Tauri 2.12 (OS WebView / wry) |
 | **Web** | Leptos 0.8 (CSR), Wasm |
-| **Markdown処理** | `pulldown-cmark`, `comrak`, `rumdl` (Wasm対応) |
+| **Markdown処理** | `comrak` (Markdown→HTML), `ammonia` (sanitize), `rumdl` (lint, Wasm対応) |
 | **AI/LLM** | OpenAI API互換, Ollama (ローカル) |
 | **設定** | `figment` (TOML + 環境変数) |
 | **ストレージ** | ローカルFS, Google Drive (予定) |

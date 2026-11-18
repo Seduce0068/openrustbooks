@@ -169,13 +169,13 @@ OS WebViewの差に影響する表示・入力は、対象環境で確認する�
 | `ai_markdown::lint` | `rumdl` ラッパー・ルールセット適用・自動修正 | 必須 |
 | `ai_markdown::diff` | 差分計算・インライン表示用データ生成 | 必須 |
 
-### 依存クレート (予定)
+### 依存クレート
 
-- `rumdl` — markdownlint 互換 lint (Wasm 対応確認済み次第採用)
-- `async-openai` / `rig-core` — AI API クライアント
+- `async-openai` — AI API クライアント
 - `tiktoken-rs` — トークン計算
 - `similar` — 差分アルゴリズム
-- `pulldown-cmark` / `comrak` — Markdown AST 操作 (必要に応じて)
+- `comrak` — Markdown→HTML 変換 (`default-features = false`)、
+  `ammonia` — 生成 HTML のサニタイズ（二段構え）、`rumdl` — markdownlint 互換 lint
 
 ### プロンプト戦略
 

@@ -34,8 +34,8 @@ ADR-0162 で comrak 0.59（featureless）を Markdown Preview に採用した結
 - `cargo audit --no-fetch`: 脆弱性 0、警告 baseline 10 のまま（差分なし）。
 - 直接依存は消えるが推移依存として残るため、
   「依存ツリーから完全に消えた」と表現しない。
-- README.md:74 / docs/architecture.md:178 の「pulldown-cmark」記載は
-  今回のスコープ外（ドキュメント整合の未決定として残す）。
+- README.md:74 / docs/architecture.md:178 の依存一覧は、comrak / ammonia / rumdl の
+  実装事実へ更新済み（未決定だったドキュメント整合は解消）。
 - workspace の rumdl `default-features=true`（Cargo.toml:27）は
   ADR-0155 の未決定として維持。
 
@@ -51,6 +51,9 @@ ADR-0162 で comrak 0.59（featureless）を Markdown Preview に採用した結
 
 ## 未決定
 
-- README / architecture の依存一覧更新（pulldown-cmark の記載を削除するか、
-  推移依存として注記するか）。
 - workspace.dependencies の rumdl エントリ整理（ADR-0155 と連動）。
+
+## 解消済み
+
+- README / architecture の依存一覧更新（pulldown-cmark の直接依存記載を削除し、
+  comrak / ammonia / rumdl の実装事実へ更新）。推移依存として残る旨は本文に記載済み。

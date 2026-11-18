@@ -23,7 +23,8 @@ core は `comrak 0.59` と `pulldown-cmark 0.13` を宣言済みだが未使用�
 - **comrak 0.59** を採用（`default-features = false` の既存宣言を利用）。
   - CLI / syntect-onig / bon を除外、追加依存なし、Cargo.lock 変更なし。
   - `Options::default()` に `strikethrough` / `table` / `autolink` のみ有効化。
-  - pulldown-cmark は未使用だが既存宣言を維持（削除は別タスク）。
+  - pulldown-cmark は未使用のため既存宣言を維持していたが、
+    ADR-0163 で直接依存を削除済み（推移依存は残存）。
 - `core/src/markdown.rs` に純粋関数 `render_markdown(md) -> String` を追加:
   1. `comrak::markdown_to_html()`（生 HTML は既定 `render.r#unsafe=false` で出力しない）
   2. 生成 HTML を `sanitize_epub_html()`（ammonia 許可リスト）へ通す
