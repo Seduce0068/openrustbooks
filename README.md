@@ -445,6 +445,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0246-workspace-dependency-unification](docs/decisions/0246-workspace-dependency-unification.md)
 - [0247-epub-owned-limits](docs/decisions/0247-epub-owned-limits.md)
 - [0248-epub-manifest-errors](docs/decisions/0248-epub-manifest-errors.md)
+- [0249-cover-media-type](docs/decisions/0249-cover-media-type.md)
+  - 未宣言の media-type を許容し明示された非画像を拒否する ADR-0008 の契約を unit test で固定する決定を記録する。
   - manifest item の id / href 欠落を固定文言の Archive エラーとして fail-closed に報告する決定を記録する。
   - EpubBook の所有権移譲 API に ArchiveLimits を指定可能にし、借用 API と同じ検証契約を共有する決定を記録する。
   - feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
