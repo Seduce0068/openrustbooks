@@ -2,6 +2,8 @@
 
 ## 2026-11-19
 
+- 検証条件へ VC ID を付与し E2E 251 件の対応表を追加（ADR-0206）。
+- 検証条件へ VC-001〜015 を付与し、E2E check（251 件）との対応表を新規作成（R6 TD-L07）。
 - WasmConfig と Wasm test 3 件を削除し、wasm テストを 10→7 件へ縮小（ADR-0205）。
 - figment env を明示マップ＋生値検証へ変更し core を 248→255 件へ拡充（ADR-0204）。
 - CoverImage DTO を href / bytes のみへ縮小し dead_code 警告を解消（ADR-0203）。

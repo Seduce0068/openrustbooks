@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 205 件）。
+openrustbooks の ADR 一覧（全 206 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -412,3 +412,5 @@ openrustbooks の ADR 一覧（全 205 件）。
   - status: accepted — figment の split 依存をやめ、明示マップと生値検証で ADR-0122 の契約を維持する決定を記録する。
 - [ADR-0205: WasmConfig の削除](0205-wasm-config-removal.md)
   - status: accepted — 未使用の WasmConfig 公開 API を削除し、設定モデル重複の 1 つを解消する決定を記録する。
+- [ADR-0206: E2E トレーサビリティの可視化](0206-e2e-traceability.md)
+  - status: accepted — 要件の検証条件に VC ID を付与し、E2E check 名との対応表を追加する決定を記録する。
