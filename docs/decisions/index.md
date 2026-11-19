@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 245 件）。
+openrustbooks の ADR 一覧（全 246 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -492,3 +492,5 @@ openrustbooks の ADR 一覧（全 245 件）。
   - status: accepted — 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
 - [ADR-0245: 容量超過時の位置削除通知](0245-position-prune-notification.md)
   - status: accepted — localStorage 容量超過で古い読書位置を削除した場合に件数と残件数を通知する決定を記録する。
+- [ADR-0246: workspace 依存の第一段統一](0246-workspace-dependency-unification.md)
+  - status: accepted — feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。

@@ -442,6 +442,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0243-unused-wasm-api-removal](docs/decisions/0243-unused-wasm-api-removal.md)
 - [0244-wasm-document-removal](docs/decisions/0244-wasm-document-removal.md)
 - [0245-position-prune-notification](docs/decisions/0245-position-prune-notification.md)
+- [0246-workspace-dependency-unification](docs/decisions/0246-workspace-dependency-unification.md)
+  - feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
   - localStorage 容量超過で古い読書位置を削除した場合に件数と残件数を通知する決定を記録する。
   - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
   - wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。

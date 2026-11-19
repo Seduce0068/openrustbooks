@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- feature 差分の無い core 依存 18 件を workspace 参照へ統一（ADR-0246）。
 - 容量超過時の位置削除へ件数・残件数を通知し E2E を 254→255 件へ拡充（ADR-0245）。
 - 未使用 Wasm API 第二段として WasmDocument を削除（ADR-0244）。
 - 未使用 Wasm API（greet / detect_format）を属性ごと削除し JS export 面を縮小（ADR-0243）。
