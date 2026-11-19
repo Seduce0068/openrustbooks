@@ -4570,10 +4570,16 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         tauri_errors = await cdp.evaluate(
             "Array.isArray(window.__orbTauriErrors) ? window.__orbTauriErrors : ['listener missing']"
         )
+        # R6 A05: desktop（editable=true）では browser-only 説明が DOM に存在しないこと。
+        # role=status の <p> は常時存在するため .some() の判定対象は必ず 1 件以上ある。
+        browser_notice_absent = await cdp.evaluate(
+            "!Array.from(document.querySelectorAll('.settings-form .settings-notice'))"
+            ".some((el) => el.textContent.includes('ブラウザ版は表示のみです'))"
+        )
         checker.check(
             "Tauri モックの設定保存で成功文言と revision +1 と JS エラー 0 を検証",
-            saved and tauri_errors == [],
-            f"(status={tauri_status!r}, revision={tauri_revision!r}, errors={tauri_errors!r})",
+            saved and tauri_errors == [] and browser_notice_absent is True,
+            f"(status={tauri_status!r}, revision={tauri_revision!r}, errors={tauri_errors!r}, browserNoticeAbsent={browser_notice_absent!r})",
         )
     finally:
         if identifier:

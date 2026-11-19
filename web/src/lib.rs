@@ -4353,9 +4353,12 @@ fn SettingsForm() -> impl IntoView {
 
     view! {
         <form class="settings-form">
-            // ADR-0128 / 0193: ブラウザ版は読み取り専用。常時表示の説明と、
-            // fetch_config の成否を伝える status（「デスクトップ版のみ利用可能」）を併記する。
-            <p class="settings-notice">"ブラウザ版は表示のみです。設定の変更・保存はデスクトップ版で行ってください。"</p>
+            // ADR-0128 / 0193: ブラウザ版は読み取り専用。readonly のときだけ説明を表示し、
+            // fetch_config の成否を伝える status（「デスクトップ版のみ利用可能」）は常時併記する。
+            // R6 A05: desktop（editable=true）では browser-only 説明を DOM から除く。
+            <Show when=move || !editable.get()>
+                <p class="settings-notice">"ブラウザ版は表示のみです。設定の変更・保存はデスクトップ版で行ってください。"</p>
+            </Show>
             <p class="settings-notice" role="status" aria-live="polite">{move || status.get()}</p>
             <p class="settings-revision">
                 "Revision: "
