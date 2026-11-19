@@ -140,6 +140,7 @@ AI API を利用して Markdown の生成・修正・リファクタリングを
 
 ## 検証条件の提案
 
+REQ / ADR / E2E の対応は [ADR-0233](decisions/0233-solution-selection-rationale.md) と [E2E 表](e2e-traceability.md) を参照。
 以下は要件を具体化するための候補であり、承認済みの受け入れ基準ではない。
 
 | VC ID | 対象 | 検証したい体験 |
