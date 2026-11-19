@@ -8,6 +8,7 @@
 
 IPC 経路（ADR-0270）と UI 起点 CAS / 構造化エラー（ADR-0269）は完了したが、
 R1 監査で次が判明した:
+
 - Web 側 SettingsView は ConfigPatch へ Serialize できず 23 フィールド不足。
 - storage の allow-list DTO 複製、a11y（for/id / aria-invalid / aria-describedby）、
   `CommandError.message` の英語固定文言を日本語 status へ変換する設計が必要。
