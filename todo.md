@@ -59,14 +59,17 @@ status: current
 - 【R2-epub#1-#4】EPUB 層の API・エラー・所有権境界を整理。
   `open_owned` の limits 指定、1316 行ファイルの分割、欠落エラーの統一、
   Document 側の二重定義解消。
-- 【R2-crates#2-#5】ADR-0003 の rumdl feature 記述更新、
-  未実装 Wasm API の非公開化、core の Web バインディング分離、
-  workspace 依存の一元化。
+- 【R2-crates#3-#5】未実装 Wasm API の非公開化、core の Web バインディング分離、
+  workspace 依存の一元化（rumdl は ADR-0242 で workspace 化しないと決定済み）。
 - 【R1-archive#2,#3,#5 残】実展開サイズの累計上限、入力パーサ側の深さ上限、表紙 media-type 検証。
   正規化後同名エントリの拒否は完了（ADR-0240）。
 
 ## 完了
 
+- [x] 【R2-crates#2】ADR-0003 の rumdl feature 記述を現状へ追従。
+      default / wasm の target 別選択は廃止され、native / wasm とも featureless。
+      wasm feature は同名 `init` export 衝突で禁止（ADR-0160）。
+      ADR-0003 に実装状況注記を追加し、現状は ADR-0242 を正とする。
 - [x] 【R5-adr 全体評価】ADR-0001 / 0002 の `generated.at` は c030537 の frontmatter 正規化で付与。
       git 作成順は 0001(10-11) → 0002(10-12) → 0003(10-16) → 0004 / 0005(10-17) で連番と一致。
       日付逆転は意味論の誤読のため、既存値を保持し規約へ注記（ADR-0241）。
