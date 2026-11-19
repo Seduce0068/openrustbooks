@@ -57,8 +57,6 @@ status: current
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
-- 【TD-M16】検証済み配布物が保持されずデプロイ／復旧の糸口が無い。
-  根拠 `scripts/verify.sh:64-65` / `.github/workflows/ci.yml:22-44`。
 - 【TD-M20】OpenAI extra_headers / Ollama options がクライアントへ渡っていない。
   根拠 `core/src/ai_markdown/client.rs:203-206,328,352`。
 - 【TD-M21】updater プラグインが初期化されるが更新チェック未配線。
@@ -135,6 +133,11 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M16】検証済み配布物をローカルへ保持し復旧の糸口を確保（即時対応完了）。
+       `verify.sh --dist <dir>` で全ゲート成功時のみ保持、manifest で完全性を記録。
+       引数なしの既定動作は不変。引数なし／--dist とも rc=0、E2E 253/0、SHA256 5 行すべて OK。
+       恒久策（保存先・保持期間、本番プロファイル、--locked、共通ワークフロー upload、
+       署名／真正性、Release Workflow との境界）は未決定 / ADR-0219 / Runbook 追加。
 - [x] 【TD-M17】AI カスタムエンドポイント opt-in を設計受容（見送り）。allowlist の現状契約と
       将来の最小安全設計を記録。フラグは未実装のまま、ADR-0101 の未決定を継続。
       コード・設定・E2E 不変（253 維持）、markdownlint 0 issues / ADR-0218。
