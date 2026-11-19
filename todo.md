@@ -125,8 +125,6 @@ status: current
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 -->
-- 【TD-L04】Reader の CoverImage.id / media_type が allow(dead_code) で捨てられる。
-  根拠 `web/src/lib.rs:2119-2126,2731-2738`。
 - 【TD-L05】E2E のコメントが期待総数 245 のまま（`Checker(expected=246)` と不整合）。
   根拠 `tools/verify-web-reader.py:820,850`。
 - 【TD-L07】要件の検証条件と E2E check 名のトレーサビリティ欠損。
@@ -158,6 +156,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L04】CoverImage を href / bytes のみへ縮小し allow(dead_code) を削除。
+      serde 未知フィールド無視で core 契約を維持。E2E 251 件・全ゲート成功 / ADR-0203。
 - [x] 【TD-L06】AI コマンドの確認／format／alignment を純粋関数へ抽出し異常系 10 件を追加。
       desktop 72 件・E2E 251 件・全ゲート成功 / ADR-0202。
 - [x] 【PR-L03】build_app の共通 8 プラグインを with_common_plugins へ集約。
