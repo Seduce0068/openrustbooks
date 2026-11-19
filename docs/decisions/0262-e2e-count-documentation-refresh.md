@@ -46,7 +46,8 @@ status: accepted
 ## 未決定
 
 - 今後 E2E 件数が変更されたとき、文書側の current 表記のズレを自動検出する
-  CI ゲートの要否（現状は ADR 追従の手運用に依存）。
+  CI ゲートの要否は [ADR-0263](0263-e2e-count-gate.md) で採用した
+  （`scripts/check-e2e-count-consistency.sh` を verify.sh / CI へ配線）。
 - ADR 内に記載した数値を「決定時点の履歴」として扱う慣例の明文化
   （本 ADR では 254 / 253 を履歴として扱うが、規約化は未実施）。
 

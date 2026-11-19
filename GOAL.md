@@ -39,3 +39,9 @@ version-consistency と同型の静的検査で fail-closed に検出できる�
 - `tools/verify-web-reader.py` / `docs/e2e-traceability.md` / Cargo.* は変更しない。
 - 外部サービス・billing は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0262 の未決定を解消する e2e-count-consistency ゲートを追加。
+- AST で Checker(expected=N) と check/equal 内訳・重複を検査、current 2 アンカーを固定。
+- 負向 test 15/15 PASS、`./scripts/verify.sh` 全ゲート成功、E2E 255 passed / 0 failed。
