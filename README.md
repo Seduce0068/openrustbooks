@@ -443,6 +443,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0244-wasm-document-removal](docs/decisions/0244-wasm-document-removal.md)
 - [0245-position-prune-notification](docs/decisions/0245-position-prune-notification.md)
 - [0246-workspace-dependency-unification](docs/decisions/0246-workspace-dependency-unification.md)
+- [0247-epub-owned-limits](docs/decisions/0247-epub-owned-limits.md)
+  - EpubBook の所有権移譲 API に ArchiveLimits を指定可能にし、借用 API と同じ検証契約を共有する決定を記録する。
   - feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
   - localStorage 容量超過で古い読書位置を削除した場合に件数と残件数を通知する決定を記録する。
   - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
