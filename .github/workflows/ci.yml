@@ -26,6 +26,7 @@ jobs:
   gates:
     uses: Seduce0068/workflows/.github/workflows/rust-gates.yml@v1
     with:
+      rust_toolchain: 1.95.0
       audit: true
       apt_packages: |
         libwebkit2gtk-4.1-dev

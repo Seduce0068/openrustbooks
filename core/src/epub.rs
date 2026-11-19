@@ -1468,10 +1468,8 @@ fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Vec<EpubTocEn
                         open.push(points.len().saturating_sub(1));
                     }
                     "navLabel" => in_label = true,
-                    "text" => {
-                        if in_label && text.is_none() {
-                            text = Some(String::new());
-                        }
+                    "text" if in_label && text.is_none() => {
+                        text = Some(String::new());
                     }
                     "content" => {
                         if let Some(&index) = open.last() {
