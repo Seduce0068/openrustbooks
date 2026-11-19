@@ -66,13 +66,19 @@ status: current
   workspace 依存の一元化。
 - 【R1-archive#2-#5】実展開サイズの累計上限、入力パーサ側の深さ上限、
   正規化後同名エントリの拒否、表紙 media-type 検証。
-- 【R3-ci#3-#5】wasm ゲートの二重指定の有無、CI とローカルの
-  ビルドプロファイル差、`trunk build` への `--locked` 付与。
 - 【R5-adr 全体評価】ADR-0002 と ADR-0003 の日付逆転（推測）を確認。
 - 【R4-unit#4】圧縮率に依存するアサーション（推測）を決定的性质へ変更。
 
 ## 完了
 
+- [x] 【R3-ci#3-#5】wasm ゲートの二重指定の有無、CI とローカルのビルドプロファイル差、
+      `trunk build` への `--locked` 付与を確認・実施。
+      `wasm_targets` は `rustup target add` のみ、`extra_gates` が実検査で二重実行ではないと判定。
+      `CARGO_PROFILE_DEV_DEBUG` / `TEST_DEBUG` / `INCREMENTAL` は runner の disk 対策で
+      ローカルへ全局適用しない。`verify.sh:268` に `--offline --locked` を付与し、
+      `ci.yml` / `ci-wasm-test.sh` は不変。bash -n OK・verify.sh 全ゲート rc=0・
+      E2E 254/0・Cargo.lock 差分なし・markdownlint 0 issues / ADR-0237。
+      CI-H01（billing 解消後の実 CI 検証）は低優先度で継続。
 - [x] 【B06 / C01】`prefers-contrast: more` で枠線・補助文字のコントラストを強化。
        light border 4.83:1 / muted 10.31:1、dark border 6.96:1 / muted 12.02:1 を
        light / dark と `prefers-color-scheme: dark` の両経路へ適用。
