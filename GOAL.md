@@ -1,46 +1,42 @@
 # Goal
 
-設定保存 UI 接続の残作業を設計受容として記録する（R6 A05 の現状整理）。
+Tauri 設定保存 UI を接続する（R6 A05 段階 2、ADR-0271 の DTO 要件を実装）。
 
 ## Scope
 
 ### 背景
 
-IPC 経路（ADR-0270）と UI 起点 CAS / 構造化エラー（ADR-0269）は完了したが、
-R1 監査で次が判明した:
-
-- Web 側 SettingsView は ConfigPatch へ Serialize できず 23 フィールド不足。
-- storage の allow-list DTO 複製、a11y（for/id / aria-invalid / aria-describedby）、
-  `CommandError.message` の英語固定文言を日本語 status へ変換する設計が必要。
-- Tauri mock E2E +1 は DTO 往復が完成していない段階では get_config 成功までしか検証できない。
+IPC 経路（ADR-0270）と UI 起点 CAS / 構造化エラー（ADR-0269）は完了した。
+web 側 `SettingsView` は `ConfigPatch` へ Serialize できず、
+allow-list View の差分（general 1 / ai 6 / lint 2 / storage 14）と
+`expected` が不足していた（ADR-0271）。
 
 ### 成果物
 
-- `docs/decisions/0271-settings-ui-scope.md`: 追加
-- `docs/decisions/0253-tauri-settings-save-design.md`: 変更（命名ドリフトと残作業を明確化）
-- `todo.md`: A05 は「IPC 契約完了・UI 接続は DTO 設計後」へ更新
+- `web/src/lib.rs`: 変更（完全な ConfigView DTO、保存 IPC、入力可能 UI、a11y）
+- `tools/verify-web-reader.py`: 変更（Tauri mock 成功経路 +1、255 → 256）
+- `docs/e2e-traceability.md`: 変更（256 件追従）
+- `docs/documentation-operations.md`: 変更（current 256）
+- `docs/decisions/0272-settings-save-ui.md`: 追加
+- `todo.md`: A05 を「UI 接続完了、実 WebView 検証は後続」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 実装済み（withGlobalTauri / CAS / 構造化エラー）と未実装（DTO 往復 / a11y / E2E 成功経路 / 実 WebView）を切り分ける。
-2. 不足フィールド 23 項目と storage allow-list の制約を記録する。
-3. `ConfigPatch.expected` / `__TAURI__` を正とし、旧 ADR の命名は履歴として扱う。
-4. E2E 255 維持、check 追加なし。
-5. markdownlint 0 issues、verify.sh（255）成功。
+1. web 側 DTO を desktop `ConfigView` / `ConfigPatch` と同形にし、
+   `revision` → `expected` マッピングで保存する。
+2. secret / path / extra_headers を DTO へ追加しない。
+3. browser は readonly / fail-closed を維持し、desktop（IPC 成功時）のみ編集可能にする。
+4. a11y: `label[for]` / `id` / `aria-invalid` / `aria-describedby` /
+   `role="status" aria-live="polite"` を満たす。
+5. E2E +1（成功経路）、期待総数 256、check 名一意、AST / 文書同期。
 
 ## Acceptance criteria
 
-- 文書・索引が整合し、全ゲート成功。
+- E2E 256 項目、core / desktop / web / wasm / verify.sh 全ゲート成功。
 
 ## Constraints
 
-- web / desktop / E2E / Cargo.* は変更しない。
-- 外部サービス・実 WebView 検証は行わない。
+- desktop / core / Cargo.* は変更しない（IPC 契約は ADR-0269 を正とする）。
+- 実 Tauri WebView 往路検証は行わない（CDP mock のみ、未決定として残す）。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- ADR-0271 で IPC 完了 / UI 未実装を分離し、23 フィールド不足の内訳を記録。
-- ADR-0253 の旧命名を履歴注記、docs/index に 0269 / 0270 の導線を追加。
-- コード・E2E 不変、`./scripts/verify.sh` 全ゲート成功、E2E 255 passed / 0 failed。
