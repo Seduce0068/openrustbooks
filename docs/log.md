@@ -2,6 +2,13 @@
 
 ## 2026-11-19
 
+- `prefers-contrast: more` で枠線と補助文字を強化。light border `#6b7280`（4.83:1）/
+  muted `#374151`（10.31:1）、dark border `#94a3b8`（6.96:1）/ muted `#cbd5e1`（12.02:1）を
+  `@media (prefers-contrast: more)` と `(prefers-contrast: more) and (prefers-color-scheme: dark)`
+  で適用し、dark は `html.dark` 経路もカバー。forced-colors ブロックは変更せず後方に維持。
+  静的コントラストを再計算し、E2E の色非依存（check 名 254 件不変）を確認。
+  E2E 254/0・`verify.sh` rc=0・markdownlint 0 issues。ADR-0236 を追加し decisions / docs
+  各 index（236 件）、README、GOAL、todo を追従（ADR-0236）。
 - swipe の先頭 evaluate（引数未埋め込みの二重 dispatch）を削除し、f-string 版 1 回のみの
   dispatch へ変更。到達条件が明確な章移動・縦 / マルチタッチ・ダーク切替・ファイル選択後の
   DOM / 保存・リセット後を条件待ちへ置換（負向チェックは baseline＋第 1 章本文＋0.3 秒維持）。

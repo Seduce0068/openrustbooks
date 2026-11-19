@@ -424,6 +424,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - OKF・索引・log・lint の規約と設定をリポジトリ内へ集約する決定。
 - [0235-e2e-conditional-wait](docs/decisions/0235-e2e-conditional-wait.md)
   - swipe の二重 dispatch を 1 回へし、到達条件が明確な待機を条件待ちへ置換する決定。
+- [0236-prefers-contrast](docs/decisions/0236-prefers-contrast.md)
+  - `prefers-contrast: more` で枠線・補助文字を強化し、forced-colors 契約を後方で維持する決定。
 
 ## ライセンス
 
