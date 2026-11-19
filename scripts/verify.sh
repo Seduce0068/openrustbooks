@@ -219,6 +219,7 @@ run fmt cargo fmt --all -- --check
 run no-external-font-refs check_no_external_font_refs
 run rumdl-featureless check_rumdl_featureless
 run version-consistency bash scripts/check-version-consistency.sh
+run e2e-count-consistency bash scripts/check-e2e-count-consistency.sh
 run check cargo check --all-targets --locked
 run test cargo test --all-targets --locked
 run clippy cargo clippy --all-targets --locked -- -D warnings

@@ -112,6 +112,7 @@ OKF `type: Decision` と `##` 見出しで記述する。追加時は次をす�
   出典は `tools/verify-web-reader.py` の `Checker(expected=255)` であり、
   文書側の current 表記を追従させる決定は
   [ADR-0262](decisions/0262-e2e-count-documentation-refresh.md) に記録する。
+- current 表記のズレは `scripts/check-e2e-count-consistency.sh` が verify.sh / CI extra_gates で fail-closed に自動検出する。
 
 ## markdownlint
 
