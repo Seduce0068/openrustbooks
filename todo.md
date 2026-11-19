@@ -125,8 +125,6 @@ status: current
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 -->
-- 【PR-L03】build_app が desktop/mobile で 7 プラグイン重複。
-  根拠 `desktop/src/main.rs:16-18,42-44`。共通関数へ抽出。
 - 【TD-L04】Reader の CoverImage.id / media_type が allow(dead_code) で捨てられる。
   根拠 `web/src/lib.rs:2119-2126,2731-2738`。
 - 【TD-L05】E2E のコメントが期待総数 245 のまま（`Checker(expected=246)` と不整合）。
@@ -162,6 +160,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-L03】build_app の共通 8 プラグインを with_common_plugins へ集約。
+      global_shortcut の挿入位置と登録順を維持。E2E 251 件・全ゲート成功 / ADR-0201。
 - [x] 【TD-M07】send_wrapper を web の直接依存 (0.6) へ変更。
       Cargo.lock は 1 行追加のみ、re-export 参照 0 件。E2E 251 件・全ゲート成功 / ADR-0200。
 - [x] 【PR-M12】第三者通知へ外部依存 781 件（dev 9 件除外）を自動生成。
