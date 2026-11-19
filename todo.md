@@ -133,6 +133,11 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L12】E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れ解消）。
+      Python AST で checker.check 236 + checker.equal 17 = 253 件を抽出し、
+      不正 EPUB の固定文言通知を VC-009、reduce の即時フラグメント移動を VC-004 の
+      既存行へ割り当て。対応表は missing / duplicate / extra 0（253/253 一致）、
+      markdownlint 0 issues / ADR-0220。E2E コード・check 名・期待総数は不変。
 - [x] 【TD-M16】検証済み配布物をローカルへ保持し復旧の糸口を確保（即時対応完了）。
        `verify.sh --dist <dir>` で全ゲート成功時のみ保持、manifest で完全性を記録。
        引数なしの既定動作は不変。引数なし／--dist とも rc=0、E2E 253/0、SHA256 5 行すべて OK。
