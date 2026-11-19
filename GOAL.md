@@ -1,6 +1,6 @@
 # Goal
 
-表紙 media-type 契約を回 regress test で固定した（R6 R1-archive#5、ADR-0249）。
+表紙 media-type 契約を回帰 test で固定した（R6 R1-archive#5、ADR-0249）。
 
 ## Scope
 
