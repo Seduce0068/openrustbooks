@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 267 件）。
+openrustbooks の ADR 一覧（全 268 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -536,3 +536,5 @@ openrustbooks の ADR 一覧（全 267 件）。
   - status: accepted — verify.sh の manifest に E2E のブラウザ実行ファイル・解決パス・バージョン・ポートを記録する決定。
 - [ADR-0267: WASM バンドルサイズの比較可能ベースライン](0267-bundle-size-baseline.md)
   - status: accepted — verify.sh と同一のビルド条件で現行 WASM 配布物のサイズを実測し、今後の比較可能 before とする決定を記録する。
+- [ADR-0268: CSP 整合性の静的ゲート](0268-csp-consistency-gate.md)
+  - status: accepted — meta CSP と desktop config CSP の一致・許可オリジンを fail-closed で検査する静的ゲートを記録する。

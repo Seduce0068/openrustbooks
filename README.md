@@ -489,6 +489,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0265-cross-browser-e2e](docs/decisions/0265-cross-browser-e2e.md)
 - [0266-browser-metadata-manifest](docs/decisions/0266-browser-metadata-manifest.md)
 - [0267-bundle-size-baseline](docs/decisions/0267-bundle-size-baseline.md)
+- [0268-csp-consistency-gate](docs/decisions/0268-csp-consistency-gate.md)
+  - meta CSP と desktop config CSP の一致・許可オリジンを fail-closed で検査する静的ゲートを記録する。
   - verify.sh と同一のビルド条件で現行 WASM 配布物のサイズを実測し、今後の比較可能 before とする決定を記録する。
   - verify.sh の manifest に E2E のブラウザ実行ファイル・解決パス・バージョン・ポートを記録する決定。
   - 現行 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。

@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- meta / desktop config の CSP 整合を静的ゲート化、負向 test 15/15 PASS（ADR-0268）。
 - WASM バンドルを verify.sh 同一条件で実測し、比較可能 before を確立（ADR-0267）。
 - 検証済み dist の manifest にブラウザ executable / path / version / ポートを記録（ADR-0266）。
 - E2E 255 件を Chrome / Edge で実機実行し 255/0 を確認、他ブラウザの環境ブロッカーを記録（ADR-0265）。
