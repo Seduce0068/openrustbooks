@@ -61,7 +61,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
 }
 
 /// Application entry point
-pub fn run() {
+pub fn run() -> tauri::Result<()> {
     init();
 
     build_app()
@@ -136,17 +136,21 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
 }
 
 /// Tauri mobile entry point (for iOS/Android)
 #[cfg(mobile)]
 #[tauri::mobile_entry_point]
 fn main() {
-    run();
+    if let Err(error) = run() {
+        log::error!("error while running tauri application: {error}");
+    }
 }
 
 #[cfg(not(mobile))]
 fn main() {
-    run();
+    if let Err(error) = run() {
+        eprintln!("error while running tauri application: {error}");
+        std::process::exit(101);
+    }
 }

@@ -4042,14 +4042,14 @@ async fn invoke(command: &str, args: &JsValue) -> Result<JsValue, String> {
     let promise: js_sys::Promise = promise.dyn_into().map_err(|_| "desktop only".to_string())?;
     wasm_bindgen_futures::JsFuture::from(promise)
         .await
-        .map_err(|err| format!("invoke failed: {err:?}"))
+        .map_err(|_| "デスクトップ版の設定を取得できませんでした".to_string())
 }
 
 /// `get_config` を呼び出して DTO に変換する（ブラウザでは Err）。
 async fn fetch_config() -> Result<SettingsView, String> {
     let args: JsValue = js_sys::Object::new().into();
     let value = invoke("get_config", &args).await?;
-    serde_wasm_bindgen::from_value(value).map_err(|err| format!("config parse failed: {err}"))
+    serde_wasm_bindgen::from_value(value).map_err(|_| "設定の形式が正しくありません".to_string())
 }
 
 /// Settings form component（読み取り表示のみ）。

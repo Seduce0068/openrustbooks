@@ -274,7 +274,7 @@ impl AiClient for OpenAiClient {
             .chat()
             .create(request)
             .await
-            .map_err(|e| CoreError::ai_provider(format!("OpenAI API error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
         let content = response
             .choices
@@ -307,7 +307,7 @@ impl AiClient for OpenAiClient {
             .chat()
             .create_stream(request)
             .await
-            .map_err(|e| CoreError::ai_provider(format!("OpenAI stream error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
         Ok(Box::new(OpenAiTokenStream {
             stream,
@@ -340,8 +340,7 @@ impl std::fmt::Debug for OpenAiTokenStream {
 impl TokenStream for OpenAiTokenStream {
     async fn next_token(&mut self) -> CoreResult<Option<String>> {
         while let Some(chunk) = self.stream.next().await {
-            let chunk =
-                chunk.map_err(|e| CoreError::ai_provider(format!("Stream error: {}", e)))?;
+            let chunk = chunk.map_err(|e| CoreError::ai_provider(e.to_string()))?;
             if let Some(choice) = chunk.choices.first() {
                 if let Some(delta) = &choice.delta.content {
                     self.buffer.push_str(delta);
@@ -407,7 +406,7 @@ impl OllamaClient {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
-            .map_err(|e| CoreError::ai_provider(format!("Ollama client build error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
         let tokenizer = cl100k_base_singleton(); // Approximation
         let options = config
             .options
@@ -442,12 +441,12 @@ impl AiClient for OllamaClient {
             .send()
             .await
             .and_then(reqwest::Response::error_for_status)
-            .map_err(|e| CoreError::ai_provider(format!("Ollama request error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
         let result: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| CoreError::ai_provider(format!("Ollama response error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
         let content = result["response"].as_str().unwrap_or("").to_string();
         let tokens_used = self.count_tokens(&content)?;
@@ -473,7 +472,7 @@ impl AiClient for OllamaClient {
             .send()
             .await
             .and_then(reqwest::Response::error_for_status)
-            .map_err(|e| CoreError::ai_provider(format!("Ollama stream request error: {}", e)))?;
+            .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
         let stream = response.bytes_stream();
         Ok(Box::new(OllamaTokenStream {
@@ -583,9 +582,7 @@ impl TokenStream for OllamaTokenStream {
 
             match self.stream.next().await {
                 Some(chunk) => {
-                    let chunk = chunk.map_err(|e| {
-                        CoreError::ai_provider(format!("Ollama stream error: {}", e))
-                    })?;
+                    let chunk = chunk.map_err(|e| CoreError::ai_provider(e.to_string()))?;
                     self.push_chunk(&chunk)?;
                 }
                 None => {
@@ -848,9 +845,15 @@ mod tests {
             Some("before")
         );
         let err = stream.next_token().await.unwrap_err();
+        let message = err.to_string();
+        let prefix = "AI provider error: ";
         assert!(
-            err.to_string().contains("Ollama stream error"),
-            "エラーが伝播しない: {err}"
+            message.starts_with(prefix) && message.len() > prefix.len(),
+            "元のエラーが伝播しない: {message}"
+        );
+        assert!(
+            !message.contains("not a valid url"),
+            "試行 URL が漏れた: {message}"
         );
     }
 

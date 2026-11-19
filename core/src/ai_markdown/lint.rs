@@ -172,7 +172,7 @@ impl MarkdownLinter {
             Some(&self.config),
         );
 
-        let warnings = result.map_err(|e| CoreError::lint(format!("Lint error: {:?}", e)))?;
+        let warnings = result.map_err(|e| CoreError::lint(format!("{e:?}")))?;
 
         let mut issues = Vec::new();
         for warning in warnings {
@@ -204,7 +204,7 @@ impl MarkdownLinter {
         // 反復上限は rumdl の wasm 実装に倣う
         let (fixed_content, fix_result) = DocumentRun::new(content, &self.rules, &self.config)
             .fix(10)
-            .map_err(|e| CoreError::validation(format!("Auto-fix error: {}", e)))?;
+            .map_err(|e| CoreError::validation(e.to_string()))?;
 
         let (adopted, fixes_applied, converged) =
             apply_fix_result(content, &fixed_content, &fix_result);
