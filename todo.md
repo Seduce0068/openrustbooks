@@ -53,8 +53,8 @@ status: current
 ### 優先度: 中
 
 <!-- R6-2026-11-19 中優先度 -->
-- 【PR-M08 / TD-M08】設定モデルが AppConfig / WasmConfig / ReaderSettings / SettingsView の 4 重。
-  根拠 `core/src/config.rs:14` / `core/src/wasm.rs:645` / `web/src/lib.rs:1501`。
+- 【PR-M08 / TD-M08 残】設定モデルが AppConfig / ReaderSettings / SettingsView の 3 重（WasmConfig は ADR-0205 で削除）。
+  根拠 `core/src/config.rs:14` / `web/src/lib.rs:1501`。
 - 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
   根拠 `desktop/src/state/mod.rs:12,76,136`。
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
@@ -154,6 +154,8 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M08 / TD-M08 一部】WasmConfig と Wasm test 3 件を削除（wasm 10→7）。
+      Rust ソースの参照 0、他 wasm API 維持。E2E 251 件・全ゲート成功 / ADR-0205。
 - [x] 【TD-M08b】figment env を明示マップ＋生値検証 filter へ変更。
       不正 max_retries は toml/default を維持、unit 7 件追加（core 255）。
       E2E 251 件・全ゲート成功 / ADR-0204。
