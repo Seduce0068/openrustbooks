@@ -70,5 +70,5 @@ status: accepted
 - Firefox / Safari を動かす WebDriver BiDi / Playwright 等のドライバ選定。
 - エンジン依存アサーション（TouchEvent / CLS / forced-colors / ダウンロード名）の扱い
   （件数維持で同等 check に置換するか、既知ベースラインとするか）。
-- manifest への `browser executable` / `browser version` / `cdp port` 記録（ADR-0219 と整合）。
+- ~~manifest への `browser executable` / `browser version` / `cdp port` 記録~~ は ADR-0266 で完了。
 - 固定ポート 9222 / 8099 の衝突時 fail-closed 運用、固定タイムアウトの他エンジンでの妥当性。

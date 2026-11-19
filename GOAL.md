@@ -39,3 +39,9 @@ ADR-0219 の完全性記録と ADR-0265 の cross-browser 証跡を接続する�
 - `tools/verify-web-reader.py` / E2E check / Cargo.* は変更しない。
 - 外部ダウンロード・ブラウザインストールは行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- verify.sh の manifest に browser executable / path / version / static port / cdp port を追加。
+- env 値の制御文字・port 形式・version 失敗を fail-closed で拒否、負向 test 6/6 PASS。
+- ADR-0266 / runbook / ADR-0219 / ADR-0265 を追従、E2E 255/0 維持。

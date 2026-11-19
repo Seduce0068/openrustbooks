@@ -31,6 +31,7 @@ CI は共通ワークフロー `Seduce0068/workflows/rust-gates.yml@v1` へ委�
   `-1`〜`-99` の連番を付与する。
 - `manifest.txt` に commit sha、verified at（UTC）、rustc、trunk、
   e2e expected / e2e result、source dist、dist ファイルの SHA256（現状 5 行）を記録する。
+  ブラウザ実行ファイル / 解決パス / version / static port / cdp port は ADR-0266 で追加した。
 - 一時 dist は常に trap で削除する。保持物はステージング経由で `mv -n -T` により
   原子的に配置し、中途半端な成果物を残さない。
 - `DIST_ROOT` は絶対パス必須とし、`readlink -m` で正規化したうえでリポジトリ配下を拒否する。
