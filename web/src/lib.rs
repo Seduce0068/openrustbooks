@@ -4106,6 +4106,7 @@ fn SettingsForm() -> impl IntoView {
             </section>
             <section>
                 <h3>"Editor Settings"</h3>
+                <p class="settings-notice">"エディタ設定: config.toml の設定値です。エディタの動作には未接続です。"</p>
                 <label>
                     "Font Size: "
                     <input type="number" prop:value=move || editor_font_size.get() readonly=true min="10" max="24"/>
@@ -4132,6 +4133,7 @@ fn SettingsForm() -> impl IntoView {
             </section>
             <section>
                 <h3>"Reader Settings"</h3>
+                <p class="settings-notice">"リーダー設定: config.toml の設定値です。実際の表示はブラウザに保存された表示設定が権威です（ADR-0211）。"</p>
                 <p class="settings-readonly">{move || reader_info.get()}</p>
             </section>
             <button type="submit" class="btn btn-primary" disabled>"保存はデスクトップ版のみ（パス検証と CSP 強化後に接続）"</button>
