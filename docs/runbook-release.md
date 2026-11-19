@@ -38,7 +38,7 @@ generated:
 - `scripts/verify.sh` の全ゲートが成功していること。
   ゲートは fmt / check / test / clippy / wasm / audit / `trunk build` /
   パス検査 / E2E を含む。E2E の期待総数は現行契約（[GOAL.md](../GOAL.md) では
-  255 件）に従う。[runbook-verified-build.md](runbook-verified-build.md) に残る
+  256 件）に従う。[runbook-verified-build.md](runbook-verified-build.md) に残る
   253 件は旧実測例であり、現行の期待値ではない。
 - [docs/runbook-verified-build.md](runbook-verified-build.md) の手順で保持した
   検証済み dist が存在し、`manifest.txt` と SHA256 で完全性を確認できること。

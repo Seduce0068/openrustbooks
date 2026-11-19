@@ -69,8 +69,13 @@ IPC 経路（ADR-0270）と UI 起点 CAS / 構造化エラー（ADR-0269）は�
 
 ## 未決定
 
+- markdownlint は 290 ファイル 0 issues（ADR-0273 作成時点）。
+
 - 実 Tauri WebView での往路 / 復路 / 表示 / a11y 検証
   （mock は代替ではない、ADR-0253 実装前提 6）。
+  Tauri CLI 未導入による環境ブロッカーとして
+  [ADR-0273](0273-real-webview-verification-deferred.md) へ記録し、
+  未実施のまま pass としない。
 - API Key 値の編集可否（専用 command または config.toml 直接、ADR-0134 / 0135）。
 - 外部 JS 利用者の有無（`withGlobalTauri` 有効化の破壊的影響）。
 - CSP nonce/hash 化（`'unsafe-inline'` 残存、ADR-0091 / 0264 / 0268）。

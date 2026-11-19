@@ -2,6 +2,16 @@
 
 ## 2026-11-20
 
+- R6 A05: 実 WebView 検証を環境ブロッカーとして記録。`cargo tauri --version` は
+  `no such command: tauri`（終了コード 101）で、Tauri CLI 未導入のため
+  `cargo tauri dev` を起動できない。DISPLAY=:1 / xdotool / wmctrl は存在するが、
+  CDP / Tauri mock は実 WebView の代替ではなく、未実施のまま pass としない。
+  Tauri CLI 導入後の検証手順（起動、/settings、get_config、Enable AI 変更、保存、
+  固定成功文言、config.toml 更新、再起動永続化、スクリーンリーダー／キーボード a11y）
+  と未決定（導入責任者・時期、GTK/WebKitGTK 依存、実 WebView の CSP 挙動、
+  `__TAURI__` 形状の更新追従）を記録。ADR-0273 を追加し、ADR-0272 の未決定へ参照を追記。
+  decisions / docs 各 index（273 件）、README、todo を追従。
+  コード / E2E 256 件・check 名は未変更。markdownlint 0 issues（ADR-0273）。
 - Tauri 設定保存 UI を完全 DTO 往復で接続し、E2E を 255→256 件へ拡充（ADR-0272）。
 - R6 A05: 設定保存 UI 接続スコープを設計受容。withGlobalTauri / `__TAURI__.core.invoke`
   （ADR-0270）、UI 起点 CAS と構造化エラー（ADR-0269）は完了した一方、web 側

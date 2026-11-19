@@ -23,27 +23,29 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残 / UI 接続完了・実 WebView 検証は後続】Tauri 設定保存 UI の接続（段階 2）。
+- 【A05 残 / UI 接続完了・実 WebView は環境ブロッカー】Tauri 設定保存 UI の接続（段階 2）。
   段階設計は ADR-0253 で決定。さらに R6 A05 第一段の設計補強として、
   withGlobalTauri 未設定で desktop も IPC が動かない可能性（実機未検証）と
   3 経路（npm / `__TAURI_INTERNALS__` / withGlobalTauri）の比較、
   CSP 未決定を ADR-0264 に記録した（設計受容のみ・コード変更なし）。
   実装前提 3（UI 起点 expected + 構造化エラー）は ADR-0269 で、
   実装前提 1（withGlobalTauri + `__TAURI__.core.invoke`）は ADR-0270 で完了。
-  すなわち IPC 契約は完了。一方 web 側 `SettingsView` は `ConfigPatch` へ
-  Serialize できず `expected` を除く 23 フィールドが不足し、
+  すなわち IPC 契約は完了。web 側 `SettingsView` の `ConfigPatch` 非 Serialize と
+  `expected` を除く 23 フィールド不足は ADR-0271 で記録した課題だったが、
+  完全な `ConfigPatch` DTO 往復と Tauri mock E2E 256/0 による UI 接続は ADR-0272 で完了。
   storage allow-list / a11y / `CommandError.code` → 日本語 status 変換 /
-  Tauri mock E2E 成功経路 / 実 WebView 検証は未実装・未検証（ADR-0271）。
-  完全な `ConfigPatch` DTO 往復と Tauri mock E2E による UI 接続は ADR-0272 で完了。
-  browser は読み取り専用 fail-closed を維持し、
-  desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
-  `ConfigPatch.expected` + 構造化エラー + 最新 ConfigView / a11y /
-  E2E 成功経路 +1 / 実 Tauri WebView 検証）を順に満たしてから接続する。
+  Tauri mock E2E 成功経路も完了（ADR-0272）。browser は読み取り専用 fail-closed を維持する。
+  残る実装前提 6（実 Tauri WebView 検証）は Tauri CLI 未導入
+  （`cargo tauri --version` が `no such command: tauri`、終了コード 101）で実行不可。
+  DISPLAY=:1 / xdotool / wmctrl は存在するが `cargo tauri dev` を起動できず、
+  CDP / Tauri mock は代替ではないため未実施のまま pass としない（ADR-0273）。
   AI / Lint / format の 4 操作は ADR-0232 の初版外で対象外。
   ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193（desktop 側を ADR-0253 が
   supersede、browser 側は維持）、IPC 経路と CSP の未決定は ADR-0264 を追跡先とする。
   旧 B01 / B02 の CSP 強化は ADR-0091 / ADR-0130 / ADR-0191 で解消済み。
   ただし withGlobalTauri に伴う nonce/hash と meta/config CSP 一本化は ADR-0264 の未決定。
+  実 WebView の環境ブロッカー、Tauri CLI 導入責任者・時期、GTK / WebKitGTK 依存、
+  導入後の検証手順は ADR-0273 を追跡先とする。
 
 ### 優先度: 中
 

@@ -35,3 +35,10 @@ ADR-0272 で desktop 設定保存 UI を接続し、Tauri mock E2E 256/0 を確�
 - Tauri CLI のインストール / 外部ダウンロードは行わない。
 - 実 WebView を pass と記録しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 実 WebView 検証は cargo-tauri 未導入を Runtime Proof として記録し、環境ブロッカーとして未実施を維持。
+- ADR-0273 で導入後検証手順を明記、0272 / todo / 索引 / log を追従。
+- docs/index / runbook-release の current 表記を 256 件へ修正。
+- E2E 256/0、verify.sh 全ゲート成功。
