@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- E2E 255 件を Chrome / Edge で実機実行し 255/0 を確認、他ブラウザの環境ブロッカーを記録（ADR-0265）。
 - R6 A05 第一段の設計補強。`web/src/lib.rs:4096-4121` が
   `window.__TAURI.core.invoke` を参照する一方 `desktop/tauri.conf.json` に
   withGlobalTauri が無く、Tauri 公式はグローバル経路に有効化を求めるため、

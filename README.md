@@ -486,6 +486,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0263-e2e-count-gate](docs/decisions/0263-e2e-count-gate.md)
   - Checker(expected=N) を唯一の出典として current 文書表記とのズレを fail-closed で検出する静的ゲートを記録する。
 - [0264-tauri-ipc-path-acceptance](docs/decisions/0264-tauri-ipc-path-acceptance.md)
+- [0265-cross-browser-e2e](docs/decisions/0265-cross-browser-e2e.md)
+  - 現行 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。
   - withGlobalTauri 未設定で desktop も IPC が動かない可能性を記録し、3 経路比較と未決定を残して設計受容とする。
 
 ## ライセンス
