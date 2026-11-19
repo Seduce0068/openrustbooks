@@ -23,15 +23,21 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残 / 段階設計決定・実装は後続】Tauri 設定保存 UI の接続（段階 2）。
-  段階設計は ADR-0253 で決定。browser は読み取り専用 fail-closed を維持し、
+- 【A05 残 / 第一段の設計補強完了・実装は後続】Tauri 設定保存 UI の接続（段階 2）。
+  段階設計は ADR-0253 で決定。さらに R6 A05 第一段の設計補強として、
+  withGlobalTauri 未設定で desktop も IPC が動かない可能性（実機未検証）と
+  3 経路（npm / `__TAURI_INTERNALS__` / withGlobalTauri）の比較、
+  CSP 未決定を ADR-0264 に記録した（設計受容のみ・コード変更なし）。
+  実装は ADR-0253 の実装前提 1 決定後の後続作業とする。
+  browser は読み取り専用 fail-closed を維持し、
   desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
   ConfigUpdateRequest.expected + 構造化エラー + 最新 ConfigView / a11y /
   E2E 成功経路 +1 / 実 Tauri WebView 検証）を順に満たしてから接続する。
   AI / Lint / format の 4 操作は ADR-0232 の初版外で対象外。
   ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193（desktop 側を ADR-0253 が
-  supersede、browser 側は維持）を追跡先とする。
-  CSP（B01 / B02）は ADR-0091 / ADR-0130 / ADR-0191 で解消済みのため重複計上しない。
+  supersede、browser 側は維持）、IPC 経路と CSP の未決定は ADR-0264 を追跡先とする。
+  旧 B01 / B02 の CSP 強化は ADR-0091 / ADR-0130 / ADR-0191 で解消済み。
+  ただし withGlobalTauri に伴う nonce/hash と meta/config CSP 一本化は ADR-0264 の未決定。
 
 ### 優先度: 中
 

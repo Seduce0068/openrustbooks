@@ -20,7 +20,10 @@ R1 監査で次が判明した。
 
 - `desktop/tauri.conf.json` に `withGlobalTauri` が無く、
   ブラウザ版 WebView から `window.__TAURI.core.invoke` を取得できない。
+  Tauri 公式はグローバル経路に `withGlobalTauri: true` を求めるため、
+  **desktop も `Err("desktop only")` になる可能性がある**（実機未検証）。
   `app.security.csp` の `script-src` は `'unsafe-inline'` を含む。
+  3 経路の比較と設計受容は [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md) に記録した。
 - `ConfigView.revision: u64` は `get_config` が返すが、
   `update_config_patch(state, patch: ConfigPatch)` の `expected` は
   `state.config_with_revision()` が内部で取得し、UI 側の revision を
@@ -65,6 +68,7 @@ R1 監査で次が判明した。
 1. `withGlobalTauri` と CSP の方針を確定する。
    単独有効化は攻撃面を広げるため、CSP（`script-src` の `'unsafe-inline'` と
    inline script の扱い）と同時に設計する（ADR-0128 / 0130）。
+   経路の比較と未決定は [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md) を参照し、決定後に本設計の実装へ進む。
 2. capability を最小権限で設計する。
    Tauri 2.12.5 では `invoke_handler` に登録した独自コマンドは ACL 非対象
    （R1 監査で却下済みの「capability 不在で全拒否」を維持しない）。
@@ -125,6 +129,8 @@ R1 監査で次が判明した。
 
 ## 未決定
 
+- desktop も IPC 未接続の可能性（withGlobalTauri 未設定、実機未検証）。
+  経路選択と往路検証の未決定は [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md) に集約する。
 - `withGlobalTauri` の inline script と CSP nonce / hash の具体策。
 - capability の実ビルド挙動（最小権限の記述が実際の ACL にどう反映されるか）。
 - `ConfigUpdateRequest.expected` の DTO 形（既存 `ConfigPatch` との統合または別型）。
