@@ -3975,7 +3975,6 @@ struct SettingsAiView {
     openai: SettingsOpenAiView,
     ollama: SettingsOllamaView,
     max_tokens_per_request: usize,
-    max_tokens_per_month: Option<u64>,
     prefer_local: bool,
     timeout_secs: u64,
 }
@@ -4107,12 +4106,8 @@ fn SettingsForm() -> impl IntoView {
                     );
                     ollama_model.set(cfg.ai.ollama.model);
                     ai_info.set(format!(
-                        "最大トークン/要求: {} / 月間上限: {} / ローカル優先: {} / タイムアウト: {}s / ストリーミング: 未配線",
+                        "最大トークン/要求: {} / 月間上限: 未配線 / ローカル優先: {} / タイムアウト: {}s（Ollama のみ） / ストリーミング: 未配線",
                         cfg.ai.max_tokens_per_request,
-                        cfg.ai.max_tokens_per_month.map_or_else(
-                            || "無制限".to_string(),
-                            |value| value.to_string()
-                        ),
                         if cfg.ai.prefer_local { "有効" } else { "無効" },
                         cfg.ai.timeout_secs,
                     ));
