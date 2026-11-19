@@ -739,6 +739,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0270-tauri-global-ipc-path](docs/decisions/0270-tauri-global-ipc-path.md)
   - withGlobalTauri を有効化し、web の `__TAURI__.core.invoke` 参照を公式グローバル経路へ統一する決定。
 - [0271-settings-ui-scope](docs/decisions/0271-settings-ui-scope.md)
+- [0272-settings-save-ui](docs/decisions/0272-settings-save-ui.md)
+  - 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
   - IPC 契約の完了と DTO / a11y / E2E の未実装を切り分け、UI 接続を完全な ConfigPatch DTO 定義後に留める設計受容。
 
 ## ライセンス

@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- Tauri 設定保存 UI を完全 DTO 往復で接続し、E2E を 255→256 件へ拡充（ADR-0272）。
 - R6 A05: 設定保存 UI 接続スコープを設計受容。withGlobalTauri / `__TAURI__.core.invoke`
   （ADR-0270）、UI 起点 CAS と構造化エラー（ADR-0269）は完了した一方、web 側
   `SettingsView` は `ConfigPatch` へ Serialize できず `expected` を除く 23 フィールドが不足。

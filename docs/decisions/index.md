@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 271 件）。
+openrustbooks の ADR 一覧（全 272 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -543,4 +543,6 @@ openrustbooks の ADR 一覧（全 271 件）。
 - [ADR-0270: Tauri グローバル IPC 経路の選択](0270-tauri-global-ipc-path.md)
   - status: accepted — withGlobalTauri を有効化し、web の __TAURI__.core.invoke 参照を公式グローバル経路へ統一する決定。
 - [ADR-0271: 設定保存 UI 接続スコープの設計受容](0271-settings-ui-scope.md)
-  - status: accepted — IPC 契約完了と DTO / a11y / E2E 未実装を切り分け、UI 接続を完全な ConfigPatch DTO 定義後に留める設計受容。
+  - status: accepted — IPC 契約の完了と DTO / a11y / E2E の未実装を切り分け、UI 接続を完全な ConfigPatch DTO 定義後に留める決定。
+- [ADR-0272: Tauri 設定保存 UI の接続](0272-settings-save-ui.md)
+  - status: accepted — 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
