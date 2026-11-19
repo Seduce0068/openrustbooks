@@ -479,6 +479,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - EPUB 本編を opf / navigation / text / xmlutil モジュールへ分割し、公開 6 型と fail-closed 契約を維持する決定を記録する。
   - Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
   - feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず、現状を設計受容として残す決定を記録する。
+- [0261-os-keychain-deferred](docs/decisions/0261-os-keychain-deferred.md)
+  - 平文保存 + redaction + Unix 0600 を受容済みリスクとして明記し、OS キーチェーン移行を ADR-0098 の未決定へ集約して実装を見送る決定を記録する。
 
 ## ライセンス
 

@@ -2,6 +2,20 @@
 
 ## 2026-11-20
 
+- R6 D05: OS キーチェーン移行を設計受容として記録。平文 config.toml 保存 +
+  redaction（REDACTED_SECRET / DTO has_* / Debug マスク）+ Unix 0600 +
+  `update_ai_config` の `api_key` のみ IPC 書き込み可を受容済みリスクとして明記。
+  keyring（新規直接依存・target feature）/ secret-service（dbus/zbus 再利用だが
+  新規直接依存）/ 独自 file（平文残留）/ 設計受容を比較し、設計受容を採用。
+  Wasm では config 永続化自体が無いこと、CI は secret 不使用で env 注入不可のため
+  実キーストア検証ができないこと、owner-only は Unix のみ（非 Unix fallback は
+  ACL 未設定）を根拠に、移行順序と失敗時挙動・ローテーション・プラットフォーム差・
+  Wasm / localStorage の平文性・CI 検証・keyring の target/feature 一次確認を
+  ADR-0098 / ADR-0261 の未決定へ集約。`core/src/config.rs` の "encrypted" コメントは
+  暗号化なし（Unix 0600 のみ）と矛盾することを開示し、コードは未変更。
+  ADR-0261 を追加し decisions / docs 各 index（261 件）、README、runbook-release、
+  todo を追従。コード / Cargo.toml / Cargo.lock / E2E は未変更で E2E 255 維持。
+  markdownlint 0 issues。
 - EPUB 本編を opf/navigation/text/xmlutil へ分割し epub.rs を 1884→556 行へ削減（ADR-0260）。
 - Wasm バインディング本編を epub/archive/lint へ分割し wasm.rs を 537→134 行へ削減（ADR-0259）。
 - R6 R2-crates#5: feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず

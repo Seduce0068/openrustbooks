@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 260 件）。
+openrustbooks の ADR 一覧（全 261 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -522,3 +522,5 @@ openrustbooks の ADR 一覧（全 260 件）。
   - status: accepted — Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
 - [ADR-0260: EPUB 本編の責務別分割](0260-epub-module-split.md)
   - status: accepted — EPUB 本編を opf / navigation / text / xmlutil モジュールへ分割し、公開 6 型と fail-closed 契約を維持する決定を記録する。
+- [ADR-0261: OS キーチェーン移行の設計受容](0261-os-keychain-deferred.md)
+  - status: accepted — 平文保存 + redaction + Unix 0600 を受容済みリスクとして明記し、OS キーチェーン移行を ADR-0098 の未決定へ集約して今回の実装を見送る決定を記録する。
