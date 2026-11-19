@@ -59,8 +59,11 @@ status: current
 
 - 【R1-tauri#8 / R3-release#1,#2】updater の公開鍵・署名設定と
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
-- 【R3-release#4,#5】導入・更新・ロールバック手順、既知問題の開示、
-  署名秘密鍵の `.gitignore` 登録。
+- 【R3-release#4,#5 残 / 公開作業は未決定】運用文書は完了
+  （`docs/runbook-release.md` / ADR-0254）。公開鍵の生成・ローテーション、
+  署名 secrets、endpoint、billing、Release workflow、require_signed_version、
+  実機 5 ブラウザ検証は未決定（ADR-0254 / ADR-0222）。
+  署名秘密鍵の `.gitignore` 登録は完了（公開鍵は追跡対象）。
 - 【R2-epub#2 残】EPUB 層の分割。
   `open_owned_with_limits`、manifest 欠落エラーの統一、Document 側 EPUB 型削除は完了（ADR-0247 / 0248 / 0250）。
 - 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
@@ -69,6 +72,14 @@ status: current
 
 ## 完了
 
+- [x] 【R3-release#4,#5】運用文書完了、公開作業は未決定。
+      `docs/runbook-release.md` を追加し、導入・更新・ロールバック・既知問題を開示。
+      現状は公開 installer / updater / 署名済み成果物 / 公開 endpoint が無く、
+      設定表示は「更新確認: 未配線」、check_updates は死設定。
+      ADR-0254 で文書先行を決定し、公開 / 署名 / endpoint は未決定として残す。
+      decisions / docs 各 index（254 件）、README、log を追従。
+      コード・CSP・tauri.conf・公開鍵・秘密鍵・Release workflow は未変更。
+      markdownlint 0 issues / ADR-0254。
 - [x] 【R1-archive#3】入力パーサ側の深さ上限を追加せず設計受容を記録（ADR-0252）。
       normalize_path / resolve_reference は非再帰で、256 MiB 入力・4096 entries・
       64 MiB per entry・256 MiB total・実展開 AtomicU64 予算・fail-closed 検証・

@@ -2,6 +2,18 @@
 
 ## 2026-11-20
 
+- R6 R3-release#4,#5: 運用文書を先行開示し、公開・署名・endpoint は未決定として残す。
+  `docs/runbook-release.md` を追加し、現状（公開 installer / updater / 署名済み成果物 /
+  公開 endpoint は無い、設定表示は「更新確認: 未配線」、check_updates は死設定）と、
+  検証済み Web dist の導入・更新・ロールバック手順、既知問題（updater 未配線 /
+  browser AI 無効 / 設定 readonly / 実機 5 ブラウザ未検証 / CI billing /
+  OS キーチェーン未配線）を根拠 ADR 付きで開示。
+  署名秘密鍵はリポジトリ外 / CI secrets に置き、`.gitignore` での拒否を完了。
+  公開鍵設定・署名 secrets・endpoint・billing・Release workflow・
+  require_signed_version・実機検証は未決定（ADR-0254 / 0222 / 0219 / 0232）。
+  ADR-0254 を追加し decisions / docs 各 index（254 件）、README、todo を追従。
+  コード・CSP・tauri.conf・公開鍵・秘密鍵・Release workflow は未変更。
+  markdownlint 0 issues。
 - R6 A05 残の Tauri 設定保存 UI を段階設計として決定。browser 単体は読み取り専用
   fail-closed を維持し、desktop のみ最小 IPC（get_config + update_config_patch）と
   実装前提 6 段階（withGlobalTauri + CSP / capability 最小権限 /

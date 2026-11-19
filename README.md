@@ -172,6 +172,8 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 `./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/` を指定する。
 保持物の確認・SHA256 検証・serve・復旧手順は
 [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) を参照。
+公開 installer / updater / 署名成果物が無い現状と、導入・更新・ロールバック手順は
+[リリース運用](docs/runbook-release.md) を参照。
 `trunk build` は `--offline --locked` で実行し、`Cargo.lock` の黙った更新を防ぐ
 （[ADR-0237](docs/decisions/0237-ci-gate-consistency.md)）。
 
@@ -194,6 +196,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
+- [リリース運用](docs/runbook-release.md) - 導入・更新・ロールバック・既知問題と公開作業の未決定
 - [ドキュメント運用規約](docs/documentation-operations.md) - OKF・索引・log・ADR・lint の運用
 - [0001-use-system-webview](docs/decisions/0001-use-system-webview.md) - デスクトップ版にOS WebViewを採用する
 - [0002-ai-markdown-pipeline](docs/decisions/0002-ai-markdown-pipeline.md) - AI支援Markdown生成・修正パイプラインを導入する
@@ -462,6 +465,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - ZIP パスの深さ上限を追加せず、非再帰正規化と既存の多重防御で受容する決定を記録する。
 - [0253-tauri-settings-save-design](docs/decisions/0253-tauri-settings-save-design.md)
   - browser の読み取り専用を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続する段階設計を記録する。
+- [0254-release-operations-disclosure](docs/decisions/0254-release-operations-disclosure.md)
+  - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 
 ## ライセンス
 
