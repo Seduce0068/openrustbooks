@@ -133,8 +133,14 @@ impl ArchiveReader {
                     )));
                 }
 
-                // 正規化後に同名となるエントリは先着を索引に残す。
-                index.entry(path.clone()).or_insert(position);
+                // 正規化後に同名となるエントリは、先着を黙って残さずアーカイブ全体を拒否する。
+                // `entries()` は重複を露出するため、consumer が後勝ちを選ぶと
+                // parser differential が生じ得る（ADR-0004 の fail-closed 方針）。
+                if index.insert(path.clone(), position).is_some() {
+                    return Err(CoreError::validation(format!(
+                        "正規化後に同名のエントリがあります: {path}"
+                    )));
+                }
                 entries.push(ArchiveEntry {
                     path,
                     is_dir: entry.is_dir(),
@@ -568,6 +574,68 @@ mod tests {
             Item::File("C:\\evil.txt", b"e", CompressionMethod::Stored),
         ]);
         expect_validation(&bytes);
+    }
+
+    /// 正規化後に同名になるエントリは、入力名の表記に関わらずアーカイブ全体を拒否する。
+    ///
+    /// `zip` 9.1.3 は同じ raw 名を Writer も Reader も 1 つへまとめるため、
+    /// 「`a.txt` × 2」という完全同一 raw 名の ZIP はこのクレートでは作れない。
+    /// 代替として末尾 `/` 付きの `a.txt/` と `a.txt` を使う（正規化後は両方
+    /// `a.txt` で、Reader から見える名前は完全に同じ）。
+    #[test]
+    fn rejects_duplicate_entries_after_normalization() {
+        for (first, second, normalized) in [
+            ("a.txt/", "a.txt", "a.txt"),  // 正規化後完全相同（末尾 `/` を除く）
+            ("./a.txt", "a.txt", "a.txt"), // 先頭の `./`
+            ("a//b.txt", "a/b.txt", "a/b.txt"), // 二重スラッシュ
+            ("a\\b.txt", "a/b.txt", "a/b.txt"), // バックスラッシュ
+            ("a/./b.txt", "a/b.txt", "a/b.txt"), // 途中の `.`
+        ] {
+            let bytes = build_zip(&[
+                Item::File(first, b"x", CompressionMethod::Stored),
+                Item::File(second, b"y", CompressionMethod::Stored),
+            ]);
+            match expect_validation(&bytes) {
+                CoreError::Validation(message) => assert!(
+                    message.contains(normalized),
+                    "エラー文言に正規化後のパスがありません: {message}"
+                ),
+                other => panic!("Validation を期待したが {other:?} だった"),
+            }
+        }
+    }
+
+    /// 正規化後に別名のエントリは従来どおり開ける。
+    #[test]
+    fn accepts_entries_with_distinct_normalized_names() {
+        let bytes = build_zip(&[
+            Item::File("a.txt", b"x", CompressionMethod::Stored),
+            Item::File("b.txt", b"y", CompressionMethod::Stored),
+        ]);
+        let reader = ArchiveReader::new(&bytes).unwrap();
+
+        assert_eq!(reader.entries().len(), 2);
+        assert_eq!(reader.entries()[0].path, "a.txt");
+        assert_eq!(reader.entries()[1].path, "b.txt");
+        assert_eq!(reader.read_entry("a.txt").unwrap(), b"x");
+        assert_eq!(reader.read_entry("b.txt").unwrap(), b"y");
+    }
+
+    /// 既存の `sample_zip` は、Dir("docs/") と直下の File が正規化後も同名に
+    /// ならず、重複拒否の導入後も開ける（回帰）。
+    #[test]
+    fn sample_zip_directory_and_files_have_distinct_normalized_paths() {
+        let bytes = sample_zip();
+        let reader = ArchiveReader::new(&bytes).expect("sample_zip は開けるままであること");
+        let paths: Vec<&str> = reader
+            .entries()
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+
+        assert_eq!(paths, vec!["docs", "docs/readme.txt", "docs/body.txt"]);
+        let unique: std::collections::HashSet<&str> = paths.iter().copied().collect();
+        assert_eq!(unique.len(), paths.len());
     }
 
     #[test]

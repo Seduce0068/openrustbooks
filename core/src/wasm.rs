@@ -1040,6 +1040,17 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn wasm_archive_rejects_duplicate_entries_after_normalization() {
+        // zip 9.1.3 は同じ raw 名を 2 回書けないため、`a.txt` と `./a.txt`
+        // （正規化後は両方 `a.txt`）で重複を作る。
+        let bytes = build_zip(&[
+            Item::File("a.txt", b"x", CompressionMethod::Stored),
+            Item::File("./a.txt", b"y", CompressionMethod::Stored),
+        ]);
+        assert_js_error(WasmArchive::new(bytes), ERR_INVALID_ARCHIVE);
+    }
+
+    #[wasm_bindgen_test]
     fn wasm_archive_rejects_invalid_bytes() {
         assert_js_error(
             WasmArchive::new(b"not a zip archive".to_vec()),

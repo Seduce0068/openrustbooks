@@ -2116,6 +2116,21 @@ mod tests {
         writer.finish().unwrap().into_inner()
     }
 
+    /// `mimetype` が重複する EPUB を組み立てる。
+    ///
+    /// `zip` 9.1.3 は同じ raw 名を 2 回書けないため、2 回目は `./mimetype`
+    /// として書き込む。`normalize_path` により両方 `mimetype` へ正規化される。
+    fn build_epub_with_duplicate_mimetype() -> Vec<u8> {
+        let mut files: Vec<(&str, &[u8])> = vec![("./mimetype", b"application/epub+zip")];
+        files.extend_from_slice(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", OPF.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/ch2.xhtml", CH2.as_bytes()),
+        ]);
+        build_epub(&files)
+    }
+
     /// `container.xml` を差し替えた EPUB を組み立てる。
     fn epub_with_container(container: &str) -> Vec<u8> {
         build_epub(&[
@@ -2366,6 +2381,16 @@ mod tests {
         assert!(matches!(
             EpubBook::open(&bytes),
             Err(CoreError::UnsupportedFormat(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_mimetype_entries() {
+        let bytes = build_epub_with_duplicate_mimetype();
+        // UnsupportedFormat ではなく、重複検出による Validation になること。
+        assert!(matches!(
+            open_error(&bytes),
+            CoreError::Validation(message) if message.contains("mimetype")
         ));
     }
 
