@@ -55,8 +55,6 @@ status: current
 <!-- R6-2026-11-19 中優先度 -->
 - 【PR-M08 / TD-M08 残】設定モデルが AppConfig / ReaderSettings / SettingsView の 3 重（WasmConfig は ADR-0205 で削除）。
   根拠 `core/src/config.rs:14` / `web/src/lib.rs:1501`。
-- 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
-  根拠 `desktop/src/state/mod.rs:12,76,136`。
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
@@ -94,6 +92,7 @@ status: current
   `core/src/ai_markdown/pipeline.rs:27` は専用リトライ設定へ変更。
 - 【R3-config#2,#3,#4】インポートのアトミック化と部分インポートの
   ロールバック。設定保存のメモリ・ディスク乖離を解消。
+  ADR-0207 の低優先度 TD-L09（save 原子化） / TD-L10（lost update）と関連。
 - 【R4-unit#3】設定・ストレージ・AI 主要モジュールのテストを追加。
   figment の優先順位、保存ラウンドトリップ、未検出バックエンドを検証。
 - 【R4-e2e#1,#2 / C06】E2E に期待総数を宣言し未実行 check を失敗扱いに。
@@ -126,6 +125,19 @@ status: current
 - 【TD-L08】serde_yaml 0.9.34+deprecated / tikv-jemalloc 残存は上流 optional 化待ち。
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
+<!-- ADR-0207 の残リスク（低優先度で個別追跡） -->
+- 【TD-L09】AppConfig::save() を tmp ファイル＋rename による原子書き込みへ変更。
+  現状は `core/src/config.rs:495-527` の truncate + write で、保存途中失敗時に
+  config.toml が部分破壊され、2 次 save 失敗時にディスクを復旧できない。
+  既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
+- 【TD-L10】並行設定更新の lost update を検出する。
+  世代カウンタ／CAS 等が無く、古い更新が新しい更新を上書きし得る。
+  既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
+- 【TD-L11】close_document の unsaved_changes が残留する。
+  `desktop/src/commands/document.rs:261` の remove_document() は
+  `desktop/src/state/mod.rs:140-142` の documents のみ削除し、
+  `desktop/src/state/mod.rs:176-178` の has_unsaved_changes() に古いフラグが残る。
+
 - 【R1-tauri#8 / R3-release#1,#2】updater の公開鍵・署名設定と
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
 - 【R3-release#3】バージョン二重管理（Cargo workspace と tauri.conf）
@@ -150,6 +162,11 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M10】AppState の 4 RwLock 集約を Tauri の composition root として設計受容。
+      設定系トランザクションは ADR-0177 で完了（6 コマンドが commit_validated_config を共有、
+      生成失敗時 3 状態不変、ロック同時保持なし）。Repository/Store 分離は見送り。
+      残リスク 3 件を低優先度 todo（TD-L09〜L11）へ切り出し / ADR-0177 / ADR-0207。
+      コード変更なし・E2E 251 維持。
 - [x] 【TD-L05 / TD-L07】検証条件へ VC-001〜015 を付与し、E2E 251 件との対応表を追加。
       AST 再抽出で missing/duplicate/extra 0、未カバー要件も明記。E2E 251 件・全ゲート成功 / ADR-0206。
 - [x] 【PR-M08 / TD-M08 一部】WasmConfig と Wasm test 3 件を削除（wasm 10→7）。
