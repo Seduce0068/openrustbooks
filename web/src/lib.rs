@@ -3892,7 +3892,6 @@ struct SettingsAiView {
     max_tokens_per_month: Option<u64>,
     prefer_local: bool,
     timeout_secs: u64,
-    streaming: bool,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -4027,7 +4026,7 @@ fn SettingsForm() -> impl IntoView {
                     );
                     ollama_model.set(cfg.ai.ollama.model);
                     ai_info.set(format!(
-                        "最大トークン/要求: {} / 月間上限: {} / ローカル優先: {} / タイムアウト: {}s / ストリーミング: {}",
+                        "最大トークン/要求: {} / 月間上限: {} / ローカル優先: {} / タイムアウト: {}s / ストリーミング: 未配線",
                         cfg.ai.max_tokens_per_request,
                         cfg.ai.max_tokens_per_month.map_or_else(
                             || "無制限".to_string(),
@@ -4035,7 +4034,6 @@ fn SettingsForm() -> impl IntoView {
                         ),
                         if cfg.ai.prefer_local { "有効" } else { "無効" },
                         cfg.ai.timeout_secs,
-                        if cfg.ai.streaming { "有効" } else { "無効" },
                     ));
                     lint_enabled.set(cfg.lint.enabled);
                     auto_fix.set(cfg.lint.auto_fix);

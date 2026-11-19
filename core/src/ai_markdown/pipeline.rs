@@ -105,7 +105,8 @@ impl AiMarkdownService {
             .await
     }
 
-    /// Stream generate with callback for each token
+    /// 疑似ストリーム: generate() の完了本文を 1 回だけ on_token へ渡す。
+    /// トークン単位の配信ではない（ADR-0216）。
     pub async fn stream_generate<F>(
         &self,
         prompt: &str,
@@ -115,8 +116,7 @@ impl AiMarkdownService {
     where
         F: FnMut(&str) + Send + 'static,
     {
-        // This would use the streaming API
-        // For now, fall back to non-streaming
+        // 本番の stream_complete は未接続（ADR-0216）。完了本文を 1 回だけ通知する従来の挙動を維持する。
         let result = self.generate(prompt, context).await?;
         if !result.content.is_empty() {
             on_token(&result.content);
