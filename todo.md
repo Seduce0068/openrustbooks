@@ -31,9 +31,6 @@ status: current
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
-- 【R1-ai#2,#5 / R2-ai#3,#4】死設定（timeout_secs / max_tokens_per_month /
-  streaming / リトライ回数の誤導出）を配線するか削除。
-  `core/src/ai_markdown/pipeline.rs:27` は専用リトライ設定へ変更。
 - 【R4-unit#3】設定・ストレージ・AI 主要モジュールのテストを追加。
   figment の優先順位、保存ラウンドトリップ、未検出バックエンドを検証。
 - 【B04-B07 / C01】UX と a11y。IME の `isComposing` 除外、
@@ -87,6 +84,7 @@ status: current
 
 ## 完了
 
+- [x] 【R1-ai#2,#5 / R2-ai#3,#4】AI 死設定を設計受容。月間上限を「未配線」、timeout を「Ollama のみ」と表示し、E2E 254 件・全ゲート成功 / ADR-0228。
 - [x] 【R2-ai#2】AI クライアント注入点を設計受容（公開注入点は追加せず）。
       `#[cfg(test)]` 内の `CountingAiClient` ＋ `pipeline_with_mock()` による非公開フィールド
       直接構築を維持。クロスクレート要件が出た場合のみ同期 `with_client` を `pub(crate)` から検討し
