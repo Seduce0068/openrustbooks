@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 216 件）。
+openrustbooks の ADR 一覧（全 217 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -434,3 +434,5 @@ openrustbooks の ADR 一覧（全 216 件）。
   - status: accepted — Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 - [ADR-0216: ストリーミング未接続の設計受容](0216-streaming-deferred.md)
   - status: accepted — ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
+- [ADR-0217: Editor / Reader 死設定の正直化](0217-editor-reader-dead-config.md)
+  - status: accepted — config.toml の Editor / Reader 値を DTO に残しつつ、動作に未接続であることを設定画面へ明記する決定を記録する。

@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- Editor / Reader の死設定を注記で正直化し DTO 互換を維持（ADR-0217）。
 - ストリーミング未接続を設計受容し、設定表示を「未配線」へ正直化（ADR-0216）。
 - Dependabot で Cargo / GitHub Actions の patch / minor を週次自動検出（ADR-0215）。
 - MSRV を 1.95 と宣言し CI ツールチェーンを固定（ADR-0214）。

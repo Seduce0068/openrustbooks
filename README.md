@@ -376,6 +376,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 
 - [0215-dependabot](docs/decisions/0215-dependabot.md)
 - [0216-streaming-deferred](docs/decisions/0216-streaming-deferred.md)
+- [0217-editor-reader-dead-config](docs/decisions/0217-editor-reader-dead-config.md)
+  - config.toml の Editor / Reader 値を DTO に残しつつ、動作に未接続であることを設定画面へ明記する決定を記録する。
   - ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
   - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 
