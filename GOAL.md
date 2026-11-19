@@ -1,39 +1,21 @@
 # Goal
 
-`close_document()` 後に `unsaved_changes` が残留する問題を修正する（R6 TD-L11）。
+文書削除時の unsaved_changes 残留を解消する（R6 TD-L11、ADR-0208）。
 
 ## Scope
 
-### 背景
-
-`AppState::remove_document()` は `documents` から文書を削除するが、
-`unsaved_changes` のキーを削除しない。
-force close 等で未保存フラグ `true` の文書を閉じると
-`has_unsaved_changes()` が `true` のままになり、終了時確認が誤作動し得る。
-
 ### 成果物
 
-- `desktop/src/state/mod.rs`: 変更（remove_document で unsaved フラグも削除）
-- 必要なら `desktop/src/commands/document.rs`: 変更（force close の契約明記のみ）
+- `desktop/src/state/mod.rs`: remove_document で unsaved キーも削除、unit 2 件
 - `docs/decisions/0208-unsaved-changes-cleanup.md`: 追加
-- `GOAL.md` / `todo.md`: 契約・完了反映
+- `todo.md`: TD-L11 を完了へ移動
 
-### 必須事項
+### 決定
 
-1. `remove_document()` が文書削除時に同じ id の `unsaved_changes` エントリも削除する。
-2. 文書が存在しない場合も、孤立した unsaved フラグは削除する。
-3. unit test を追加:
-   - `mark_unsaved()` 後に `remove_document()` すると `has_unsaved_changes()` が false。
-   - 存在しない id の孤立フラグも削除される。
-4. 既存の `unsaved_changes_state_transitions` を壊さない。
-5. 全ゲート成功（E2E 251 維持）。
+- documents / unsaved_changes のロックは順番に取得・解放（同時保持なし）。
+- 文書が無い場合も孤立フラグを削除。
+- force/non-force 契約は不変、非原子窓と non-force 孤立は ADR 未決定。
 
 ## Acceptance criteria
 
-- 全ゲート成功、E2E 251 項目成功。
-
-## Constraints
-
-- 2 つの RwLock を同時に保持しない（デッドロック回避）。
-- 新規依存を追加しない。
-- `master` へ push する。force push はしない。
+- desktop 74 tests / E2E 251、全ゲート成功（検証済み）。
