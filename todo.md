@@ -44,8 +44,9 @@ status: current
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラスト、
-  `prefers-contrast: more` は完了（ADR-0236）。残るは実機 5 ブラウザ検証のみ
-  （ADR-0230 / 0224 / 0236 の未決定を追跡先とする）。
+  `prefers-contrast: more` は完了（ADR-0236）。Chrome / Edge の実機 255/0 も完了（ADR-0265）。
+  残るは Firefox（CDP 非対応）、Brave（未インストール）、Safari（macOS 必須）の環境ブロッカー
+  （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 
 ### 優先度: 低
 
