@@ -198,100 +198,192 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
 - [リリース運用](docs/runbook-release.md) - 導入・更新・ロールバック・既知問題と公開作業の未決定
 - [ドキュメント運用規約](docs/documentation-operations.md) - OKF・索引・log・ADR・lint の運用
-- [0001-use-system-webview](docs/decisions/0001-use-system-webview.md) - デスクトップ版にOS WebViewを採用する
-- [0002-ai-markdown-pipeline](docs/decisions/0002-ai-markdown-pipeline.md) - AI支援Markdown生成・修正パイプラインを導入する
-- [0003-native-wasm-target-split](docs/decisions/0003-native-wasm-target-split.md) - 共通コアをターゲット別依存でNative/Wasm両対応にする
-- [0004-zip-archive-reader](docs/decisions/0004-zip-archive-reader.md) - ZIPアーカイブ閲覧をcoreの読み取り専用モジュールとして実装する
-- [0005-epub-body-reading](docs/decisions/0005-epub-body-reading.md) - EPUB本文の読み出しをcoreの読み取り専用モジュールとして実装する
-- [0006-epub-table-of-contents](docs/decisions/0006-epub-table-of-contents.md) - EPUBの目次（nav / NCX）を平坦な深さ付きリストで返す
-- [0007-epub-toc-fragments](docs/decisions/0007-epub-toc-fragments.md) - EPUB目次のフラグメントを保持する
-- [0008-epub-cover-and-chapter-title](docs/decisions/0008-epub-cover-and-chapter-title.md) - EPUBの表紙画像と章の表示名を取得する
+- [0001-use-system-webview](docs/decisions/0001-use-system-webview.md)
+  - Tauriの標準的なOS WebView方式を採用する決定と、その影響。
+- [0002-ai-markdown-pipeline](docs/decisions/0002-ai-markdown-pipeline.md)
+  - AI API + markdownlint (rumdl) の組み合わせで Markdown 品質を保証するパイプラインを共通コアに実装する決定。
+- [0003-native-wasm-target-split](docs/decisions/0003-native-wasm-target-split.md)
+  - ネイティブ専用依存をtarget別に分離し、共通コアとWebアプリをwasm32-unknown-unknownでビルド可能にする決定。
+- [0004-zip-archive-reader](docs/decisions/0004-zip-archive-reader.md)
+  - アーカイブ閲覧の境界、zipクレートの選定理由、パス逸脱と過大展開への対策を記録する。
+- [0005-epub-body-reading](docs/decisions/0005-epub-body-reading.md)
+  - container.xmlとOPFの解析範囲、quick-xml 0.42の選定理由、本文抽出とパス逸脱への対策を記録する。
+- [0006-epub-table-of-contents](docs/decisions/0006-epub-table-of-contents.md)
+  - EPUB3 nav と EPUB2 NCX の読み分け、平坦リスト採用の理由、欠落と破損の扱いを記録する。
+- [0007-epub-toc-fragments](docs/decisions/0007-epub-toc-fragments.md)
+  - 目次エントリに文書内アンカーを第2フィールドとして保持し、空パスのhrefを読み飛ばす決定。
+- [0008-epub-cover-and-chapter-title](docs/decisions/0008-epub-cover-and-chapter-title.md)
+  - 表紙の宣言の解決順と、目次を優先する章タイトルの解決、欠落と破損の扱いを記録する。
 - [0009-epub-landmarks-and-page-list](docs/decisions/0009-epub-landmarks-and-page-list.md)
-  - EPUB3 nav の landmarks と page-list を読む
-- [0010-epub-wasm-bindings](docs/decisions/0010-epub-wasm-bindings.md) - EPUB読み出し API を WebAssembly に公開する
-- [0011-web-epub-reader](docs/decisions/0011-web-epub-reader.md) - Web 版でローカル EPUB をテキスト閲覧する
-- [0012-epub-html-display](docs/decisions/0012-epub-html-display.md) - EPUB の HTML をサニタイズして表示する
-- [0013-epub-display-hardening](docs/decisions/0013-epub-display-hardening.md) - EPUB 表示経路を fail-closed に強化する
-- [0014-relative-chapter-links](docs/decisions/0014-relative-chapter-links.md) - 本文内の相対リンクから章へ移動する
-- [0015-reading-position](docs/decisions/0015-reading-position.md) - 読書位置を localStorage に保存して復元する
-- [0016-scroll-position](docs/decisions/0016-scroll-position.md) - 章内のスクロール位置も読書位置として保存する
-- [0017-navigation-history](docs/decisions/0017-navigation-history.md) - 章と位置の移動履歴（戻る・進む）
-- [0018-reader-display-settings](docs/decisions/0018-reader-display-settings.md) - リーダーの表示設定と読書データの削除
-- [0019-position-retention](docs/decisions/0019-position-retention.md) - 読書位置の保持期間と件数上限
-- [0020-layout-shift-correction](docs/decisions/0020-layout-shift-correction.md) - 画像読み込みによるレイアウトずれの補正
-- [0021-keyboard-and-aria](docs/decisions/0021-keyboard-and-aria.md) - キーボード操作と ARIA 属性
-- [0022-position-export-import](docs/decisions/0022-position-export-import.md) - 読書位置のエクスポート・インポート
-- [0023-app-wide-theme](docs/decisions/0023-app-wide-theme.md) - アプリ全体のダークテーマ
-- [0024-history-persistence](docs/decisions/0024-history-persistence.md) - 章の移動履歴の永続化
-- [0025-touch-gestures](docs/decisions/0025-touch-gestures.md) - タッチ操作（スワイプで章を移動）
-- [0026-settings-export-import](docs/decisions/0026-settings-export-import.md) - 設定のエクスポート・インポート
-- [0027-landmarks-ui](docs/decisions/0027-landmarks-ui.md) - landmarks の移動 UI
-- [0028-page-list-navigation](docs/decisions/0028-page-list-navigation.md) - page-list によるページ移動
-- [0029-history-list-ui](docs/decisions/0029-history-list-ui.md) - 履歴一覧の UI
-- [0030-history-export-import](docs/decisions/0030-history-export-import.md) - 履歴のエクスポート・インポート
-- [0031-history-clear](docs/decisions/0031-history-clear.md) - 履歴のクリア
-- [0032-import-merge](docs/decisions/0032-import-merge.md) - インポート時のマージ
-- [0033-prefers-color-scheme](docs/decisions/0033-prefers-color-scheme.md) - OS のカラースキームへの追従
-- [0034-async-image-decoding](docs/decisions/0034-async-image-decoding.md) - 本文画像の非同期デコード
-- [0035-history-delete-entry](docs/decisions/0035-history-delete-entry.md) - 履歴エントリの個別削除
-- [0036-export-versioning](docs/decisions/0036-export-versioning.md) - エクスポート形式のバージョニング
-- [0037-scroll-order-test-stability](docs/decisions/0037-scroll-order-test-stability.md) - スクロール順序テストの安定化
-- [0038-initial-theme-follow](docs/decisions/0038-initial-theme-follow.md) - 初回起動時のカラースキーム追従デフォルト
-- [0039-forced-colors](docs/decisions/0039-forced-colors.md) - 強制カラーモードへの対応
-- [0040-delete-confirmation-dialog](docs/decisions/0040-delete-confirmation-dialog.md) - 削除確認ダイアログ
-- [0041-history-summary](docs/decisions/0041-history-summary.md) - 履歴の日時サマリー表示
-- [0042-wasm-clippy-cleanup](docs/decisions/0042-wasm-clippy-cleanup.md) - wasm32 clippy 警告の解消
-- [0043-svg-blob-sanitization](docs/decisions/0043-svg-blob-sanitization.md) - SVG Blob URL のサニタイズ
-- [0044-svg-external-references](docs/decisions/0044-svg-external-references.md) - SVG の外部リソース参照制御
-- [0045-svg-xml-processing-instructions](docs/decisions/0045-svg-xml-processing-instructions.md) - SVG の XML 処理命令除去
-- [0046-fragment-scroll-stability](docs/decisions/0046-fragment-scroll-stability.md) - フラグメントスクロールの安定化
-- [0047-dialog-esc-test](docs/decisions/0047-dialog-esc-test.md) - 確認ダイアログの Esc キャンセル検証
-- [0048-dialog-focus-test](docs/decisions/0048-dialog-focus-test.md) - 確認ダイアログのフォーカス検証
-- [0049-export-import-roundtrip](docs/decisions/0049-export-import-roundtrip.md) - エクスポート・インポートのラウンドトリップ検証
-- [0050-deep-nesting-safety](docs/decisions/0050-deep-nesting-safety.md) - 深い入れ子 XHTML の安全性確認
-- [0051-owned-epub-open](docs/decisions/0051-owned-epub-open.md) - EPUB バイト列の所有権移譲による二重コピー解消
-- [0052-fragment-retry-hardening](docs/decisions/0052-fragment-retry-hardening.md) - フラグメントスクロール retry の強化と残る課題
-- [0053-scroll-reset-root-cause](docs/decisions/0053-scroll-reset-root-cause.md) - フラグメントスクロールが 0 に戻る根本原因
-- [0054-early-generation-check](docs/decisions/0054-early-generation-check.md) - 画像待ちループの早期世代チェック
-- [0055-same-chapter-fragment-history](docs/decisions/0055-same-chapter-fragment-history.md) - 同一章フラグメント移動の履歴記録
-- [0056-swipe-threshold-setting](docs/decisions/0056-swipe-threshold-setting.md) - スワイプ閾値の設定化
-- [0057-content-language](docs/decisions/0057-content-language.md) - 本文言語の設定
-- [0058-region-aria-labelledby](docs/decisions/0058-region-aria-labelledby.md) - 本文領域のアクセシブル名
-- [0059-malformed-xhtml-policy](docs/decisions/0059-malformed-xhtml-policy.md) - 非整形式 XHTML の扱い
-- [0060-remote-resources-policy](docs/decisions/0060-remote-resources-policy.md) - remote-resources 宣言の扱い
-- [0061-vertical-scroll-threshold](docs/decisions/0061-vertical-scroll-threshold.md) - 縦スクロール閾値の設定化
-- [0062-browser-pinch-zoom](docs/decisions/0062-browser-pinch-zoom.md) - ブラウザ標準のピンチズーム
-- [0063-legacy-roundtrip](docs/decisions/0063-legacy-roundtrip.md) - 旧形式とマージを含むラウンドトリップ検証
-- [0064-large-image-warning](docs/decisions/0064-large-image-warning.md) - 巨大画像の検出と警告
-- [0065-deep-nesting-10k](docs/decisions/0065-deep-nesting-10k.md) - 10000 階層の入れ子テスト
-- [0066-remote-resources-warning](docs/decisions/0066-remote-resources-warning.md) - remote-resources 宣言の警告
-- [0067-optional-image-downscale](docs/decisions/0067-optional-image-downscale.md) - オプトインの画像縮小
-- [0068-reset-settings](docs/decisions/0068-reset-settings.md) - 表示設定の一括リセット
-- [0069-timestamped-export-filename](docs/decisions/0069-timestamped-export-filename.md) - エクスポート名のタイムスタンプ
-- [0070-export-filename-timezone](docs/decisions/0070-export-filename-timezone.md) - エクスポート名へのタイムゾーン明示
-- [0071-downscale-mime-preservation](docs/decisions/0071-downscale-mime-preservation.md) - 縮小画像の MIME 保持
-- [0072-downscale-jpeg-quality](docs/decisions/0072-downscale-jpeg-quality.md) - 縮小 JPEG の品質指定
-- [0073-jpeg-quality-setting](docs/decisions/0073-jpeg-quality-setting.md) - JPEG 品質の設定化
-- [0074-jpeg-size-comparison](docs/decisions/0074-jpeg-size-comparison.md) - JPEG 品質とファイルサイズの定量比較の調査
-- [0075-shortcuts-help](docs/decisions/0075-shortcuts-help.md) - キーボードショートカットのヘルプ
-- [0076-version-migration-policy](docs/decisions/0076-version-migration-policy.md) - エクスポート形式のバージョン移行方針
-- [0077-version-1-sufficiency](docs/decisions/0077-version-1-sufficiency.md) - エクスポート形式 version 1 の十分性
-- [0078-chapter-filter](docs/decisions/0078-chapter-filter.md) - 章タイトルの検索フィルター
-- [0079-filter-focus-shortcut](docs/decisions/0079-filter-focus-shortcut.md) - 章フィルターへのフォーカスショートカット
-- [0080-external-link-safety-test](docs/decisions/0080-external-link-safety-test.md) - 外部リンク安全性の E2E 検証
-- [0081-external-link-popup-test](docs/decisions/0081-external-link-popup-test.md) - 外部リンクのポップアップ呼び出し検証
-- [0082-mailto-link-test](docs/decisions/0082-mailto-link-test.md) - mailto リンクの検証
-- [0083-dead-code-cleanup](docs/decisions/0083-dead-code-cleanup.md) - デッドコードと古い契約値の整理
-- [0084-verification-script](docs/decisions/0084-verification-script.md) - 一括検証スクリプト
-- [0085-single-entry-history-save](docs/decisions/0085-single-entry-history-save.md) - 履歴が 1 件になっても localStorage を更新する決定を記録する。
-- [0086-dependency-vulnerability-fix](docs/decisions/0086-dependency-vulnerability-fix.md) - ammonia と pulldown-cmark の脆弱性を修正する決定を記録する。
-- [0087-front-matter-preservation](docs/decisions/0087-front-matter-preservation.md) - Markdown 文書の保存時に front matter が失われるバグを修正する決定を記録する。
-- [0088-wasm-path-stripping](docs/decisions/0088-wasm-path-stripping.md) - 配布 WASM に含まれる開発ホスト絶対パスを除去する決定を記録する。
-- [0089-init-unification](docs/decisions/0089-init-unification.md) - Rust / JS 双方の init() が同じ初期化処理を呼ぶようにする決定を記録する。
-- [0090-e2e-expected-count](docs/decisions/0090-e2e-expected-count.md) - 未実行の check を見逃さないため、期待総数を宣言して検証する決定を記録する。
-- [0091-content-security-policy](docs/decisions/0091-content-security-policy.md) - Web 版に CSP meta を追加し、リソース読み込み先を制限する決定を記録する。
-- [0092-ime-composing-guard](docs/decisions/0092-ime-composing-guard.md) - IME の変換中はキーボードショートカットを発火させない決定を記録する。
-- [0093-modal-shortcut-guard](docs/decisions/0093-modal-shortcut-guard.md) - dialog が開いているときは背景のキーボードショートカットを止める決定を記録する。
+  - EPUB3 nav の landmarks と page-list を既存の目次項目型で返す決定を記録する。
+- [0010-epub-wasm-bindings](docs/decisions/0010-epub-wasm-bindings.md)
+  - WasmEpubBook で EPUB の読み取り専用 API を JavaScript から利用する方針を記録する。
+- [0011-web-epub-reader](docs/decisions/0011-web-epub-reader.md)
+  - WasmEpubBook を使ったブラウザ内 EPUB 読書の初期 UI と安全な表示境界を記録する。
+- [0012-epub-html-display](docs/decisions/0012-epub-html-display.md)
+  - 章 XHTML の許可リスト方式サニタイズ、画像の Blob URL 化、アンカー移動の決定を記録する。
+- [0013-epub-display-hardening](docs/decisions/0013-epub-display-hardening.md)
+  - 画像参照の URL 正規化、外部リンクの opener 分離、EPUB サイズ上限の決定を記録する。
+- [0014-relative-chapter-links](docs/decisions/0014-relative-chapter-links.md)
+  - 相対リンクの解決を core に置き、Web の本文内リンクから章間移動とアンカー移動を行う決定を記録する。
+- [0015-reading-position](docs/decisions/0015-reading-position.md)
+  - 本ごとの章とフラグメントを localStorage に保存し、開き直したときに復元する決定を記録する。
+- [0016-scroll-position](docs/decisions/0016-scroll-position.md)
+  - スクロール位置の保存（デバウンス）と描画後の復元（再試行付き）の決定を記録する。
+- [0017-navigation-history](docs/decisions/0017-navigation-history.md)
+  - 読書中の章移動をメモリ上の履歴に積み、戻る・進むでスクロール位置ごと復元する決定を記録する。
+- [0018-reader-display-settings](docs/decisions/0018-reader-display-settings.md)
+  - 文字サイズ・行間・ダーク表示の保存と適用、保存した読書位置の削除の決定を記録する。
+- [0019-position-retention](docs/decisions/0019-position-retention.md)
+  - 保存時刻の記録、90 日の寿命、40 件の上限、容量超過時の縮退の決定を記録する。
+- [0020-layout-shift-correction](docs/decisions/0020-layout-shift-correction.md)
+  - 画像が確定するまで位置の適用を待つ決定と、フラグメント保存の欠落修正を記録する。
+- [0021-keyboard-and-aria](docs/decisions/0021-keyboard-and-aria.md)
+  - リーダーのキーボードショートカットとアクセシビリティ属性の決定を記録する。
+- [0022-position-export-import](docs/decisions/0022-position-export-import.md)
+  - 保存した読書位置を JSON で書き出し・読み込みする決定を記録する。
+- [0023-app-wide-theme](docs/decisions/0023-app-wide-theme.md)
+  - リーダーのダーク表示トグルをアプリ全体（ツールバー・一覧画面）へ拡張する決定を記録する。
+- [0024-history-persistence](docs/decisions/0024-history-persistence.md)
+  - 移動履歴を localStorage に保存し、同じ本を開き直したときにも戻る・進むができるようにする決定を記録する。
+- [0025-touch-gestures](docs/decisions/0025-touch-gestures.md)
+  - 本文領域のスワイプで章を移動する決定を記録する。
+- [0026-settings-export-import](docs/decisions/0026-settings-export-import.md)
+  - エクスポート・インポート形式を拡張し、表示設定も含める決定を記録する。
+- [0027-landmarks-ui](docs/decisions/0027-landmarks-ui.md)
+  - EPUB3 nav の landmarks をドロップダウンで表示し、移動できるようにする決定を記録する。
+- [0028-page-list-navigation](docs/decisions/0028-page-list-navigation.md)
+  - EPUB3 nav の page-list を使い、ページ番号入力で章へ移動できるようにする決定を記録する。
+- [0029-history-list-ui](docs/decisions/0029-history-list-ui.md)
+  - 移動履歴をドロップダウンで一覧表示し、任意の履歴エントリへ直接ジャンプできるようにする決定を記録する。
+- [0030-history-export-import](docs/decisions/0030-history-export-import.md)
+  - エクスポート・インポート形式に移動履歴を含める決定を記録する。
+- [0031-history-clear](docs/decisions/0031-history-clear.md)
+  - 移動履歴を全消去できるようにする決定を記録する。
+- [0032-import-merge](docs/decisions/0032-import-merge.md)
+  - インポートする読書位置を savedAt で比較し、新しい方を採用する決定を記録する。
+- [0033-prefers-color-scheme](docs/decisions/0033-prefers-color-scheme.md)
+  - prefers-color-scheme を検知してダーク表示を自動で切り替える決定を記録する。
+- [0034-async-image-decoding](docs/decisions/0034-async-image-decoding.md)
+  - 本文画像に decoding=\"async\" を付与し、デコードを非同期化して描画をブロックしない決定を記録する。
+- [0035-history-delete-entry](docs/decisions/0035-history-delete-entry.md)
+  - 選択中の履歴エントリだけを削除できるようにする決定を記録する。
+- [0036-export-versioning](docs/decisions/0036-export-versioning.md)
+  - エクスポート JSON に形式バージョンを付与し、未知のバージョンを fail-closed で拒否する決定を記録する。
+- [0037-scroll-order-test-stability](docs/decisions/0037-scroll-order-test-stability.md)
+  - 画像位置復元の E2E がブラウザ自身のスクロール調整を誤検知しないようにする決定を記録する。
+- [0038-initial-theme-follow](docs/decisions/0038-initial-theme-follow.md)
+  - 設定キーが無い初回起動で OS がダークなら追従を有効にする決定を記録する。
+- [0039-forced-colors](docs/decisions/0039-forced-colors.md)
+  - Windows のハイコントラスト（Forced Colors Mode）でリーダーの視認性を確保する決定を記録する。
+- [0040-delete-confirmation-dialog](docs/decisions/0040-delete-confirmation-dialog.md)
+  - 履歴の削除操作にネイティブ &lt;dialog&gt; の確認を挟み、誤操作を防ぐ決定を記録する。
+- [0041-history-summary](docs/decisions/0041-history-summary.md)
+  - 履歴エントリに保存日時を記録し、一覧ラベルに表示する決定を記録する。
+- [0042-wasm-clippy-cleanup](docs/decisions/0042-wasm-clippy-cleanup.md)
+  - wasm32 ターゲットの clippy 警告をゼロにし、コードをクリーンに保つ決定を記録する。
+- [0043-svg-blob-sanitization](docs/decisions/0043-svg-blob-sanitization.md)
+  - SVG 画像を Blob URL 化する前にスクリプト実行経路を除去する決定を記録する。
+- [0044-svg-external-references](docs/decisions/0044-svg-external-references.md)
+  - SVG 内の外部スキーム参照を除去し、Blob URL 直接オープン時のプライバシー漏洩を防ぐ決定を記録する。
+- [0045-svg-xml-processing-instructions](docs/decisions/0045-svg-xml-processing-instructions.md)
+  - SVG から XML 処理命令を除去し、外部 CSS 参照による情報漏洩を防ぐ決定を記録する。
+- [0046-fragment-scroll-stability](docs/decisions/0046-fragment-scroll-stability.md)
+  - 画像レイアウト未確定によるフラグメント移動のスクロール失敗を解消する決定を記録する。
+- [0047-dialog-esc-test](docs/decisions/0047-dialog-esc-test.md)
+  - 削除確認ダイアログの Esc キーによるキャンセル動作を E2E で検証する決定を記録する。
+- [0048-dialog-focus-test](docs/decisions/0048-dialog-focus-test.md)
+  - 削除確認ダイアログで安全な操作（Cancel）にフォーカスが当たることを E2E で検証する決定を記録する。
+- [0049-export-import-roundtrip](docs/decisions/0049-export-import-roundtrip.md)
+  - 書き出した JSON をそのまま読み込んで位置・設定・履歴が復元されることを E2E で検証する決定を記録する。
+- [0050-deep-nesting-safety](docs/decisions/0050-deep-nesting-safety.md)
+  - 深い入れ子の XHTML がサニタイズ時に異常終了しないことをテストで確認する決定を記録する。
+- [0051-owned-epub-open](docs/decisions/0051-owned-epub-open.md)
+  - wasm で EPUB を開くときのアーカイブバイト列の二重コピーを解消する決定を記録する。
+- [0052-fragment-retry-hardening](docs/decisions/0052-fragment-retry-hardening.md)
+  - フラグメントスクロールの retry を強化し、残るフレークの調査結果を記録する。
+- [0053-scroll-reset-root-cause](docs/decisions/0053-scroll-reset-root-cause.md)
+  - 連続した章移動で古い位置適用コールバックが新しい章をリセットする問題を世代号で解消する決定を記録する。
+- [0054-early-generation-check](docs/decisions/0054-early-generation-check.md)
+  - 古い章の画像待ちループを世代チェックで早期停止する決定を記録する。
+- [0055-same-chapter-fragment-history](docs/decisions/0055-same-chapter-fragment-history.md)
+  - 本文内のアンカー・脚注リンクによる同一章内の移動も履歴に記録する決定を記録する。
+- [0056-swipe-threshold-setting](docs/decisions/0056-swipe-threshold-setting.md)
+  - 章移動のスワイプ閾値を表示設定から変更できるようにする決定を記録する。
+- [0057-content-language](docs/decisions/0057-content-language.md)
+  - EPUB の言語を本文要素の lang 属性に反映し、スクリーンリーダーの発音を最適化する決定を記録する。
+- [0058-region-aria-labelledby](docs/decisions/0058-region-aria-labelledby.md)
+  - 本文領域の aria-labelledby を章タイトルに結びつける決定を記録する。
+- [0059-malformed-xhtml-policy](docs/decisions/0059-malformed-xhtml-policy.md)
+  - OPF は fail-closed、章本文はサニタイズに委譲する実際の挙動を確認し記録する。
+- [0060-remote-resources-policy](docs/decisions/0060-remote-resources-policy.md)
+  - remote-resources を宣言する EPUB を受け付け、リモートアクセスは表示側の防御に委ねる決定を記録する。
+- [0061-vertical-scroll-threshold](docs/decisions/0061-vertical-scroll-threshold.md)
+  - タッチ操作の縦スクロール判定閾値を設定から変更できるようにする決定を記録する。
+- [0062-browser-pinch-zoom](docs/decisions/0062-browser-pinch-zoom.md)
+  - リーダーがブラウザ標準のピンチズームを阻害していないことを確認する決定を記録する。
+- [0063-legacy-roundtrip](docs/decisions/0063-legacy-roundtrip.md)
+  - 旧形式 JSON のインポートからエクスポート・再インポートまでの連鎖を検証する決定を記録する。
+- [0064-large-image-warning](docs/decisions/0064-large-image-warning.md)
+  - 本文の巨大画像を検出し、状態メッセージで警告する決定を記録する。
+- [0065-deep-nesting-10k](docs/decisions/0065-deep-nesting-10k.md)
+  - より深い入れ子 XHTML の挙動を回帰テストとして固定する決定を記録する。
+- [0066-remote-resources-warning](docs/decisions/0066-remote-resources-warning.md)
+  - remote-resources を宣言する EPUB を開いたとき、利用者に警告を表示する決定を記録する。
+- [0067-optional-image-downscale](docs/decisions/0067-optional-image-downscale.md)
+  - 巨大画像を Canvas で縮小する設定を既定オフで追加する決定を記録する。
+- [0068-reset-settings](docs/decisions/0068-reset-settings.md)
+  - 増えた表示設定をまとめて既定値に戻すボタンを追加する決定を記録する。
+- [0069-timestamped-export-filename](docs/decisions/0069-timestamped-export-filename.md)
+  - エクスポート JSON のダウンロード名にローカル時刻のタイムスタンプを付ける決定を記録する。
+- [0070-export-filename-timezone](docs/decisions/0070-export-filename-timezone.md)
+  - エクスポート JSON のファイル名にタイムゾーン偏移を付ける決定を記録する。
+- [0071-downscale-mime-preservation](docs/decisions/0071-downscale-mime-preservation.md)
+  - 画像縮小時に元画像の MIME タイプを保持する決定を記録する。
+- [0072-downscale-jpeg-quality](docs/decisions/0072-downscale-jpeg-quality.md)
+  - 画像縮小時の JPEG 再エンコードに品質 0.85 を明示する決定を記録する。
+- [0073-jpeg-quality-setting](docs/decisions/0073-jpeg-quality-setting.md)
+  - 縮小 JPEG の品質を表示設定から変更できるようにする決定を記録する。
+- [0074-jpeg-size-comparison](docs/decisions/0074-jpeg-size-comparison.md)
+  - 縮小 JPEG の品質差がファイルサイズに表れない場合があることを調査し記録する。
+- [0075-shortcuts-help](docs/decisions/0075-shortcuts-help.md)
+  - ? キーとボタンでショートカット一覧を表示する決定を記録する。
+- [0076-version-migration-policy](docs/decisions/0076-version-migration-policy.md)
+  - 形式バージョン 2 以降を導入するときの受け付け範囲・デフォルト値・移行手順を定義する。
+- [0077-version-1-sufficiency](docs/decisions/0077-version-1-sufficiency.md)
+  - 現時点では version 1 で十分であることをレビューし、version 2 の導入条件を将来の候補として記録する。
+- [0078-chapter-filter](docs/decisions/0078-chapter-filter.md)
+  - 章ドロップダウンにタイトル検索フィルターを追加する決定を記録する。
+- [0079-filter-focus-shortcut](docs/decisions/0079-filter-focus-shortcut.md)
+  - / キーで章フィルター入力にフォーカスする決定を記録する。
+- [0080-external-link-safety-test](docs/decisions/0080-external-link-safety-test.md)
+  - 本文内の外部リンクが noopener noreferrer 付きで保持されることを E2E で検証する決定を記録する。
+- [0081-external-link-popup-test](docs/decisions/0081-external-link-popup-test.md)
+  - 外部リンクのクリックが noopener/noreferrer 付きの window.open 呼び出しになることを E2E で検証する決定を記録する。
+- [0082-mailto-link-test](docs/decisions/0082-mailto-link-test.md)
+  - mailto: リンクが外部リンクと同じ安全な分岐で開かれることを E2E で検証する決定を記録する。
+- [0083-dead-code-cleanup](docs/decisions/0083-dead-code-cleanup.md)
+  - 調査で検出された未使用関数と古い E2E 項目数を整理する決定を記録する。
+- [0084-verification-script](docs/decisions/0084-verification-script.md)
+  - 全ゲート・Wasm ビルド・E2E を再現可能に実行するスクリプトを追加する決定を記録する。
+- [0085-single-entry-history-save](docs/decisions/0085-single-entry-history-save.md)
+  - 履歴が 1 件になっても localStorage を更新する決定を記録する。
+- [0086-dependency-vulnerability-fix](docs/decisions/0086-dependency-vulnerability-fix.md)
+  - ammonia と pulldown-cmark の脆弱性を修正する決定を記録する。
+- [0087-front-matter-preservation](docs/decisions/0087-front-matter-preservation.md)
+  - Markdown 文書の保存時に front matter が失われるバグを修正する決定を記録する。
+- [0088-wasm-path-stripping](docs/decisions/0088-wasm-path-stripping.md)
+  - 配布 WASM に含まれる開発ホスト絶対パスを除去する決定を記録する。
+- [0089-init-unification](docs/decisions/0089-init-unification.md)
+  - Rust / JS 双方の init() が同じ初期化処理を呼ぶようにする決定を記録する。
+- [0090-e2e-expected-count](docs/decisions/0090-e2e-expected-count.md)
+  - 未実行の check を見逃さないため、期待総数を宣言して検証する決定を記録する。
+- [0091-content-security-policy](docs/decisions/0091-content-security-policy.md)
+  - Web 版に CSP meta を追加し、リソース読み込み先を制限する決定を記録する。
+- [0092-ime-composing-guard](docs/decisions/0092-ime-composing-guard.md)
+  - IME の変換中はキーボードショートカットを発火させない決定を記録する。
+- [0093-modal-shortcut-guard](docs/decisions/0093-modal-shortcut-guard.md)
+  - dialog が開いているときは背景のキーボードショートカットを止める決定を記録する。
 - [0094-desktop-window-result](docs/decisions/0094-desktop-window-result.md)
   - get_webview_window の unwrap() を Result 化し、起動時の panic を防ぐ決定を記録する。
 - [0095-empty-export-and-text-shrink](docs/decisions/0095-empty-export-and-text-shrink.md)
@@ -370,8 +462,156 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
 - [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
   - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
+- [0133-zero-retry-regression](docs/decisions/0133-zero-retry-regression.md)
+  - 初期1回のみ実行される挙動をテストで固定し、ADR-0118/0120 の未決定を解消する。
+- [0134-secret-removal-command](docs/decisions/0134-secret-removal-command.md)
+  - reset_config を使わずに API キー等だけを削除する clear_secrets コマンドを追加する決定を記録する。
+- [0135-secret-clear-audit-log](docs/decisions/0135-secret-clear-audit-log.md)
+  - clear_secrets が削除対象名だけをログに残す決定を記録する。
+- [0136-image-dimension-reservation](docs/decisions/0136-image-dimension-reservation.md)
+  - 画像の自然寸法を width/height 属性で予約する段階導入の設計方針を記録する。
+- [0137-imagesize-wasm-compat](docs/decisions/0137-imagesize-wasm-compat.md)
+  - 画像寸法取得クレート imagesize が wasm32 で使えることを隔離検証で確認し、段階導入の前提を解消する。
+- [0138-position-e2e-baseline](docs/decisions/0138-position-e2e-baseline.md)
+  - 画像寸法予約の実装前に位置復元関連 E2E を 5 回連続実行し、現状のベースラインとフレークを記録する。
+- [0139-image-warning-flake](docs/decisions/0139-image-warning-flake.md)
+  - 位置適用の 2 秒 deadline を過ぎて読み込まれる巨大画像を load イベントで検出し、警告の取りこぼしを防ぐ決定を記録する。
+- [0140-extended-position-baseline](docs/decisions/0140-extended-position-baseline.md)
+  - 画像寸法予約前に位置復元系 E2E を 10 回連続実行し、ベースラインと残るフレークを記録する。
+- [0141-downscale-flake](docs/decisions/0141-downscale-flake.md)
+  - 画像縮小の完了待ちを条件確認＋再待機にし、E2E の取りこぼしを防ぐ決定を記録する。
+- [0142-startup-flake](docs/decisions/0142-startup-flake.md)
+  - E2E 起動時に CDP 診断イベントを収集し、マウント失敗時のみ 1 回再試行する決定を記録する。
+- [0143-cdp-target-matching](docs/decisions/0143-cdp-target-matching.md)
+  - Chrome の browser-level WebSocket を使って E2E が起動した Chrome に確実に接続する決定を記録する。
+- [0144-cdp-recv-timeout](docs/decisions/0144-cdp-recv-timeout.md)
+  - E2E の CDP 応答待ちにタイムアウトを設け、ハング時に fail-closed で診断を残す決定を記録する。
+- [0145-vertical-writing-pagination](docs/decisions/0145-vertical-writing-pagination.md)
+  - 縦書き表示とページ送りを即座に実装せず、E2E の軸非依存化から始める段階導入方針を記録する。
+- [0146-axis-independent-e2e-scroll](docs/decisions/0146-axis-independent-e2e-scroll.md)
+  - E2E の DOM スクロール読み書きを writing-mode に応じて軸を選ぶヘルパーへ集約する決定を記録する。
+- [0147-opt-in-vertical-writing-rejected](docs/decisions/0147-opt-in-vertical-writing-rejected.md)
+  - 縦書きのアプリ側実装を試行したが、位置保存・復元を検証できなかったため見送った決定を記録する。
+- [0148-downscale-completion-signal](docs/decisions/0148-downscale-completion-signal.md)
+  - 画像縮小の完了を data-downscaled で明示し、未確定画像のリトライと MIME 属性化で E2E フレークを解消する決定を記録する。
+- [0149-image-dimension-reservation](docs/decisions/0149-image-dimension-reservation.md)
+  - EPUB 画像の自然寸法を core で取得し、web で width/height 属性として付与する実装を記録する。
+- [0150-img-dimension-validation](docs/decisions/0150-img-dimension-validation.md)
+  - EPUB HTML の img の width/height を数値検証し、不正値を削除する決定を記録する。
+- [0151-remaining-task-discovery](docs/decisions/0151-remaining-task-discovery.md)
+  - 5 観点のエージェント探索で発見した残タスクを集約し、次に実行するタスクを記録する。
+- [0152-wasm-path-check-failclosed](docs/decisions/0152-wasm-path-check-failclosed.md)
+  - 配布 WASM の開発ホスト絶対パス検査を、glob 非マッチと grep エラーでも失敗するようにする決定を記録する。
+- [0153-about-page-accuracy](docs/decisions/0153-about-page-accuracy.md)
+  - About 画面のライセンスと対応形式を実装事実に合わせる決定を記録する。
+- [0154-storage-failure-visibility](docs/decisions/0154-storage-failure-visibility.md)
+  - localStorage への保存失敗時に固定文言の status 表示と console.error を出す決定を記録する。
+- [0155-rumdl-feature-reduction](docs/decisions/0155-rumdl-feature-reduction.md)
+  - native 側 rumdl を featureless にし、LSP / ファイル監視 / 並列処理スタックを依存ツリーから除去する決定を記録する。
+- [0156-wasm-stub-failclosed](docs/decisions/0156-wasm-stub-failclosed.md)
+  - ブラウザで AI/lint が成功を偽装していた Wasm API を明示的なエラーに変更する決定を記録する。
+- [0157-import-preservation](docs/decisions/0157-import-preservation.md)
+  - インポートが現在の設定と履歴を破壊しないよう、現在値が存在する場合は維持する決定を記録する。
+- [0158-partial-settings-import](docs/decisions/0158-partial-settings-import.md)
+  - 部分設定インポートの bool false リセットが現行ガード下では再現しないことを記録する。
+- [0159-cls-e2e-measurement](docs/decisions/0159-cls-e2e-measurement.md)
+  - PerformanceObserver('layout-shift') で CLS を計測し、画像章オープン時のレイアウトシフトをゲートする決定を記録する。
+- [0160-real-wasm-lint](docs/decisions/0160-real-wasm-lint.md)
+  - fail-closed スタブだった WasmMarkdownLinter を featureless rumdl の実 lint に接続する決定を記録する。
+- [0161-minimal-editor-ui](docs/decisions/0161-minimal-editor-ui.md)
+  - CodeMirror を導入せず、textarea と既存 Preview を接続した最小エディタを実装する決定を記録する。
+- [0162-markdown-preview-rendering](docs/decisions/0162-markdown-preview-rendering.md)
+  - エディタ Preview で comrak による Markdown レンダリングと二段構えのサニタイズを行う決定を記録する。
+- [0163-remove-unused-markdown-dep](docs/decisions/0163-remove-unused-markdown-dep.md)
+  - 直接未使用となった pulldown-cmark をマニフェストから削除する決定を記録する。
+- [0164-editor-draft-save](docs/decisions/0164-editor-draft-save.md)
+  - Tauri を有効化せず、エディタの Save をブラウザ内 localStorage ドラフトとして接続する決定を記録する。
+- [0165-save-error-listener](docs/decisions/0165-save-error-listener.md)
+  - 保存失敗通知を送信先別イベント名へ分離し、Editor / Reader の status 競合を解消する決定を記録する。
+- [0166-listener-cleanup](docs/decisions/0166-listener-cleanup.md)
+  - forget() によるリスナー蓄積を on_cleanup + SendWrapper による解除へ変更する決定を記録する。
+- [0167-draft-size-limit](docs/decisions/0167-draft-size-limit.md)
+  - 下書き保存に 1 MiB の UTF-8 バイト上限を設け、超過時は保存せず固定文言で通知する決定を記録する。
+- [0168-workspace-rumdl-cleanup](docs/decisions/0168-workspace-rumdl-cleanup.md)
+  - 未使用の workspace.dependencies.rumdl を削除し、default features 復活の罠を排除する決定を記録する。
+- [0169-partial-storage-failures](docs/decisions/0169-partial-storage-failures.md)
+  - 読書位置の全消去・インポートの部分失敗を操作単位で通知する決定を記録する。
+- [0170-oversized-draft-restore](docs/decisions/0170-oversized-draft-restore.md)
+  - 1 MiB 超の保存済み下書きは本文を保持したまま復元し、固定警告のみを表示する決定を記録する。
+- [0171-clear-data-confirmation](docs/decisions/0171-clear-data-confirmation.md)
+  - 読書位置の全消去に window.confirm() の確認を追加する決定を記録する。
+- [0172-import-confirmation](docs/decisions/0172-import-confirmation.md)
+  - バックアップの取り込み前に window.confirm() の確認を求める決定を記録する。
+- [0173-overwrite-guard](docs/decisions/0173-overwrite-guard.md)
+  - overwrite=false のとき既存ファイルへの書き込みを拒否し、黙って上書きされる問題を解消する決定を記録する。
+- [0174-read-text-utf8](docs/decisions/0174-read-text-utf8.md)
+  - 不正 UTF-8 の内容をエラー文言へ埋め込まず、U+FFFD 置換で返す決定を記録する。
+- [0175-reset-settings-failure](docs/decisions/0175-reset-settings-failure.md)
+  - 設定リセットが保存失敗通知を成功文言で上書きしないようにする決定を記録する。
+- [0176-epub-load-generation](docs/decisions/0176-epub-load-generation.md)
+  - 非同期 EPUB ロードに独立した世代カウンタを導入し、古いロード完了による状態上書きを防ぐ決定を記録する。
+- [0177-config-commit-transaction](docs/decisions/0177-config-commit-transaction.md)
+  - 設定保存と AI サービス再初期化を準備／コミットに分け、失敗時の部分状態を防ぐ決定を記録する。
+- [0178-watch-capability-honesty](docs/decisions/0178-watch-capability-honesty.md)
+  - 未実装の watch を利用可能と報告せず、到達不能な IPC も削除する決定を記録する。
+- [0179-editor-autosave](docs/decisions/0179-editor-autosave.md)
+  - 明示 Save に加えてデバウンス自動保存を導入し、画面遷移時の下書き損失を防ぐ決定を記録する。
+- [0180-draft-backup](docs/decisions/0180-draft-backup.md)
+  - バックアップ JSON に下書きを optional field として含め、復元時に現在値を保護する決定を記録する。
+- [0181-svg-sanitizer-unification](docs/decisions/0181-svg-sanitizer-unification.md)
+  - Web 側の DomParser 手動サニタイズを廃止し、core の ammonia ベース実装へ一本化する決定を記録する。
+- [0182-e2e-unique-check-names](docs/decisions/0182-e2e-unique-check-names.md)
+  - Checker に check 名の重複検知を追加し、総数ゲートの形骸化を防ぐ決定を記録する。
+- [0183-wait-until-failclosed](docs/decisions/0183-wait-until-failclosed.md)
+  - E2E 待機ヘルパーで握り潰していた Python 例外を再送出する決定を記録する。
+- [0184-image-dimension-tests](docs/decisions/0184-image-dimension-tests.md)
+  - image_dimensions の JPEG / WebP ヘッダーと境界値テストを追加する決定を記録する。
+- [0185-audit-tool-failclosed](docs/decisions/0185-audit-tool-failclosed.md)
+  - cargo-audit 未インストール時に検証をスキップせず失敗させる決定を記録する。
+- [0186-config-ipc-boundary](docs/decisions/0186-config-ipc-boundary.md)
+  - 生 config を受け取るコマンドでも DTO 境界へ正規化し、機微フィールドの注入を防ぐ決定を記録する。
+- [0187-table-attribute-validation](docs/decisions/0187-table-attribute-validation.md)
+  - EPUB サニタイズで table 関連の数値属性を検証し、不正値を削除する決定を記録する。
+- [0188-atomic-tmp-uniqueness](docs/decisions/0188-atomic-tmp-uniqueness.md)
+  - atomic 書き込みの tmp 名に PID とカウンタを付与し、並行書き込みの衝突を防ぐ決定を記録する。
+- [0189-ollama-stream-boundary](docs/decisions/0189-ollama-stream-boundary.md)
+  - Ollama の JSONL ストリームをバッファリングし、HTTP タイムアウトとエラーを fail-closed で扱う決定を記録する。
+- [0190-read-limit-hardening](docs/decisions/0190-read-limit-hardening.md)
+  - StorageBackend::read の要求サイズに上限を設け、超過時は黙って切り詰めずエラーにする決定を記録する。
+- [0191-external-font-removal](docs/decisions/0191-external-font-removal.md)
+  - Google Fonts の preconnect / stylesheet を廃止し、CSP とフォントスタックをローカル完結にする決定を記録する。
+- [0192-blob-url-cleanup](docs/decisions/0192-blob-url-cleanup.md)
+  - Reader アンマウント時に残余の object URL を revoke し、SPA 往復によるメモリ残存を防ぐ決定を記録する。
+- [0193-settings-form-readonly](docs/decisions/0193-settings-form-readonly.md)
+  - ブラウザ版の設定フォームを契約どおり読み取り専用にし、変更できると誤解させない決定を記録する。
+- [0194-lint-validation-unification](docs/decisions/0194-lint-validation-unification.md)
+  - native と wasm で重複していた auto_fix 分岐を lint.rs の共通関数へ集約する決定を記録する。
+- [0195-rumdl-feature-gate](docs/decisions/0195-rumdl-feature-gate.md)
+  - core/Cargo.toml の rumdl default-features=false をローカルと CI の両方で静的検査する決定を記録する。
+- [0196-ci-wasm-test-gate](docs/decisions/0196-ci-wasm-test-gate.md)
+  - wasm-bindgen-test を CI でも実行するため、共通スクリプトを verify.sh と extra_gates から呼ぶ決定を記録する。
+- [0197-dead-trait-methods](docs/decisions/0197-dead-trait-methods.md)
+  - TokenStream::is_done と StorageBackend::available_space を削除し、未実装 API への誤依存を防ぐ決定を記録する。
+- [0198-reader-a11y-fixes](docs/decisions/0198-reader-a11y-fixes.md)
+  - 本文領域のアクセシブル名を aria-labelledby へ一本化し、ダーク切替の状態を実効値で告知する決定を記録する。
+- [0199-third-party-notices](docs/decisions/0199-third-party-notices.md)
+  - 配布に関係する依存クレートを cargo metadata から網羅し、ライセンス ID と出典を第三者通知へ記載する決定を記録する。
+- [0200-send-wrapper-direct-dep](docs/decisions/0200-send-wrapper-direct-dep.md)
+  - Leptos の doc(hidden) re-export を避け、send_wrapper を web クレートの直接依存として使う決定を記録する。
+- [0201-build-app-plugin-dedup](docs/decisions/0201-build-app-plugin-dedup.md)
+  - desktop / mobile の build_app で重複していた共通プラグイン設定を 1 関数へ集約する決定を記録する。
+- [0202-ai-command-error-tests](docs/decisions/0202-ai-command-error-tests.md)
+  - confirmation / format / alignment の分岐を純粋関数へ抽出し、既存挙動を unit test で固定する決定を記録する。
+- [0203-cover-image-dto](docs/decisions/0203-cover-image-dto.md)
+  - Web 側の CoverImage を受信に必要な 2 フィールドへ縮小し、allow(dead_code) を削除する決定を記録する。
+- [0204-env-mapping](docs/decisions/0204-env-mapping.md)
+  - figment の split 依存をやめ、明示マップと生値検証で ADR-0122 の契約を維持する決定を記録する。
+- [0205-wasm-config-removal](docs/decisions/0205-wasm-config-removal.md)
+  - 未使用の WasmConfig 公開 API を削除し、設定モデル重複の 1 つを解消する決定を記録する。
+- [0206-e2e-traceability](docs/decisions/0206-e2e-traceability.md)
+  - 要件の検証条件に VC ID を付与し、E2E check 名との対応表を追加する決定を記録する。
 - [0207-appstate-scope](docs/decisions/0207-appstate-scope.md)
-  - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
+  - 設定系トランザクションの完了を確認し、AppState を composition root として設計受容する決定を記録する。
 - [0208-unsaved-changes-cleanup](docs/decisions/0208-unsaved-changes-cleanup.md)
   - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
 - [0209-atomic-config-save](docs/decisions/0209-atomic-config-save.md)
@@ -379,8 +619,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0210-config-revision-cas](docs/decisions/0210-config-revision-cas.md)
   - 生成失敗待ち中の設定更新を CAS で検出し、lost update を防ぐ決定を記録する。
 - [0211-config-layer-boundaries](docs/decisions/0211-config-layer-boundaries.md)
-  - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なる 3 レイヤーとして設計受容し、
-    統合を却下する決定を記録する。
+  - 3 設定レイヤーの権威・寿命分離を設計受容し、統合を却下する決定。
 - [0212-status-error-redaction](docs/decisions/0212-status-error-redaction.md)
   - 内部エラーの Debug 表現を status と console から排除し、操作別の固定文言のみを表示する決定を記録する。
 - [0213-reduced-motion](docs/decisions/0213-reduced-motion.md)
@@ -396,19 +635,19 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0218-custom-ai-endpoint](docs/decisions/0218-custom-ai-endpoint.md)
   - カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
 - [0219-verified-artifact-retention](docs/decisions/0219-verified-artifact-retention.md)
-  - verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
+  - verify.sh --dist で全ゲート成功時のみ dist をリポジトリ外へ保持し、manifest で完全性を記録する決定。
 - [0220-traceability-refresh](docs/decisions/0220-traceability-refresh.md)
-  - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
+  - ADR-0206 の追従漏れを解消し、253 件の E2E check 名を VC 対応表へ完全一致で反映する決定。
 - [0221-ai-client-options](docs/decisions/0221-ai-client-options.md)
   - OpenAI extra_headers と Ollama options を安全にクライアントへ渡す決定を記録する。
 - [0222-updater-deferred](docs/decisions/0222-updater-deferred.md)
-  - updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化する決定を記録する。
+  - tauri_plugin_updater の初期化のみで更新チェックは未配線とし、設定表示を「未配線」へ正直化する決定を記録する。
 - [0223-zip-wasm-api](docs/decisions/0223-zip-wasm-api.md)
   - fail-closed な ZIP core を wasm32 向け API として公開し、UI は後段へ分離する決定を記録する。
 - [0224-todo-reconciliation](docs/decisions/0224-todo-reconciliation.md)
-  - 解消済み TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
+  - 監査で解消済みと判定した TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
 - [0225-broken-image-settling](docs/decisions/0225-broken-image-settling.md)
-  - 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒セトリング待ちを防ぐ決定を記録する。
+  - 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒待ちを防ぐ決定を記録する。
 - [0226-status-message-language](docs/decisions/0226-status-message-language.md)
   - lang=\"ja\" 固定の Web UI で Reader status を日本語へ統一し、aria-live 分離は後段へ残す決定を記録する。
 - [0227-ai-client-injection](docs/decisions/0227-ai-client-injection.md)
@@ -422,83 +661,83 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0231-unknown-backend-tests](docs/decisions/0231-unknown-backend-tests.md)
   - 未検出ストレージバックエンドと未知 AI provider のエラー分岐を unit test で固定する決定を記録する。
 - [0232-initial-release-scope](docs/decisions/0232-initial-release-scope.md)
-  - 実装・検証済みの初版スコープと、含まない項目・未決定を実証付きで切り分ける決定を記録する。
+  - 要件と実装の境界を実証付きで明示し、初版で提供する範囲と未決定を切り分ける決定を記録する。
 - [0233-solution-selection-rationale](docs/decisions/0233-solution-selection-rationale.md)
-  - 主要依存のライセンス / 鮮度 / 既知脆弱性 / Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
+  - 主要依存のライセンス・鮮度・既知脆弱性・Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
 - [0234-documentation-operations](docs/decisions/0234-documentation-operations.md)
   - OKF・索引・log・lint の規約と設定をリポジトリ内へ集約する決定。
 - [0235-e2e-conditional-wait](docs/decisions/0235-e2e-conditional-wait.md)
   - swipe の二重 dispatch を 1 回へし、到達条件が明確な待機を条件待ちへ置換する決定。
 - [0236-prefers-contrast](docs/decisions/0236-prefers-contrast.md)
-  - `prefers-contrast: more` で枠線・補助文字を強化し、forced-colors 契約を後方で維持する決定。
+  - prefers-contrast: more で枠線と補助文字を強化し、forced-colors の既存契約を後方で維持する決定。
 - [0237-ci-gate-consistency](docs/decisions/0237-ci-gate-consistency.md)
+  - wasm_targets と extra_gates の役割分担を確認し、verify.sh の trunk build に --locked を付けて Cargo.lock の不変を保証する決定。
 - [0238-deterministic-compression-tests](docs/decisions/0238-deterministic-compression-tests.md)
+  - ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
 - [0239-version-single-source](docs/decisions/0239-version-single-source.md)
+  - tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
 - [0240-duplicate-archive-entries](docs/decisions/0240-duplicate-archive-entries.md)
   - parser differential を防ぐため、正規化後に同名となる ZIP エントリを含むアーカイブを fail-closed で拒否する決定を記録する。
-  - tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
-  - ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
-  - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
 - [0241-generated-timestamp-semantics](docs/decisions/0241-generated-timestamp-semantics.md)
-  - `generated.at` は生成／正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
+  - ADR の generated.at は生成・正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
 - [0242-rumdl-feature-status](docs/decisions/0242-rumdl-feature-status.md)
+  - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定を記録する。
 - [0243-unused-wasm-api-removal](docs/decisions/0243-unused-wasm-api-removal.md)
+  - wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。
 - [0244-wasm-document-removal](docs/decisions/0244-wasm-document-removal.md)
+  - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
 - [0245-position-prune-notification](docs/decisions/0245-position-prune-notification.md)
+  - localStorage 容量超過で古い読書位置を削除した場合に件数と残件数を通知する決定を記録する。
 - [0246-workspace-dependency-unification](docs/decisions/0246-workspace-dependency-unification.md)
+  - feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
 - [0247-epub-owned-limits](docs/decisions/0247-epub-owned-limits.md)
+  - EpubBook の所有権移譲 API に ArchiveLimits を指定可能にし、借用 API と同じ検証契約を共有する決定を記録する。
 - [0248-epub-manifest-errors](docs/decisions/0248-epub-manifest-errors.md)
+  - manifest item の id / href 欠落を固定文言の Archive エラーとして fail-closed に報告する決定を記録する。
 - [0249-cover-media-type](docs/decisions/0249-cover-media-type.md)
+  - 未宣言の media-type を許容し明示された非画像を拒否する ADR-0008 の契約を unit test で固定する決定を記録する。
 - [0250-document-epub-type-removal](docs/decisions/0250-document-epub-type-removal.md)
+  - DocumentContent::Epub と重複する 3 構造体を削除し、EPUB は EpubBook 経路へ一本化する決定を記録する。
 - [0251-expanded-size-budget](docs/decisions/0251-expanded-size-budget.md)
   - ZIP エントリの実展開バイトを AtomicU64 で累計し、宣言サイズ合計では防げない反復読み出しを制限する決定を記録する。
-  - DocumentContent::Epub と重複する 3 構造体を削除し、EPUB は EpubBook 経路へ一本化する決定を記録する。
-  - 未宣言の media-type を許容し明示された非画像を拒否する ADR-0008 の契約を unit test で固定する決定を記録する。
-  - manifest item の id / href 欠落を固定文言の Archive エラーとして fail-closed に報告する決定を記録する。
-  - EpubBook の所有権移譲 API に ArchiveLimits を指定可能にし、借用 API と同じ検証契約を共有する決定を記録する。
-  - feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
-  - localStorage 容量超過で古い読書位置を削除した場合に件数と残件数を通知する決定を記録する。
-  - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
-  - wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。
-  - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
 - [0252-path-depth-limit](docs/decisions/0252-path-depth-limit.md)
-  - ZIP パスの深さ上限を追加せず、非再帰正規化と既存の多重防御で受容する決定を記録する。
+  - normalize_path と resolve_reference のコンポーネント数が無制限であることを、非再帰性と既存防御の責任分界から受容する決定を記録する。
 - [0253-tauri-settings-save-design](docs/decisions/0253-tauri-settings-save-design.md)
-  - browser の読み取り専用を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続する段階設計を記録する。
+  - browser の読み取り専用 fail-closed を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続する段階設計を記録する。
 - [0254-release-operations-disclosure](docs/decisions/0254-release-operations-disclosure.md)
+  - 導入・更新・ロールバックと既知問題を先に開示し、公開・署名・endpoint は未決定として残す決定を記録する。
 - [0255-epub-test-split](docs/decisions/0255-epub-test-split.md)
   - EPUB の 92 tests を epub/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
 - [0256-wasm-ai-cluster-removal](docs/decisions/0256-wasm-ai-cluster-removal.md)
+  - 未使用の fail-closed スタブ 3 型と自己言及 test を削除し、ADR-0156 の AI 部分のみ supersede する決定を記録する。
 - [0257-wasm-test-split](docs/decisions/0257-wasm-test-split.md)
   - wasm-bindgen-test 14 件を wasm/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
-  - 未使用の Wasm AI 3 型と自己言及 test を削除し、ADR-0156 の AI 部分のみ supersede する決定を記録する。
-  - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 - [0258-workspace-feature-additive-deps](docs/decisions/0258-workspace-feature-additive-deps.md)
+  - chrono / uuid / wasm dev tokio の feature 差分（member の加算／限定）を記録し、workspace 化せず現状を設計受容とする決定を記録する。
 - [0259-wasm-binding-module-split](docs/decisions/0259-wasm-binding-module-split.md)
+  - Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
 - [0260-epub-module-split](docs/decisions/0260-epub-module-split.md)
   - EPUB 本編を opf / navigation / text / xmlutil モジュールへ分割し、公開 6 型と fail-closed 契約を維持する決定を記録する。
-  - Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
-  - feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず、現状を設計受容として残す決定を記録する。
 - [0261-os-keychain-deferred](docs/decisions/0261-os-keychain-deferred.md)
-  - 平文保存 + redaction + Unix 0600 を受容済みリスクとして明記し、OS キーチェーン移行を ADR-0098 の未決定へ集約して実装を見送る決定を記録する。
+  - OS キーチェーン移行を設計受容として記録し、ADR-0098 の未決定へ集約して今回の実装を見送る決定を記録する。
 - [0262-e2e-count-documentation-refresh](docs/decisions/0262-e2e-count-documentation-refresh.md)
-  - E2E 総数の current 表記をコード出典の 255 件へ追従し、254 件は ADR-0225 の履歴として保持する決定を記録する。
+  - E2E 総数の current 表記をコード出典（255）へ追従させ、履歴的数値は保持する決定を記録する。
 - [0263-e2e-count-gate](docs/decisions/0263-e2e-count-gate.md)
   - Checker(expected=N) を唯一の出典として current 文書表記とのズレを fail-closed で検出する静的ゲートを記録する。
 - [0264-tauri-ipc-path-acceptance](docs/decisions/0264-tauri-ipc-path-acceptance.md)
+  - withGlobalTauri 未設定で desktop も IPC が動かない可能性を記録し、3 経路を比較してコード変更なしの設計受容を選択する。
 - [0265-cross-browser-e2e](docs/decisions/0265-cross-browser-e2e.md)
-- [0266-browser-metadata-manifest](docs/decisions/0266-browser-metadata-manifest.md)
-- [0267-bundle-size-baseline](docs/decisions/0267-bundle-size-baseline.md)
-- [0268-csp-consistency-gate](docs/decisions/0268-csp-consistency-gate.md)
-- [0269-ipc-cas-contract](docs/decisions/0269-ipc-cas-contract.md)
-- [0270-tauri-global-ipc-path](docs/decisions/0270-tauri-global-ipc-path.md)
-  - withGlobalTauri を有効化し、web の __TAURI__.core.invoke 参照を公式グローバル経路へ統一する決定。
-  - update_config_patch に UI が読んだ revision を必須で渡し、衝突を構造化エラーで判別可能にする決定。
-  - meta CSP と desktop config CSP の一致・許可オリジンを fail-closed で検査する静的ゲートを記録する。
-  - verify.sh と同一のビルド条件で現行 WASM 配布物のサイズを実測し、今後の比較可能 before とする決定を記録する。
-  - verify.sh の manifest に E2E のブラウザ実行ファイル・解決パス・バージョン・ポートを記録する決定。
   - 現行 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。
-  - withGlobalTauri 未設定で desktop も IPC が動かない可能性を記録し、3 経路比較と未決定を残して設計受容とする。
+- [0266-browser-metadata-manifest](docs/decisions/0266-browser-metadata-manifest.md)
+  - verify.sh の manifest に E2E のブラウザ実行ファイル・解決パス・バージョン・ポートを記録する決定。
+- [0267-bundle-size-baseline](docs/decisions/0267-bundle-size-baseline.md)
+  - verify.sh と同一のビルド条件で現行 WASM 配布物のサイズを実測し、今後の比較可能 before とする決定を記録する。
+- [0268-csp-consistency-gate](docs/decisions/0268-csp-consistency-gate.md)
+  - meta CSP と desktop config CSP の一致・許可オリジンを fail-closed で検査する静的ゲートを記録する。
+- [0269-ipc-cas-contract](docs/decisions/0269-ipc-cas-contract.md)
+  - update_config_patch に UI が読んだ revision を必須で渡し、衝突を構造化エラーで判別可能にする決定。
+- [0270-tauri-global-ipc-path](docs/decisions/0270-tauri-global-ipc-path.md)
+  - withGlobalTauri を有効化し、web の `__TAURI__.core.invoke` 参照を公式グローバル経路へ統一する決定。
 
 ## ライセンス
 
