@@ -6,6 +6,66 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
+usage() {
+	cat <<'EOF'
+Usage: ./scripts/verify.sh [--dist <dir>]
+
+全検証ゲートを一括実行する。
+
+Options:
+  --dist <dir>  全ゲート成功時のみ、検証済み dist のコピーを
+                <dir>/<short-sha>-<UTC>/ へ保持し manifest.txt を生成する。
+                一時 dist は常に trap で削除され、--dist 指定時のみ別途コピーが残る。
+  -h, --help    このヘルプを表示して終了する。
+EOF
+}
+
+# 一時 dist は常に trap で削除する。--dist 指定時のみ、成功時に別途コピーを保持する。
+RETAIN_DIST=0
+DIST_ROOT=""
+while (($# > 0)); do
+	case "$1" in
+		--dist)
+			if (($# < 2)) || [[ -z "$2" ]]; then
+				echo "ERROR: --dist には保存先ディレクトリが必要です" >&2
+				usage >&2
+				exit 2
+			fi
+			DIST_ROOT="$2"
+			RETAIN_DIST=1
+			shift 2
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			echo "ERROR: 不正な引数: $1" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+done
+
+if [[ $RETAIN_DIST -eq 1 ]]; then
+	# 絶対パスを推奨（相対パスは cwd 依存で危険なため拒否）。
+	if [[ "$DIST_ROOT" != /* ]]; then
+		echo "ERROR: --dist には絶対パスを指定してください: $DIST_ROOT" >&2
+		usage >&2
+		exit 2
+	fi
+	# シンボリックリンクと .. を解決し、リポジトリ配下への生成を拒否する。
+	DIST_ROOT="$(readlink -m "$DIST_ROOT")"
+	ROOT_CANON="$(readlink -f "$ROOT_DIR")"
+	case "$DIST_ROOT" in
+		"$ROOT_CANON"|"$ROOT_CANON"/*)
+			echo "ERROR: --dist はリポジトリ配下（$ROOT_CANON）を指定できません: $DIST_ROOT" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+fi
+
 # 開発ホストのホームを正規化（末尾の / を除去）し、remap と grep で同じ値を使う。
 home=${HOME%/}
 if [[ -z "$home" ]]; then
@@ -25,6 +85,105 @@ run() {
 		echo "===== END: $name rc=$rc ====="
 		fail=1
 	fi
+}
+
+# 検証済み dist を保持先へコピーし、manifest.txt を生成する。
+# 呼び出し側で全ゲート成功（fail=0）を確認してから呼ぶ。
+# 既存の同名ディレクトリは決して上書きせず、連番の別名を探索する。
+# ステージングへ書き出してから atomic mv するため、中途半端な成果物は残らない。
+retain_verified_dist() {
+	local short_sha utc_stamp base dest suffix
+	short_sha="$(git rev-parse --short HEAD)"
+	utc_stamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+
+	mkdir -p "$DIST_ROOT" || {
+		echo "ERROR: 保持先ディレクトリを作成できません: $DIST_ROOT" >&2
+		exit 1
+	}
+
+	base="${short_sha}-${utc_stamp}"
+	dest="$DIST_ROOT/$base"
+	suffix=1
+	while [[ -e "$dest" ]]; do
+		dest="$DIST_ROOT/${base}-${suffix}"
+		suffix=$((suffix + 1))
+		if ((suffix > 99)); then
+			echo "ERROR: 保持先の候補がすべて使用中です: $DIST_ROOT/$base" >&2
+			exit 1
+		fi
+	done
+
+	# STAGE_DIR は EXIT trap で必ず掃除する（成功時に空へ戻して解除）。
+	STAGE_DIR="${dest}.tmp.$$"
+	mkdir -p "$STAGE_DIR" || {
+		echo "ERROR: ステージングディレクトリを作成できません: $STAGE_DIR" >&2
+		exit 1
+	}
+	# 一時 DIST_DIR の中身（隠しファイル含む）を属性付きでコピーする。
+	if ! cp -a "$DIST_DIR"/. "$STAGE_DIR"/; then
+		echo "ERROR: dist のコピーに失敗しました: $STAGE_DIR" >&2
+		exit 1
+	fi
+
+	# E2E の期待件数と実際の結果を、再実行せず既存の情報から取得する。
+	# 抽出不能なら "unknown" を記録したうえで失敗扱いとし、成功風の数値は書かない。
+	local metadata_ok=1
+	local e2e_expected e2e_result trunk_ver
+	e2e_expected="$(grep -o -m1 -E 'Checker\(expected=[0-9]+\)' tools/verify-web-reader.py | grep -o -E '[0-9]+' || true)"
+	if [[ -z "$e2e_expected" ]]; then
+		e2e_expected="unknown"
+		metadata_ok=0
+	fi
+	e2e_result="$(grep -m1 -E '^passed: [0-9]+, failed: [0-9]+$' "$E2E_LOG" || true)"
+	if [[ -z "$e2e_result" ]]; then
+		e2e_result="unknown"
+		metadata_ok=0
+	fi
+	trunk_ver="$(trunk --version 2>/dev/null || true)"
+	if [[ -z "$trunk_ver" ]]; then
+		trunk_ver="unknown"
+		metadata_ok=0
+	fi
+
+	# dist 内ファイルの SHA256（相対パス、決定的な並び順）。
+	local sha256_block
+	sha256_block="$(cd "$DIST_DIR" && find . -type f -print0 | sort -z | xargs -0 sha256sum)"
+
+	# 一時ファイルに書き出して mv でステージング内へ配置する。
+	local tmp_manifest="$STAGE_DIR/.manifest.txt.tmp"
+	{
+		echo "openrustbooks verified distribution manifest"
+		echo "============================================"
+		echo "commit sha   : $(git rev-parse HEAD)"
+		echo "verified at  : $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+		echo "rustc        : $(rustc --version)"
+		echo "trunk        : $trunk_ver"
+		echo "e2e expected : $e2e_expected"
+		echo "e2e result   : $e2e_result"
+		echo "source dist  : temporary DIST_DIR (removed by trap on exit)"
+		echo ""
+		echo "SHA256 (relative paths under dist):"
+		echo "$sha256_block"
+	} > "$tmp_manifest"
+	mv "$tmp_manifest" "$STAGE_DIR/manifest.txt"
+
+	if [[ $metadata_ok -eq 0 ]]; then
+		echo "ERROR: manifest の必須メタデータを取得できませんでした（unknown を記録）: e2e_expected=$e2e_expected e2e_result=$e2e_result trunk=$trunk_ver" >&2
+		exit 1
+	fi
+
+	# ステージングを最終ディレクトリへ原子的に配置（既存ディレクトリは上書きしない）。
+	if ! mv -n -T "$STAGE_DIR" "$dest"; then
+		echo "ERROR: ステージングの配置に失敗しました: $dest" >&2
+		exit 1
+	fi
+	if [[ -e "$STAGE_DIR" ]]; then
+		echo "ERROR: 配置先が競合したため保持を中止しました: $dest" >&2
+		exit 1
+	fi
+	STAGE_DIR=""
+
+	echo "===== 検証済み dist を保持しました: $dest ====="
 }
 
 # web/index.html に第三者フォント参照が混入していないことを静的に検査する。
@@ -98,7 +257,11 @@ if [[ -d "$HOME/.cache/trunk/wasm-bindgen-0.2.129" ]]; then
 fi
 
 DIST_DIR="$(mktemp -d)"
-trap 'rm -rf "$DIST_DIR"' EXIT
+# E2E 出力を保持して manifest の結果欄に使う（常に一時ファイルとして扱う）。
+E2E_LOG="$(mktemp)"
+# STAGE_DIR は retain_verified_dist が設定する。中途失敗時は EXIT trap で掃除する。
+STAGE_DIR=""
+trap 'rm -rf "$DIST_DIR" "$E2E_LOG"; [[ -z "$STAGE_DIR" ]] || rm -rf "$STAGE_DIR"' EXIT
 
 echo "===== START: trunk build ====="
 # 開発ホストの絶対パスを配布 WASM に残さない（rustc の正しいフラグは --remap-path-prefix）。
@@ -148,7 +311,9 @@ fi
 echo "===== END: wasm path check rc=0 ====="
 
 echo "===== START: e2e ====="
-if python3 tools/verify-web-reader.py --dist "$DIST_DIR"; then
+# 出力は従来どおりストリーミング表示しつつ、manifest 用に E2E_LOG へも保存する。
+# pipefail により python3 の失敗はパイプラインの終了コードへ伝播する。
+if python3 tools/verify-web-reader.py --dist "$DIST_DIR" 2>&1 | tee "$E2E_LOG"; then
 	echo "===== END: e2e rc=0 ====="
 else
 	rc=$?
@@ -157,3 +322,9 @@ else
 fi
 
 echo "===== 全検証成功 ====="
+
+# --dist 指定時のみ、全ゲート成功（fail=0）を確認してから成果物を保持する。
+# ゲート失敗時は上流で exit するため、ここに到達した時点では全ゲート成功済み。
+if [[ $RETAIN_DIST -eq 1 && $fail -eq 0 ]]; then
+	retain_verified_dist
+fi
