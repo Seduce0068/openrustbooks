@@ -351,168 +351,6 @@ struct WasmArchiveEntry {
     compressed_size: u64,
 }
 
-/// Wasm-compatible AI pipeline result
-///
-/// Not `serde`-derivable: [`WasmDiffResult`] holds `JsValue`s by design.
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub struct WasmPipelineResult {
-    content: String,
-    diff: Option<WasmDiffResult>,
-    lint_passed: bool,
-    attempts: usize,
-    tokens_used: usize,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmPipelineResult {
-    #[wasm_bindgen(getter)]
-    pub fn content(&self) -> String {
-        self.content.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn diff(&self) -> Option<WasmDiffResult> {
-        self.diff.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn lint_passed(&self) -> bool {
-        self.lint_passed
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn attempts(&self) -> usize {
-        self.attempts
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn tokens_used(&self) -> usize {
-        self.tokens_used
-    }
-}
-
-/// Wasm-compatible diff result
-///
-/// Fields are `JsValue` so the JS side receives plain objects; that also means
-/// the struct cannot derive `Serialize`/`Deserialize` (see above in this module).
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-#[derive(Clone)]
-pub struct WasmDiffResult {
-    hunks: JsValue,
-    stats: JsValue,
-    original_lines: usize,
-    modified_lines: usize,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmDiffResult {
-    #[wasm_bindgen(getter)]
-    pub fn hunks(&self) -> JsValue {
-        self.hunks.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn stats(&self) -> JsValue {
-        self.stats.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn original_lines(&self) -> usize {
-        self.original_lines
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn modified_lines(&self) -> usize {
-        self.modified_lines
-    }
-}
-
-/// Wasm-compatible AI Markdown service
-///
-/// fail-closed: ブラウザには AI クライアントが無いため、すべてのメソッドは
-/// 架空の成功値を返さずエラーを返す（ADR-0099）。
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub struct WasmAiMarkdownService {
-    /// Reserved for the browser AI client, which is not implemented yet.
-    #[allow(dead_code)]
-    config: JsValue,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmAiMarkdownService {
-    #[wasm_bindgen(constructor)]
-    pub fn new(config: JsValue) -> Self {
-        Self { config }
-    }
-
-    /// Generate Markdown from prompt
-    #[wasm_bindgen]
-    pub async fn generate(
-        &self,
-        prompt: String,
-        _context: Option<String>,
-    ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!("AI generate unavailable (prompt: {} chars)", prompt.len());
-        Err(JsValue::from_str(
-            "AI features are not available in the browser.",
-        ))
-    }
-
-    /// Refine existing Markdown
-    #[wasm_bindgen]
-    pub async fn refine(
-        &self,
-        content: String,
-        instruction: String,
-        _context: Option<String>,
-    ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!(
-            "AI refine unavailable (content: {} chars, instruction: {} chars)",
-            content.len(),
-            instruction.len()
-        );
-        Err(JsValue::from_str(
-            "AI features are not available in the browser.",
-        ))
-    }
-
-    /// Convert to table
-    #[wasm_bindgen]
-    pub async fn to_table(
-        &self,
-        _data: String,
-        format: String,
-        _headers: Option<JsValue>,
-    ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!("AI table conversion unavailable (format: {})", format);
-        Err(JsValue::from_str(
-            "AI features are not available in the browser.",
-        ))
-    }
-
-    /// Generate front matter
-    #[wasm_bindgen]
-    pub async fn front_matter(
-        &self,
-        content: String,
-        _schema: Option<JsValue>,
-    ) -> Result<WasmPipelineResult, JsValue> {
-        console_log!(
-            "AI front matter unavailable (content: {} chars)",
-            content.len()
-        );
-        Err(JsValue::from_str(
-            "AI features are not available in the browser.",
-        ))
-    }
-}
-
 #[cfg(target_arch = "wasm32")]
 use crate::{
     ai_markdown::lint::{LintIssue, LintSeverity, MarkdownLinter},
@@ -696,8 +534,8 @@ pub mod utils {
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
     use super::{
-        ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmAiMarkdownService, WasmArchive,
-        WasmArchiveEntry, WasmMarkdownLinter,
+        ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmArchive, WasmArchiveEntry,
+        WasmMarkdownLinter,
     };
     use crate::archive::{ArchiveLimits, ArchiveReader};
     use std::io::{Cursor, Write};
@@ -713,27 +551,6 @@ mod tests {
             Ok(_) => panic!("expected an error: {expected}"),
             Err(error) => assert_eq!(error.as_string().as_deref(), Some(expected)),
         }
-    }
-
-    #[wasm_bindgen_test]
-    async fn ai_methods_fail_closed() {
-        const EXPECTED: &str = "AI features are not available in the browser.";
-        let service = WasmAiMarkdownService::new(JsValue::NULL);
-
-        assert_js_error(service.generate("prompt".into(), None).await, EXPECTED);
-        assert_js_error(
-            service
-                .refine("content".into(), "instruction".into(), None)
-                .await,
-            EXPECTED,
-        );
-        assert_js_error(
-            service
-                .to_table("data".into(), "markdown".into(), None)
-                .await,
-            EXPECTED,
-        );
-        assert_js_error(service.front_matter("content".into(), None).await, EXPECTED);
     }
 
     fn linter() -> WasmMarkdownLinter {
