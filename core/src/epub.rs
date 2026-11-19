@@ -198,7 +198,16 @@ impl EpubBook {
     /// 呼び出し側が既にバイト列を所有している場合の二重コピーを避ける。
     /// 既定のリミットを使い、バリデーションとエラーは `open` と同一。
     pub fn open_owned(bytes: Vec<u8>) -> CoreResult<Self> {
-        Self::from_archive(ArchiveReader::from_owned(bytes, ArchiveLimits::default())?)
+        Self::open_owned_with_limits(bytes, ArchiveLimits::default())
+    }
+
+    /// 所有権を持つバイト列とリミットを指定して EPUB を開く。
+    ///
+    /// `mimetype` を持たないアーカイブは [`CoreError::UnsupportedFormat`]、
+    /// コンテナ文書や OPF の読み出し・解析の失敗は [`CoreError::Archive`]、
+    /// パス逸脱やリミット超過は [`CoreError::Validation`] を返す。
+    pub fn open_owned_with_limits(bytes: Vec<u8>, limits: ArchiveLimits) -> CoreResult<Self> {
+        Self::from_archive(ArchiveReader::from_owned(bytes, limits)?)
     }
 
     /// 開いたアーカイブからメタデータと章を読み出す共通処理。
@@ -2288,6 +2297,36 @@ mod tests {
         assert_eq!(
             owned.chapter_html(0).unwrap(),
             borrowed.chapter_html(0).unwrap()
+        );
+    }
+
+    #[test]
+    fn open_owned_with_limits_enforces_limits() {
+        let bytes = sample_epub();
+        let limits = ArchiveLimits {
+            max_entries: 1,
+            ..ArchiveLimits::default()
+        };
+
+        // 所有経路でもリミットが効き、上限超過は Validation になる。
+        assert!(matches!(
+            EpubBook::open_owned_with_limits(bytes, limits),
+            Err(CoreError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn open_owned_with_default_limits_matches_open_owned() {
+        let bytes = sample_epub();
+        let expected = EpubBook::open_owned(bytes.clone()).unwrap();
+        let actual = EpubBook::open_owned_with_limits(bytes, ArchiveLimits::default()).unwrap();
+
+        // 既定リミットでは旧 API と同じメタデータ・章になる。
+        assert_eq!(actual.metadata(), expected.metadata());
+        assert_eq!(actual.chapters(), expected.chapters());
+        assert_eq!(
+            actual.chapter_html(0).unwrap(),
+            expected.chapter_html(0).unwrap()
         );
     }
 
