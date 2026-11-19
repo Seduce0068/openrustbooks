@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 214 件）。
+openrustbooks の ADR 一覧（全 215 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -430,3 +430,5 @@ openrustbooks の ADR 一覧（全 214 件）。
   - status: accepted — OS の reduce 設定で空間移動を抑制し、色 transition と位置復元の正確性を維持する決定を記録する。
 - [ADR-0214: MSRV 1.95 の宣言](0214-msrv.md)
   - status: accepted — 依存クレートの実際の要件に合わせて Rust 1.95 を MSRV とし、CI でも同じツールチェーンを使う決定を記録する。
+- [ADR-0215: Dependabot による依存更新の自動検出](0215-dependabot.md)
+  - status: accepted — Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定。

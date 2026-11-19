@@ -374,6 +374,9 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なる 3 レイヤーとして設計受容し、
     統合を却下する決定を記録する。
 
+- [0215-dependabot](docs/decisions/0215-dependabot.md)
+  - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
+
 ## ライセンス
 
 `AGPL-3.0-or-later`（[LICENSE](LICENSE) を参照）。以前の MIT ライセンス本文は
