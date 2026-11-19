@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- build_app の共通プラグイン設定を 1 関数へ集約し登録順を維持（ADR-0201）。
 - send_wrapper を直接依存化し Leptos の doc(hidden) re-export 依存を解消（ADR-0200）。
 - 第三者通知へ配布依存 781 件のライセンス ID と出典を追加（ADR-0199）。
 - Reader の ARIA 属性を修正し E2E を 250→251 に更新（ADR-0198、ADR-0058 を supersede）。

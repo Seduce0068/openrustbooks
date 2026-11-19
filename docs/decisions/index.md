@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 200 件）。
+openrustbooks の ADR 一覧（全 201 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -402,3 +402,5 @@ openrustbooks の ADR 一覧（全 200 件）。
   - status: accepted — 配布に関係する依存クレートを cargo metadata から網羅し、ライセンス ID と出典を第三者通知へ記載する決定を記録する。
 - [ADR-0200: send_wrapper の直接依存化](0200-send-wrapper-direct-dep.md)
   - status: accepted — Leptos の doc(hidden) re-export を避け、send_wrapper を web クレートの直接依存として使う決定を記録する。
+- [ADR-0201: Tauri プラグイン設定の共通化](0201-build-app-plugin-dedup.md)
+  - status: accepted — desktop / mobile の build_app で重複していた共通プラグイン設定を 1 関数へ集約する決定を記録する。
