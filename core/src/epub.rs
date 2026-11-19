@@ -1016,12 +1016,10 @@ fn push_manifest_item(
     index: &mut HashMap<String, usize>,
 ) -> CoreResult<()> {
     let Some(id) = attribute_value(element, "id")? else {
-        return Ok(());
+        return Err(CoreError::archive("manifest の item に id がありません"));
     };
     let Some(href) = attribute_value(element, "href")? else {
-        return Err(CoreError::archive(format!(
-            "manifest の item に href がありません: {id}"
-        )));
+        return Err(CoreError::archive("manifest の item に href がありません"));
     };
     let media_type = attribute_value(element, "media-type")?.unwrap_or_default();
     let properties = attribute_value(element, "properties")?.unwrap_or_default();
@@ -2182,6 +2180,23 @@ mod tests {
         }
     }
 
+    /// 固定文言の Archive エラーを検証する（値・ファイル名が漏れないこと）。
+    fn assert_fixed_archive_error(err: CoreError, expected: &str) {
+        match err {
+            CoreError::Archive(message) => {
+                assert_eq!(message, expected);
+                // ADR-0212 の redaction 契約: id 値・href 値・ファイル名を出さない。
+                for leaked in ["ch1", "ch1.xhtml", "content.opf", "OEBPS"] {
+                    assert!(
+                        !message.contains(leaked),
+                        "エラー文言に {leaked} が含まれています: {message}"
+                    );
+                }
+            }
+            other => panic!("CoreError::Archive を期待したが {other:?}"),
+        }
+    }
+
     /// 目次の XHTML（nav / NCX）と OPF を差し替えた EPUB を組み立てる。
     fn epub_with_toc(nav: Option<&str>, ncx: Option<&str>, opf: &str) -> Vec<u8> {
         let mut files: Vec<(&str, &[u8])> = vec![
@@ -2465,6 +2480,30 @@ mod tests {
     fn rejects_spine_idref_missing_from_manifest() {
         let bytes = epub_with_opf(&OPF.replace("idref=\"ch1\"", "idref=\"missing\""));
         assert!(matches!(open_error(&bytes), CoreError::Archive(_)));
+    }
+
+    #[test]
+    fn rejects_manifest_item_without_id() {
+        // `<item id="ch1" .../>` から id だけを外した OPF。
+        let opf = OPF.replace(
+            r#"<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>"#,
+            r#"<item href="ch1.xhtml" media-type="application/xhtml+xml"/>"#,
+        );
+        let bytes = epub_with_opf(&opf);
+
+        assert_fixed_archive_error(open_error(&bytes), "manifest の item に id がありません");
+    }
+
+    #[test]
+    fn rejects_manifest_item_without_href() {
+        // 既存 fixture の `<item id="ch1" .../>` から href だけを外した OPF。
+        let opf = OPF.replace(
+            r#"<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>"#,
+            r#"<item id="ch1" media-type="application/xhtml+xml"/>"#,
+        );
+        let bytes = epub_with_opf(&opf);
+
+        assert_fixed_archive_error(open_error(&bytes), "manifest の item に href がありません");
     }
 
     #[test]
