@@ -44,8 +44,6 @@ status: current
 - 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
   既存ソリューション選定根拠 ADR、REQ→ADR→テスト対応表、
   測定可能な受け入れ基準を整備。
-- 【R2-ai#2】AI クライアントの注入点（`Arc<dyn AiClient>`）を追加し
-  単体テスト可能性を確保。
 - 【C04 / R5-ops#1】docs 配下に `index.md` / `log.md` を整備し
   OKF・索引運用を明文化。
 
@@ -89,6 +87,11 @@ status: current
 
 ## 完了
 
+- [x] 【R2-ai#2】AI クライアント注入点を設計受容（公開注入点は追加せず）。
+      `#[cfg(test)]` 内の `CountingAiClient` ＋ `pipeline_with_mock()` による非公開フィールド
+      直接構築を維持。クロスクレート要件が出た場合のみ同期 `with_client` を `pub(crate)` から検討し
+      `new()` を委譲。信頼境界（allowlist / 予約ヘッダ拒否 / IPC DTO）を公開しない。
+      コード・E2E 不変（core 267）、markdownlint 0 issues / ADR-0227。
 - [x] 【TD-M11 第一段】Reader status の英語文言 22 パターンを日本語へ統一し、E2E 期待を同期。
       aria-live 分離は第二段の未決定。E2E 254 件・全ゲート成功 / ADR-0226。
 <!-- 2026-11-19: 監査で解消済みと判定した項目を ADR 実績へ照合して移動（ADR-0224）。 -->
