@@ -64,10 +64,13 @@ status: current
   workspace 依存の一元化。
 - 【R1-archive#2,#3,#5 残】実展開サイズの累計上限、入力パーサ側の深さ上限、表紙 media-type 検証。
   正規化後同名エントリの拒否は完了（ADR-0240）。
-- 【R5-adr 全体評価】ADR-0002 と ADR-0003 の日付逆転（推測）を確認。
 
 ## 完了
 
+- [x] 【R5-adr 全体評価】ADR-0001 / 0002 の `generated.at` は c030537 の frontmatter 正規化で付与。
+      git 作成順は 0001(10-11) → 0002(10-12) → 0003(10-16) → 0004 / 0005(10-17) で連番と一致。
+      日付逆転は意味論の誤読のため、既存値を保持し規約へ注記（ADR-0241）。
+      `created` キーと一括移行は未決定。
 - [x] 【R1-archive#4】正規化後同名の ZIP エントリを fail-closed で拒否。archive / epub / wasm に test 5 件追加。
       core 274・wasm 15・E2E 254 件・全ゲート成功 / ADR-0240。完全一致 raw 名は未決定。
 - [x] 【R3-release#3】tauri.conf.json の version を削除し Cargo workspace を単一情報源へ。
