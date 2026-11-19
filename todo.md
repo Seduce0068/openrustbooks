@@ -60,11 +60,14 @@ status: current
 - 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
   core の Web バインディング分離、workspace 依存の残り（feature 加算依存）。
   greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了（ADR-0243 / 0244 / 0246）。
-- 【R1-archive#3 残】入力パーサ側の深さ上限。
-  正規化後同名エントリ拒否、表紙 media-type 固定、実展開セッション予算は完了（ADR-0240 / 0249 / 0251）。
 
 ## 完了
 
+- [x] 【R1-archive#3】入力パーサ側の深さ上限を追加せず設計受容を記録（ADR-0252）。
+      normalize_path / resolve_reference は非再帰で、256 MiB 入力・4096 entries・
+      64 MiB per entry・256 MiB total・実展開 AtomicU64 予算・fail-closed 検証・
+      サニタイザ深い入れ子テスト前例（ADR-0050 / 0065）により受容。
+      wasm DoS 実測、JS DTO の信頼境界、XML/TOC 深さとの一本化は未決定。
 - [x] 【R3-config#5】容量超過時の位置削除へ削除件数・残件数を通知。E2E 255 件・全ゲート成功 / ADR-0245。
 - [x] 【R2-crates#2】ADR-0003 の rumdl feature 記述を現状へ追従。
       default / wasm の target 別選択は廃止され、native / wasm とも featureless。

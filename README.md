@@ -458,6 +458,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
   - wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。
   - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
+- [0252-path-depth-limit](docs/decisions/0252-path-depth-limit.md)
+  - ZIP パスの深さ上限を追加せず、非再帰正規化と既存の多重防御で受容する決定を記録する。
 
 ## ライセンス
 

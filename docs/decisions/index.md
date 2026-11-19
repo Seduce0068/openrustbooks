@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 251 件）。
+openrustbooks の ADR 一覧（全 252 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -504,3 +504,5 @@ openrustbooks の ADR 一覧（全 251 件）。
   - status: accepted — DocumentContent::Epub と重複する 3 構造体を削除し、EPUB は EpubBook 経路へ一本化する決定を記録する。
 - [ADR-0251: アーカイブ実展開サイズのセッション予算](0251-expanded-size-budget.md)
   - status: accepted — ZIP エントリの実展開バイトを AtomicU64 で累計し、宣言サイズ合計では防げない反復読み出しを制限する決定を記録する。
+- [ADR-0252: ZIP パスの深さ上限を追加しない設計受容](0252-path-depth-limit.md)
+  - status: accepted — normalize_path と resolve_reference の無制限なコンポーネント数を、非再帰性と既存防御の責任分界から受容する決定を記録する。

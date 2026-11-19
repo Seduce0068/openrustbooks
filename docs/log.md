@@ -2,6 +2,11 @@
 
 ## 2026-11-19
 
+- ZIP パスの深さ上限を追加せず設計受容を記録。normalize_path / resolve_reference の
+  無制限なコンポーネント数は、非再帰性・ZIP 名 u16 長・256 MiB 入力 /
+  4096 entries / 64 MiB per entry / 256 MiB total / 実展開 AtomicU64 予算・
+  fail-closed 検証・サニタイザ深い入れ子テスト前例により受容（ADR-0252）。
+  decisions / docs 各 index（252 件）、README、todo を追従。
 - ZIP 実展開サイズへ AtomicU64 セッション予算を追加し core を 279→284 件へ拡充（ADR-0251）。
 - Document 側の dead な EPUB 型を削除し EPUB 経路を EpubBook へ集約（ADR-0250）。
 - 表紙 media-type 契約を unit test で固定し core を 278→279 件へ拡充（ADR-0249）。
