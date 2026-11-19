@@ -66,14 +66,24 @@ status: current
   署名秘密鍵の `.gitignore` 登録は完了（公開鍵は追跡対象）。
 - 【R2-epub#2 残 / 本編分割は未決定】EPUB 層の分割。
   tests.rs 切り出し完了（ADR-0255）。`open_owned_with_limits` / manifest 欠落エラー統一 / Document 型削除も完了（ADR-0247 / 0248 / 0250）。
-- 【R2-crates#4 残 / #5 残】core の Web バインディング本編分割、
-  workspace 依存の残り（feature 加算依存）。
+- 【R2-crates#4 残】core の Web バインディング本編分割。
+  feature が一致しない依存（R2-crates#5）は現状を設計受容として完了（ADR-0258）。
   wasm tests 切り出しは完了（ADR-0257）。
   greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了
   （ADR-0243 / 0244 / 0246）、AI cluster 削除も完了（ADR-0256）。
 
 ## 完了
 
+- [x] 【R2-crates#5】feature が一致しない依存を workspace 化せず設計受容・残置（ADR-0258）。
+      chrono / uuid は member 側が feature を加算し、wasm dev tokio は member 側が限定。
+      Cargo の feature は和集合で member 側から削除できず、workspace 定義へ上げると
+      desktop chrono へ wasmbind / uuid js が波及し、wasm dev tokio へ full が加算される。
+      現状維持を設計受容とし workspace 化は行わない（設計受容をもってタスク完了、
+      依存自体は残置）。rumdl は workspace に無く ADR-0242 /
+      check-rumdl-featureless.sh で除外。加算による具体的なビルド影響と
+      MSRV 1.95 の override 制限は ADR-0242 の「推測・未検証」を継続して断定しない。
+      Cargo.toml / Cargo.lock / コードは未変更、E2E 255 維持。
+      decisions / docs 各 index（258 件）、README、log を追従。markdownlint 0 issues。
 - [x] 【R3-release#4,#5】運用文書完了、公開作業は未決定。
       `docs/runbook-release.md` を追加し、導入・更新・ロールバック・既知問題を開示。
       現状は公開 installer / updater / 署名済み成果物 / 公開 endpoint が無く、
