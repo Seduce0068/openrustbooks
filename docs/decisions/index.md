@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 255 件）。
+openrustbooks の ADR 一覧（全 256 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -512,3 +512,5 @@ openrustbooks の ADR 一覧（全 255 件）。
   - status: accepted — 導入・更新・ロールバックと既知問題を先に開示し、公開・署名・endpoint は未決定として残す決定を記録する。
 - [ADR-0255: EPUB テストの分離](0255-epub-test-split.md)
   - status: accepted — EPUB の 92 tests を epub/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
+- [ADR-0256: Wasm AI cluster の削除](0256-wasm-ai-cluster-removal.md)
+  - status: accepted — 未使用の AI 3 型と自己言及 test を削除し、ADR-0156 の AI 部分のみ supersede する決定を記録する。

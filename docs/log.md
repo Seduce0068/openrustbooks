@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+- 未使用の Wasm AI cluster（`WasmAiMarkdownService` / `WasmPipelineResult` /
+  `WasmDiffResult`）と自己言及 test `ai_methods_fail_closed` を属性ごと削除。
+  追跡ソース（web / E2E / wasm test）の参照 0 件、型互換の根拠消滅、
+  `WasmDiffResult` は未構築、削除は fail-closed より強いことを根拠とする。
+  lint cluster は ADR-0160 実装済みのため維持し、ADR-0156 の AI 部分のみ supersede。
+  ADR-0156 / 0227 / 0232 / 0243 / 0244 / 0246 を追従（status は `accepted` 維持）。
+  wasm-bindgen-test 15 → 14 件、core 284 維持、E2E 255 維持。
+  外部 JS 利用者の有無、deprecation shim、バンドルサイズ実測は未決定（ADR-0256）。
+  decisions / docs 各 index（256 件）、README、todo を追従。markdownlint 0 issues。
 - EPUB の 92 tests を epub/tests.rs へ切り出し、本編を 3780→1884 行へ削減（ADR-0255）。
 - R6 R3-release#4,#5: 運用文書を先行開示し、公開・署名・endpoint は未決定として残す。
   `docs/runbook-release.md` を追加し、現状（公開 installer / updater / 署名済み成果物 /
