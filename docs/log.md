@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- EPUB 本編を opf/navigation/text/xmlutil へ分割し epub.rs を 1884→556 行へ削減（ADR-0260）。
 - Wasm バインディング本編を epub/archive/lint へ分割し wasm.rs を 537→134 行へ削減（ADR-0259）。
 - R6 R2-crates#5: feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず
   現状を設計受容。chrono / uuid は member 側が feature を加算し、wasm dev tokio は

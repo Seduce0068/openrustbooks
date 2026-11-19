@@ -475,6 +475,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 - [0258-workspace-feature-additive-deps](docs/decisions/0258-workspace-feature-additive-deps.md)
 - [0259-wasm-binding-module-split](docs/decisions/0259-wasm-binding-module-split.md)
+- [0260-epub-module-split](docs/decisions/0260-epub-module-split.md)
+  - EPUB 本編を opf / navigation / text / xmlutil モジュールへ分割し、公開 6 型と fail-closed 契約を維持する決定を記録する。
   - Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
   - feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず、現状を設計受容として残す決定を記録する。
 
