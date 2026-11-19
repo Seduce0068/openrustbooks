@@ -2,6 +2,13 @@
 
 ## 2026-11-19
 
+- E2E トレーサビリティへ REQ / 主要 ADR 列を追加し、未カバー行も含め VC 全件を
+  対応付け。VC は ADR-0233 により初版の測定可能な受け入れ基準として参照し、
+  要件側の「候補」表記は維持。主要依存の選定根拠をライセンス / 鮮度 /
+  既知脆弱性 / Wasm 対応で横断比較（2026-11-19 実測、cargo audit baseline
+  10 warnings / 0 vulnerabilities）。E2E check 名 254 件不変、
+  AST 254/254・missing / duplicate / extra 0、markdownlint-cli2 --config
+  /tmp/mdlint.jsonc（8 ファイル、MD013 tables:false）0 issues（ADR-0233）。
 - ADR-0232 の監査指摘（誤引用・TXT 範囲・根拠行番号・Runtime Proof）を修正。
 - 初版スコープ ADR を追加し、native desktop / browser / text / AI / 保存・検証の
   実装範囲と初版に含まない項目・未決定を実装証拠（E2E 254 件・core 270 件）付きで

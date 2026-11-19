@@ -414,6 +414,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 未検出ストレージバックエンドと未知 AI provider のエラー分岐を unit test で固定する決定を記録する。
 - [0232-initial-release-scope](docs/decisions/0232-initial-release-scope.md)
   - 実装・検証済みの初版スコープと、含まない項目・未決定を実証付きで切り分ける決定を記録する。
+- [0233-solution-selection-rationale](docs/decisions/0233-solution-selection-rationale.md)
+  - 主要依存のライセンス / 鮮度 / 既知脆弱性 / Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
 
 ## ライセンス
 
