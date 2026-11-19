@@ -55,7 +55,6 @@ status: current
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
 - 【R3-release#4,#5】導入・更新・ロールバック手順、既知問題の開示、
   署名秘密鍵の `.gitignore` 登録。
-- 【R3-config#5】容量超過時の位置削除を通知・退避方式へ変更。
 - 【R2-epub#1-#4】EPUB 層の API・エラー・所有権境界を整理。
   `open_owned` の limits 指定、1316 行ファイルの分割、欠落エラーの統一、
   Document 側の二重定義解消。
@@ -67,6 +66,7 @@ status: current
 
 ## 完了
 
+- [x] 【R3-config#5】容量超過時の位置削除へ削除件数・残件数を通知。E2E 255 件・全ゲート成功 / ADR-0245。
 - [x] 【R2-crates#2】ADR-0003 の rumdl feature 記述を現状へ追従。
       default / wasm の target 別選択は廃止され、native / wasm とも featureless。
       wasm feature は同名 `init` export 衝突で禁止（ADR-0160）。
