@@ -85,7 +85,7 @@ status: accepted
 ## 未決定
 
 - 公開範囲（`pub` vs `pub(crate)`）。
-- 採用するシグネチャ（`client` の型の書き方、引数順、所有権（値 vs 参照））。
+- 将来 `with_client` を採用する場合の最終的な引数順と所有権（値 vs 参照）。
 - ADR-0133（`#[cfg(test)]` 内テスト契約）の更新要否（維持する限り不要だが、公開時に再確認）。
 - `AiMarkdownService` への注入点の有無（`core/src/ai_markdown/pipeline.rs:16`）。
 - wasm 側の `AiClient`（ADR-0003 継続、現状は `WasmAiMarkdownService` が別経路）。
