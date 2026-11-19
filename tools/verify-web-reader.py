@@ -851,7 +851,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 237 + checker.equal 17 = 254。
+    # 期待 check 総数: checker.check 238 + checker.equal 17 = 255。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -882,7 +882,9 @@ async def run_checks(cdp: Cdp) -> int:
     # フラグメント移動が再試行なしで即時反映されること +1（R6 TD-M13）。
     # 壊れた画像（complete() true / naturalWidth 0）を含む章で、描画開始から
     # 位置適用完了までが 1.5 秒未満であること +1（R6 TD-M10 / ADR-0225）。
-    checker = Checker(expected=254)
+    # localStorage 容量超過で古い位置を削除して再保存したとき、status に削除件数と
+    # 残件数だけが出てキー名・生エラーが出ず現在の本の位置が残ること +1（ADR-0245）。
+    checker = Checker(expected=255)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -912,7 +914,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 254 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 255 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -1958,6 +1960,86 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "掃除しても表示設定は残る",
         await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
     )
+
+    # 容量超過で古い位置を削除して再保存したときの通知を検証する。
+    # 位置キーに対する最初の setItem だけを DOMException で失敗させ、以降は元の
+    # setItem を呼ぶ。オーバーライドと注入キーは try/finally で必ず元へ戻す。
+    try:
+        # 保留中のデバウンス保存を先に終わらせ、最初の位置 setItem を確実に拾う。
+        await asyncio.sleep(1.0)
+        await cdp.evaluate("""(() => {
+          const now = Date.now();
+          for (let i = 0; i < 20; i += 1) {
+            localStorage.setItem('openrustbooks:position:e2e-quota-' + i,
+              JSON.stringify({chapterIndex: 0, fragment: null, scrollTop: 0, savedAt: now - i * 60000}));
+          }
+          window.__orbQuotaOriginalSetItem = Storage.prototype.setItem;
+          window.__orbQuotaFailedOnce = false;
+          Storage.prototype.setItem = function (key, value) {
+            if (!window.__orbQuotaFailedOnce
+                && String(key).startsWith('openrustbooks:position:')) {
+              window.__orbQuotaFailedOnce = true;
+              throw new DOMException('quota');
+            }
+            return window.__orbQuotaOriginalSetItem.call(this, key, value);
+          };
+          return true;
+        })()""")
+        # 章を切り替えて位置保存を発生させ、削除 → 再保存成功を起こす。
+        await select_chapter(cdp, 0)
+        prune_notified = await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent"
+            ".includes('空き容量を確保するため古い読書位置を')",
+            timeout=10,
+        )
+        prune_status = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent ?? ''"
+        )
+        prune_match = re.search(
+            r"空き容量を確保するため古い読書位置を (\d+) 件削除しました（残り (\d+) 件）。"
+            r"バックアップはエクスポートから保存できます。",
+            prune_status,
+        )
+        current_position = await cdp.evaluate(
+            "(() => {"
+            " const key = Object.keys(localStorage)"
+            "   .find((k) => k.startsWith('openrustbooks:position:sample.epub'));"
+            " return key ? JSON.parse(localStorage.getItem(key)) : null; })()"
+        )
+        sensitive = [
+            token for token in (
+                "openrustbooks:position:", "sample.epub", "DOMException", "quota",
+                "QuotaExceededError", "Error",
+            )
+            if token in prune_status
+        ]
+        checker.check(
+            "容量超過時の位置削除で削除件数と残件数を通知し現在の本の位置は残る",
+            prune_notified
+            and prune_match is not None
+            and int(prune_match.group(1)) > 0
+            and int(prune_match.group(2)) > 0
+            and not sensitive
+            and current_position is not None
+            and current_position.get("chapterIndex") == 0,
+            f"(status={prune_status!r},"
+            f" deleted={prune_match.group(1) if prune_match else None},"
+            f" remaining={prune_match.group(2) if prune_match else None},"
+            f" sensitive={sensitive!r}, position={current_position!r})",
+        )
+    finally:
+        await cdp.evaluate("""(() => {
+          if (window.__orbQuotaOriginalSetItem) {
+            Storage.prototype.setItem = window.__orbQuotaOriginalSetItem;
+            delete window.__orbQuotaOriginalSetItem;
+          }
+          delete window.__orbQuotaFailedOnce;
+          Object.keys(localStorage)
+            .filter((k) => k.startsWith('openrustbooks:position:e2e-quota-'))
+            .forEach((k) => localStorage.removeItem(k));
+          return true;
+        })()""")
 
     # 読書位置のエクスポート・インポート。
     # まず章 1 に移動して位置を保存する。

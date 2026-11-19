@@ -1497,6 +1497,65 @@ fn report_save_failure(context: &str, target: SaveErrorTarget) {
     }
 }
 
+// 容量超過で削除した件数・残件数・再保存結果を Reader のリスナーへ渡す一時領域。
+//
+// `dispatch_event` は同期なので、ペイロードは thread_local に置き、リスナーが
+// 読み取った時点でクリアする。イベント自体は常に素の `Event` のままで、
+// キー名・ファイル名・生エラーは一切載せない（数値と成否だけを渡す）。
+// `Event` 型をこの領域へ保持しないこと（ADR-0164 の event 分離を崩さない）。
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static POSITION_PRUNE_NOTICE: std::cell::Cell<Option<(usize, usize, bool)>> =
+        std::cell::Cell::new(None);
+}
+
+/// リスナーが削除通知のペイロードを読み取り、同時にクリアする。
+#[cfg(target_arch = "wasm32")]
+fn take_position_prune_notice() -> Option<(usize, usize, bool)> {
+    POSITION_PRUNE_NOTICE.take()
+}
+
+/// 削除通知のペイロードから利用者向け status 文言を作る（数値のみ）。
+#[cfg(target_arch = "wasm32")]
+fn position_prune_status(deleted: usize, remaining: usize, saved: bool) -> String {
+    if saved {
+        format!(
+            "空き容量を確保するため古い読書位置を {deleted} 件削除しました（残り {remaining} 件）。バックアップはエクスポートから保存できます。"
+        )
+    } else {
+        format!(
+            "空き容量不足で読書位置を {deleted} 件削除しましたが保存できませんでした（残り {remaining} 件）。"
+        )
+    }
+}
+
+/// 容量超過による古い位置の削除結果を console と Reader の status へ通知する。
+///
+/// `SaveErrorTarget::Reader` と同じカスタムイベントで status へ届けるが、
+/// 文言は保存失敗の固定文言とは別で、数値（削除件数・残件数・成否）だけを
+/// thread_local 経由で渡す。`dispatch_event` 後にペイロードを必ずクリアし、
+/// リスナーが居ない場合も次回通知へ持ち越さない。
+#[cfg(target_arch = "wasm32")]
+fn report_position_prune(deleted: usize, remaining: usize, saved: bool) {
+    if saved {
+        web_sys::console::log_1(&JsValue::from_str(&format!(
+            "openrustbooks: 読書位置を {deleted} 件削除しました（残り {remaining} 件）"
+        )));
+    } else {
+        web_sys::console::error_1(&JsValue::from_str(&format!(
+            "openrustbooks: 空き容量不足で読書位置を {deleted} 件削除しましたが保存できませんでした（残り {remaining} 件）"
+        )));
+    }
+    POSITION_PRUNE_NOTICE.set(Some((deleted, remaining, saved)));
+    if let Some(window) = web_sys::window()
+        && let Ok(event) = web_sys::Event::new(SaveErrorTarget::Reader.event_name())
+    {
+        let _ = window.dispatch_event(&event);
+    }
+    // dispatch_event は同期。リスナーが take 済みでも必ずクリアする。
+    POSITION_PRUNE_NOTICE.set(None);
+}
+
 /// 下書きの最大サイズ（UTF-8 バイト数）。これを超える本文は保存しない。
 const EDITOR_DRAFT_MAX_BYTES: usize = 1_048_576;
 
@@ -1559,7 +1618,8 @@ fn save_editor_draft(doc_id: &str, content: &str) -> bool {
 /// 読書位置を保存する。localStorage が使えない場合は通知して諦める。
 ///
 /// 保存のたびに古いエントリを掃除する。容量超過で失敗した場合は件数を
-/// 減らして再試行し、それでも失敗したら読書を妨げずに通知する。
+/// 減らして再試行し、削除件数・残件数・再保存結果を通知する。通常の
+/// 掃除（90 日 / 40 件）の挙動は変更しない。
 #[cfg(target_arch = "wasm32")]
 fn save_position(key: &str, position: &SavedPosition) {
     let Some(window) = web_sys::window() else {
@@ -1582,7 +1642,10 @@ fn save_position(key: &str, position: &SavedPosition) {
         return;
     }
 
-    // 容量超過。古い順に減らして再試行する。
+    // 容量超過。古い順に減らして再試行する。remove_item が成功した件数だけを
+    // 数え、再試行の成否と残件数を利用者へ通知する（キー名・生エラーは渡さない）。
+    let mut deleted = 0usize;
+    let mut saved = false;
     for keep in [POSITION_MIN_KEEP, 1] {
         let mut entries: Vec<(String, f64)> = list_positions(&storage)
             .into_iter()
@@ -1590,13 +1653,17 @@ fn save_position(key: &str, position: &SavedPosition) {
             .collect();
         sort_newest_first(&mut entries);
         for (old_key, _) in entries.into_iter().skip(keep) {
-            let _ = storage.remove_item(&old_key);
+            if storage.remove_item(&old_key).is_ok() {
+                deleted += 1;
+            }
         }
         if storage.set_item(key, &raw).is_ok() {
-            return;
+            saved = true;
+            break;
         }
     }
-    report_save_failure("読書位置", SaveErrorTarget::Reader);
+    let remaining = list_positions(&storage).len();
+    report_position_prune(deleted, remaining, saved);
 }
 
 /// 表示設定の localStorage キー。
@@ -2369,10 +2436,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     }
     // save 関数からの Reader 向け保存失敗通知だけを受け取り status に表示する。
     // Editor 向けイベントは受け取らず、status を競合させない（ADR-0164）。
+    // 容量超過の削除通知は同じイベントで届くが、thread_local の数値ペイロードが
+    // あれば専用文言、なければ既存の保存失敗文言を使う（ペイロードは読取りで消える）。
     if let Some(window) = web_sys::window() {
         let event_name = SaveErrorTarget::Reader.event_name();
         let on_save_error = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-            set_status.set(SAVE_ERROR_MESSAGE.to_string());
+            let message = match take_position_prune_notice() {
+                Some((deleted, remaining, saved)) => {
+                    position_prune_status(deleted, remaining, saved)
+                }
+                None => SAVE_ERROR_MESSAGE.to_string(),
+            };
+            set_status.set(message);
         }) as Box<dyn FnMut(web_sys::Event)>);
         let _ = window
             .add_event_listener_with_callback(event_name, on_save_error.as_ref().unchecked_ref());
