@@ -59,8 +59,9 @@ status: current
 - 【R2-epub#1-#4】EPUB 層の API・エラー・所有権境界を整理。
   `open_owned` の limits 指定、1316 行ファイルの分割、欠落エラーの統一、
   Document 側の二重定義解消。
-- 【R2-crates#3-#5】未実装 Wasm API の非公開化、core の Web バインディング分離、
-  workspace 依存の一元化（rumdl は ADR-0242 で workspace 化しないと決定済み）。
+- 【R2-crates#3 残 / #4 / #5】未実装 Wasm API の第二段以降（WasmDocument / AI cluster）、
+  core の Web バインディング分離、workspace 依存の一元化（rumdl は ADR-0242 で除外）。
+  greet / detect_format の削除は完了（ADR-0243）。
 - 【R1-archive#2,#3,#5 残】実展開サイズの累計上限、入力パーサ側の深さ上限、表紙 media-type 検証。
   正規化後同名エントリの拒否は完了（ADR-0240）。
 
