@@ -60,8 +60,8 @@ status: current
 - 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
   core の Web バインディング分離、workspace 依存の残り（feature 加算依存）。
   greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了（ADR-0243 / 0244 / 0246）。
-- 【R1-archive#2 / #3 残】実展開サイズの累計上限、入力パーサ側の深さ上限。
-  正規化後同名エントリの拒否と表紙 media-type 契約の回帰固定は完了（ADR-0240 / 0249）。
+- 【R1-archive#3 残】入力パーサ側の深さ上限。
+  正規化後同名エントリ拒否、表紙 media-type 固定、実展開セッション予算は完了（ADR-0240 / 0249 / 0251）。
 
 ## 完了
 
