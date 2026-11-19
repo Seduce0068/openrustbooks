@@ -65,11 +65,10 @@ status: accepted
 - Markdown は閲覧・下書き・デバウンス自動保存・lint（`rumdl`、
   auto-fix を含む）を実装済み（ADR-0110 / ADR-0160 / ADR-0161 /
   ADR-0164 / ADR-0179）。
-- TXT / Markdown の editor 系は実装範囲とし、機能一覧は README:81-100 を
-  参照する。CodeMirror は採用せず textarea + Preview の最小構成
-  （ADR-0161）。ただしブラウザ UI では format 選択と Lint ボタンが
-  disabled で、TXT 編集は未実装（web/src/lib.rs:368-384）。
-  E2E の editor 検証は Markdown のみを対象とする。
+- ブラウザの editor は Markdown のみを対象とする。
+  CodeMirror は採用せず textarea + Preview の最小構成（ADR-0161）。
+  format 選択と Lint ボタンは disabled で、TXT 編集は初版外
+  （web/src/lib.rs:368-384）。E2E の editor 検証は Markdown のみ。
 
 #### AI
 
@@ -95,6 +94,7 @@ status: accepted
 
 - PDF ビューア。要件には残すが実装範囲外（REQ-002、README:94）。
 - ZIP の UI。WASM API のみで UI 未接続（ADR-0223）。
+- TXT 編集。ブラウザでは format 選択が disabled で未実装。
 - Google Drive / クラウド同期（REQ-006 / REQ-007）。
 - 既存フォルダの直接アクセス（REQ-005）。
 - OS ファイルマネージャー連携（REQ-008）。
@@ -125,8 +125,9 @@ status: accepted
 - ADR-0231: 未検出 backend / provider の test 追加（core 270 passed）。
 - E2E 254 件（期待総数 254 と実測が一致、重複・欠落なし）。
 - core test 270 件（ADR-0231 の Runtime Proof）。
-- `markdownlint-cli2 --config /tmp/mdlint.jsonc`（対象 7 ファイル）:
-  **0 issues / exit 0**。
+- `markdownlint-cli2 --config /tmp/mdlint.jsonc`（対象 7 ファイル、
+  一時設定の MD013 line_length 120 を含む）: **0 issues / exit 0**。
+  再現には同設定が必要（リポジトリへの設定ファイル追加は本次範囲外）。
 - 文書のみの変更のため compile / test / `verify.sh` は未実行。
   E2E 254 件と core 270 件は ADR-0231 と `docs/e2e-traceability.md` の
   間接証拠であり、本 ADR の範囲確認に用いる。
