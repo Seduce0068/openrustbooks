@@ -96,6 +96,7 @@ status: current
 
 ## 完了
 
+- [x] 【A05 UX 整合】desktop で browser-only 設定説明を非表示化、E2E 256 件・check 名不変（ADR-0275）。
 - [x] 【A05 / 設定 UI 接続スコープ】IPC 契約（withGlobalTauri / CAS / 構造化エラー）は
       完了、UI 接続は完全な `ConfigPatch` DTO 定義後とする設計受容を記録（ADR-0271）。
       web / desktop / E2E / Cargo.* は未変更、E2E 255 件・check 名は不変。

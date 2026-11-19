@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 274 件）。
+openrustbooks の ADR 一覧（全 275 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -547,6 +547,8 @@ openrustbooks の ADR 一覧（全 274 件）。
 - [ADR-0272: Tauri 設定保存 UI の接続](0272-settings-save-ui.md)
   - status: accepted — 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
 - [ADR-0273: 実 WebView 検証の環境ブロッカーとしての記録](0273-real-webview-verification-deferred.md)
-  - status: accepted — Tauri CLI 未導入で実 WebView 検証を実行不可と記録し、未実施のまま pass とせず導入後の手順を残す決定。
+  - status: accepted — Tauri CLI 未導入により実 WebView 検証を実行できないため、未実施のまま pass とせず、導入後の手順を残す決定。
 - [ADR-0274: A05 前提別状態のトレーサビリティ整合](0274-a05-traceability-reconciliation.md)
-  - status: accepted — 前提 1〜6 を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を切り分ける。A05 は残のまま。
+  - status: accepted — R6 A05 監査で判明した前提 1〜6 の達成度を再分類し、JS / IPC 契約レベルと実 WebView 未達を切り分ける。
+- [ADR-0275: ブラウザ専用設定通知の表示範囲](0275-settings-notice-visibility.md)
+  - status: accepted — desktop で設定保存 UI が有効なとき、ブラウザ専用の読み取り説明を DOM から除外する決定を記録する。

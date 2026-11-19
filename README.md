@@ -748,6 +748,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0273-real-webview-verification-deferred](docs/decisions/0273-real-webview-verification-deferred.md)
   - Tauri CLI 未導入で実 WebView 検証を実行不可と記録し、未実施のまま pass とせず導入後の手順を残す決定。
 - [0274-a05-traceability-reconciliation](docs/decisions/0274-a05-traceability-reconciliation.md)
+- [0275-settings-notice-visibility](docs/decisions/0275-settings-notice-visibility.md)
+  - desktop で設定保存 UI が有効なとき、ブラウザ専用の読み取り説明を DOM から除外する決定を記録する。
   - A05 の前提別状態を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を切り分ける。
 
 ## ライセンス
