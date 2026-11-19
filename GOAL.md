@@ -1,22 +1,39 @@
 # Goal
 
-容量超過時の読書位置削除を通知した（R6 R3-config#5、ADR-0245）。
+core の依存のうち feature 差分が無いものを workspace 参照へ統一する（R6 R2-crates#5 の第一段）。
 
 ## Scope
 
+### 背景
+
+workspace に既に定義されている依存のうち、core/Cargo.toml が
+直接 version を書いているものが残っていた。
+feature を足す依存（chrono / uuid / tokio wasm dev）と
+featureless ゲート対象（rumdl）は除外し、
+完全一致する依存だけを `{ workspace = true }` へ変更する。
+
 ### 成果物
 
-- `web/src/lib.rs`: thread_local ペイロードと専用 status/console 文言
-- `tools/verify-web-reader.py`: E2E 1 件、254 → 255
-- `docs/e2e-traceability.md`: 255 件追従、VC-006 へ割当
-- `docs/decisions/0245-position-prune-notification.md`: 追加
-- `todo.md` / README / 各索引 / log: 更新
+- `core/Cargo.toml`: 変更（完全一致依存を workspace 参照化）
+- `docs/decisions/0246-workspace-dependency-unification.md`: 追加
+- `todo.md`: R2-crates#5 第一段完了、残りは未決定へ
+- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
-### 決定
+### 必須事項
 
-- 削除件数・残件数・成否のみを数値で通知、機微情報は出さない。
-- 通常 prune / editor イベント分離は不変、退避は未決定。
+1. workspace と完全一致する依存を `{ workspace = true }` に変更する。
+2. 除外: rumdl（featureless gate）、chrono / uuid / tokio wasm dev（feature 加算）、
+   workspace に無い依存（zip / quick-xml / imagesize / url 等）。
+3. Cargo.lock に差分が出ないこと。
+4. check-rumdl-featureless が 2 行を維持すること。
+5. 全ゲート成功（E2E 255 維持）。
 
 ## Acceptance criteria
 
-- E2E 255 項目、全ゲート成功（検証済み）。
+- Cargo.lock 差分なし、check-rumdl-featureless 成功、verify.sh 成功。
+
+## Constraints
+
+- feature の加算・削除は行わない。
+- 共通ワークフローは変更しない。
+- `master` へ push する。force push はしない。
