@@ -150,12 +150,6 @@ pub enum DocumentContent {
         content: String,
         front_matter: Option<serde_json::Map<String, serde_json::Value>>,
     },
-    /// EPUB structure (simplified)
-    Epub {
-        spine: Vec<EpubSpineItem>,
-        manifest: Vec<EpubManifestItem>,
-        toc: Vec<EpubTocItem>,
-    },
     /// PDF content (page-based)
     Pdf {
         page_count: usize,
@@ -165,32 +159,6 @@ pub enum DocumentContent {
     Zip { entries: Vec<ZipEntry> },
     /// Binary content (for formats we don't parse)
     Binary(Vec<u8>),
-}
-
-/// EPUB spine item
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpubSpineItem {
-    pub id: String,
-    pub href: String,
-    pub media_type: String,
-    pub linear: bool,
-}
-
-/// EPUB manifest item
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpubManifestItem {
-    pub id: String,
-    pub href: String,
-    pub media_type: String,
-    pub properties: Option<String>,
-}
-
-/// EPUB table of contents item
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpubTocItem {
-    pub label: String,
-    pub href: String,
-    pub children: Vec<EpubTocItem>,
 }
 
 /// ZIP archive entry
