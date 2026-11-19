@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- Reader エラー status/console を固定文言化し情報漏洩を防止（ADR-0212、E2E 252）。
 - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なるレイヤー分離として設計受容。
   localStorage `openrustbooks:settings` と camelCase 8 項目を互換契約化し、統合を却下（ADR-0211）。
 - 設定更新へ revision CAS を導入し lost update を検出（ADR-0210、desktop 74→79）。

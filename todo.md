@@ -57,8 +57,6 @@ status: current
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
-- 【TD-M12】内部エラーの Debug 表現が status へ流出。
-  根拠 `web/src/lib.rs:2664,2672,2687,3051,3755`。
 - 【TD-M13】prefers-reduced-motion 未対応。
   根拠 `web/index.html:108,134,189,549-587`。
 - 【TD-M14】依存更新の自動検出（Dependabot / Renovate）未設定。
@@ -149,6 +147,7 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M12】Reader エラー status / console を操作別固定文言へ redaction。6 経路の `{error:?}` を削除し E2E 252 件・全ゲート成功 / ADR-0212。
 - [x] 【PR-M08 / TD-M08】AppConfig / ReaderSettings / SettingsView の 3 重を
       権威・寿命が異なるレイヤー分離として設計受容。WasmConfig は ADR-0205 で削除済み。
       統合は wasm 単体の永続化（ADR-0018 / 0038）、ADR-0157 の現在値保護・
