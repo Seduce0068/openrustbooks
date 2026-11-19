@@ -64,8 +64,8 @@ status: current
   署名 secrets、endpoint、billing、Release workflow、require_signed_version、
   実機 5 ブラウザ検証は未決定（ADR-0254 / ADR-0222）。
   署名秘密鍵の `.gitignore` 登録は完了（公開鍵は追跡対象）。
-- 【R2-epub#2 残】EPUB 層の分割。
-  `open_owned_with_limits`、manifest 欠落エラーの統一、Document 側 EPUB 型削除は完了（ADR-0247 / 0248 / 0250）。
+- 【R2-epub#2 残 / 本編分割は未決定】EPUB 層の分割。
+  tests.rs 切り出し完了（ADR-0255）。`open_owned_with_limits` / manifest 欠落エラー統一 / Document 型削除も完了（ADR-0247 / 0248 / 0250）。
 - 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
   core の Web バインディング分離、workspace 依存の残り（feature 加算依存）。
   greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了（ADR-0243 / 0244 / 0246）。
