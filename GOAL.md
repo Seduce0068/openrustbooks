@@ -36,3 +36,9 @@ Brave は未インストール、Safari は Linux で起動不可。
 - Brave / Safari のインストールや外部ダウンロードは行わない。
 - E2E スクリプト / check 名 / 件数は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- Chrome 158 / Edge 157 で同一 255 check を実機実行し 255/0 を確認。
+- Firefox / Brave / Safari は環境ブロッカーとして ADR-0265 に記録。
+- E2E check 名・件数・コードは不変、`./scripts/verify.sh` 全ゲート成功。
