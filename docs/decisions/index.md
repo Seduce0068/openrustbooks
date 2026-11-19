@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 258 件）。
+openrustbooks の ADR 一覧（全 259 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -517,4 +517,6 @@ openrustbooks の ADR 一覧（全 258 件）。
 - [ADR-0257: WASM binding tests の分離](0257-wasm-test-split.md)
   - status: accepted — wasm-bindgen-test 14 件を wasm/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
 - [ADR-0258: feature が一致しない依存の workspace 化を見送り現状を設計受容とする](0258-workspace-feature-additive-deps.md)
-  - status: accepted — chrono / uuid の member 加算と wasm dev tokio の member 限定を記録し、workspace 化せず現状を設計受容として残す決定。
+  - status: accepted — chrono / uuid / wasm dev tokio の feature 差分（member の加算／限定）を記録し、workspace 化せず現状を設計受容とする決定を記録する。
+- [ADR-0259: Wasm バインディングの責務別分割](0259-wasm-binding-module-split.md)
+  - status: accepted — Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。

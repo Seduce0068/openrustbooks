@@ -474,6 +474,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 未使用の Wasm AI 3 型と自己言及 test を削除し、ADR-0156 の AI 部分のみ supersede する決定を記録する。
   - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 - [0258-workspace-feature-additive-deps](docs/decisions/0258-workspace-feature-additive-deps.md)
+- [0259-wasm-binding-module-split](docs/decisions/0259-wasm-binding-module-split.md)
+  - Wasm バインディング本編を epub / archive / lint モジュールへ分割し、公開パスと fail-closed 契約を維持する決定を記録する。
   - feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず、現状を設計受容として残す決定を記録する。
 
 ## ライセンス

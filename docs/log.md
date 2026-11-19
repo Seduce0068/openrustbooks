@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- Wasm バインディング本編を epub/archive/lint へ分割し wasm.rs を 537→134 行へ削減（ADR-0259）。
 - R6 R2-crates#5: feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず
   現状を設計受容。chrono / uuid は member 側が feature を加算し、wasm dev tokio は
   member 側が限定するため、workspace 化すると逆方向へ feature が加算される。
