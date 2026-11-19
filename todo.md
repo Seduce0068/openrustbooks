@@ -59,8 +59,6 @@ status: current
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
 - 【TD-M16】検証済み配布物が保持されずデプロイ／復旧の糸口が無い。
   根拠 `scripts/verify.sh:64-65` / `.github/workflows/ci.yml:22-44`。
-- 【TD-M17】AI カスタムエンドポイント opt-in が将来課題のまま。
-  根拠 `core/src/ai_markdown/client.rs:105-113`。
 - 【TD-M20】OpenAI extra_headers / Ollama options がクライアントへ渡っていない。
   根拠 `core/src/ai_markdown/client.rs:203-206,328,352`。
 - 【TD-M21】updater プラグインが初期化されるが更新チェック未配線。
@@ -137,6 +135,9 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M17】AI カスタムエンドポイント opt-in を設計受容（見送り）。allowlist の現状契約と
+      将来の最小安全設計を記録。フラグは未実装のまま、ADR-0101 の未決定を継続。
+      コード・設定・E2E 不変（253 維持）、markdownlint 0 issues / ADR-0218。
 - [x] 【TD-M19】Editor / Reader の死設定に未接続注記を追加。DTO/config 互換を維持し E2E 253 件・全ゲート成功 / ADR-0217。
 - [x] 【TD-M18】ストリーミング未接続を設計受容。UI 表示を「未配線」とし、stream_generate を疑似ストリームと明記。
       E2E 253 件・全ゲート成功 / ADR-0216。
