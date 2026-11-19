@@ -1,48 +1,37 @@
 # Goal
 
-TD-M10（壊れた画像による章ごとの 2 秒セトリング待ちの解消）は完了した。
+status 文言を日本語へ統一する（R6 TD-M11 の第一段）。
 
 ## Scope
 
 ### 背景
 
-`images_settled()` は `src` を持つ全画像に
-`complete() && natural_width() > 0` を要求していた。
-読み込み失敗画像は `complete()` が true でも自然幅 0 のままなので、
-`IMAGE_SETTLE_MS = 2000` の deadline まで位置復元が待たされていた。
-ADR-0225 で error を記録し失敗画像を待ち対象外にして解消した。
+`web/index.html` は `<html lang="ja">` 固定だが、
+Reader の status には英語文言が残り、Editor / Settings の日本語と混在していた（TD-M11）。
+`aria-live` 分離は ADR-0021 で明示的に却下済みで、
+DOM 契約変更を伴うため第二段の別 ADR に委ねる。
 
-### 成果物（すべて反映済み）
+### 成果物
 
-- `web/src/lib.rs`: 画像の error を記録し、失敗画像を待ち対象外に。
-- `tools/verify-web-reader.py`: E2E 1 件追加、253 → 254（check 237 + equal 17）。
-- `docs/decisions/0225-broken-image-settling.md`: 追加（status: accepted）。
-- `docs/e2e-traceability.md`: 254 件へ追従。新規 check を VC-004 の読書位置行へ割り当て。
-- `GOAL.md` / `todo.md` / `README.md` / `docs/index.md` /
-  `docs/decisions/index.md` / `docs/log.md`: 最終契約・完了反映。
+- `web/src/lib.rs`: 変更（Reader status の英語文言を日本語へ）
+- `tools/verify-web-reader.py`: 変更（E2E 期待値を日本語へ同期、総数 254 維持）
+- `docs/decisions/0226-status-message-language.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 必須事項（充足）
+### 必須事項
 
-1. `resolve_images()` が生成した `<img>` の error を generation / chapter で排他して
-   記録し、失敗画像を `images_settled()` の待ち対象から除外する — 完了。
-2. 正常画像は従来どおり自然幅確定まで待ち、CLS / 位置復元契約を維持する — 完了。
-3. 章切り替え・generation 変更時に古い画像のリスナーが誤って効かないようにする — 完了。
-4. E2E 1 件を追加し（壊れた画像を含む章で位置復元が 1.5 秒未満で完了）、
-   期待総数 253 → 254 とする — 完了。
-5. 全ゲート成功 — ローカル検証で充足（py_compile / wasm-web check / verify.sh /
-   E2E 254 すべて成功。CI は billing issue で実行不可）。
+1. Reader の英語 status 文言を日本語へ置換する（動的値の書式は維持）。
+2. 固定エラー文言はredaction 契約（ADR-0212）を維持し、詳細値を出さない。
+3. E2E の文言依存（約 25 箇所）を同期更新し、`Checker(expected=254)` を維持する。
+4. `aria-live` 属性と要素構造は変更しない（`role="status" aria-live="polite"` を維持）。
+5. 全ゲート成功。
 
-## Acceptance criteria（充足）
+## Acceptance criteria
 
-- E2E 254 項目すべて成功（check 237 + equal 17 = 254、期待総数 254 と一致）。
-- AST 抽出: expected=254 / found=254 / distinct=254 / missing=0 / extra=0。
-- 新規 E2E「壊れた画像を含む章の位置復元が 1.5 秒未満で完了する」が ok。
-- 正常画像の自然幅待ち・CLS 契約・generation ガードを維持。
-- markdownlint-cli2（`/tmp/mdlint.jsonc`）: 全対象 0 issues。
-- 検証実績は ADR-0225 の Runtime Proof を出典とする。
+- E2E 254 項目、全ゲート成功。
 
-## Constraints（遵守）
+## Constraints
 
-- 既存の EPUB 画像サニタイズ / Blob URL 寿命管理を変更しない。
-- 新規依存を追加しない。unsafe なし。
-- git 操作（commit / push）は本ドキュメント作業の範囲外とし、行わない。
+- 新規依存なし（i18n クレートは追加しない）。
+- `aria-live` 分離・error/info 分類表は ADR の未決定として残す。
+- `master` へ push する。force push はしない。
