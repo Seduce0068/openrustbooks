@@ -15,7 +15,8 @@ status: accepted
 ## 背景
 
 設定・ストレージ・AI 主要モジュールのテストは core 267 件まで拡充済みだったが、
-次の 2 経路に専用 test が無かった（R6 R4-unit#3 残）:
+次の 2 経路に専用 test が無かった（R6 R4-unit#3 残）。
+
 - `StorageManager::set_default_backend()` の未検出 backend
   （`core/src/io.rs:232`）
 - `create_client()` の未知 provider
