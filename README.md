@@ -172,6 +172,8 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 `./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/` を指定する。
 保持物の確認・SHA256 検証・serve・復旧手順は
 [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) を参照。
+`trunk build` は `--offline --locked` で実行し、`Cargo.lock` の黙った更新を防ぐ
+（[ADR-0237](docs/decisions/0237-ci-gate-consistency.md)）。
 
 ### 手動の E2E 検証
 
@@ -426,6 +428,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - swipe の二重 dispatch を 1 回へし、到達条件が明確な待機を条件待ちへ置換する決定。
 - [0236-prefers-contrast](docs/decisions/0236-prefers-contrast.md)
   - `prefers-contrast: more` で枠線・補助文字を強化し、forced-colors 契約を後方で維持する決定。
+- [0237-ci-gate-consistency](docs/decisions/0237-ci-gate-consistency.md)
+  - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
 
 ## ライセンス
 

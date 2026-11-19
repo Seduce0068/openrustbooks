@@ -7,7 +7,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [architecture.md](architecture.md) — 初期提案の構成案。現状は ADR と README を参照。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 236 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 237 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -33,4 +33,6 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — 未埋め込みイベントの二重発火を 1 回 dispatch へ、到達条件が明確な待機を条件待ちへ統一。
 - [ADR-0236: prefers-contrast: more の枠線・補助文字コントラスト強化](decisions/0236-prefers-contrast.md)
   — media query 内で枠線・補助文字を強化し、forced-colors 契約を後方で維持。
+- [ADR-0237: CI / ローカルゲートの整合と trunk build への --locked 付与](decisions/0237-ci-gate-consistency.md)
+  — wasm_targets は target 導入のみ、extra_gates が実検査。verify.sh の trunk build に --locked を付与。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。

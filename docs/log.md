@@ -2,6 +2,14 @@
 
 ## 2026-11-19
 
+- CI / ローカルゲートの整合を監査し、`wasm_targets` は `rustup target add` のみ、
+  `extra_gates` が wasm check / wasm-pack test を実行して二重実行ではないと判定。
+  `CARGO_PROFILE_DEV_DEBUG` / `TEST_DEBUG` / `INCREMENTAL` は runner の disk 対策として
+  CI 側に留め、ローカルへ全局適用しない。`scripts/verify.sh:268` の trunk build へ
+  `--offline --locked` を付与し、`ci.yml` / `ci-wasm-test.sh` は不変。
+  bash -n OK・verify.sh 全ゲート rc=0・E2E 254/0・Cargo.lock 差分なし・
+  markdownlint 0 issues。ADR-0237 を追加し decisions / docs 各 index（237 件）、
+  README、GOAL、todo を追従。
 - `prefers-contrast: more` で枠線と補助文字を強化。light border `#6b7280`（4.83:1）/
   muted `#374151`（10.31:1）、dark border `#94a3b8`（6.96:1）/ muted `#cbd5e1`（12.02:1）を
   `@media (prefers-contrast: more)` と `(prefers-contrast: more) and (prefers-color-scheme: dark)`
