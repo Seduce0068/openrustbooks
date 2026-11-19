@@ -44,7 +44,7 @@ secret-auditor の精査）。UI 未接続のため顕在化はしていない�
 | --- | --- |
 | IPC マスク＋Debug＋権限（採用） | 機能を維持しつつ露出面を減らせる |
 | `skip_serializing` | 再起動後にキーが復元できず機能回帰する |
-| OS キーチェーン移行 | 新規依存と設計判断が必要で今回は見送り |
+| OS キーチェーン移行 | 新規依存と設計判断が必要で見送り。設計受容として ADR-0261 へ集約 |
 
 ## 影響
 
@@ -68,6 +68,15 @@ secret-auditor の精査）。UI 未接続のため顕在化はしていない�
 ## 未決定
 
 - OS キーチェーン移行（`api_key` / `client_secret` / `refresh_token`）。
+  **追跡先は [ADR-0261](0261-os-keychain-deferred.md)**。設計受容として今回の
+  実装は見送り、残る判断を次の未決定として集約する。
+  - 移行順序と失敗時挙動（既存値をいつ写すか、失敗時にどちらを権威とするか）。
+  - ローテーション（更新・失効・アカウント切替の手順）。
+  - プラットフォーム差（Linux secret-service / macOS Keychain /
+    Windows Credential Manager）。
+  - Wasm / localStorage の平文性（config 永続化自体が無く、保存データは平文）。
+  - CI 実キーストア検証（secret 不使用・env 注入不可のため手段が未定義）。
+  - keyring クレートの target / feature 一次確認（未実施）。
 - ~~`extra_headers` に認証情報が入り得る問題~~ ADR-0102 で解決済み
   （DTO から削除し、Debug でマスク）。
 - `desktop/src/commands/document.rs` の `tokio::fs` 直呼び

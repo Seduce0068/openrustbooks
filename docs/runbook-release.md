@@ -147,7 +147,7 @@ config.toml のファイルバックアップも適用前に取得する。
 | 設定が読み取り専用 | browser は fail-closed readonly。desktop は段階設計で未接続 | ADR-0193 / ADR-0253 |
 | 実機 5 ブラウザ未検証 | Chrome / Edge / Brave / Firefox / Safari の実機検証は未実施 | ADR-0232 |
 | CI billing | billing 未解消のため実 CI の検証と artifact upload は未実施 | ADR-0219 / ADR-0237 |
-| OS キーチェーン未配線 | API キー等の平文保存からの移行は未決定（マスク済み） | ADR-0098 |
+| OS キーチェーン未配線 | API キー等の平文保存からの移行は未決定（マスク済み、設計受容） | ADR-0098 / ADR-0261 |
 
 自動更新、自動 rollback、公開 installer、署名済み成果物は上記のとおり提供しない。
 これらは未決定として [ADR-0254](decisions/0254-release-operations-disclosure.md)
