@@ -367,6 +367,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0211-config-layer-boundaries](docs/decisions/0211-config-layer-boundaries.md)
 - [0212-status-error-redaction](docs/decisions/0212-status-error-redaction.md)
 - [0213-reduced-motion](docs/decisions/0213-reduced-motion.md)
+- [0214-msrv](docs/decisions/0214-msrv.md)
+  - 依存クレートの実際の要件に合わせて Rust 1.95 を MSRV とし、CI でも同じツールチェーンを使う決定を記録する。
   - OS の reduce 設定で空間移動を抑制し、色 transition と位置復元の正確性を維持する決定を記録する。
   - 内部エラーの Debug 表現を status と console から排除し、操作別の固定文言のみを表示する決定を記録する。
   - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なる 3 レイヤーとして設計受容し、
