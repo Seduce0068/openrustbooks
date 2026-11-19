@@ -404,6 +404,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0228-ai-dead-config](docs/decisions/0228-ai-dead-config.md)
 - [0229-error-message-cleanup](docs/decisions/0229-error-message-cleanup.md)
 - [0230-dark-button-contrast](docs/decisions/0230-dark-button-contrast.md)
+- [0231-unknown-backend-tests](docs/decisions/0231-unknown-backend-tests.md)
+  - 未検出ストレージバックエンドと未知 AI provider のエラー分岐を unit test で固定する決定を記録する。
   - dark のプライマリボタン文字色を暗色トークンへ変更し、WCAG AA を満たす決定を記録する。
   - 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
   - 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。

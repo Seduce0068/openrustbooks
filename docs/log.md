@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- 未検出 backend / provider の unit test を追加し core を 267→270 件へ拡充（ADR-0231）。
 - dark のプライマリボタン文字色を暗色トークンへ変更し WCAG AA を達成（ADR-0230）。
 - エラー文言の二重付与と JsValue Debug 露出を解消し、desktop run() を Result 化（ADR-0229）。
 - AI 死設定を設計受容し、月間上限/timeout の表示を正直化（ADR-0228）。
