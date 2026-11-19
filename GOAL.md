@@ -1,40 +1,44 @@
 # Goal
 
-feature 加算を伴う workspace 依存の現状を設計受容として記録する（R6 R2-crates#5）。
+core の Wasm バインディング本編を責務別モジュールへ分割する（R6 R2-crates#4）。
 
 ## Scope
 
 ### 背景
 
-ADR-0246 で feature 差分の無い 18 依存を workspace 参照へ統一した。
-残る `chrono` / `uuid` / wasm dev `tokio` は workspace 定義と feature が異なる。
-`chrono` / `uuid` は member 側が feature を加算し、
-wasm dev `tokio` は member 側が限定しているため、
-workspace 化すると逆方向へ feature が加算される。
-Cargo の feature は加算で解決され member 側から削除できない。
-よって現状维持を設計受容とし、理由と再評価条件を記録する。
+ADR-0257 で tests 379 行を `wasm/tests.rs` へ切り出し、
+`core/src/wasm.rs` は 537 行（本編）になった。
+残る本編は epub / archive / lint / 共有基盤が混在しており、
+公開パス（`pub use wasm::*`）と native 向け cfg を維持しつつ
+子モジュールへ分離する。
 
 ### 成果物
 
-- `docs/decisions/0258-workspace-feature-additive-deps.md`: 追加
-- `todo.md`: R2-crates#5 を「設計受容・残置」へ更新
+- `core/src/wasm.rs`: 変更（共有基盤・再エクスポート・tests 参照のみ残す）
+- `core/src/wasm/epub.rs`: 追加（WasmEpubBook と DTO / serializer）
+- `core/src/wasm/archive.rs`: 追加（WasmArchive / 固定エラー / DTO）
+- `core/src/wasm/lint.rs`: 追加（WasmMarkdownLinter / lint DTO）
+- `docs/decisions/0259-wasm-binding-module-split.md`: 追加
+- `todo.md`: R2-crates#4 完了
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 除外する 3 依存（chrono / uuid / wasm dev tokio）と feature 差分を列挙する。
-2. Cargo の feature 加算性と、workspace 側へ上げた場合の影響を記録する。
-3. ADR-0242 / 0246 の判断を引き継ぎ、rumdl は対象外と明記する。
-4. 再評価条件（MSRV 上の default-features override、Cargo 仕様変更、
-   依存更新）を未決定として残す。
-5. markdownlint 0 issues、verify.sh（E2E 255）成功。
+1. 既存の公開 API（`init` / `image_dimensions_wasm` / `render_markdown_wasm` /
+   `sanitize_svg_wasm` / `WasmEpubBook` / `WasmArchive` / `WasmArchiveEntry` /
+   `WasmMarkdownLinter` / `WasmLintIssue` / `WasmLintFixResult` / `utils::version`）
+   を同じ Rust パスで維持する。
+2. native 向け `init()` / `utils::version()` と `cfg_attr` の挙動を維持する。
+3. tests は `wasm/tests.rs` の本文を変更せず、必要なら `pub(super)` で定数 / DTO を親へ見せる。
+4. fail-closed の固定エラー文言と redaction 契約を変更しない。
+5. 全ゲート成功（wasm 14 / core 284 / E2E 255）。
 
 ## Acceptance criteria
 
-- 規約・索引・todo が整合し、全ゲート成功。
+- wasm 14 / core 284 / E2E 255、全ゲート成功。
 
 ## Constraints
 
-- Cargo.toml / Cargo.lock / コード / E2E は変更しない。
-- 新規依存を追加しない。
+- 公開 API・既存 test 本文・E2E・Cargo.toml は変更しない。
+- `unsafe` を追加しない。
 - `master` へ push する。force push はしない。
