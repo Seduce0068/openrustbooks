@@ -364,6 +364,10 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
   - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
 
+- [0211-config-layer-boundaries](docs/decisions/0211-config-layer-boundaries.md)
+  - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なる 3 レイヤーとして設計受容し、
+    統合を却下する決定を記録する。
+
 ## ライセンス
 
 `AGPL-3.0-or-later`（[LICENSE](LICENSE) を参照）。以前の MIT ライセンス本文は

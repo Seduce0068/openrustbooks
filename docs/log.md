@@ -2,6 +2,8 @@
 
 ## 2026-11-19
 
+- AppConfig / ReaderSettings / SettingsView を権威・寿命が異なるレイヤー分離として設計受容。
+  localStorage `openrustbooks:settings` と camelCase 8 項目を互換契約化し、統合を却下（ADR-0211）。
 - 設定更新へ revision CAS を導入し lost update を検出（ADR-0210、desktop 74→79）。
 - config.toml を tmp + rename で原子保存し、0600 を維持（ADR-0209）。
 - 文書削除時に unsaved_changes を削除し、desktop を 72→74 件へ拡充（ADR-0208）。
