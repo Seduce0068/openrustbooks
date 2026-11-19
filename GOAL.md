@@ -42,3 +42,10 @@ ADR-0255 で tests 1897 行を `epub/tests.rs` へ切り出し、
 - test 本文・E2E・Cargo.toml / Cargo.lock・公開 API は変更しない。
 - `unsafe` を追加しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- epub.rs を 1884→556 行、opf/navigation/text/xmlutil へ分割（1379 行）。tests.rs 1897 行は無変更（SHA 8cb975e0...）。
+- 公開 6 型 / fail-closed 文言 / 上限値 / serde 属性を維持。
+- ADR-0260: support モジュール、integration test 化、外部利用者、バンドルサイズ、opf.rs 再評価は未決定。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
