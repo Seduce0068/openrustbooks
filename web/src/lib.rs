@@ -3867,7 +3867,6 @@ struct SettingsGeneralView {
     language: String,
     theme: String,
     telemetry: bool,
-    check_updates: bool,
     log_level: String,
 }
 
@@ -3997,15 +3996,10 @@ fn SettingsForm() -> impl IntoView {
             match fetch_config().await {
                 Ok(cfg) => {
                     general_info.set(format!(
-                        "言語: {} / テーマ: {} / テレメトリ: {} / 更新確認: {} / ログレベル: {}",
+                        "言語: {} / テーマ: {} / テレメトリ: {} / 更新確認: 未配線 / ログレベル: {}",
                         cfg.general.language,
                         cfg.general.theme,
                         if cfg.general.telemetry {
-                            "有効"
-                        } else {
-                            "無効"
-                        },
-                        if cfg.general.check_updates {
                             "有効"
                         } else {
                             "無効"
