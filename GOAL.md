@@ -17,6 +17,7 @@
 - `web/src/lib.rs`: 変更（容量超過時の削除件数・残件数通知）
 - `tools/verify-web-reader.py`: 変更（E2E 1 件、254 → 255）
 - `docs/decisions/0245-position-prune-notification.md`: 追加
+- `docs/e2e-traceability.md`: 変更（255 件追従）
 - `GOAL.md` / `todo.md`: 契約・完了反映
 
 ### 必須事項
