@@ -31,8 +31,6 @@ status: current
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
-- 【R4-unit#3】設定・ストレージ・AI 主要モジュールのテストを追加。
-  figment の優先順位、保存ラウンドトリップ、未検出バックエンドを検証。
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
   残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
 - 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
@@ -81,6 +79,8 @@ status: current
 
 ## 完了
 
+- [x] 【R4-unit#3】未検出 backend / provider の unit test を追加し core を 267→270 件へ拡充。
+      E2E 254 件・全ゲート成功 / ADR-0231。
 - [x] 【C05 / R3-error#3,#5】二重 prefix と JsValue Debug を削除し、desktop run() を Result 化（終了コード 101 維持）。
       status 分離は ADR 未決定。E2E 254 件・全ゲート成功 / ADR-0229。
 - [x] 【R1-ai#2,#5 / R2-ai#3,#4】AI 死設定を設計受容。月間上限を「未配線」、timeout を「Ollama のみ」と表示し、E2E 254 件・全ゲート成功 / ADR-0228。
