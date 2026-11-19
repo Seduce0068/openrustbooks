@@ -8,7 +8,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 275 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 276 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -68,4 +68,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — Tauri CLI 未導入で実 WebView 検証は実行不可。未実施のまま pass とせず、導入後の手順を残す。
 - [ADR-0274: A05 前提別状態のトレーサビリティ整合](decisions/0274-a05-traceability-reconciliation.md)
   — 前提 1〜6 を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を分けて記録。A05 は残のまま。
-- [investigation/](investigation/) — 別セッションによる残タスク調査レポート。
+- [ADR-0276: 一時調査成果物のスナップショットとしての扱い](decisions/0276-investigation-artifacts-status.md)
+  — `docs/investigation/` を未追跡の当時スナップショットとして導線に明示し、生ファイルは変更しない決定。
+- [investigation/](investigation/) — 別セッションの一時調査スナップショット（未追跡・ADR-0083 で変更/コミットしないと決定）。
+  数値は 2026-11-17 時点で現行ではない。成果は `todo.md` / ADR へ吸収済み（ADR-0276）。

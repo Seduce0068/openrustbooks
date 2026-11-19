@@ -96,6 +96,15 @@ status: current
 
 ## 完了
 
+- [x] 【R6 ドキュメント運用】`docs/investigation/` を一時調査スナップショットとして導線に明示（ADR-0276）。
+      別セッションの round-01〜05 / final-report（generated.by dsh、2026-11-17、
+      HEAD 38e6dac / ADR 83 件 / E2E 219 件）は未追跡のまま変更・コミットせず、ADR-0083 を維持。
+      `docs/index.md` の導線に「未追跡・当時スナップショット・現行値ではない・成果は todo / ADR へ吸収済み」を明記。
+      根拠は ADR-0083 / 0171 / 0267、final-report のメタ成果物自己申告、todo の吸収済み記録。
+      却下済み誤検知（capability 不在で IPC 全拒否等）は現行事実として読まない。
+      追跡昇格と stale 注記手順（ADR-0083 supersede が必要）、公開リポジトリでの開発ホストパス除去は未決定。
+      decisions / docs 各 index（276 件）、README、log を追従。
+      `docs/investigation/` / E2E 256 件・check 名 / コード / `GOAL.md` は未変更。markdownlint 0 issues。
 - [x] 【A05 UX 整合】desktop で browser-only 設定説明を非表示化、E2E 256 件・check 名不変（ADR-0275）。
 - [x] 【A05 / 設定 UI 接続スコープ】IPC 契約（withGlobalTauri / CAS / 構造化エラー）は
       完了、UI 接続は完全な `ConfigPatch` DTO 定義後とする設計受容を記録（ADR-0271）。

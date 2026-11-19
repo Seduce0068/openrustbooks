@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+- R6 ドキュメント運用: `docs/investigation/` を別セッションの一時調査スナップショットとして
+  導線に明示（ADR-0276）。未追跡の round-01〜05 / final-report
+  （generated.by dsh、2026-11-17、HEAD 38e6dac / ADR 83 件 / E2E 219 件）の
+  生ファイルは変更・コミットせず ADR-0083 を維持。数値は当時スナップショットで現行ではない。
+  成果は todo / ADR へ吸収済み。却下済み誤検知（capability 不在で全拒否等）は
+  現行事実として読まない。追跡昇格と stale 注記手順（ADR-0083 supersede が必要）、
+  公開リポジトリでの開発ホストパス除去は未決定。
+  decisions / docs 各 index（276 件）、README、todo を追従。
+  `docs/investigation/` / E2E 256 件・check 名 / コードは未変更。markdownlint 0 issues（ADR-0276）。
 - desktop で browser-only 設定説明を非表示化し、誤解を防止（ADR-0275）。
 - R6 A05: 前提別状態のトレーサビリティ整合（ADR-0274）。前提 1 は一部完了
   （経路確定、nonce/hash と meta/config CSP 一本化は未決定）、前提 2 は方針のみで
