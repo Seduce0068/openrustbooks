@@ -35,3 +35,10 @@ E2E 件数の current 表記をコード出典（255）へ追従させる（R6 �
 - `tools/verify-web-reader.py` / `docs/e2e-traceability.md` / E2E check 名は変更しない。
 - 過去の ADR / log / 完了済み TODO の履歴記述は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- todo CI-H01 と documentation-operations の current 値を 255（check 238 + equal 17）へ追従。
+- 過去 ADR / log / 完了済み TODO の履歴 254 は保持。
+- ADR-0262 で監査指摘（現状表記、ADR-0182 の役割）を修正。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
