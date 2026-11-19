@@ -437,7 +437,12 @@ mod tests {
         assert_eq!(entries[2].path, "docs/body.txt");
         assert!(!entries[2].is_dir);
         assert_eq!(entries[2].size, 17);
-        assert!(entries[2].compressed_size < entries[2].size);
+
+        // 圧縮率ではなく、ZIP の方式と圧縮サイズそのものを検証する。
+        let mut zip = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let file = zip.by_index(2).unwrap();
+        assert_eq!(file.compression(), CompressionMethod::Deflated);
+        assert_eq!(entries[2].compressed_size, file.compressed_size());
     }
 
     #[test]

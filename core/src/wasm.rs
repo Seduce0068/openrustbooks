@@ -783,11 +783,11 @@ mod tests {
         WasmArchiveEntry, WasmMarkdownLinter,
     };
     use crate::archive::{ArchiveLimits, ArchiveReader};
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
     use zip::write::SimpleFileOptions;
-    use zip::{CompressionMethod, ZipWriter};
+    use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
     /// `Result<T, JsValue>` が期待どおりのエラー文字列を返すことを検証する。
     /// `unwrap_err()` は `T: Debug` を要求するため `match` で回避する。
@@ -967,7 +967,8 @@ mod tests {
                 CompressionMethod::Deflated,
             ),
         ]);
-        let archive = WasmArchive::new(bytes).expect("valid zip should open");
+        // 元バイト列は方式・圧縮サイズの直接検証にも使うため複製して渡す。
+        let archive = WasmArchive::new(bytes.clone()).expect("valid zip should open");
 
         let entries: Vec<WasmArchiveEntry> =
             serde_wasm_bindgen::from_value(archive.entries().expect("entries should serialize"))
@@ -981,7 +982,12 @@ mod tests {
         assert_eq!(entries[1].compressed_size, 5);
         assert_eq!(entries[2].path, "docs/body.txt");
         assert_eq!(entries[2].size, 17);
-        assert!(entries[2].compressed_size < entries[2].size);
+
+        // 圧縮率ではなく、ZIP の方式と圧縮サイズそのものを検証する。
+        let mut zip = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let file = zip.by_index(2).unwrap();
+        assert_eq!(file.compression(), CompressionMethod::Deflated);
+        assert_eq!(entries[2].compressed_size, file.compressed_size());
 
         assert_eq!(
             archive
