@@ -1,47 +1,37 @@
 # Goal
 
-OS キーチェーン移行を設計受容として記録する（R6 D05）。
+E2E 件数の current 表記をコード出典（255）へ追従させる（R6 ドキュメント整合）。
 
 ## Scope
 
 ### 背景
 
-ADR-0098 は API キー / client_secret / refresh_token の
-平文 config.toml 保存を維持し、キーチェーン移行を「新規依存と設計判断が必要」
-として見送っていた。監査で、redaction / DTO 境界 / Unix 0600 は維持済みだが、
-Wasm 対象外・移行手順未定義・CI で実キーストア検証不可・
-コードコメントの「encrypted」と実装の矛盾が確認された。
+`docs/e2e-traceability.md` と `tools/verify-web-reader.py` は
+`Checker(expected=255)`（check 238 + equal 17）で一致している。
+一方、未着手の `todo.md` の CI-H01 と
+`docs/documentation-operations.md` の E2E 件数出自節には
+「254 件」が current 値として残り、履歴根拠と現状が混在している。
 
 ### 成果物
 
-- `docs/decisions/0261-os-keychain-deferred.md`: 追加
-- `docs/decisions/0098-secret-exposure-mitigation.md`: 変更（未決定の追記）
-- `todo.md`: D05 を設計受容として完了へ移動
-- `docs/runbook-release.md`: 既知問題の根拠を ADR-0261 へ追記
+- `todo.md`: CI-H01 の期待件数を 255 へ更新
+- `docs/documentation-operations.md`: 255 件の根拠（ADR-0245）を追記し、254 は履歴として明示
+- `docs/decisions/0262-e2e-count-documentation-refresh.md`: 追加
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 平文保存 + redaction + Unix 0600 + api_key のみ IPC 書き込み可を
-   受容済みリスクとして明記する。
-2. Wasm はキーチェーン対象外、CI では実キーストアを検証できないことを記録する。
-3. 新規依存（keyring / secret-service）・移行順序・ローテーション・
-   プラットフォーム差を未決定として ADR-0098 / ADR-0261 へ集約する。
-4. 「encrypted」コメントと実装の矛盾を開示する（コードは変更しない）。
-5. markdownlint 0 issues、verify.sh（E2E 255）成功。
+1. current 表記のみを 255 へ更新し、完了ログ / 過去 ADR の履歴的数値は書き換えない。
+2. `Checker(expected=255)` と check 238 + equal 17 の内訳を根拠として記録する。
+3. E2E check 名・件数・コードは変更しない。
+4. markdownlint 0 issues、verify.sh（E2E 255）成功。
 
 ## Acceptance criteria
 
-- 規約・索引・todo が整合し、全ゲート成功。
+- 文書・索引が整合し、全ゲート成功。
 
 ## Constraints
 
-- コード / Cargo.toml / Cargo.lock / E2E は変更しない。
-- 新規依存・外部サービス・秘密情報は扱わない。
+- `tools/verify-web-reader.py` / `docs/e2e-traceability.md` / E2E check 名は変更しない。
+- 過去の ADR / log / 完了済み TODO の履歴記述は変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- ADR-0261 で平文保存 + redaction + Unix 0600 を受容済みリスクとして記録。
-- ADR-0098 の未決定 6 項目を ADR-0261 へ集約、runbook / todo / 索引を追従。
-- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
