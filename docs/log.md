@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- ZIP リーダーを WASM API として公開し、wasm test を 7→14 件へ拡充（ADR-0223）。
 - updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化。
   本番接続・自動チェック・自動インストールは実装せず、公開鍵 / endpoint /
   署名 secrets / Release workflow は未決定として継続（ADR-0222、TD-M21 完了）。
