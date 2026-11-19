@@ -137,8 +137,13 @@ impl AppState {
     }
 
     /// Remove a document
+    ///
+    /// documents と unsaved_changes のロックは順番に取得・解放する（同時保持しない）。
+    /// 文書が存在しない場合でも unsaved キーを削除し、孤立フラグを掃除する。
     pub fn remove_document(&self, id: &DocumentId) -> Option<Document> {
-        self.documents.write().unwrap().remove(id)
+        let removed = self.documents.write().unwrap().remove(id);
+        self.unsaved_changes.write().unwrap().remove(id);
+        removed
     }
 
     /// List all documents
@@ -261,6 +266,41 @@ mod tests {
 
         assert!(state.remove_document(&id).is_some());
         assert!(state.get_document(&id).is_none());
+        assert!(!state.has_unsaved_changes());
+    }
+
+    #[test]
+    fn remove_document_clears_unsaved_flag() {
+        let state = AppState::new(AppConfig::default());
+        let document = sample_document("doc-remove-unsaved");
+        let id = document.metadata.id.clone();
+
+        state.add_document(document);
+        state.mark_unsaved(&id);
+        assert!(state.is_unsaved(&id));
+        assert!(state.has_unsaved_changes());
+
+        // force close 相当: mark_saved を挟まずに削除してもフラグは消える。
+        assert!(state.remove_document(&id).is_some());
+        assert!(state.get_document(&id).is_none());
+        assert!(!state.is_unsaved(&id));
+        assert!(!state.has_unsaved_changes());
+    }
+
+    #[test]
+    fn remove_document_clears_orphaned_unsaved_flag() {
+        let state = AppState::new(AppConfig::default());
+        let orphan = sample_document("doc-orphan-unsaved");
+        let id = orphan.metadata.id.clone();
+
+        // documents に登録せずに unsaved フラグだけ立てる（孤立フラグ）。
+        state.mark_unsaved(&id);
+        assert!(state.is_unsaved(&id));
+        assert!(state.has_unsaved_changes());
+
+        // 文書が無くても remove_document は孤立フラグを掃除する。
+        assert!(state.remove_document(&id).is_none());
+        assert!(!state.is_unsaved(&id));
         assert!(!state.has_unsaved_changes());
     }
 
