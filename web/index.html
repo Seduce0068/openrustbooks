@@ -69,6 +69,31 @@
             --color-on-accent: #0f172a;
         }
 
+        /* prefers-contrast: more では、平時に 3:1 / 4.5:1 を満たさない
+           枠線と補助文字だけを補強する（WCAG 1.4.11 / 1.4.3）。
+           dark は html.dark（JS 付与）と prefers-color-scheme の両経路をカバーする。 */
+        @media (prefers-contrast: more) {
+            :root {
+                --color-border: #6b7280;
+                --color-muted: #374151;
+            }
+
+            html.dark {
+                --color-border: #94a3b8;
+                --color-muted: #cbd5e1;
+            }
+        }
+
+        /* html.dark がまだ付与されていない / JS が動いていない場合でも、
+           OS が dark なら暗色側のコントラスト値を適用する。
+           forced-colors ブロックはこの後ろに置き、常に上書きを維持する。 */
+        @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+            :root {
+                --color-border: #94a3b8;
+                --color-muted: #cbd5e1;
+            }
+        }
+
         body {
             font-family: var(--font-sans);
             background: var(--color-bg);
