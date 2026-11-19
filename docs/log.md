@@ -2,6 +2,11 @@
 
 ## 2026-11-19
 
+- E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れを解消）。
+  不正 EPUB の固定文言通知を VC-009、reduce の即時フラグメント移動を VC-004 の
+  既存行へ割り当て、Python AST で check 236 + equal 17 = 253 件を抽出して
+  対応表と完全一致（missing / duplicate / extra 0）。一時ファイル指定を廃し
+  AST 抽出を手順化（ADR-0220）。
 - `verify.sh --dist` を追加し、全ゲート成功時のみ検証済み dist をリポジトリ外へ保持。
   manifest（commit sha / verified at / rustc / trunk / e2e / source dist / SHA256 5 行）と
   取得・検証・serve・復旧の Runbook を追加（ADR-0219、TD-M16 完了）。

@@ -388,6 +388,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
 - [0219-verified-artifact-retention](docs/decisions/0219-verified-artifact-retention.md)
   - verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
+- [0220-traceability-refresh](docs/decisions/0220-traceability-refresh.md)
+  - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
 
 ## ライセンス
 
