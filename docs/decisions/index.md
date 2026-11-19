@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 209 件）。
+openrustbooks の ADR 一覧（全 210 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -420,3 +420,5 @@ openrustbooks の ADR 一覧（全 209 件）。
   - status: accepted — 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
 - [ADR-0209: 設定保存の原子化](0209-atomic-config-save.md)
   - status: accepted — config.toml を tmp ファイル＋rename で置換し、保存途中失敗による部分破壊を防ぐ決定を記録する。
+- [ADR-0210: 設定更新の revision CAS](0210-config-revision-cas.md)
+  - status: accepted — 生成失敗待ち中の設定更新を CAS で検出し、lost update を防ぐ決定を記録する。

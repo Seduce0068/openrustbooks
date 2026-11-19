@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- 設定更新へ revision CAS を導入し lost update を検出（ADR-0210、desktop 74→79）。
 - config.toml を tmp + rename で原子保存し、0600 を維持（ADR-0209）。
 - 文書削除時に unsaved_changes を削除し、desktop を 72→74 件へ拡充（ADR-0208）。
 - AppState を composition root として設計受容し、設定系トランザクションの完了を確認。残リスク 3 件を低優先度 todo へ切り出し（ADR-0207）。

@@ -358,6 +358,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0207-appstate-scope](docs/decisions/0207-appstate-scope.md)
 - [0208-unsaved-changes-cleanup](docs/decisions/0208-unsaved-changes-cleanup.md)
 - [0209-atomic-config-save](docs/decisions/0209-atomic-config-save.md)
+- [0210-config-revision-cas](docs/decisions/0210-config-revision-cas.md)
+  - 生成失敗待ち中の設定更新を CAS で検出し、lost update を防ぐ決定を記録する。
   - config.toml を tmp ファイル＋rename で置換し、保存途中失敗による部分破壊を防ぐ決定を記録する。
   - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
   - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
