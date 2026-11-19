@@ -1,49 +1,38 @@
 # Goal
 
-E2E の swipe スタブ二重発火と固定 sleep を条件待ちへ置換する（R6 R4-e2e#3,#4 / C08）。
-
-## Status
-
-**完了**（2026-11-19）。契約の充足と根拠は
-[ADR-0235](docs/decisions/0235-e2e-conditional-wait.md) を参照。
+`prefers-contrast: more` で枠線と補助文字のコントラストを補強する（R6 B06 / C01 残）。
 
 ## Scope
 
 ### 背景
 
-`tools/verify-web-reader.py` の `swipe()` は最初の `cdp.evaluate()` で
-引数未埋め込みの TouchEvent を dispatch した後、同じイベントを
-実引数付きで再 dispatch していた（二重発火）。
-また `asyncio.sleep()` が多数残り、状態変化を条件待ちではなく
-固定時間で決めつけていた。
+`forced-colors` は ADR-0039 で対応済みだが、
+`prefers-contrast: more` は「必要性なし」として未対応だった。
+しかし static 計算で light の枠線 `#e5e7eb` / 白 = 1.24:1、
+dark の枠線 `#334155` / `#0f172a` = 1.72:1 と
+WCAG 1.4.11（非テキスト 3:1）に不足していた。
 
 ### 成果物
 
-- `tools/verify-web-reader.py`: 変更済み（swipe を 1 回 dispatch、fixed sleep を条件待ちへ）
-- `docs/decisions/0235-e2e-conditional-wait.md`: 追加済み
-- `GOAL.md` / `todo.md`: 完了契約・完了反映済み
+- `web/index.html`: 変更（`prefers-contrast: more` のトークン上書き）
+- `docs/decisions/0236-prefers-contrast.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 必須事項（完了契約）
+### 必須事項
 
-1. [x] `swipe()` から最初の evaluate（`arguments[0..2]` 参照、二重 dispatch）を削除し、
-   f-string 版 1 回のみ dispatch する。`dx` / `dy` / `touches` の意味は維持。
-2. [x] 到達条件が明確な箇所（章移動・縦 / マルチタッチ・ダーク切替・ファイル選択後の
-   DOM / 保存・リセット後）を `wait_until()` / `wait_swipe_done()` /
-   `wait_swipe_ignored()` ベースへ置換する。
-3. [x] 負向チェックは baseline カウンタ＋第 1 章本文＋0.3 秒維持確認で判定する。
-4. [x] 到達条件のない残り 106 件の sleep は据え置く（無理な置換は flaky 化するため）。
-5. [x] `wait_until()` の `RuntimeError` / 一般例外は fail-closed（再送出）を維持
-   （ADR-0183）。
-6. [x] E2E check 名・期待総数 254 を維持し、全ゲート成功。
+1. `@media (prefers-contrast: more)` で light / dark の
+   `--color-border` を 3:1 以上へ強化する。
+2. `--color-muted` も補強し、通常テキストの 4.5:1 を維持する。
+3. forced-colors の既存契約（ADR-0039）を壊さない。
+4. E2E 254 を維持する（色値への直接依存なし）。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- [x] E2E 254 項目、全ゲート成功（実装エージェント検証: `py_compile` OK、
-  AST 237 + 17 = 254 / `Checker(expected=254)`、`verify.sh` 全ゲート 0、E2E 254/0）。
-- [x] 文書検証（文書エージェント検証）: AST 254/254、markdownlint 0 issues。
+- 静的コントラスト比が枠線 3:1 以上、muted 4.5:1 以上、E2E 254 維持。
 
 ## Constraints
 
-- CDP 接続先照合（ADR-0143）と check 名一意性（ADR-0182）を維持。
+- 一般テーマの配色は変更しない（media query 内のみ）。
 - 新規依存を追加しない。
-- `master` へ push する。force push はしない（文書エージェントの書き込み範囲外）。
+- `master` へ push する。force push はしない。
