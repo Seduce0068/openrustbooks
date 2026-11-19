@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- WASM バンドルを verify.sh 同一条件で実測し、比較可能 before を確立（ADR-0267）。
 - 検証済み dist の manifest にブラウザ executable / path / version / ポートを記録（ADR-0266）。
 - E2E 255 件を Chrome / Edge で実機実行し 255/0 を確認、他ブラウザの環境ブロッカーを記録（ADR-0265）。
 - R6 A05 第一段の設計補強。`web/src/lib.rs:4096-4121` が
