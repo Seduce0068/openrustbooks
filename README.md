@@ -397,9 +397,11 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0224-todo-reconciliation](docs/decisions/0224-todo-reconciliation.md)
   - 解消済み TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
 - [0225-broken-image-settling](docs/decisions/0225-broken-image-settling.md)
+  - 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒セトリング待ちを防ぐ決定を記録する。
 - [0226-status-message-language](docs/decisions/0226-status-message-language.md)
   - lang=\"ja\" 固定の Web UI で Reader status を日本語へ統一し、aria-live 分離は後段へ残す決定を記録する。
-  - 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒セトリング待ちを防ぐ決定を記録する。
+- [0227-ai-client-injection](docs/decisions/0227-ai-client-injection.md)
+  - core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
 
 ## ライセンス
 
