@@ -2,6 +2,9 @@
 
 ## 2026-11-19
 
+- `verify.sh --dist` を追加し、全ゲート成功時のみ検証済み dist をリポジトリ外へ保持。
+  manifest（commit sha / verified at / rustc / trunk / e2e / source dist / SHA256 5 行）と
+  取得・検証・serve・復旧の Runbook を追加（ADR-0219、TD-M16 完了）。
 - AI カスタムエンドポイント opt-in を設計受容（見送り）。allowlist の現状契約と
   将来の最小安全設計を記録し、ADR-0101 の未決定を継続（ADR-0218）。
 - Editor / Reader の死設定を注記で正直化し DTO 互換を維持（ADR-0217）。

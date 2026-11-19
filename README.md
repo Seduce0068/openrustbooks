@@ -166,7 +166,10 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 ### 一括検証
 
 `./scripts/verify.sh` で、上記ゲート・wasm-test・audit・`trunk build`・パス検査・E2E をまとめて実行できる
-（一時出力先は自動で削除される）。
+（一時出力先は自動で削除される）。全ゲート成功時だけ成果物を残したい場合は
+`./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/` を指定する。
+保持物の確認・SHA256 検証・serve・復旧手順は
+[検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) を参照。
 
 ### 手動の E2E 検証
 
@@ -183,6 +186,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
+- [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
 - [0001-use-system-webview](docs/decisions/0001-use-system-webview.md) - デスクトップ版にOS WebViewを採用する
 - [0002-ai-markdown-pipeline](docs/decisions/0002-ai-markdown-pipeline.md) - AI支援Markdown生成・修正パイプラインを導入する
 - [0003-native-wasm-target-split](docs/decisions/0003-native-wasm-target-split.md) - 共通コアをターゲット別依存でNative/Wasm両対応にする
@@ -382,6 +386,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 - [0218-custom-ai-endpoint](docs/decisions/0218-custom-ai-endpoint.md)
   - カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
+- [0219-verified-artifact-retention](docs/decisions/0219-verified-artifact-retention.md)
+  - verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
 
 ## ライセンス
 

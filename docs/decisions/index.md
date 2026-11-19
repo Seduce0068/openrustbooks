@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 218 件）。
+openrustbooks の ADR 一覧（全 219 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -438,3 +438,5 @@ openrustbooks の ADR 一覧（全 218 件）。
   - status: accepted — config.toml の Editor / Reader 値を DTO に残しつつ、動作に未接続であることを設定画面へ明記する決定を記録する。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](0218-custom-ai-endpoint.md)
   - status: accepted — カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
+- [ADR-0219: 検証済み配布物のローカル保持](0219-verified-artifact-retention.md)
+  - status: accepted — verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
