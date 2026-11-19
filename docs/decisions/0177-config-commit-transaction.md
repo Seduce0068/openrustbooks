@@ -77,3 +77,4 @@ AI service だけ `None` になり、利用者には失敗が返るが再起動�
 - lint 変更時に AI service も再初期化する理由の確認
   （`AiMarkdownService` が lint を含むか未確認、推測）。
 - 並行設定更新の lost update 検出（世代カウンタ等）。
+- ADR-0207 で AppState を composition root として設計受容。残リスクは低優先度 todo で個別追跡（相互参照）。
