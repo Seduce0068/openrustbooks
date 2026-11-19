@@ -438,6 +438,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
 - [0241-generated-timestamp-semantics](docs/decisions/0241-generated-timestamp-semantics.md)
   - `generated.at` は生成／正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
+- [0242-rumdl-feature-status](docs/decisions/0242-rumdl-feature-status.md)
+  - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
 
 ## ライセンス
 

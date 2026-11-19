@@ -7,7 +7,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [architecture.md](architecture.md) — 初期提案の構成案。現状は ADR と README を参照。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 241 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 242 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -37,4 +37,6 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — wasm_targets は target 導入のみ、extra_gates が実検査。verify.sh の trunk build に --locked を付与。
 - [ADR-0241: generated.at の意味論と日付逆転の扱い](decisions/0241-generated-timestamp-semantics.md)
   — 生成／正規化時点の記録である `generated.at` を作成時刻と誤読しない規約を追加し、既存値を保持。
+- [ADR-0242: rumdl feature 選択の現状と ADR-0003 の履歴化](decisions/0242-rumdl-feature-status.md)
+  — native / wasm とも featureless である現状を ADR-0242 を正とし、target 別 feature 選択を履歴化。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。

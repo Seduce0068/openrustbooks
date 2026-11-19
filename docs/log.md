@@ -2,6 +2,12 @@
 
 ## 2026-11-19
 
+- ADR-0003 に rumdl feature の実装状況注記（2026-11-19）を追加。target 別 feature
+  選択は廃止され、native / wasm とも `default-features = false` であることを記録。
+  ADR-0242 を追加して ADR-0003 を履歴化し、rumdl の workspace 化を行わず
+  `wasm` feature は同名 `init` export 衝突で禁止、
+  `scripts/check-rumdl-featureless.sh` の完全一致 2 行を維持すると決定。
+  decisions / docs 各 index（242 件）、README、todo を追従（ADR-0242 / R2-crates#2）。
 - ADR の `generated.at` は生成／正規化時点の記録で作成時刻や決定順ではないことを
   `docs/documentation-operations.md` へ明記。0001 / 0002 の 2026-11-17 は c030537 の
   frontmatter 正規化による付与で、git 作成順は 0001〜0005 が連番どおり（10-11〜10-17）。
