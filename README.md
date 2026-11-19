@@ -360,42 +360,42 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
   - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
 - [0207-appstate-scope](docs/decisions/0207-appstate-scope.md)
+  - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
 - [0208-unsaved-changes-cleanup](docs/decisions/0208-unsaved-changes-cleanup.md)
+  - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
 - [0209-atomic-config-save](docs/decisions/0209-atomic-config-save.md)
+  - config.toml を tmp ファイル＋rename で置換し、保存途中失敗による部分破壊を防ぐ決定を記録する。
 - [0210-config-revision-cas](docs/decisions/0210-config-revision-cas.md)
   - 生成失敗待ち中の設定更新を CAS で検出し、lost update を防ぐ決定を記録する。
-  - config.toml を tmp ファイル＋rename で置換し、保存途中失敗による部分破壊を防ぐ決定を記録する。
-  - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
-  - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
-
 - [0211-config-layer-boundaries](docs/decisions/0211-config-layer-boundaries.md)
-- [0212-status-error-redaction](docs/decisions/0212-status-error-redaction.md)
-- [0213-reduced-motion](docs/decisions/0213-reduced-motion.md)
-- [0214-msrv](docs/decisions/0214-msrv.md)
-  - 依存クレートの実際の要件に合わせて Rust 1.95 を MSRV とし、CI でも同じツールチェーンを使う決定を記録する。
-  - OS の reduce 設定で空間移動を抑制し、色 transition と位置復元の正確性を維持する決定を記録する。
-  - 内部エラーの Debug 表現を status と console から排除し、操作別の固定文言のみを表示する決定を記録する。
   - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なる 3 レイヤーとして設計受容し、
     統合を却下する決定を記録する。
-
+- [0212-status-error-redaction](docs/decisions/0212-status-error-redaction.md)
+  - 内部エラーの Debug 表現を status と console から排除し、操作別の固定文言のみを表示する決定を記録する。
+- [0213-reduced-motion](docs/decisions/0213-reduced-motion.md)
+  - OS の reduce 設定で空間移動を抑制し、色 transition と位置復元の正確性を維持する決定を記録する。
+- [0214-msrv](docs/decisions/0214-msrv.md)
+  - 依存クレートの実際の要件に合わせて Rust 1.95 を MSRV とし、CI でも同じツールチェーンを使う決定を記録する。
 - [0215-dependabot](docs/decisions/0215-dependabot.md)
+  - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 - [0216-streaming-deferred](docs/decisions/0216-streaming-deferred.md)
+  - ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
 - [0217-editor-reader-dead-config](docs/decisions/0217-editor-reader-dead-config.md)
   - config.toml の Editor / Reader 値を DTO に残しつつ、動作に未接続であることを設定画面へ明記する決定を記録する。
-  - ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
-  - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 - [0218-custom-ai-endpoint](docs/decisions/0218-custom-ai-endpoint.md)
   - カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
 - [0219-verified-artifact-retention](docs/decisions/0219-verified-artifact-retention.md)
   - verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
 - [0220-traceability-refresh](docs/decisions/0220-traceability-refresh.md)
+  - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
 - [0221-ai-client-options](docs/decisions/0221-ai-client-options.md)
   - OpenAI extra_headers と Ollama options を安全にクライアントへ渡す決定を記録する。
-  - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
 - [0222-updater-deferred](docs/decisions/0222-updater-deferred.md)
+  - updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化する決定を記録する。
 - [0223-zip-wasm-api](docs/decisions/0223-zip-wasm-api.md)
   - fail-closed な ZIP core を wasm32 向け API として公開し、UI は後段へ分離する決定を記録する。
-  - updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化する決定を記録する。
+- [0224-todo-reconciliation](docs/decisions/0224-todo-reconciliation.md)
+  - 解消済み TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
 
 ## ライセンス
 
