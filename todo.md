@@ -61,8 +61,6 @@ status: current
   根拠 `scripts/verify.sh:64-65` / `.github/workflows/ci.yml:22-44`。
 - 【TD-M17】AI カスタムエンドポイント opt-in が将来課題のまま。
   根拠 `core/src/ai_markdown/client.rs:105-113`。
-- 【TD-M19】EditorConfig / ReaderConfig が死設定。
-  根拠 `core/src/config.rs:291,342` / `web/src/lib.rs:3700,3716`。
 - 【TD-M20】OpenAI extra_headers / Ollama options がクライアントへ渡っていない。
   根拠 `core/src/ai_markdown/client.rs:203-206,328,352`。
 - 【TD-M21】updater プラグインが初期化されるが更新チェック未配線。
@@ -139,6 +137,7 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M19】Editor / Reader の死設定に未接続注記を追加。DTO/config 互換を維持し E2E 253 件・全ゲート成功 / ADR-0217。
 - [x] 【TD-M18】ストリーミング未接続を設計受容。UI 表示を「未配線」とし、stream_generate を疑似ストリームと明記。
       E2E 253 件・全ゲート成功 / ADR-0216。
 - [x] 【TD-M14】Dependabot を導入し Cargo / GitHub Actions の patch / minor を週次自動検出。
