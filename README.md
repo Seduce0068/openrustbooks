@@ -469,6 +469,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0255-epub-test-split](docs/decisions/0255-epub-test-split.md)
   - EPUB の 92 tests を epub/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
 - [0256-wasm-ai-cluster-removal](docs/decisions/0256-wasm-ai-cluster-removal.md)
+- [0257-wasm-test-split](docs/decisions/0257-wasm-test-split.md)
+  - wasm-bindgen-test 14 件を wasm/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
   - 未使用の Wasm AI 3 型と自己言及 test を削除し、ADR-0156 の AI 部分のみ supersede する決定を記録する。
   - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 

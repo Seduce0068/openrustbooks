@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- WASM binding の 14 tests を wasm/tests.rs へ切り出し、本編を 912→537 行へ削減（ADR-0257）。
 - 未使用の Wasm AI cluster（`WasmAiMarkdownService` / `WasmPipelineResult` /
   `WasmDiffResult`）と自己言及 test `ai_methods_fail_closed` を属性ごと削除。
   追跡ソース（web / E2E / wasm test）の参照 0 件、型互換の根拠消滅、
