@@ -25,6 +25,14 @@ R6 R3-release#4,#5。ADR-0222 は updater 未配線を設計受容とし、
 署名・公開は行われていない。AI 用 endpoint は既存設定に残る。
 本 ADR は、運用文書を先に開示し未決定を正直に残す判断を記録する。
 
+### 事後経緯（2026-11-20 追記）
+
+本 ADR 作成後、desktop の設定保存 UI は完全な `ConfigView` DTO 往復と
+Tauri mock E2E 256/0 で mock 経路まで接続された（ADR-0272）。
+実 Tauri WebView 検証は Tauri CLI 未導入の環境ブロッカーで未実施であり（ADR-0273）、
+ブラウザ版の読み取り専用 fail-closed は維持される。
+前提別の達成度は [ADR-0274](0274-a05-traceability-reconciliation.md) を参照する。
+
 ## 決定
 
 - 導入・更新・ロールバック手順と既知問題を
@@ -62,7 +70,8 @@ R6 R3-release#4,#5。ADR-0222 は updater 未配線を設計受容とし、
 - ADR-0193: ブラウザ版の設定フォームは契約どおり読み取り専用で、
   変更可能と誤解させない方針を既に確立している。
 - ADR-0253: Tauri 設定保存 UI は browser readonly を維持し、desktop のみ
-  段階設計で接続する。保存 UI が未接続であることを既知問題として開示する。
+  段階設計で接続する。その後 ADR-0272 で mock 経路まで接続済みだが、
+  実 WebView は ADR-0273 の環境ブロッカーで未検証（前提別状態は ADR-0274）。
 - ADR-0239: Cargo workspace をバージョンの単一情報源とし drift を防いでいる。
   公開成果物のバージョン決定の前提は整っているが、署名・配布は未実装である。
 - ADR-0246: feature 差分の無い workspace 依存を統一した背景記録。
@@ -95,7 +104,9 @@ R6 R3-release#4,#5。ADR-0222 は updater 未配線を設計受容とし、
   [runbook-verified-build.md](../runbook-verified-build.md) の実測記録を根拠とする。
 - 本件は文書と `.gitignore` のみの変更で、コード・E2E は不変。
   R6 で `./scripts/verify.sh` を実行し、全ゲート成功 /
-  E2E **255 passed, 0 failed** を確認した。
+  E2E **255 passed, 0 failed** を確認した（当時の実測・履歴）。
+  現行契約は ADR-0272 の **256 passed, 0 failed** で、
+  前提別状態は [ADR-0274](0274-a05-traceability-reconciliation.md) を参照。
 - `npx markdownlint-cli2 'docs/**/*.md' README.md todo.md`: 0 issues。
 
 ## 参照

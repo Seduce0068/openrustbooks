@@ -46,6 +46,15 @@ status: current
   ただし withGlobalTauri に伴う nonce/hash と meta/config CSP 一本化は ADR-0264 の未決定。
   実 WebView の環境ブロッカー、Tauri CLI 導入責任者・時期、GTK / WebKitGTK 依存、
   導入後の検証手順は ADR-0273 を追跡先とする。
+  前提別状態（詳細は ADR-0274）: 前提 1 withGlobalTauri / CSP は一部完了
+  （経路確定、nonce/hash と meta/config 一本化は未決定）、
+  前提 2 capability 最小権限は方針のみで完了証跡なし、
+  前提 3 UI 起点 CAS + 構造化エラーは完了（ADR-0269）、
+  前提 4 a11y は実装完了・実 WebView 検証未実施（ADR-0272 / 0273）、
+  前提 5 Tauri mock E2E +1 は完了（256/0、ADR-0272）、
+  前提 6 実 WebView は環境ブロッカー（ADR-0273）。
+  未達: A05 全体は完了としない。JS / IPC 契約レベル（mock E2E 256/0 を含む）は達成だが、
+  実 WebView 検証と capability 完了証跡は残す。E2E 256 件・check 名・コードは変更しない。
 
 ### 優先度: 中
 
@@ -93,6 +102,8 @@ status: current
       ADR-0253 に命名ドリフト（`ConfigUpdateRequest.expected` → `ConfigPatch.expected`、
       `window.__TAURI.core.invoke` → `window.__TAURI__.core.invoke`）を追記。
       decisions / docs 各 index（271 件）、README、log を追従。markdownlint 0 issues。
+      その後 ADR-0272 で完全な DTO 往復と Tauri mock E2E 256/0 により UI 接続完了、
+      ADR-0273 で実 WebView は環境ブロッカー。前提別状態は ADR-0274 を参照。
 - [x] 【CSP 静的ゲート】meta / desktop config の整合と許可オリジンを fail-closed 検査、負向 test 15/15 PASS（ADR-0268）。
 - [x] 【バンドルサイズ実測】verify.sh 同一条件で WASM raw 69,012,923 B / gzip 12,183,616 B を記録し、比較可能 before を確立（ADR-0267）。
 - [x] 【D05 残 / OS キーチェーン】設計受容として完了。平文 config.toml 保存 +

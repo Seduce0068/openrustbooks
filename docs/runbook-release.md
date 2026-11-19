@@ -144,10 +144,14 @@ config.toml のファイルバックアップも適用前に取得する。
 | --- | --- | --- |
 | updater 未配線 | 初期化のみ。公開鍵 / endpoint / 署名 / Release workflow は未決定 | ADR-0222 |
 | browser AI 無効 | ブラウザの AI API は明示エラー。native のみ提供、既定無効 | ADR-0232 / ADR-0156 |
-| 設定が読み取り専用 | browser は fail-closed readonly。desktop は段階設計で未接続 | ADR-0193 / ADR-0253 |
+| 設定が読み取り専用 | browser は fail-closed readonly。desktop は mock 経路まで接続済み（Tauri mock E2E 256/0）、実 WebView は未検証 | ADR-0193 / ADR-0253 / ADR-0272 / ADR-0273 |
 | 実機 5 ブラウザ未検証 | Chrome / Edge / Brave / Firefox / Safari の実機検証は未実施 | ADR-0232 |
 | CI billing | billing 未解消のため実 CI の検証と artifact upload は未実施 | ADR-0219 / ADR-0237 |
 | OS キーチェーン未配線 | API キー等の平文保存からの移行は未決定（マスク済み、設計受容） | ADR-0098 / ADR-0261 |
+
+desktop 設定保存の前提別状態（一部完了 / 方針のみ / 完了 / 未検証 / 環境ブロッカー）は
+[ADR-0274](decisions/0274-a05-traceability-reconciliation.md) を参照。
+Tauri mock E2E 256/0 は JS / IPC 契約レベルであり、実 WebView の代替ではない（ADR-0273）。
 
 自動更新、自動 rollback、公開 installer、署名済み成果物は上記のとおり提供しない。
 これらは未決定として [ADR-0254](decisions/0254-release-operations-disclosure.md)

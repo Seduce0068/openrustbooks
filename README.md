@@ -93,6 +93,9 @@ openrustbooks/
   章タイトルの検索フィルター、巨大画像の警告とオプトインの縮小（JPEG 品質設定付き）
 - **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
 - **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）、format 選択と Lint は desktop 向け。
+- **desktop 設定保存 (Tauri)**: browser は読み取り専用 fail-closed、desktop は UI 起点 CAS と
+  構造化エラーで mock 経路まで接続済み（Tauri mock E2E 256/0）。実 WebView は未検証
+  （ADR-0272 / ADR-0273 / ADR-0274）。
 - **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +
   `rumdl`品質保証
 - **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
@@ -744,6 +747,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
 - [0273-real-webview-verification-deferred](docs/decisions/0273-real-webview-verification-deferred.md)
   - Tauri CLI 未導入で実 WebView 検証を実行不可と記録し、未実施のまま pass とせず導入後の手順を残す決定。
+- [0274-a05-traceability-reconciliation](docs/decisions/0274-a05-traceability-reconciliation.md)
+  - A05 の前提別状態を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を切り分ける。
 
 ## ライセンス
 

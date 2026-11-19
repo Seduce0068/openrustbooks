@@ -91,6 +91,22 @@ R1 監査で次が判明した。
 6. 実 Tauri WebView で検証する。
    mock ではなく実際の WebView で IPC 往路・復路と表示を確認する。
 
+### 前提別状態の参照（2026-11-20 追記）
+
+実装前提 1〜6 の現在の達成度は
+[ADR-0274: A05 前提別状態のトレーサビリティ整合](0274-a05-traceability-reconciliation.md)
+の「前提別状態」表を正とする。状態の更新先は ADR-0274 へ集約し、
+本 ADR は設計時の前提を保持する。
+
+| 前提 | 状態 | 根拠 |
+| --- | --- | --- |
+| 1 `withGlobalTauri` / CSP | 一部完了（nonce/hash と meta/config 一本化は未決定） | ADR-0264 / 0268 / 0270 |
+| 2 capability 最小権限 | 方針のみ（完了証跡なし） | ADR-0253 |
+| 3 UI 起点 CAS + 構造化エラー | 完了 | ADR-0269 |
+| 4 a11y | 実装完了・実 WebView 未検証 | ADR-0272 / 0273 |
+| 5 Tauri mock E2E +1 | 完了（256/0） | ADR-0272 |
+| 6 実 WebView | 環境ブロッカー | ADR-0273 |
+
 ### 命名の正規化（2026-11-20 追記）
 
 - 本文の `ConfigUpdateRequest.expected` は設計時の仮名であり、実装では
@@ -134,7 +150,7 @@ R1 監査で次が判明した。
 - 本次は設計のみ。コード・CSP・capability・E2E・GOAL.md は変更しない。
 - desktop の保存 UI は、実装前提 1〜6 が満たされるまで接続されない。
 - browser 単体の fallback 表示と fail-closed は従来どおり維持する。
-- E2E 255 件は不変（新規 check +1 は実装時に追加する）。
+- E2E 255 件は設計時点の履歴（新規 check +1 は実装時に追加）。現行は 256 件（ADR-0272）。
 - 秘密情報・署名鍵・外部サービスは扱わない。
 
 ## 未決定
@@ -158,5 +174,7 @@ R1 監査で次が判明した。
 - 文書形式: OKF frontmatter、`##` からの見出し階段、RFC 3339 `+09:00`。
 - `npx markdownlint-cli2 ...`: 0 issues。
 - コード・E2E は未変更。R6 で `./scripts/verify.sh` を再実行し、
-  全ゲート成功 / E2E **255 passed, 0 failed** を確認した。
+  全ゲート成功 / E2E **255 passed, 0 failed** を確認した（当時の実測・履歴）。
+  現行契約は ADR-0272 の **256 passed, 0 failed**（check 239 + equal 17）で、
+  更新の経緯は [ADR-0274](0274-a05-traceability-reconciliation.md) を参照。
 - `npx markdownlint-cli2 'docs/**/*.md' README.md todo.md`: 0 issues。

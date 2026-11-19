@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+- R6 A05: 前提別状態のトレーサビリティ整合（ADR-0274）。前提 1 は一部完了
+  （経路確定、nonce/hash と meta/config CSP 一本化は未決定）、前提 2 は方針のみで
+  完了証跡なし、前提 3 / 5 は完了（ADR-0269 / 0272）、前提 4 は実装完了・実 WebView
+  検証未実施（ADR-0272 / 0273）、前提 6 は環境ブロッカー（ADR-0273）。
+  A05 全体は完了とせず、JS / IPC 契約レベル達成と実 WebView 未達を分けて記録。
+  Tauri mock E2E 256/0 は実 WebView の代替ではない。runbook の既知問題を
+  「browser readonly / desktop は mock 経路まで接続済み・実 WebView 未検証」へ更新し、
+  README の主な機能に desktop 設定保存を追加。ADR-0253 / 0254 / todo / 各索引を追従。
+  コード / E2E 256 件・check 名は未変更。markdownlint 0 issues（ADR-0274）。
 - R6 A05: 実 WebView 検証を環境ブロッカーとして記録。`cargo tauri --version` は
   `no such command: tauri`（終了コード 101）で、Tauri CLI 未導入のため
   `cargo tauri dev` を起動できない。DISPLAY=:1 / xdotool / wmctrl は存在するが、
