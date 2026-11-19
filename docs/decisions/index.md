@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 249 件）。
+openrustbooks の ADR 一覧（全 250 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -500,3 +500,5 @@ openrustbooks の ADR 一覧（全 249 件）。
   - status: accepted — manifest item の id / href 欠落を固定文言の Archive エラーとして fail-closed に報告する決定を記録する。
 - [ADR-0249: 表紙 media-type 契約の回帰固定](0249-cover-media-type.md)
   - status: accepted — 未宣言の media-type を許容し明示された非画像を拒否する ADR-0008 の契約を unit test で固定する決定を記録する。
+- [ADR-0250: Document 側 EPUB 型の削除](0250-document-epub-type-removal.md)
+  - status: accepted — DocumentContent::Epub と重複する 3 構造体を削除し、EPUB は EpubBook 経路へ一本化する決定を記録する。

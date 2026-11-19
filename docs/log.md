@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- Document 側の dead な EPUB 型を削除し EPUB 経路を EpubBook へ集約（ADR-0250）。
 - 表紙 media-type 契約を unit test で固定し core を 278→279 件へ拡充（ADR-0249）。
 - EPUB manifest の id/href 欠落を固定文言の fail-closed エラーへ統一（ADR-0248）。
 - EPUB 所有 API へ limits 指定を追加し core を 274→276 件へ拡充（ADR-0247）。
