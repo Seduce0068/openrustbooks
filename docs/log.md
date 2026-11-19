@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- 設定画面 IPC を 2 command に固定する静的ゲートを追加、負向 test 11/11 PASS（ADR-0278）。
 - updater 死設定の固定表示と保存時 fail-closed を復元、静的ゲートを追加（ADR-0277）。
 - R6 ドキュメント運用: `docs/investigation/` を別セッションの一時調査スナップショットとして
   導線に明示（ADR-0276）。未追跡の round-01〜05 / final-report

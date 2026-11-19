@@ -101,7 +101,7 @@ R1 監査で次が判明した。
 | 前提 | 状態 | 根拠 |
 | --- | --- | --- |
 | 1 `withGlobalTauri` / CSP | 一部完了（nonce/hash と meta/config 一本化は未決定） | ADR-0264 / 0268 / 0270 |
-| 2 capability 最小権限 | 方針のみ（完了証跡なし） | ADR-0253 |
+| 2 capability 最小権限 | 静的ゲート完了（実ビルド未検証） | ADR-0278 |
 | 3 UI 起点 CAS + 構造化エラー | 完了 | ADR-0269 |
 | 4 a11y | 実装完了・実 WebView 未検証 | ADR-0272 / 0273 |
 | 5 Tauri mock E2E +1 | 完了（256/0） | ADR-0272 |

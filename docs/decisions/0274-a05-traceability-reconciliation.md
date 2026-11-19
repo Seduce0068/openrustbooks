@@ -34,7 +34,7 @@ R6 A05 監査で、前提別状態・runbook・README・ADR-0254 への追記漏
 | 前提 | 状態 | 根拠 | 詳細 |
 | --- | --- | --- | --- |
 | 1 `withGlobalTauri` / CSP | 一部完了 | ADR-0264 / 0268 / 0270 | 経路（`__TAURI__.core.invoke`）は確定。nonce/hash と meta/config CSP の一本化は未決定。 |
-| 2 capability 最小権限 | 未検証 | ADR-0253 | 最小権限の方針はあるが、実ビルドの完了証跡なし。 |
+| 2 capability 最小権限 | 静的ゲート完了 | ADR-0278 | web 側 IPC 表面を 2 command に固定。実 WebView の権限挙動は未検証。 |
 | 3 UI 起点 CAS + 構造化エラー | 完了 | ADR-0269 | `ConfigPatch.expected` と `CommandError` で stale 更新を判別。 |
 | 4 a11y | 未検証 | ADR-0272 / 0273 | 実装は完了（`for` / `id` / `aria-invalid` / `aria-describedby` / `role="status"`）。実 WebView 検証は未実施。 |
 | 5 Tauri mock E2E +1 | 完了 | ADR-0272 | 256/0（check 239 + equal 17）。JS / IPC 契約レベルの検証。 |

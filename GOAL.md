@@ -23,7 +23,7 @@ plugin fs / dialog / shell の scope が広い点が残リスク。
 
 1. 設定画面の IPC 呼び出しが `get_config` / `update_config_patch` のみであることを検査する。
 2. `plugin:` 参照、fs / dialog / shell / updater の invoke、`UpdaterExt::check` が web 側に無いことを検査する。
-3. 独自 command は ACL 非対象である ADR-0264 の判断を維持し、capability ファイルは追加しない。
+3. 独自 command は ACL 非対象である ADR-0253:73-74 の判断を維持し、capability ファイルは追加しない。
 4. 負向 test（危険 command 追加 / plugin 参照追加）で失敗する。
 5. 全ゲート成功（E2E 256 維持）。
 
@@ -36,3 +36,9 @@ plugin fs / dialog / shell の scope が広い点が残リスク。
 - tauri.conf.json / web / desktop コード / E2E check 名・件数は変更しない。
 - 共通 workflow、外部 secrets、実 Tauri WebView 検証は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- scripts/check-capability-scope.sh を追加し、設定画面 IPC を get_config/update_config_patch に固定。
+- 監査指摘（出典 0253、handler 抽出 fail-closed、静的解析の限界）を反映。
+- 負向 test 11/11 PASS、verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
