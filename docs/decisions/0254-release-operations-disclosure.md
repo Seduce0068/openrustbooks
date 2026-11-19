@@ -77,6 +77,8 @@ R6 R3-release#4,#5。ADR-0222 は updater 未配線を設計受容とし、
 
 ## 未決定
 
+- 設定保存 IPC の UI 起点 CAS / 構造化エラーは [ADR-0269](0269-ipc-cas-contract.md) で実装済み。
+
 - 公開鍵の生成・配布・ローテーションと失効（kill switch を含む）。
 - 署名 secrets の登録先と管理責任者、失効時の手順。
 - 配布 endpoint の URL / ホスティング先と CSP `connect-src` の追加範囲。

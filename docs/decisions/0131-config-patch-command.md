@@ -76,3 +76,5 @@ DTO をそのまま送るとデシリアライズ失敗し、Web で完全再構
 - `local_roots` 新規 id の空 path を許容するか拒否するか。
 - `google_drive: None` が「削除」として扱われる挙動の仕様化。
 - 不正 base_url や service 初期化失敗の command 経由テスト。
+
+- 参照: [ADR-0269](0269-ipc-cas-contract.md) で IPC CAS 契約を実装済み。

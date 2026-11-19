@@ -89,6 +89,8 @@ read-modify-write 全体をロックで包むことはできない。
 
 ## 未決定
 
+- 設定保存 IPC の UI 起点 CAS / 構造化エラーは [ADR-0269](0269-ipc-cas-contract.md) で実装済み。
+
 - 競合時の UI 挙動（自動リトライ／再取得／ユーザー確認）。
 - プロセス外編集の検出（revision のファイル永続化が必要か）。
 - revision 溢出時の挙動（現状は Internal で fail-closed）。

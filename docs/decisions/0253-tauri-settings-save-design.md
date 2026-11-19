@@ -129,6 +129,8 @@ R1 監査で次が判明した。
 
 ## 未決定
 
+- 設定保存 IPC の UI 起点 CAS / 構造化エラーは [ADR-0269](0269-ipc-cas-contract.md) で実装済み。
+
 - desktop も IPC 未接続の可能性（withGlobalTauri 未設定、実機未検証）。
   経路選択と往路検証の未決定は [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md) に集約する。
 - `withGlobalTauri` の inline script と CSP nonce / hash の具体策。

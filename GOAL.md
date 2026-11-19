@@ -40,3 +40,9 @@ ADR-0253 の実装前提 3 は、この 2 点を解消することを求めて�
 - web / E2E / IPC 経路（withGlobalTauri 等）は変更しない（ADR-0264 の未決定を維持）。
 - `update_config` / `reset_config` / `clear_secrets` は既存 String エラーを維持。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ConfigPatch.expected 必須化と CommandError { code, message } を追加。
+- 監査指摘を反映し message は固定文言のみ、stale expected は CONFIG_CONFLICT。
+- core 287 / desktop 82 / web 2 / wasm 14、E2E 255/0、全ゲート成功。
