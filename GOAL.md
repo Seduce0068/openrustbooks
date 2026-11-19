@@ -1,53 +1,40 @@
 # Goal
 
-Tauri 設定保存 UI の段階設計を確定する（R6 A05 残、swarm-coding / design）。
+リリース運用の導入・更新・ロールバックと既知問題を開示し、署名秘密鍵の誤コミットを防ぐ（R6 R3-release#4,#5）。
 
 ## Scope
 
 ### 背景
 
-R1 監査で次が判明した:
-
-- `desktop/tauri.conf.json` に `withGlobalTauri` が無く、
-  ブラウザ版 WebView から `__TAURI.core.invoke` を取得できない。
-- `ConfigView.revision` は返るが更新コマンドが expected を受け取らず、
-  CAS 衝突を UI が判別できない（`Result<T, String>` も同じ）。
-- 保存 UI を接続するには patch DTO + `get_config` /
-  `update_config_patch` の最小 IPC、CSP / capability、
-  a11y（label / aria-invalid / aria-describedby）、E2E 成功経路が必要。
-- AI / Lint / format の 4 操作は ADR-0232 の初版外で、
-  今回の対象に含めない。
+ADR-0222 は updater 未配線を設計受容とし、公開鍵・署名 secrets・
+Release workflow・ロールバック手順を未決定として残していた。
+外部サービスや成果物公開を行わずに、利用者向けの現状開示と
+署名 material の誤コミット防止を先に整備する。
 
 ### 成果物
 
-- `docs/decisions/0253-tauri-settings-save-design.md`: 追加
-- `todo.md`: A05 は優先度「高」のまま「段階設計決定・実装は後続」へ更新
+- `.gitignore`: 変更（署名秘密鍵・release secrets の除外パターン）
+- `docs/runbook-release.md`: 追加（導入・更新・ロールバック・既知問題）
+- `docs/decisions/0254-release-operations-disclosure.md`: 追加
+- `todo.md`: R3-release#4,#5 を「運用文書完了、公開作業は未決定」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. browser 単体の読み取り専用 / fail-closed を維持し、desktop のみ保存 UI を接続する方針を記録する。
-2. 最小 IPC を `get_config` + `update_config_patch` に限定し、
-   fs / ai / window / updater を設定画面から呼ばない旨を明記する。
-3. 実装前提（withGlobalTauri、CSP、capability、expected revision、
-   構造化エラー、a11y、E2E 成功経路）を ordered list で残す。
-4. ADR-0128 / 0193 の desktop 側のみ supersede し、
-   browser 側の読み取り専用は維持する。
+1. 現状を「公開 installer / updater / 署名なし」と正直に記載する。
+2. 検証済み Web 配布物の導入・更新・ロールバック手順を
+   `docs/runbook-verified-build.md` と整合させる。
+3. 既知問題（updater 未配線、browser AI 無効、設定読み取り専用、
+   実機 5 ブラウザ未検証、CI billing）を根拠 ADR 付きで開示する。
+4. `.gitignore` に minisign 秘密鍵・署名 material のパターンを追加する。
 5. markdownlint 0 issues、verify.sh（E2E 255）成功。
 
 ## Acceptance criteria
 
-- 設計 ADR と索引が整合し、全ゲート成功。
+- 文書・索引・gitignore が整合し、全ゲート成功。
 
 ## Constraints
 
-- コード・CSP・capability・E2E は変更しない（本次は設計のみ）。
-- 外部サービス・署名鍵・秘密情報は扱わない。
+- Release workflow / CSP / tauri.conf / 公開鍵 / 秘密鍵は作成・変更しない。
+- 外部サービス・billing・成果物公開は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- ADR-0253 作成、R1 監査（IPC / Web）、R4 設計レビューを実施。
-- 採用指摘: capability は独自コマンド非対象の注記、verify.sh 証跡を ADR へ追記。
-- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
-- markdownlint: 269 files / 0 issues。
