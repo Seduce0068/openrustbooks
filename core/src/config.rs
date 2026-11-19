@@ -381,7 +381,68 @@ impl Default for ReaderConfig {
     }
 }
 
+/// `OPENRUSTBOOKS_` を除いた環境変数名を figment のキーパスへ明示変換する。
+///
+/// 従来の `split("_")` は全ての `_` を `.` に置換するため、複数語フィールド
+/// （`AI_MAX_RETRIES` -> `ai.max.retries`）が `ai.max_retries` に届かなかった。
+/// ここでは既存の単一語 env を維持しつつ、対象フィールドだけを正しい
+/// キーパスへ接続する（ADR-0122 / R6 TD-M08b）。
+///
+/// 未知のキーは小文字化するだけにし、serde の既定動作（未知フィールド無視）
+/// に任せる。秘密フィールド（`api_key` / `client_secret` / `refresh_token`）は
+/// ADR-0098 の前提を守るため意図的にマップしない。
+#[cfg(not(target_arch = "wasm32"))]
+fn map_env_key(key: &str) -> String {
+    match key {
+        "AI_MAX_RETRIES" => "ai.max_retries".to_string(),
+
+        // 従来 split("_") で届いていた単一語フィールド（環境変数名の互換維持）。
+        "GENERAL_LANGUAGE" => "general.language".to_string(),
+        "GENERAL_THEME" => "general.theme".to_string(),
+        "GENERAL_TELEMETRY" => "general.telemetry".to_string(),
+        "AI_ENABLED" => "ai.enabled".to_string(),
+        "AI_OPENAI_MODEL" => "ai.openai.model".to_string(),
+        "AI_OPENAI_ORGANIZATION" => "ai.openai.organization".to_string(),
+        "AI_OLLAMA_MODEL" => "ai.ollama.model".to_string(),
+        "AI_STREAMING" => "ai.streaming".to_string(),
+        "LINT_ENABLED" => "lint.enabled".to_string(),
+        "EDITOR_MINIMAP" => "editor.minimap".to_string(),
+        "READER_THEME" => "reader.theme".to_string(),
+        "READER_HYPHENATION" => "reader.hyphenation".to_string(),
+
+        other => other.to_ascii_lowercase(),
+    }
+}
+
+/// env プロバイダへ載せるキーを選別する。
+///
+/// `Env::map()` はキーしか変換できず、値が "abc" の場合 serde が `usize` へ
+/// 変換できず `extract()` が Err になり起動失敗する（figment 0.10.19 で実測）。
+/// 生値を merge 前に検証し、不正値はキーごと除外して toml / 既定値を維持する
+/// （ADR-0122 の「パース失敗時は維持」契約）。
+#[cfg(not(target_arch = "wasm32"))]
+fn include_env_key(mapped_key: &str, raw_retries: Option<&str>) -> bool {
+    mapped_key != "ai.max_retries"
+        || raw_retries.is_some_and(|value| value.parse::<usize>().is_ok())
+}
+
+/// 明示マップ付きの環境変数プロバイダを組み立てる。
+///
+/// `raw_retries` は `OPENRUSTBOOKS_AI_MAX_RETRIES` の生値。不正値を
+/// `include_env_key` でふるいにかけ、figment に渡さない。
+#[cfg(not(target_arch = "wasm32"))]
+fn env_provider(raw_retries: Option<String>) -> figment::providers::Env {
+    use figment::providers::Env;
+
+    Env::prefixed("OPENRUSTBOOKS_")
+        .map(|key| map_env_key(key.as_str()).into())
+        .filter(move |key| include_env_key(key.as_str(), raw_retries.as_deref()))
+}
+
 /// 環境変数の生値をパースして `max_retries` を上書きする（失敗時は維持）。
+///
+/// 通常は [`env_provider`] が有効値だけを figment に載せるため既に反映済みだが、
+/// `extract()` 後の防御的フォールバックとして残す。不正値／未設定は no-op。
 #[cfg(not(target_arch = "wasm32"))]
 fn apply_env_max_retries(config: &mut AppConfig, raw: Option<String>) {
     if let Some(retries) = raw.and_then(|value| value.parse::<usize>().ok()) {
@@ -399,7 +460,7 @@ impl AppConfig {
         use directories::ProjectDirs;
         use figment::{
             Figment,
-            providers::{Env, Format, Serialized, Toml},
+            providers::{Format, Serialized, Toml},
         };
 
         let mut figment = Figment::new().merge(Serialized::defaults(Self::default()));
@@ -413,18 +474,16 @@ impl AppConfig {
             }
         }
 
-        // Load from environment variables (OPENRUSTBOOKS_*)
-        figment = figment.merge(Env::prefixed("OPENRUSTBOOKS_").split("_"));
+        // Load from environment variables (OPENRUSTBOOKS_*).
+        // 明示マップで AI_MAX_RETRIES -> ai.max_retries を接続し、不正値は
+        // provider 側で除外する（ADR-0122 の「パース失敗時は維持」契約）。
+        let raw_retries = std::env::var("OPENRUSTBOOKS_AI_MAX_RETRIES").ok();
+        figment = figment.merge(env_provider(raw_retries.clone()));
 
         let mut config: Self = figment.extract()?;
 
-        // `split("_")` は全 `_` を `.` に換えるため MAX_RETRIES は
-        // ai.max.retries になり届かない。extract 後に直接上書きして
-        // env > toml > default の優先順位を保つ（パース失敗時は維持）。
-        apply_env_max_retries(
-            &mut config,
-            std::env::var("OPENRUSTBOOKS_AI_MAX_RETRIES").ok(),
-        );
+        // 防御的フォールバック: 有効値のみ上書き（不正値／未設定は no-op）。
+        apply_env_max_retries(&mut config, raw_retries);
 
         Ok(config)
     }
@@ -545,6 +604,148 @@ mod tests {
 
         let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
         assert_eq!(restored.ai.max_retries, 5);
+    }
+
+    /// 環境変数の (キー, 値) を `map_env_key` / `include_env_key` に通して
+    /// Figment を組み立てる。`AppConfig::load()` と同じ変換経路を
+    /// プロセス環境を汚さずに再現する（Rust 2024 では set_var が unsafe）。
+    #[cfg(not(target_arch = "wasm32"))]
+    fn figment_from_env_entries<I>(entries: I, toml_override: Option<&str>) -> figment::Figment
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        use figment::{
+            Figment,
+            providers::{Format, Serialized, Toml},
+        };
+
+        let mut figment = Figment::new().merge(Serialized::defaults(AppConfig::default()));
+        if let Some(toml) = toml_override {
+            figment = figment.merge(Toml::string(toml));
+        }
+
+        let mut overrides = serde_json::Map::new();
+        for (key, value) in entries {
+            let mapped = map_env_key(&key);
+            let raw = if mapped == "ai.max_retries" {
+                Some(value.as_str())
+            } else {
+                None
+            };
+            if !include_env_key(&mapped, raw) {
+                continue;
+            }
+            insert_env_value(&mut overrides, &mapped, parse_env_value(&value));
+        }
+        figment.merge(Serialized::defaults(serde_json::Value::Object(overrides)))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn insert_env_value(
+        root: &mut serde_json::Map<String, serde_json::Value>,
+        path: &str,
+        value: serde_json::Value,
+    ) {
+        let parts: Vec<_> = path.split('.').collect();
+        let (leaf, parents) = parts.split_last().expect("non-empty key path");
+        let mut cursor = root;
+        for part in parents {
+            let entry = cursor
+                .entry((*part).to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            cursor = entry.as_object_mut().expect("dotted path must be object");
+        }
+        cursor.insert((*leaf).to_string(), value);
+    }
+
+    /// figment が env 値に行うパース（数値 / bool / 文字列）の最小再現。
+    #[cfg(not(target_arch = "wasm32"))]
+    fn parse_env_value(raw: &str) -> serde_json::Value {
+        if let Ok(value) = raw.parse::<u64>() {
+            serde_json::Value::Number(value.into())
+        } else if raw == "true" || raw == "false" {
+            serde_json::Value::Bool(raw == "true")
+        } else {
+            serde_json::Value::String(raw.to_string())
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn env_key_mapping_is_explicit() {
+        assert_eq!(map_env_key("AI_MAX_RETRIES"), "ai.max_retries");
+        // 既存の single-word env を壊さない（ADR-0122 の互換要件）。
+        assert_eq!(map_env_key("GENERAL_LANGUAGE"), "general.language");
+        assert_eq!(map_env_key("AI_ENABLED"), "ai.enabled");
+        assert_eq!(map_env_key("AI_OPENAI_MODEL"), "ai.openai.model");
+        assert_eq!(map_env_key("READER_THEME"), "reader.theme");
+        // 未知 env は小文字化のみ（serde 側で無視）。
+        assert_eq!(map_env_key("AI_FOO_BAR"), "ai_foo_bar");
+        // 秘密フィールドはマップしない（ADR-0098 の前提維持）。
+        assert_eq!(map_env_key("AI_OPENAI_API_KEY"), "ai_openai_api_key");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn env_invalid_max_retries_is_filtered_out() {
+        assert!(include_env_key("ai.max_retries", Some("7")));
+        assert!(!include_env_key("ai.max_retries", Some("abc")));
+        // 他キーは生値に関係なく通過（例: boolean の "abc" は serde が扱う）。
+        assert!(include_env_key("ai.enabled", Some("abc")));
+    }
+
+    /// フィルタを外して不正値を figment に渡すと extract が失敗することを固定。
+    /// これが `include_env_key` による事前検証の根拠。
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn invalid_max_retries_would_fail_extract_without_filter() {
+        use figment::{Figment, providers::Serialized};
+
+        let invalid = Figment::new()
+            .merge(Serialized::defaults(AppConfig::default()))
+            .merge(Serialized::defaults(
+                serde_json::json!({"ai": {"max_retries": "abc"}}),
+            ))
+            .extract::<AppConfig>();
+        assert!(invalid.is_err(), "不正文字列は usize に変換できない");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn figment_extract_applies_mapped_max_retries() {
+        let entries = [("AI_MAX_RETRIES".to_string(), "7".to_string())];
+        let config: AppConfig = figment_from_env_entries(entries, None).extract().unwrap();
+        assert_eq!(config.ai.max_retries, 7);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn figment_extract_keeps_toml_value_on_invalid_env() {
+        let entries = [("AI_MAX_RETRIES".to_string(), "abc".to_string())];
+        let config: AppConfig = figment_from_env_entries(entries, Some("[ai]\nmax_retries = 5\n"))
+            .extract()
+            .unwrap();
+        assert_eq!(config.ai.max_retries, 5);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn figment_extract_keeps_default_on_invalid_env() {
+        let entries = [("AI_MAX_RETRIES".to_string(), "abc".to_string())];
+        let config: AppConfig = figment_from_env_entries(entries, None).extract().unwrap();
+        assert_eq!(config.ai.max_retries, 3);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn figment_extract_preserves_single_word_env() {
+        let entries = [
+            ("AI_ENABLED".to_string(), "true".to_string()),
+            ("GENERAL_LANGUAGE".to_string(), "en".to_string()),
+        ];
+        let config: AppConfig = figment_from_env_entries(entries, None).extract().unwrap();
+        assert!(config.ai.enabled);
+        assert_eq!(config.general.language, "en");
     }
 
     #[cfg(not(target_arch = "wasm32"))]
