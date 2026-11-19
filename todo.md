@@ -29,9 +29,7 @@ status: current
 
 ### 優先度: 中
 
-<!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224） -->
-- 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
-  根拠 `web/src/lib.rs:392,544,823,1162`。
+<!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
 
@@ -94,6 +92,13 @@ status: current
 ## 完了
 
 <!-- 2026-11-19: 監査で解消済みと判定した項目を ADR 実績へ照合して移動（ADR-0224）。 -->
+- [x] 【TD-M10】壊れた画像のセトリング待ちを解消。画像の error を記録し失敗画像を
+      待ち対象外にして、章切替ごとの 2 秒待ちを防止（ADR-0225）。
+      正常画像の自然幅待ち・CLS 契約・generation ガードは維持。
+      E2E 1 件追加で 253 → **254**（check 237 + equal 17）。
+      AST 抽出で expected / found / distinct 254、missing / extra 0、
+      `docs/e2e-traceability.md` の新規 check を VC-004 の読書位置行へ割り当て、
+      markdownlint 0 issues。E2E 254 項目すべて成功。
 - [x] 【B03】既知脆弱性 2 件（ammonia / pulldown-cmark）を修正し、audit ゲートを整備。
       ADR-0086 / 0125 / 0126。
 - [x] 【E01】配布 WASM の開発ホスト絶対パスを除去し、パス検査を fail-closed 化。
