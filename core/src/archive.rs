@@ -11,6 +11,7 @@
 use crate::{CoreError, CoreResult};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use zip::result::ZipError;
 use zip::{CompressionMethod, ZipArchive};
@@ -21,6 +22,10 @@ const EPUB_MIMETYPE_PATH: &str = "mimetype";
 const EPUB_MIMETYPE_VALUE: &str = "application/epub+zip";
 /// EPUB 判定で読む `mimetype` の最大バイト数。
 const EPUB_MIMETYPE_PROBE: u64 = 64;
+/// 累計展開サイズの上限超過エラーの固定文言。
+///
+/// アーカイブ内のパスや `ZipError` の本文は含めない（GOAL.md Constraints）。
+const EXPANDED_BUDGET_ERROR: &str = "アーカイブの累計展開サイズが上限を超えています";
 
 /// アーカイブ閲覧のリミット。
 ///
@@ -63,8 +68,8 @@ pub struct ArchiveEntry {
 /// 読み取り専用の ZIP アーカイブ閲覧。
 ///
 /// バイト列とエントリ一覧を所有する。[`ArchiveReader::read_entry`] は `&self` の
-/// ままで、読み出しのたびに [`ZipArchive`] を作り直すため内部可変性を使わない。
-/// そのため `Send + Sync` を満たす。
+/// ままで、読み出しのたびに [`ZipArchive`] を作り直す。累計展開バイトの記録に
+/// [`AtomicU64`] の内部可変性を使うが、ロックを持たないため `Send + Sync` を満たす。
 pub struct ArchiveReader {
     /// アーカイブ原本。読み出すたびにこのバイト列から `ZipArchive` を作る。
     bytes: Vec<u8>,
@@ -74,6 +79,11 @@ pub struct ArchiveReader {
     index: HashMap<String, usize>,
     /// 適用したリミット。
     limits: ArchiveLimits,
+    /// セッション中に実展開したバイト数の累計。
+    ///
+    /// 宣言サイズ合計だけでは `&self` の再読による累積を防げないため、読み出し
+    /// ごとに実バイトを加算して `limits.max_total_size` で制限する。
+    expanded: AtomicU64,
 }
 
 impl ArchiveReader {
@@ -157,6 +167,7 @@ impl ArchiveReader {
             entries,
             index,
             limits,
+            expanded: AtomicU64::new(0),
         })
     }
 
@@ -194,6 +205,9 @@ impl ArchiveReader {
     /// アーカイブかどうか。
     ///
     /// `mimetype` は最大 64 バイトだけ読み、前後の空白・改行を除いて比較する。
+    ///
+    /// この probe も [`Self::read_entry_with_limit`] を通るため、実バイトが
+    /// 累計展開予算に計上される（既定予算では無視できる大きさ）。
     pub fn is_epub(&self) -> bool {
         let Some(first) = self.entries.first() else {
             return false;
@@ -214,7 +228,9 @@ impl ArchiveReader {
     /// パスを正規化して索引を引き、`limit` バイトを上限に読み出す。
     ///
     /// 宣言サイズを信用せず、実読み出しでも `limit + 1` バイトで打ち切って
-    /// 超過を検出する。
+    /// 超過を検出する。読み出し前に宣言サイズ分の予算を予約し、成功時は実
+    /// バイトに合わせて精算、失敗時は予約を全額返金する。予約が
+    /// `limits.max_total_size` を超える場合は読み出さずに拒否する。
     fn read_entry_with_limit(&self, path: &str, limit: u64) -> CoreResult<Vec<u8>> {
         let normalized = normalize_path(path)?;
         let Some(&position) = self.index.get(&normalized) else {
@@ -228,6 +244,84 @@ impl ArchiveReader {
             return Err(CoreError::DocumentNotFound(path.to_string()));
         }
 
+        // 宣言サイズ +1 を予約する。実読み出しは最大 `limit + 1` バイトなので、
+        // それを予約の上限にもする（宣言サイズが過大でも上限を守る）。
+        // `max_total_size` と `max_entry_size` は独立なので、予約は常に宣言
+        // サイズ基準にする（`max_total_size < max_entry_size` でも誤拒否しない）。
+        let reserve = entry.size.saturating_add(1).min(limit.saturating_add(1));
+        self.reserve_budget(reserve)?;
+
+        // 予約後の全ての失敗経路で返金するため、読み出し本体を別関数に分離し、
+        // ここで結果を一箇所で精算する。
+        match self.read_entry_body(position, entry, limit) {
+            Ok(data) => {
+                // 成功時は実バイトに合わせて予約を精算する（差額返金）。
+                if let Err(err) = self.settle_budget(reserve, data.len() as u64) {
+                    // 実バイトが予約を超えて上限に達した場合は予約を戻し、
+                    // fail-closed で拒否する。
+                    self.refund_budget(reserve);
+                    return Err(err);
+                }
+                Ok(data)
+            }
+            Err(err) => {
+                // 暗号化・非対応圧縮・読み出しエラー・実バイト超過など、
+                // 予約後のどの失敗でも予約を全額返金する。
+                self.refund_budget(reserve);
+                Err(err)
+            }
+        }
+    }
+
+    /// 累計展開バイトに `amount` を予約する。
+    ///
+    /// CAS (`try_update`、旧 `fetch_update`) で現在値を読み書きするため、
+    /// 並行する `&self` から呼ばれても合計が `max_total_size` を超えない。
+    /// 加算がオーバーフローする場合も上限超過として扱う。
+    fn reserve_budget(&self, amount: u64) -> CoreResult<()> {
+        let max = self.limits.max_total_size;
+        self.expanded
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current.checked_add(amount).filter(|&next| next <= max)
+            })
+            .map(|_| ())
+            .map_err(|_| CoreError::validation(EXPANDED_BUDGET_ERROR))
+    }
+
+    /// 予約 `reserve` を実バイト `actual` に置き換える。
+    ///
+    /// 実バイトが予約より少なければ差額を返金し、多ければ加算する。加算時に
+    /// 上限を超える場合は変更せずエラーにする（宣言サイズが過小な不正入力に
+    /// 対する防御）。
+    fn settle_budget(&self, reserve: u64, actual: u64) -> CoreResult<()> {
+        let max = self.limits.max_total_size;
+        self.expanded
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current
+                    .checked_sub(reserve)
+                    .and_then(|base| base.checked_add(actual))
+                    .filter(|&next| next <= max)
+            })
+            .map(|_| ())
+            .map_err(|_| CoreError::validation(EXPANDED_BUDGET_ERROR))
+    }
+
+    /// 予約を全額返金する（アンダーフローは 0 で頭打ち）。
+    fn refund_budget(&self, amount: u64) {
+        let _ = self
+            .expanded
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                Some(current.saturating_sub(amount))
+            });
+    }
+
+    /// エントリ本体を読み出す。予算の精算は `read_entry_with_limit` が行う。
+    fn read_entry_body(
+        &self,
+        position: usize,
+        entry: &ArchiveEntry,
+        limit: u64,
+    ) -> CoreResult<Vec<u8>> {
         let mut archive =
             ZipArchive::new(Cursor::new(self.bytes.as_slice())).map_err(map_zip_error)?;
         let file = archive.by_index(position).map_err(map_zip_error)?;
@@ -729,6 +823,184 @@ mod tests {
         let reader = ArchiveReader::new(&bytes).unwrap();
         assert!(reader.entries().is_empty());
         assert!(!reader.is_epub());
+    }
+
+    /// 同じエントリを再読すると、累計予算を超えた時点で拒否される。
+    ///
+    /// 同じ path の再読それ自体は許可し、予算が残る限り再課金して成功する
+    /// （EPUB の章を複数回読む通常操作を壊さないため）。
+    #[test]
+    fn rejects_rereading_only_after_budget_is_exhausted() {
+        let bytes = build_zip(&[Item::File("a.txt", b"hello", CompressionMethod::Stored)]);
+        // 宣言合計 5 は開ける。予約は 6 (declared + 1) なので、予算 8 なら
+        // 1 回目は通り、累計 5 + 予約 6 = 11 > 8 の 2 回目は拒否される。
+        let limits = ArchiveLimits {
+            max_total_size: 8,
+            ..ArchiveLimits::default()
+        };
+        let reader = ArchiveReader::with_limits(&bytes, limits).unwrap();
+
+        assert_eq!(reader.read_entry("a.txt").unwrap(), b"hello");
+        match reader.read_entry("a.txt") {
+            Err(CoreError::Validation(message)) => {
+                assert!(
+                    !message.contains("a.txt"),
+                    "予算エラーにパスを含めないこと: {message}"
+                );
+            }
+            Err(other) => panic!("Validation を期待したが {other:?} だった"),
+            Ok(data) => panic!("2 回目が読めてしまった: {} バイト", data.len()),
+        }
+    }
+
+    /// 読み出し失敗時に予約が返金され、後続の別エントリが成功する。
+    #[test]
+    fn refunds_budget_on_read_failure() {
+        // Stored エントリのデータは ZIP 内にそのまま現れる。1 バイト書き換えて
+        // CRC 不一致を起こし、`read_to_end` を失敗させる。
+        let mut bytes = build_zip(&[
+            Item::File("bad.txt", b"hello world", CompressionMethod::Stored),
+            Item::File("good.txt", b"ok", CompressionMethod::Stored),
+        ]);
+        let needle: &[u8] = b"hello world";
+        let position = bytes
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .expect("Stored データが ZIP 内にそのまま存在する");
+        bytes[position] ^= 0xFF;
+
+        // 宣言合計 13。bad の予約 12 と good の予約 3 が通る予算にする。
+        // 返金が無ければ bad の予約 12 が残り good の予約 3 が上限を超える。
+        let limits = ArchiveLimits {
+            max_total_size: 13,
+            ..ArchiveLimits::default()
+        };
+        let reader = ArchiveReader::with_limits(&bytes, limits).unwrap();
+
+        assert!(matches!(
+            entry_error(&reader, "bad.txt"),
+            CoreError::Archive(_)
+        ));
+        assert_eq!(reader.read_entry("good.txt").unwrap(), b"ok");
+    }
+
+    /// 予算内にある複数のエントリを連続して読める。
+    #[test]
+    fn reads_multiple_entries_within_session_budget() {
+        let bytes = build_zip(&[
+            Item::File("a.txt", b"aaaa", CompressionMethod::Stored),
+            Item::File("b.txt", b"bbbb", CompressionMethod::Deflated),
+        ]);
+        // 宣言合計 8。各予約は 5 なので、2 回目の予約 (4 + 5 = 9) を許容する
+        // 予算 10 なら両方成功する。
+        let limits = ArchiveLimits {
+            max_total_size: 10,
+            ..ArchiveLimits::default()
+        };
+        let reader = ArchiveReader::with_limits(&bytes, limits).unwrap();
+
+        assert_eq!(reader.read_entry("a.txt").unwrap(), b"aaaa");
+        assert_eq!(reader.read_entry("b.txt").unwrap(), b"bbbb");
+    }
+
+    /// EPUB の通常操作で同じ章を連続して読んでも予算内なら成功する（回帰）。
+    #[test]
+    fn repeated_epub_reads_within_default_budget_still_work() {
+        use crate::epub::EpubBook;
+
+        const CONTAINER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"#;
+        const OPF: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>サンプル本</dc:title>
+    <dc:language>ja</dc:language>
+    <dc:identifier id="pub-id">urn:isbn:1</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+  </manifest>
+  <spine><itemref idref="ch1"/></spine>
+</package>"#;
+        const CH1: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body><p>hello</p></body></html>"#;
+        const NAV: &str = r#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">Chapter</a></li></ol></nav></body></html>"#;
+
+        let bytes = build_zip(&[
+            Item::File(
+                "mimetype",
+                b"application/epub+zip",
+                CompressionMethod::Stored,
+            ),
+            Item::File(
+                "META-INF/container.xml",
+                CONTAINER.as_bytes(),
+                CompressionMethod::Deflated,
+            ),
+            Item::File(
+                "OEBPS/content.opf",
+                OPF.as_bytes(),
+                CompressionMethod::Deflated,
+            ),
+            Item::File(
+                "OEBPS/ch1.xhtml",
+                CH1.as_bytes(),
+                CompressionMethod::Deflated,
+            ),
+            Item::File(
+                "OEBPS/nav.xhtml",
+                NAV.as_bytes(),
+                CompressionMethod::Deflated,
+            ),
+        ]);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        // 同じ章を続けて読んでも、既定予算内では再課金されて成功する。
+        assert!(book.chapter_text(0).unwrap().contains("hello"));
+        assert!(book.chapter_html(0).unwrap().contains("hello"));
+        assert_eq!(book.toc().unwrap().len(), 1);
+        // さらに再読しても成功する（同じ path の再読を常に拒否しない）。
+        assert!(book.chapter_text(0).unwrap().contains("hello"));
+    }
+
+    /// 並行読み出しでも累計予算を超えない（CAS 予約の検証）。
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn concurrent_reads_respect_session_budget() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let bytes = build_zip(&[Item::File("a.txt", b"aaaa", CompressionMethod::Stored)]);
+        // 予約は 5。予算 8 なら同時に読めるのは 1 スレッドだけ。
+        let reader = Arc::new(
+            ArchiveReader::with_limits(
+                &bytes,
+                ArchiveLimits {
+                    max_total_size: 8,
+                    ..ArchiveLimits::default()
+                },
+            )
+            .unwrap(),
+        );
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let reader = Arc::clone(&reader);
+                thread::spawn(move || reader.read_entry("a.txt").is_ok())
+            })
+            .collect();
+        let successes = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .filter(|ok| *ok)
+            .count();
+
+        assert_eq!(successes, 1, "予算を超える並行展開が成功してしまった");
     }
 
     #[test]
