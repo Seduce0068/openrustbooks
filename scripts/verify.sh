@@ -265,7 +265,7 @@ trap 'rm -rf "$DIST_DIR" "$E2E_LOG"; [[ -z "$STAGE_DIR" ]] || rm -rf "$STAGE_DIR
 
 echo "===== START: trunk build ====="
 # 開発ホストの絶対パスを配布 WASM に残さない（rustc の正しいフラグは --remap-path-prefix）。
-if (cd web && RUSTFLAGS="--remap-path-prefix=$home=~" trunk build --offline --dist "$DIST_DIR"); then
+if (cd web && RUSTFLAGS="--remap-path-prefix=$home=~" trunk build --offline --locked --dist "$DIST_DIR"); then
 	echo "===== END: trunk build rc=0 ====="
 else
 	rc=$?
