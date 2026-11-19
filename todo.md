@@ -57,8 +57,6 @@ status: current
 - 【R3-release#4,#5】導入・更新・ロールバック手順、既知問題の開示、
   署名秘密鍵の `.gitignore` 登録。
 - 【R3-config#5】容量超過時の位置削除を通知・退避方式へ変更。
-- 【R4-e2e#3,#4 / C08】swipe スタブの二重発火、
-  固定 sleep と待機例外の握り潰しを条件待ちへ統一。
 - 【R2-epub#1-#4】EPUB 層の API・エラー・所有権境界を整理。
   `open_owned` の limits 指定、1316 行ファイルの分割、欠落エラーの統一、
   Document 側の二重定義解消。
@@ -74,6 +72,13 @@ status: current
 
 ## 完了
 
+- [x] 【R4-e2e#3,#4 / C08】swipe スタブの二重発火と固定 sleep を条件待ちへ統一。
+      先頭 evaluate（`arguments[0..2]` 未埋め込み）を削除し、f-string 版 1 回のみ dispatch。
+      到達条件が明確な章移動・縦 / マルチタッチ・ダーク切替・ファイル選択後の DOM / 保存・
+      リセット後を `wait_until` / `wait_swipe_done` / `wait_swipe_ignored` ベースへ置換。
+      負向チェックは baseline カウンタ＋第 1 章本文＋0.3 秒維持で判定。到達条件のない
+      106 件の sleep は据え置き、`wait_until` の fail-closed は維持。
+      E2E 254 件・全ゲート成功、AST 254/254、markdownlint 0 issues / ADR-0235。
 - [x] 【C04 / R5-ops#1】OKF・索引・log・lint の運用を `docs/documentation-operations.md`
       へ明文化し、`.markdownlint-cli2.jsonc` を追加して一時ファイル依存を解消。
       ADR-0234 を追加し、AGENTS.md のグローバル参照を `~/.agents/AGENTS.md`（正本）へ更新。
