@@ -491,6 +491,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0267-bundle-size-baseline](docs/decisions/0267-bundle-size-baseline.md)
 - [0268-csp-consistency-gate](docs/decisions/0268-csp-consistency-gate.md)
 - [0269-ipc-cas-contract](docs/decisions/0269-ipc-cas-contract.md)
+- [0270-tauri-global-ipc-path](docs/decisions/0270-tauri-global-ipc-path.md)
+  - withGlobalTauri を有効化し、web の __TAURI__.core.invoke 参照を公式グローバル経路へ統一する決定。
   - update_config_patch に UI が読んだ revision を必須で渡し、衝突を構造化エラーで判別可能にする決定。
   - meta CSP と desktop config CSP の一致・許可オリジンを fail-closed で検査する静的ゲートを記録する。
   - verify.sh と同一のビルド条件で現行 WASM 配布物のサイズを実測し、今後の比較可能 before とする決定を記録する。

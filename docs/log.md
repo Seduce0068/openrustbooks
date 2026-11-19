@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- Tauri の withGlobalTauri と __TAURI__.core.invoke 経路を確定（ADR-0270）。
 - ConfigPatch.expected と CommandError で UI 起点 CAS と構造化エラーを実装（ADR-0269）。
 - meta / desktop config の CSP 整合を静的ゲート化、負向 test 15/15 PASS（ADR-0268）。
 - WASM バンドルを verify.sh 同一条件で実測し、比較可能 before を確立（ADR-0267）。

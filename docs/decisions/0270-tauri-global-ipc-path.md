@@ -43,6 +43,7 @@ Tauri 2.12.5 の `bundle.global.js` が公開するのは
 | 現状維持 | desktop の設定読み取りすら動作しない可能性が残る |
 
 一次情報:
+
 - Tauri 2.12.5 `bundle.global.js`: `window.__TAURI__=__TAURI_IIFE__;`
   および `return e.app=..., e.core=g, ...`（`g.invoke` は internals を呼ぶ）。
 - Tauri 公式「Calling Rust from the Frontend」:

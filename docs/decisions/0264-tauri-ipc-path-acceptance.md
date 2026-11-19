@@ -40,9 +40,9 @@ R6 A05 第一段の設計補強として、Tauri IPC の現状と経路を記録
 
 - コード変更なしで現状を設計受容する。
   `web/src/lib.rs` / `desktop/tauri.conf.json` / CSP / capability / E2E は変更しない。
-- 経路の選択は行わず未決定として残す。
-  実装は ADR-0253 の実装前提 1（`withGlobalTauri` と CSP の方針）が決定した後、
-  同 ADR の段階設計に従って進める。
+- 経路の選択は [ADR-0270](0270-tauri-global-ipc-path.md) で決定した
+  （`withGlobalTauri: true` + `__TAURI__.core.invoke`）。
+  実装は ADR-0253 の段階設計に従って進める。
 - browser 単体の読み取り専用 / fail-closed 契約（ADR-0193 / 0253）は維持する。
   desktop が未接続の可能性がある間も、誤って保存可能と表示しない。
 
@@ -71,7 +71,7 @@ R6 A05 第一段の設計補強として、Tauri IPC の現状と経路を記録
 
 ## 未決定
 
-- invoke 経路の選択（npm `@tauri-apps/api` / `__TAURI_INTERNALS__` / `withGlobalTauri`）。
+- ~~invoke 経路の選択~~ は [ADR-0270](0270-tauri-global-ipc-path.md) で決定済み。
 - Trunk inline script への CSP nonce / hash の適用方法。
 - `index.html` の meta CSP と `tauri.conf.json` の config CSP の一本化。
 - `withGlobalTauri` が注入する script の CSP 適合（nonce / hash の付与経路）。

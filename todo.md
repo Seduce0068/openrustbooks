@@ -23,13 +23,14 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残 / 第三段 IPC 契約完了・IPC 経路と UI 接続は後続】Tauri 設定保存 UI の接続（段階 2）。
+- 【A05 残 / 第一段・第三段完了・UI 接続と実 WebView 検証は後続】Tauri 設定保存 UI の接続（段階 2）。
   段階設計は ADR-0253 で決定。さらに R6 A05 第一段の設計補強として、
   withGlobalTauri 未設定で desktop も IPC が動かない可能性（実機未検証）と
   3 経路（npm / `__TAURI_INTERNALS__` / withGlobalTauri）の比較、
   CSP 未決定を ADR-0264 に記録した（設計受容のみ・コード変更なし）。
   実装前提 3（UI 起点 expected + 構造化エラー）は ADR-0269 で完了。
-  残る実装は ADR-0253 の実装前提 1 決定後の後続作業とする。
+  実装前提 1（withGlobalTauri + __TAURI__.core.invoke）は ADR-0270 で完了。
+  残る実装は a11y / E2E 成功経路 / 実 WebView 検証の後続作業とする。
   browser は読み取り専用 fail-closed を維持し、
   desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
   ConfigUpdateRequest.expected + 構造化エラー + 最新 ConfigView / a11y /
@@ -187,7 +188,7 @@ status: current
 - [x] 【TD-M10】壊れた画像のセトリング待ちを解消。画像の error を記録し失敗画像を
       待ち対象外にして、章切替ごとの 2 秒待ちを防止（ADR-0225）。
       正常画像の自然幅待ち・CLS 契約・generation ガードは維持。
-      E2E 1 件追加で 253 → **254**（check 237 + equal 17）。
+      E2E 1 件追加で 253 → __254__（check 237 + equal 17）。
       AST 抽出で expected / found / distinct 254、missing / extra 0、
       `docs/e2e-traceability.md` の新規 check を VC-004 の読書位置行へ割り当て、
       markdownlint 0 issues。E2E 254 項目すべて成功。
