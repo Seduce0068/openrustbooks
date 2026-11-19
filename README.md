@@ -431,6 +431,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0237-ci-gate-consistency](docs/decisions/0237-ci-gate-consistency.md)
 - [0238-deterministic-compression-tests](docs/decisions/0238-deterministic-compression-tests.md)
 - [0239-version-single-source](docs/decisions/0239-version-single-source.md)
+- [0240-duplicate-archive-entries](docs/decisions/0240-duplicate-archive-entries.md)
+  - parser differential を防ぐため、正規化後に同名となる ZIP エントリを含むアーカイブを fail-closed で拒否する決定を記録する。
   - tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
   - ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
   - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
