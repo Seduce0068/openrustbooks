@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- WasmConfig と Wasm test 3 件を削除し、wasm テストを 10→7 件へ縮小（ADR-0205）。
 - figment env を明示マップ＋生値検証へ変更し core を 248→255 件へ拡充（ADR-0204）。
 - CoverImage DTO を href / bytes のみへ縮小し dead_code 警告を解消（ADR-0203）。
 - AI コマンドの confirmation / format / alignment を純粋関数化し desktop を 62→72 件へ拡充（ADR-0202）。
