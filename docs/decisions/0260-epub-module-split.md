@@ -68,7 +68,7 @@ container / OPF、nav / NCX、XHTML テキスト抽出、
 - integration test 化（その場合のみ `is_image_media_type` /
   `MAX_TOC_ENTRIES` の可視性拡張が必要）。
 - 外部利用者の有無と破壊確認。
-- バンドルサイズ before / after 実測（ADR-0256 / 0259 を継続）。
+- バンドルサイズ before / after 実測（ADR-0256 / 0259 を継続）。 比較可能 before は [ADR-0267](0267-bundle-size-baseline.md) に記録済み。
 - `opf.rs` が 509 行と依然大きいことの再評価
   （1 ファイル何行までという基準は未定義）。
 - `epub.rs` → `epub/mod.rs` への改名（ADR-0255 / 0259 を継続）。

@@ -21,10 +21,11 @@ WASM / JS / 総量のベースラインを実測して記録する。
 
 ### 必須事項
 
-1. 現行ソースから `--offline --locked` で dist を生成する。
+1. 現行ソースから verify.sh と同一の
+   `RUSTFLAGS="--remap-path-prefix=$HOME=~" trunk build --offline --locked` で dist を生成する。
 2. WASM / JS / HTML / 総バイト数と SHA-256 を実測する。
-3. 過去の before 値は存在しないため「比較不能」と明記し、
-   今回を今後の before とする。
+3. 過去の参考値（22.99 MB / gzip 2.53 MB）は条件不明で比較不能と明記し、
+   今回を今後の比較可能 before とする。
 4. E2E check 名・件数・コードは変更しない（255 維持）。
 5. markdownlint 0 issues、verify.sh（255）成功。
 
@@ -37,3 +38,9 @@ WASM / JS / 総量のベースラインを実測して記録する。
 - `web/dist`（git 対象外）は上書きしない（一時 dist を使う）。
 - 外部ダウンロード・依存追加は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- verify.sh と同一 RUSTFLAGS で再計測し、WASM raw 69,012,923 B / gzip 12,183,616 B を記録。
+- 過去参考値は比較不能とし、今回を commit ba5a889 に紐付く比較可能 before とする。
+- ADR-0267 で 5 件の旧未決定を集約、E2E 255/0 維持。

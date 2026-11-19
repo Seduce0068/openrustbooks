@@ -85,7 +85,7 @@ ADR-0156 で fail-closed 化した `WasmAiMarkdownService` /
 - 外部 JS 利用者の有無（リポジトリ内に証拠なし）。
 - deprecation shim の要否。
 - ADR-0156 の `status` 変更（本プロジェクト規約では ADR の status は `accepted` を維持）。
-- バンドルサイズの before / after 実測（ADR-0160 / 0242 / 0243 / 0244 / 0246 を継続）。
+- バンドルサイズの before / after 実測（ADR-0160 / 0242 / 0243 / 0244 / 0246 を継続）。 比較可能 before は [ADR-0267](0267-bundle-size-baseline.md) に記録済み。
 
 ## 参照
 

@@ -74,6 +74,6 @@ EPUB / ZIP / lint の 3 クラスタが 1 ファイルに混在しており、
   （ADR-0257 の未決定を今回は親集約で解消）。
 - integration test 化（private item の可視性拡張または固定文言リテラル化が必要）。
 - 外部 JS 利用者の有無と破壊確認。
-- バンドルサイズの before / after 実測（ADR-0256 を継続）。
+- バンドルサイズの before / after 実測（ADR-0256 を継続）。 比較可能 before は [ADR-0267](0267-bundle-size-baseline.md) に記録済み。
 - `ERR_ENTRIES` のテスト追加（ADR-0223 の 4 文言のうち 1 つは未検証）。
 - `wasm.rs` → `wasm/mod.rs` への改名（ADR-0257 を継続）。

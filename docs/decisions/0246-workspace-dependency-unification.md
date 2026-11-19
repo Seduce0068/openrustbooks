@@ -70,4 +70,4 @@ feature 差分のある依存を安易に workspace 化すると
   （ADR-0242 の「推測・未検証」を継続）。
 - ~~Wasm API 第二段以降の AI cluster（ADR-0156 supersede 必要）~~
   ADR-0256 で削除を決定・完了（ADR-0156 の AI 部分を supersede）。
-- バンドルサイズ before / after 計測（ADR-0160 / 0242 を継続）。
+- バンドルサイズ before / after 計測（ADR-0160 / 0242 を継続）。 比較可能 before は [ADR-0267](0267-bundle-size-baseline.md) に記録済み。

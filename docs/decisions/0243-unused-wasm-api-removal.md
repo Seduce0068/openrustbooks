@@ -65,4 +65,4 @@ JavaScript へ export されていたが、
 - ~~AI cluster の削除または JS export だけの非公開化~~
   ADR-0256 で削除を決定・完了（ADR-0156 の AI 部分を supersede）。
 - `WasmDocument` の削除（第二段の候補）。
-- バンドルサイズの before / after 測定（ADR-0160 / 0242 を継続）。
+- バンドルサイズの before / after 測定（ADR-0160 / 0242 を継続）。 比較可能 before は [ADR-0267](0267-bundle-size-baseline.md) に記録済み。
