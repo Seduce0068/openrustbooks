@@ -42,6 +42,9 @@ status: accepted
   必要な根拠が揃うまで `pub` へ昇格しない。
 - 既存テストのフィールド直接構築は core 内の `#[cfg(test)]` に閉じ、
   公開 API の契約としては扱わない。
+- wasm 側の旧 `WasmAiMarkdownService` は ADR-0256 で削除され、
+  ブラウザから AI クライアントを呼び出す経路は存在しない（ADR-0232）。
+  native の `AiClient` 契約と公開注入点を追加しない決定は不変。
 
 ## 信頼境界
 
@@ -88,4 +91,5 @@ status: accepted
 - 将来 `with_client` を採用する場合の最終的な引数順と所有権（値 vs 参照）。
 - ADR-0133（`#[cfg(test)]` 内テスト契約）の更新要否（維持する限り不要だが、公開時に再確認）。
 - `AiMarkdownService` への注入点の有無（`core/src/ai_markdown/pipeline.rs:16`）。
-- wasm 側の `AiClient`（ADR-0003 継続、現状は `WasmAiMarkdownService` が別経路）。
+- wasm 側の `AiClient`（ADR-0003 継続、未実装）。旧 `WasmAiMarkdownService` は
+  ADR-0256 で削除済みで、現在は wasm 側に AI の呼び出し経路が無い。

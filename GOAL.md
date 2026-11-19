@@ -28,11 +28,11 @@ ADR-0156 の「JS 型互換のため残置」は実態と乖離している。
    `assert_js_error` helper は維持する。
 3. ADR-0156 に「AI 部分のみ ADR-0256 に supersede、lint 部分は維持」と記録する。
 4. ADR-0232 のブラウザ AI 契約を「API を公開しない」へ更新する。
-5. 全ゲート成功（E2E 255 維持、wasm test は 15 → 14 見込み）。
+5. 全ゲート成功（E2E 255 維持、wasm test は 15 → 14、core 284 維持）。
 
 ## Acceptance criteria
 
-- wasm test 14 件、core 283 件、E2E 255、全ゲート成功。
+- wasm test 14 件、core 284 件維持、E2E 255、全ゲート成功。
 
 ## Constraints
 

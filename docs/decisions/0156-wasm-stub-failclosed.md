@@ -12,6 +12,12 @@ generated:
 status: accepted
 ---
 
+> **更新（2026-11-20）**: 本 ADR の AI 部分（AI メソッドと
+> `WasmPipelineResult` / `WasmDiffResult` の JS 型互換残置）は
+> [ADR-0256](0256-wasm-ai-cluster-removal.md) に supersede された。
+> lint 部分は ADR-0160 で実装済みのため維持する。
+> プロジェクト規約に従い `status: accepted` は変更しない。
+
 ## 背景
 
 ADR-0151 の探索で、`core/src/wasm.rs` の `WasmAiMarkdownService` が

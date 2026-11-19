@@ -72,8 +72,10 @@ status: accepted
 
 #### AI
 
-- AI は native のみで提供する。ブラウザの AI API は明示的なエラーを
-  返す（ADR-0156）。
+- AI は native のみで提供する。ブラウザには AI API 自体を公開しないため、
+  呼び出し経路が存在しない（ADR-0256、ADR-0156 の AI 部分を supersede）。
+  disabled ボタンの契約は維持する（`web/src/lib.rs:352-367` の AI Generate /
+  AI Refine、`web/src/lib.rs:4234` の AI 設定チェックボックス）。
 - provider は OpenAI 互換 API と Ollama（ローカル）（README:75、
   ADR-0002）。
 - 既定無効・送信先 allowlist・送信前のネイティブ同意ダイアログ・

@@ -68,5 +68,6 @@ feature 差分のある依存を安易に workspace 化すると
 - feature 加算を伴う chrono / uuid / wasm dev tokio の workspace 化。
 - MSRV 1.95 における workspace 側 `default-features` override 制限の真偽
   （ADR-0242 の「推測・未検証」を継続）。
-- Wasm API 第二段以降の AI cluster（ADR-0156 supersede 必要）。
+- ~~Wasm API 第二段以降の AI cluster（ADR-0156 supersede 必要）~~
+  ADR-0256 で削除を決定・完了（ADR-0156 の AI 部分を supersede）。
 - バンドルサイズ before / after 計測（ADR-0160 / 0242 を継続）。

@@ -26,7 +26,8 @@ ADR-0243 の第一段で `greet` / `detect_format` を削除した後も、
   `#[wasm_bindgen]` / `#[derive(Serialize, Deserialize)]` 属性、
   struct / impl を属性ごと削除する。
 - `WasmEpubBook` / `WasmArchive` / `WasmMarkdownLinter` /
-  AI cluster / `version()` は変更しない。
+  AI cluster / `version()` は本次では変更しない
+  （AI cluster の削除は ADR-0256 で完了）。
 - `serde` import は他 API が使用するため維持する。
 
 ## 選択肢と根拠
@@ -35,7 +36,7 @@ ADR-0243 の第一段で `greet` / `detect_format` を削除した後も、
 | --- | --- |
 | 属性ごと削除（採用） | JS export が実際に減る |
 | `pub` だけ外す | wasm-bindgen が独立に export するため却下 |
-| AI cluster も同時削除 | ADR-0156 の supersede が必要で別案件 |
+| AI cluster も同時削除 | 本次では別案件、ADR-0256 で完了（ADR-0156 の AI 部分を supersede） |
 
 ## 影響
 
@@ -58,6 +59,6 @@ ADR-0243 の第一段で `greet` / `detect_format` を削除した後も、
 ## 未決定
 
 - 外部 JS 利用者の有無と、deprecation shim の要否（ADR-0243 を継続）。
-- AI cluster の削除または JS export のみの非公開化
-  （ADR-0156 の supersede が必要）。
+- ~~AI cluster の削除または JS export のみの非公開化~~
+  ADR-0256 で削除を決定・完了（ADR-0156 の AI 部分を supersede）。
 - バンドルサイズの before / after 測定（ADR-0160 / 0242 / 0243 を継続）。

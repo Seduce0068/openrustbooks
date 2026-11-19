@@ -27,7 +27,7 @@ JavaScript へ export されていたが、
 - `utils::version()` は wasm / native 双方で維持する。
 - `WasmDocument` と AI cluster
   （`WasmAiMarkdownService` / `WasmPipelineResult` / `WasmDiffResult`）は
-  ADR-0156 / 0160 の公開契約があるため本次では変更しない。
+  本次では変更しない（AI cluster は ADR-0256 で削除完了）。
 - ADR-0223:20 / 調査記録の `detect_format` 言及は履歴として保持する。
 
 ## 選択肢と根拠
@@ -36,7 +36,7 @@ JavaScript へ export されていたが、
 | --- | --- |
 | 属性ごと削除（採用） | JS export が実際に減る |
 | `pub` だけ外す | wasm-bindgen は独立に export を生成するため却下 |
-| AI cluster も削除 | ADR-0156 の公開決定を supersede する別案件 |
+| AI cluster も削除 | 本次では別案件、ADR-0256 で完了（ADR-0156 の AI 部分を supersede） |
 
 ## 影響
 
@@ -62,7 +62,7 @@ JavaScript へ export されていたが、
 ## 未決定
 
 - 外部 JS 利用者の有無と、deprecation shim の要否。
-- AI cluster の削除または JS export だけの非公開化
-  （ADR-0156 の supersede が必要）。
+- ~~AI cluster の削除または JS export だけの非公開化~~
+  ADR-0256 で削除を決定・完了（ADR-0156 の AI 部分を supersede）。
 - `WasmDocument` の削除（第二段の候補）。
 - バンドルサイズの before / after 測定（ADR-0160 / 0242 を継続）。
