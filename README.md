@@ -116,7 +116,7 @@ openrustbooks/
 
 ### 前提条件
 
-- Rust 1.94+ (2024 edition)。`rumdl` の MSRV に合わせる
+- Rust 1.95+ (2024 edition)。`parking_lot` / `lock_api` の MSRV に合わせる
 - Trunk (`cargo install trunk`, または各ディストリビューションのパッケージ)
 - `wasm32-unknown-unknown` ターゲット (`rustup target add wasm32-unknown-unknown`)
 - `wasm-bindgen` CLI (Trunk は通常自動取得する。取得できない環境では
