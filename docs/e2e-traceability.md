@@ -14,6 +14,7 @@ status: draft
 
 ## 概要
 
+- 待機は条件待ちを優先（[ADR-0235](decisions/0235-e2e-conditional-wait.md)）。
 - 検証条件は [requirements.md](requirements.md) の「検証条件の提案」と
   「追加検討する品質要件」で VC-001 〜 VC-015 として定義している。
 - VC は [ADR-0233](decisions/0233-solution-selection-rationale.md) により初版の測定可能な受け入れ基準として参照する。
