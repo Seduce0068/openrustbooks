@@ -1,38 +1,39 @@
 # Goal
 
-updater の未配線を設計受容とし、設定表示を正直化する（R6 TD-M21）。
+ZIP リーダーを wasm32 向け API として公開する（R6 TD-M22 の段階 1）。
 
 ## Scope
 
 ### 背景
 
-`tauri_plugin_updater` は `desktop/src/main.rs` で初期化されるが、
-更新チェックの呼び出し・公開鍵・endpoint・UI consent は未配線。
-`check_updates`（既定 true）は設定画面に「有効」と表示されるだけで、
-実際には何も起きない。公開鍵／署名 secrets／Release ワークフローが
-未定義で、チェックだけ配線しても fail-closed で動作しない。
+`core/src/archive.rs` の `ArchiveReader` は fail-closed のパス検証、
+サイズ制限、不正エントリ拒否を備えて native で完成している。
+一方 wasm 側は `detect_format()` が `"zip"` を返すだけで、
+エントリ一覧／読み出し API が無い（TD-M22）。
+UI は XSS / Blob URL / CSP の未決定が多いため今回は対象外。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`check_updates` 表示を「未配線」へ）
-- `docs/decisions/0222-updater-deferred.md`: 追加
+- `core/src/wasm.rs`: 変更（`WasmArchive` と wasm-bindgen API、test）
+- `docs/decisions/0223-zip-wasm-api.md`: 追加
 - `GOAL.md` / `todo.md`: 契約・完了反映
-- `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 設定画面の `check_updates` を true / false に関わらず「未配線」と表示する。
-2. ADR に現状（初期化のみ、pubkey / endpoint なし、署名 secrets 未定義）と設計受容の根拠を記録する。
-3. 将来実装する場合の最小安全設計（minisign、公開鍵、HTTPS endpoint、手動チェック、同意、CSP、Release workflow）を記載する。
-4. 未決定を漏れなく記録する。
-5. E2E 253 を維持し、全ゲート成功。
+1. `cfg(target_arch = "wasm32")` で `WasmArchive` を追加する。
+2. コンストラクタは `Vec<u8>` を `ArchiveReader::from_owned(bytes, ArchiveLimits::default())` へ渡す。
+3. API は `entries()` / `read_entry(path)` / `read_entry_text(path)` / `is_epub()` に限定する。
+4. `entries()` は camelCase（`path` / `isDir` / `size` / `compressedSize`）で返す。
+5. 各 API は core エラーを fail-closed で JsValue 化する（値・パスはエラー文言に出さない）。
+6. wasm-bindgen-test を追加（正常、traversal、サイズ制限、破損）。
+7. 全ゲート成功（E2E 253 維持）。
 
 ## Acceptance criteria
 
-- 全ゲート成功、E2E 253 項目成功。
+- wasm test 増加、全ゲート成功、E2E 253 項目成功。
 
 ## Constraints
 
-- updater の本番接続・自動チェック・自動インストールは実装しない。
-- 共通ワークフロー `rust-gates.yml@v1` は変更しない。
+- UI / File input / CSP は変更しない（段階 2 の別 ADR）。
+- 新規依存を追加しない。
 - `master` へ push する。force push はしない。
