@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- Checker(expected=N) と文書 current 値を突き合わせる静的ゲートを追加（ADR-0263）。
 - R6 ドキュメント整合: E2E 件数の current 表記をコード出典（255）へ追従。
   `Checker(expected=255)`（check 238 + equal 17）と
   `docs/e2e-traceability.md` の 255 件は一致していたが、`todo.md` の CI-H01 と
