@@ -45,6 +45,7 @@ jobs:
         CARGO_INCREMENTAL=0
       extra_gates: |
         bash scripts/check-rumdl-featureless.sh
+        bash scripts/check-version-consistency.sh
         cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
         cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
         bash scripts/ci-wasm-test.sh
