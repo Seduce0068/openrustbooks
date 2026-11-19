@@ -505,6 +505,37 @@ fn scroll_content_to_top() {
 #[cfg(target_arch = "wasm32")]
 const IMAGE_SETTLE_MS: f64 = 2000.0;
 
+/// `resolve_images()` が Blob URL を設定した `<img>` に付与する描画識別子。
+/// error リスナーが現在の描画の画像かを判定するために使う（ADR-0225）。
+#[cfg(target_arch = "wasm32")]
+const IMAGE_RENDER_GENERATION_ATTRIBUTE: &str = "data-render-generation";
+#[cfg(target_arch = "wasm32")]
+const IMAGE_RENDER_CHAPTER_ATTRIBUTE: &str = "data-render-chapter";
+/// 読み込み失敗の `error` を受け取った画像に付与する印。
+#[cfg(target_arch = "wasm32")]
+const IMAGE_ERROR_ATTRIBUTE: &str = "data-image-error";
+
+/// error イベントの対象が現在の描画で生成された Blob URL 画像かどうか。
+///
+/// 章切替や Blob URL の revoke で古い画像の error が届いても、生成時の
+/// generation / chapter が現在値と一致しなければ記録しない。
+#[cfg(target_arch = "wasm32")]
+fn is_current_render_image(
+    image: &web_sys::HtmlImageElement,
+    generation: u32,
+    chapter_index: usize,
+) -> bool {
+    let matches_generation = image
+        .get_attribute(IMAGE_RENDER_GENERATION_ATTRIBUTE)
+        .and_then(|value| value.parse::<u32>().ok())
+        == Some(generation);
+    let matches_chapter = image
+        .get_attribute(IMAGE_RENDER_CHAPTER_ATTRIBUTE)
+        .and_then(|value| value.parse::<usize>().ok())
+        == Some(chapter_index);
+    matches_generation && matches_chapter
+}
+
 /// HTML 中の `<img>` のうち、`src` 属性を持つものだけを数える。
 ///
 /// `resolve_images()` は解決できなかった画像から `src` を削除するため、
@@ -628,8 +659,11 @@ mod image_count_tests {
 /// 無い画像（解決できず除去したもの）は数えず、待たない。
 ///
 /// 完了判定は `complete()` だけでは不十分。`complete()` は `src` 未設定・空・
-/// broken・画像読み込み無効でも `true` を返すため、自然サイズが未確定の画像を
-/// 見逃さないよう `natural_width() > 0` も要求する（位置復元は自然サイズに依存）。
+/// broken・画像読み込み無効でも `true` を返すため、通常は自然サイズが未確定の
+/// 画像を見逃さないよう `natural_width() > 0` も要求する（位置復元は自然サイズに
+/// 依存）。ただし壊れた画像は `complete()` が `true` でも自然幅が 0 のままで、
+/// 上限まで待たされるため、document の error リスナーが失敗を記録した画像だけ
+/// 自然幅 0 を許容する（ADR-0225）。
 #[cfg(target_arch = "wasm32")]
 fn images_settled(expected: usize) -> bool {
     let Some(window) = web_sys::window() else {
@@ -653,9 +687,9 @@ fn images_settled(expected: usize) -> bool {
             continue;
         }
         with_source += 1;
-        // `complete()` は src 未設定・空・broken・画像読み込み無効でも true を返す。
-        // 自然サイズが未確定の画像を完了とみなさないよう自然幅も確認する。
-        if !image.complete() || image.natural_width() == 0 {
+        // 通常画像は自然幅が確定するまで待つ。error 済みの画像だけを豁免する。
+        let errored = image.get_attribute(IMAGE_ERROR_ATTRIBUTE).as_deref() == Some("1");
+        if !image.complete() || (image.natural_width() == 0 && !errored) {
             return false;
         }
     }
@@ -1165,11 +1199,14 @@ fn clear_image_dimensions(image: &web_sys::HtmlImageElement) {
 
 /// サニタイズ済み HTML の画像を Blob URL に置き換える。
 ///
-/// 解決できない画像は `src` を削除し、alt テキストだけを残す。
+/// 解決できない画像は `src` を削除し、alt テキストだけを残す。Blob URL を設定
+/// した画像には描画の世代・章を記録し、error リスナーが現在の描画だけに失敗の
+/// 印を付けられるようにする（ADR-0225）。
 #[cfg(target_arch = "wasm32")]
 fn resolve_images(
     book: &WasmEpubBook,
     index: usize,
+    generation: u32,
     html: &str,
 ) -> Result<(String, Vec<String>), JsValue> {
     let parser = web_sys::DomParser::new()?;
@@ -1200,6 +1237,11 @@ fn resolve_images(
                     // 縮小時の MIME 判定は blob URL の fetch に依存せず、この属性から得る
                     // （fetch はハングし得るため）。
                     let _ = image.set_attribute("data-source-mime", mime);
+                    // error リスナーが現在の描画の画像だけを記録できるように、
+                    // Blob URL を設定した img に世代と章を埋め込む。
+                    let _ = image
+                        .set_attribute(IMAGE_RENDER_GENERATION_ATTRIBUTE, &generation.to_string());
+                    let _ = image.set_attribute(IMAGE_RENDER_CHAPTER_ATTRIBUTE, &index.to_string());
                     apply_image_dimensions(&image, &bytes, mime);
                     image.set_attribute("src", &url)?;
                     urls.push(url);
@@ -2406,6 +2448,44 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let last_apply_time = Rc::new(Cell::new(0.0_f64));
     // 章描画の世代カウンタ。描画のたびに進めて古い適用を無効化する。
     let current_generation = Rc::new(Cell::new(0_u32));
+    // 現在描画中の章。古い画像の error を無視するため世代と併せて保持する。
+    let current_chapter = Rc::new(Cell::new(0_usize));
+    // 壊れた画像は complete() が true のまま自然幅 0 になり、位置復元が
+    // 上限（2 秒）まで待たされる。error はバブルしないため document で
+    // キャプチャし、現在の描画の画像にだけ失敗の印を付ける（ADR-0225）。
+    if let Some(window) = web_sys::window()
+        && let Some(document) = window.document()
+    {
+        let error_generation = Rc::clone(&current_generation);
+        let error_chapter = Rc::clone(&current_chapter);
+        let on_image_error = Closure::wrap(Box::new(move |event: web_sys::Event| {
+            let Some(target) = event.target() else {
+                return;
+            };
+            let Ok(image) = target.dyn_into::<web_sys::HtmlImageElement>() else {
+                return;
+            };
+            if is_current_render_image(&image, error_generation.get(), error_chapter.get()) {
+                let _ = image.set_attribute(IMAGE_ERROR_ATTRIBUTE, "1");
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = document.add_event_listener_with_callback_and_bool(
+            "error",
+            on_image_error.as_ref().unchecked_ref(),
+            true,
+        );
+        // 再マウント時に古い document のリスナーが残らないよう cleanup で解除する。
+        let listener = SendWrapper::new(Some((document, on_image_error)));
+        on_cleanup(move || {
+            if let Some((document, callback)) = listener.take() {
+                let _ = document.remove_event_listener_with_callback_and_bool(
+                    "error",
+                    callback.as_ref().unchecked_ref(),
+                    true,
+                );
+            }
+        });
+    }
     let render_chapter: RenderChapter = {
         let book = Rc::clone(&book);
         let object_urls = Rc::clone(&object_urls);
@@ -2415,6 +2495,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let applying_position = Rc::clone(&applying_position);
         let last_apply_time = Rc::clone(&last_apply_time);
         let current_generation = Rc::clone(&current_generation);
+        let current_chapter = Rc::clone(&current_chapter);
         Rc::new(move |index, fragment, scroll_top| {
             // 章の切り替えで古いスクロールのデバウンス保存をキャンセルする。
             if let Some(window) = web_sys::window()
@@ -2424,6 +2505,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             }
             applying_position.set(true);
             *current_fragment.borrow_mut() = fragment.clone();
+            // 描画の開始時に世代と章を進め、古い画像の error / 位置適用を
+            // 無効化する。resolve_images にも同じ世代を渡して属性に埋め込む。
+            let generation = current_generation.get().wrapping_add(1);
+            current_generation.set(generation);
+            current_chapter.set(index);
             let result = book
                 .borrow()
                 .as_ref()
@@ -2434,7 +2520,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         String::from(CHAPTER_RENDER_FAILED_MESSAGE)
                     })?;
                     let safe = sanitize_epub_html(&html);
-                    resolve_images(book, index, &safe).map_err(|_| {
+                    resolve_images(book, index, generation, &safe).map_err(|_| {
                         report_reader_error("Image resolution failed");
                         String::from(CHAPTER_RENDER_FAILED_MESSAGE)
                     })
@@ -2470,8 +2556,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                             },
                         );
                     }
-                    let generation = current_generation.get().wrapping_add(1);
-                    current_generation.set(generation);
                     apply_position_after_render(PositionApplyCtx {
                         chapter_index: index,
                         fragment,

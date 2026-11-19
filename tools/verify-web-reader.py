@@ -811,7 +811,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 236 + checker.equal 17 = 253。
+    # 期待 check 総数: checker.check 237 + checker.equal 17 = 254。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -840,7 +840,9 @@ async def run_checks(cdp: Cdp) -> int:
     # 型名は出ない）ことと、サンプル EPUB の表示が壊れないこと +1（ADR-0212）。
     # prefers-reduced-motion: reduce で色 transition を維持しつつ空間移動を止め、
     # フラグメント移動が再試行なしで即時反映されること +1（R6 TD-M13）。
-    checker = Checker(expected=253)
+    # 壊れた画像（complete() true / naturalWidth 0）を含む章で、描画開始から
+    # 位置適用完了までが 1.5 秒未満であること +1（R6 TD-M10 / ADR-0225）。
+    checker = Checker(expected=254)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -870,7 +872,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 253 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 254 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -3456,6 +3458,106 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             warned is True,
             f"(status={warning!r})",
         )
+
+    # 壊れた画像（complete() true / naturalWidth 0）を含む章でも、位置復元が
+    # 上限 2 秒まで待たされない（R6 TD-M10 / ADR-0225）。正常画像の待ち契約は
+    # 既存の「位置の適用は画像の読み込み完了を待つ」check で維持する。
+    # 章に含める画像は壊れた 1 枚だけとし、描画開始→位置適用完了を実測する。
+    broken_ch2 = CH2.replace(
+        '<img id="tall" src="images/tall.png" alt="tall"/>',
+        '<img id="broken" src="images/broken.png" alt="broken"/>',
+    ).replace('<img id="evil-svg" src="images/evil.svg" alt="evil svg"/>', "")
+    broken_epub = SAMPLE.parent / "broken.epub"
+    with zipfile.ZipFile(broken_epub, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                   compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", OPF, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/nav.xhtml", NAV, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch1.xhtml", CH1, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch2.xhtml", broken_ch2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/images/pic.png", PNG, compress_type=zipfile.ZIP_DEFLATED)
+        # 画像としてデコードできないバイト列。リソース解決は成功し Blob URL が
+        # 設定されるが、ブラウザは error を出し自然幅が 0 のままになる。
+        z.writestr("OEBPS/images/broken.png", b"not a valid png",
+                   compress_type=zipfile.ZIP_DEFLATED)
+
+    await cdp.evaluate("localStorage.clear()")
+    document = await cdp.send("DOM.getDocument", {"depth": -1})
+    root_id_broken = document["result"]["root"]["nodeId"]
+    node = await cdp.send(
+        "DOM.querySelector", {"nodeId": root_id_broken, "selector": "#epub-file"}
+    )
+    settled = False
+    timing: dict = {}
+    broken_state: dict = {}
+    if node["result"]["nodeId"] != 0:
+        await cdp.send(
+            "DOM.setFileInputFiles",
+            {"nodeId": node["result"]["nodeId"], "files": [str(broken_epub)]},
+        )
+        await cdp.evaluate(
+            "document.querySelector('#epub-file').dispatchEvent("
+            "new Event('change', {bubbles: true}))"
+        )
+        opened_broken = await wait_until(
+            cdp,
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+        if opened_broken:
+            # 第 2 章の本文が現れた時刻を描画開始、本文がスクロールされた時刻を
+            # 位置適用完了として performance.now() の差を実測する（待ち後計測の
+            # 偽陽性を避ける）。
+            probe = (
+                "(() => {"
+                " window.__brokenSettle = {started: null, applied: null};"
+                " const tick = () => {"
+                "  const state = window.__brokenSettle;"
+                "  if (state.applied !== null) return;"
+                "  const html = document.querySelector('.reader-html');"
+                "  if (html && state.started === null"
+                "      && html.textContent.includes('Part two text.')) {"
+                "   state.started = performance.now();"
+                "  }"
+                "  if (state.started !== null && __SCROLL__ > 0) {"
+                "   state.applied = performance.now();"
+                "  }"
+                "  requestAnimationFrame(tick);"
+                " };"
+                " requestAnimationFrame(tick);"
+                "})()"
+            ).replace("__SCROLL__", scroll_read_expr())
+            await cdp.evaluate(probe)
+            await cdp.evaluate("document.querySelector('#to-ch2-part').click()")
+            settled = await wait_until(
+                cdp,
+                "window.__brokenSettle && window.__brokenSettle.applied !== null",
+                timeout=6,
+            )
+            timing = await cdp.evaluate("window.__brokenSettle") or {}
+            broken_state = await cdp.evaluate(
+                "(() => { const img = document.querySelector('#broken');"
+                " return {src: img?.getAttribute('src') ?? '',"
+                "  complete: img?.complete === true, width: img?.naturalWidth ?? -1}; })()"
+            ) or {}
+    started = timing.get("started")
+    applied = timing.get("applied")
+    elapsed = (
+        applied - started
+        if settled and started is not None and applied is not None
+        else None
+    )
+    checker.check(
+        "壊れた画像を含む章の位置復元が 1.5 秒未満で完了する",
+        settled is True
+        and elapsed is not None
+        and 0 <= elapsed < 1500
+        and str(broken_state.get("src", "")).startswith("blob:")
+        and broken_state.get("complete") is True
+        and broken_state.get("width") == 0,
+        f"(elapsed={elapsed!r}, broken={broken_state!r})",
+    )
 
     # 既存サンプル（remote-resources 宣言なし）では警告が出ない。
     await cdp.evaluate("localStorage.clear()")
