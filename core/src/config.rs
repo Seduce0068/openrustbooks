@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Sentinel used whenever a secret is redacted in `Debug` output or IPC views.
 ///
@@ -494,42 +496,106 @@ impl AppConfig {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self) -> crate::CoreResult<()> {
         use directories::ProjectDirs;
-        use std::fs;
 
         if let Some(proj_dirs) = ProjectDirs::from("com", "onoderakeita", "openrustbooks") {
-            let config_dir = proj_dirs.config_dir();
-            fs::create_dir_all(config_dir)?;
-            let config_file = config_dir.join("config.toml");
-            let toml = toml::to_string_pretty(self)?;
-            write_private(&config_file, toml.as_bytes())?;
+            self.save_to_dir(proj_dirs.config_dir())?;
         }
+        Ok(())
+    }
+
+    /// 指定ディレクトリの `config.toml` を atomic に保存する。
+    ///
+    /// ProjectDirs を使わずに一時ディレクトリへ保存できるよう分離している（単体テスト用）。
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_to_dir(&self, config_dir: &std::path::Path) -> crate::CoreResult<()> {
+        use std::fs;
+
+        fs::create_dir_all(config_dir)?;
+        let config_file = config_dir.join("config.toml");
+        let toml = toml::to_string_pretty(self)?;
+        atomic_write(&config_file, toml.as_bytes())?;
         Ok(())
     }
 }
 
-/// Write `contents` to `path` with owner-only permissions.
+/// config の atomic save が使う一時ファイル名のプロセス内カウンタ（R6 TD-L09）。
 ///
-/// `OpenOptions::mode` applies only on creation, so `set_permissions` is also
-/// called to tighten files that already existed with a wider mode.
+/// `core/src/io.rs` の `LocalStorage::write`（ADR-0188）と同じ方式で、
+/// PID と組み合わせることでプロセス内・プロセス間の名前衝突を避ける。
+#[cfg(not(target_arch = "wasm32"))]
+static CONFIG_TMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// 一時ファイル作成の最大再試行回数。
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_TMP_ATTEMPTS: usize = 128;
+
+/// `<filename>.<pid>.<counter>.tmp` 形式の一時パスを生成する。
+#[cfg(not(target_arch = "wasm32"))]
+fn config_tmp_path(config_file: &std::path::Path) -> PathBuf {
+    let counter = CONFIG_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut file_name = config_file.file_name().unwrap_or_default().to_os_string();
+    file_name.push(format!(".{}.{counter}.tmp", std::process::id()));
+    config_file.with_file_name(file_name)
+}
+
+/// 一時ファイルを排他的に作成して owner-only 権限で書き込む（Unix）。
 #[cfg(all(not(target_arch = "wasm32"), unix))]
-fn write_private(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+fn write_private_new(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
     let mut file = std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
         .open(path)?;
     file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-    file.write_all(contents)
+    file.write_all(contents)?;
+    file.flush()
 }
 
-/// Non-UNIX fallback: use the platform's default file permissions.
+/// 非 Unix fallback: パーミッション指定なしで排他的に作成して書き込む。
 #[cfg(all(not(target_arch = "wasm32"), not(unix)))]
-fn write_private(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
-    std::fs::write(path, contents)
+fn write_private_new(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    file.write_all(contents)?;
+    file.flush()
+}
+
+/// 一時ファイルへ書き込んでから `rename` で差し替える。
+///
+/// 既存の同名一時ファイルは `create_new` で上書きせず、カウンタを進めて再試行する。
+/// 書き込み／rename が失敗した場合は一時ファイルを best-effort で削除する。
+#[cfg(not(target_arch = "wasm32"))]
+fn atomic_write(config_file: &std::path::Path, contents: &[u8]) -> crate::CoreResult<()> {
+    use std::fs;
+
+    for _ in 0..MAX_TMP_ATTEMPTS {
+        let tmp = config_tmp_path(config_file);
+        match write_private_new(&tmp, contents) {
+            Ok(()) => {
+                if let Err(error) = fs::rename(&tmp, config_file) {
+                    let _ = fs::remove_file(&tmp);
+                    return Err(error.into());
+                }
+                return Ok(());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                let _ = fs::remove_file(&tmp);
+                return Err(error.into());
+            }
+        }
+    }
+
+    Err(crate::CoreError::storage(format!(
+        "Unable to create a unique temporary config file after {MAX_TMP_ATTEMPTS} attempts"
+    )))
 }
 
 #[cfg(test)]
@@ -847,28 +913,190 @@ mod tests {
         assert_eq!(drive.client_secret, "dummy-client-secret");
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn write_private_creates_and_tightens_0600() {
-        use std::os::unix::fs::PermissionsExt;
+    /// atomic save のテスト。ProjectDirs を使わず一時ディレクトリに保存する。
+    #[cfg(not(target_arch = "wasm32"))]
+    mod atomic_save_tests {
+        use super::*;
+        use std::fs;
+        use std::path::Path;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
-        let dir =
-            std::env::temp_dir().join(format!("openrustbooks-config-perms-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("config.toml");
+        static NEXT_DIR_ID: AtomicUsize = AtomicUsize::new(0);
 
-        write_private(&path, b"first").unwrap();
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
+        struct TempDir {
+            path: PathBuf,
+        }
 
-        // `mode` only applies on creation; an existing 0644 file must also be
-        // tightened when it is overwritten.
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        write_private(&path, b"second").unwrap();
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
-        assert_eq!(std::fs::read(&path).unwrap(), b"second");
+        impl TempDir {
+            fn new() -> Self {
+                let id = NEXT_DIR_ID.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "openrustbooks-config-test-{}-{}",
+                    std::process::id(),
+                    id
+                ));
+                fs::create_dir_all(&path).unwrap();
+                Self { path }
+            }
 
-        std::fs::remove_dir_all(&dir).unwrap();
+            fn config_file(&self) -> PathBuf {
+                self.path.join("config.toml")
+            }
+
+            fn tmp_files(&self) -> Vec<PathBuf> {
+                fs::read_dir(&self.path)
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| name.ends_with(".tmp"))
+                    })
+                    .collect()
+            }
+        }
+
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+
+        /// 一時ファイル名が呼び出しごとに異なり、`<filename>.<pid>.<counter>.tmp`
+        /// の形式になること（ADR-0188 の config 版）。
+        #[test]
+        fn config_tmp_paths_are_unique() {
+            let config_file = Path::new("/tmp/openrustbooks-config-test/config.toml");
+            let first = config_tmp_path(config_file);
+            let second = config_tmp_path(config_file);
+
+            assert_ne!(first, second, "並行保存で同じ一時名を使わない");
+            assert_eq!(first.parent(), config_file.parent());
+            let first_name = first.file_name().unwrap().to_string_lossy();
+            let second_name = second.file_name().unwrap().to_string_lossy();
+            assert!(first_name.starts_with("config.toml."), "{first_name}");
+            assert!(
+                first_name.contains(&format!(".{}.", std::process::id())),
+                "{first_name}"
+            );
+            assert!(first_name.ends_with(".tmp"), "{first_name}");
+            assert!(second_name.starts_with("config.toml."), "{second_name}");
+            assert!(second_name.ends_with(".tmp"), "{second_name}");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn write_private_new_creates_0600_file() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = TempDir::new();
+            let path = dir.path.join("fresh.tmp");
+            write_private_new(&path, b"payload").unwrap();
+
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+            assert_eq!(fs::read(&path).unwrap(), b"payload");
+        }
+
+        /// 既存の一時ファイルは create_new で上書きしないこと。
+        #[test]
+        fn write_private_new_does_not_overwrite_existing_file() {
+            let dir = TempDir::new();
+            let path = dir.path.join("occupied.tmp");
+            fs::write(&path, b"original").unwrap();
+
+            let error = write_private_new(&path, b"replacement").unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(fs::read(&path).unwrap(), b"original");
+        }
+
+        #[test]
+        fn save_to_dir_writes_config_and_leaves_no_tmp() {
+            let dir = TempDir::new();
+            let config = AppConfig::default();
+
+            config.save_to_dir(&dir.path).unwrap();
+
+            let expected = toml::to_string_pretty(&config).unwrap();
+            assert_eq!(fs::read_to_string(dir.config_file()).unwrap(), expected);
+            assert!(
+                dir.tmp_files().is_empty(),
+                "保存後に一時ファイルが残っている: {:?}",
+                dir.tmp_files()
+            );
+        }
+
+        /// 既存 config.toml が新しい内容で置換されること。Unix では
+        /// 一時ファイルの 0600 が rename 後も引き継がれることも確認する。
+        #[test]
+        fn save_to_dir_replaces_existing_config() {
+            let dir = TempDir::new();
+            fs::write(dir.config_file(), b"stale contents").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(dir.config_file(), fs::Permissions::from_mode(0o644)).unwrap();
+            }
+
+            let mut config = AppConfig::default();
+            config.general.language = "en".to_string();
+            config.save_to_dir(&dir.path).unwrap();
+
+            let expected = toml::to_string_pretty(&config).unwrap();
+            assert_eq!(fs::read_to_string(dir.config_file()).unwrap(), expected);
+            assert!(dir.tmp_files().is_empty());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = fs::metadata(dir.config_file())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777;
+                assert_eq!(mode, 0o600, "rename 後も owner-only 権限が維持される");
+            }
+        }
+
+        /// rename 失敗時に一時ファイルが best-effort で削除されること。
+        #[test]
+        fn failed_rename_removes_tmp_file() {
+            let dir = TempDir::new();
+            // rename 先をディレクトリにして確実に失敗させる。
+            fs::create_dir(dir.config_file()).unwrap();
+
+            assert!(AppConfig::default().save_to_dir(&dir.path).is_err());
+            assert!(
+                dir.tmp_files().is_empty(),
+                "失敗時に一時ファイルが残っている: {:?}",
+                dir.tmp_files()
+            );
+        }
+
+        /// 同じディレクトリへの並行保存でも内容が混ざらず、一時ファイルが残らないこと。
+        #[test]
+        fn concurrent_saves_leave_no_tmp_and_keep_one_full_content() {
+            let dir = TempDir::new();
+            let mut config_a = AppConfig::default();
+            config_a.general.language = "ja".to_string();
+            let mut config_b = AppConfig::default();
+            config_b.general.language = "en".to_string();
+
+            std::thread::scope(|scope| {
+                let a = scope.spawn(|| config_a.save_to_dir(&dir.path).unwrap());
+                let b = scope.spawn(|| config_b.save_to_dir(&dir.path).unwrap());
+                a.join().unwrap();
+                b.join().unwrap();
+            });
+
+            let saved = fs::read_to_string(dir.config_file()).unwrap();
+            let expected_a = toml::to_string_pretty(&config_a).unwrap();
+            let expected_b = toml::to_string_pretty(&config_b).unwrap();
+            assert!(
+                saved == expected_a || saved == expected_b,
+                "途中状態が混ざらないこと"
+            );
+            assert!(dir.tmp_files().is_empty());
+        }
     }
 }
