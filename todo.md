@@ -23,8 +23,14 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残】Tauri コマンドの UI 接続（段階 2）と設定保存 UI のみ残存。
-  ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193 の「未決定」を追跡先とする。
+- 【A05 残 / 段階設計決定・実装は後続】Tauri 設定保存 UI の接続（段階 2）。
+  段階設計は ADR-0253 で決定。browser は読み取り専用 fail-closed を維持し、
+  desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
+  ConfigUpdateRequest.expected + 構造化エラー + 最新 ConfigView / a11y /
+  E2E 成功経路 +1 / 実 Tauri WebView 検証）を順に満たしてから接続する。
+  AI / Lint / format の 4 操作は ADR-0232 の初版外で対象外。
+  ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193（desktop 側を ADR-0253 が
+  supersede、browser 側は維持）を追跡先とする。
   CSP（B01 / B02）は ADR-0091 / ADR-0130 / ADR-0191 で解消済みのため重複計上しない。
 
 ### 優先度: 中

@@ -1,5 +1,17 @@
 # log
 
+## 2026-11-20
+
+- R6 A05 残の Tauri 設定保存 UI を段階設計として決定。browser 単体は読み取り専用
+  fail-closed を維持し、desktop のみ最小 IPC（get_config + update_config_patch）と
+  実装前提 6 段階（withGlobalTauri + CSP / capability 最小権限 /
+  ConfigUpdateRequest.expected + 構造化エラー {code,message} + 最新 ConfigView /
+  a11y 契約 / E2E 成功経路 +1 / 実 Tauri WebView 検証）を順に満たして接続する。
+  reset / clear は別操作、fs / ai / window / updater は設定画面から禁止。
+  AI / Lint / format は初版外を維持。ADR-0128 / 0193 は desktop 側のみ supersede し、
+  browser 側は維持。decisions / docs 各 index（253 件）、README、todo を追従。
+  コード・CSP・capability・E2E は未変更で E2E 255 件は不変（ADR-0253）。
+
 ## 2026-11-19
 
 - ZIP パスの深さ上限を追加せず設計受容を記録。normalize_path / resolve_reference の

@@ -7,7 +7,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [architecture.md](architecture.md) — 初期提案の構成案。現状は ADR と README を参照。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 252 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 253 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -41,4 +41,6 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — native / wasm とも featureless である現状を ADR-0242 を正とし、target 別 feature 選択を履歴化。
 - [ADR-0252: ZIP パスの深さ上限を追加しない設計受容](decisions/0252-path-depth-limit.md)
   — 非再帰正規化と既存の多重防御を理由に深さ上限を追加せず、責任分界を記録。
+- [ADR-0253: Tauri 設定保存 UI の段階設計](decisions/0253-tauri-settings-save-design.md)
+  — browser は読み取り専用 fail-closed を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。

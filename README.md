@@ -460,6 +460,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
 - [0252-path-depth-limit](docs/decisions/0252-path-depth-limit.md)
   - ZIP パスの深さ上限を追加せず、非再帰正規化と既存の多重防御で受容する決定を記録する。
+- [0253-tauri-settings-save-design](docs/decisions/0253-tauri-settings-save-design.md)
+  - browser の読み取り専用を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続する段階設計を記録する。
 
 ## ライセンス
 
