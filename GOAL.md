@@ -1,40 +1,40 @@
 # Goal
 
-依存更新の自動検出を Dependabot で有効化する（R6 TD-M14）。
+ストリーミング API の未接続を設計受容とし、設定表示を正直化する（R6 TD-M18）。
 
 ## Scope
 
 ### 背景
 
-`.github/dependabot.yml` が無く、Cargo 依存と GitHub Actions の更新を手動検出していた。
-公式ドキュメントでは `version: 2`、`updates[].package-ecosystem`、
-`directory`、`schedule.interval` が必須で、Cargo と GitHub Actions が
-サポート対象と明記されている（Dependabot options reference）。
+`AiClient::stream_complete()` / `TokenStream::next_token()` は実装済みだが
+本番呼び出しは 0 件。`complete()` は `_streaming` を無視して常に
+`stream: false` でリクエストし、`stream_generate()` は
+`generate()` の全文を 1 回だけ `on_token` へ渡す疑似ストリームである。
+一方 UI は `config.ai.streaming = true` を「有効」と表示しており、
+実態と一致しない。wasm の AI service は fail-closed で配信先も無い。
 
 ### 成果物
 
-- `.github/dependabot.yml`: 追加（cargo / github-actions、週次、patch/minor グループ）
-- `docs/decisions/0215-dependabot.md`: 追加
-- `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
-- `todo.md`: TD-M14 を完了へ移動
-- `GOAL.md`: 本契約
+- `web/src/lib.rs`: 変更（`streaming` 表示を「未配線」と明記）
+- `core/src/ai_markdown/pipeline.rs`: 変更（`stream_generate` を疑似ストリームと明記）
+- `docs/decisions/0216-streaming-deferred.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
 ### 必須事項
 
-1. cargo をルート `/` で週次チェックする。
-2. github-actions をルート `/` で週次チェックする。
-3. バージョン更新は patch / minor のみを自動 PR 対象とし、
-   major は手動判断に残す（セキュリティ更新は Dependabot 既定で継続）。
-4. 設定ファイルを YAML として構文検証する。
-5. markdownlint 0 issues、既存ゲート（E2E 253）を壊さない。
+1. UI で `streaming` が true / false に関わらず「未配線」と表示する
+   （値は denoising のため内部で保持してよいが、有効と誤認させない）。
+2. `stream_generate()` のコメントを「疑似ストリーム（全文を 1 回通知）」と明記する。
+3. ADR に設計受容の根拠と未決定（retry 表示、IPC、完了判定、tokens_used、timeout、設定配線）を記載する。
+4. 既存 E2E 253 を壊さない。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- YAML 構文 OK、markdownlint 0 issues、verify.sh 成功。
+- 全ゲート成功、E2E 253 項目成功。
 
 ## Constraints
 
-- 新規依存を追加しない（GitHub 標準機能のみ）。
-- 共通ワークフロー `rust-gates.yml@v1` は変更しない。
-- 秘密情報・トークンは書かない。
+- ストリーミング本番接続は行わない（UI / IPC 設計が未定）。
+- 既存の AI 生成・lint retry 契約を変更しない。
 - `master` へ push する。force push はしない。
