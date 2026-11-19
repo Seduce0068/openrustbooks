@@ -355,6 +355,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - ConfigView と同型の ConfigPatch を受け取る update_config_patch を追加し、Web UI からの安全な設定保存経路を準備する決定を記録する。
 - [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
   - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
+- [0207-appstate-scope](docs/decisions/0207-appstate-scope.md)
+  - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
 
 ## ライセンス
 
