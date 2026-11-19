@@ -389,6 +389,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0219-verified-artifact-retention](docs/decisions/0219-verified-artifact-retention.md)
   - verify.sh --dist で全ゲート成功時のみ dist を保持し、manifest で完全性を記録する決定。
 - [0220-traceability-refresh](docs/decisions/0220-traceability-refresh.md)
+- [0221-ai-client-options](docs/decisions/0221-ai-client-options.md)
+  - OpenAI extra_headers と Ollama options を安全にクライアントへ渡す決定を記録する。
   - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
 
 ## ライセンス

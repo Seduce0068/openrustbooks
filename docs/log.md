@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- OpenAI extra_headers / Ollama options を安全に配線し core を 260→267 件へ拡充（ADR-0221）。
 - E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れを解消）。
   不正 EPUB の固定文言通知を VC-009、reduce の即時フラグメント移動を VC-004 の
   既存行へ割り当て、Python AST で check 236 + equal 17 = 253 件を抽出して
