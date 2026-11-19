@@ -481,6 +481,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず、現状を設計受容として残す決定を記録する。
 - [0261-os-keychain-deferred](docs/decisions/0261-os-keychain-deferred.md)
   - 平文保存 + redaction + Unix 0600 を受容済みリスクとして明記し、OS キーチェーン移行を ADR-0098 の未決定へ集約して実装を見送る決定を記録する。
+- [0262-e2e-count-documentation-refresh](docs/decisions/0262-e2e-count-documentation-refresh.md)
+  - E2E 総数の current 表記をコード出典の 255 件へ追従し、254 件は ADR-0225 の履歴として保持する決定を記録する。
 
 ## ライセンス
 

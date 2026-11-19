@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+- R6 ドキュメント整合: E2E 件数の current 表記をコード出典（255）へ追従。
+  `Checker(expected=255)`（check 238 + equal 17）と
+  `docs/e2e-traceability.md` の 255 件は一致していたが、`todo.md` の CI-H01 と
+  `docs/documentation-operations.md` の出自節に 254 件が current 値として残存。
+  current は 255 件とし、254 件（check 237 + equal 17）は ADR-0225、
+  253 件は ADR-0220 の履歴更新として保持。出典はコードのみ（ADR-0090）、
+  同名重複検知は ADR-0182、255 件への更新根拠は ADR-0245。
+  ADR-0262 を追加し decisions / docs 各 index（262 件）、README、todo を追従。
+  コード / E2E check / E2E 件数は未変更（255 維持）。markdownlint 0 issues（ADR-0262）。
 - R6 D05: OS キーチェーン移行を設計受容として記録。平文 config.toml 保存 +
   redaction（REDACTED_SECRET / DTO has_* / Debug マスク）+ Unix 0600 +
   `update_ai_config` の `api_key` のみ IPC 書き込み可を受容済みリスクとして明記。

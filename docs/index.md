@@ -8,7 +8,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 261 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 262 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -52,4 +52,6 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — chrono / uuid の member 加算と wasm dev tokio の member 限定を記録し、workspace 化せず残置する。
 - [ADR-0261: OS キーチェーン移行の設計受容](decisions/0261-os-keychain-deferred.md)
   — 平文保存 + redaction + Unix 0600 を受容し、移行の未決定を ADR-0098 へ集約して実装を見送る。
+- [ADR-0262: E2E 件数 current 表記のコード出典追従](decisions/0262-e2e-count-documentation-refresh.md)
+  — current 表記をコード出典の 255 件へ追従し、254 件は履歴として保持する決定。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。
