@@ -957,7 +957,7 @@ fn find_large_image() -> Option<String> {
         let height = image.natural_height();
         if width > LARGE_IMAGE_THRESHOLD || height > LARGE_IMAGE_THRESHOLD {
             return Some(format!(
-                "Large image detected ({width}x{height}). Consider a smaller source."
+                "大きな画像を検出しました（{width}x{height}）。より小さい画像を使用してください。"
             ));
         }
     }
@@ -1465,19 +1465,20 @@ fn report_reader_error(operation: &str) {
 
 /// ファイル読込失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
-const FILE_READ_FAILED_MESSAGE: &str = "File read failed. Please try again.";
+const FILE_READ_FAILED_MESSAGE: &str = "ファイルの読み込みに失敗しました。もう一度お試しください。";
 /// EPUB オープン失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
-const EPUB_OPEN_FAILED_MESSAGE: &str = "EPUB open failed. The file may be unsupported or damaged.";
+const EPUB_OPEN_FAILED_MESSAGE: &str =
+    "EPUB を開けませんでした。形式が未対応かファイルが破損している可能性があります。";
 /// 章一覧の読込失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
-const CHAPTER_LIST_FAILED_MESSAGE: &str = "Chapter list could not be read.";
+const CHAPTER_LIST_FAILED_MESSAGE: &str = "章一覧を読み込めませんでした。";
 /// 章描画の失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
-const CHAPTER_RENDER_FAILED_MESSAGE: &str = "Chapter could not be displayed.";
+const CHAPTER_RENDER_FAILED_MESSAGE: &str = "章を表示できませんでした。";
 /// リンク解決の失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
-const LINK_RESOLUTION_FAILED_MESSAGE: &str = "Link resolution failed.";
+const LINK_RESOLUTION_FAILED_MESSAGE: &str = "リンクを解決できませんでした。";
 
 /// localStorage の保存失敗をコンソールと status に通知する。
 ///
@@ -1978,7 +1979,7 @@ fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize),
     if let Some(version) = map.get("version")
         && version.as_u64() != Some(EXPORT_VERSION as u64)
     {
-        return Err(format!("Unsupported export version: {version}."));
+        return Err(format!("未対応のエクスポート形式です: {version}。"));
     }
     let Some(window) = web_sys::window() else {
         return Err("window が取得できません".to_string());
@@ -2334,7 +2335,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     let (page_list, set_page_list) = signal(Vec::<TocEntry>::new());
     let (current, set_current) = signal(0_usize);
     let (content, set_content) = signal(String::new());
-    let (status, set_status) = signal(String::from("Choose an EPUB file to begin."));
+    let (status, set_status) = signal(String::from("EPUB ファイルを選択してください。"));
     // 巨大画像の自然サイズは画像の読み込み完了時に確定する。位置適用の
     // セトリング待ちには 2 秒の上限があるため、それを過ぎて読み込まれる
     // 画像を取りこぼさないよう load イベントでも警告を検出する。
@@ -2513,7 +2514,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             let result = book
                 .borrow()
                 .as_ref()
-                .ok_or_else(|| String::from("No EPUB is open."))
+                .ok_or_else(|| String::from("開いている EPUB がありません。"))
                 .and_then(|book| {
                     let html = book.chapter_html(index).map_err(|_| {
                         report_reader_error("Chapter rendering failed");
@@ -2840,7 +2841,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 .target()
                 .and_then(|target| target.dyn_into::<HtmlInputElement>().ok())
             else {
-                set_status.set("Unable to read the file input.".to_string());
+                set_status.set("ファイルを読み込めませんでした。".to_string());
                 return;
             };
             let Some(file) = input.files().and_then(|files| files.item(0)) else {
@@ -2848,7 +2849,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             };
             if file.size() > MAX_EPUB_FILE_BYTES {
                 set_status.set(format!(
-                    "This EPUB is too large (limit: {MAX_EPUB_FILE_MIB} MiB)."
+                    "この EPUB が大きすぎます（上限: {MAX_EPUB_FILE_MIB} MiB）。"
                 ));
                 return;
             }
@@ -2864,7 +2865,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             history_index.set(0);
             sync_history();
             *history_key_state.borrow_mut() = Some(history_key(&file));
-            set_status.set(format!("Opening {}…", file.name()));
+            set_status.set(format!("{} を開いています…", file.name()));
             set_content.set(String::new());
             set_chapters.set(Vec::new());
             set_chapter_filter.set(String::new());
@@ -2930,7 +2931,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     if load_gen != load_generation.get() {
                         return;
                     }
-                    set_status.set("This EPUB has no readable chapters.".to_string());
+                    set_status.set("読み込み可能な章がありません。".to_string());
                     return;
                 }
                 let mut spine = Vec::with_capacity(count);
@@ -3055,7 +3056,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 *book.borrow_mut() = Some(opened);
                 set_content_lang.set(language);
                 set_remote_resources_warning.set(if has_remote_resources {
-                    Some(String::from("This EPUB declares remote resources."))
+                    Some(String::from(
+                        "この EPUB はリモートリソースを宣言しています。",
+                    ))
                 } else {
                     None
                 });
@@ -3233,7 +3236,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 .find(|entry| entry.title == page)
                 .cloned();
             let Some(entry) = entry else {
-                set_status.set(format!("Page {} not found.", page));
+                set_status.set(format!("ページ {} が見つかりません。", page));
                 return;
             };
             let path = entry.href.split('#').next().unwrap_or(&entry.href);
@@ -3243,7 +3246,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             if let Some(target_index) = target_index {
                 navigate_to(target_index, entry.fragment);
             } else {
-                set_status.set(format!("Page {} not found.", page));
+                set_status.set(format!("ページ {} が見つかりません。", page));
             }
         }
     };
@@ -3325,7 +3328,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }
             };
             let Some(link) = link else {
-                set_status.set("This link cannot be opened.".to_string());
+                set_status.set("このリンクは開けません。".to_string());
                 return;
             };
             if link.chapter_index == current.get() {
@@ -3537,7 +3540,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         // 失敗時は report_save_failure のリスナーが status を更新済みなので
         // 成功文言で上書きしない（ADR-0165）。
         if save_settings(&ReaderSettings::default()) {
-            set_status.set("Display settings reset.".to_string());
+            set_status.set("表示設定をリセットしました。".to_string());
         }
     };
     let on_clear_data = move |_| {
@@ -3556,14 +3559,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
             return;
         }
-        set_status.set(format!("Removed {removed} saved reading positions."));
+        set_status.set(format!("保存済みの読書位置を {removed} 件削除しました。"));
     };
     let on_export = move |_: web_sys::MouseEvent| {
         let exported = export_positions();
         if exported == 0 {
-            set_status.set("No saved reading positions to export.".to_string());
+            set_status.set("エクスポートする読書位置がありません。".to_string());
         } else {
-            set_status.set(format!("Exported {exported} reading positions."));
+            set_status.set(format!("読書位置を {exported} 件エクスポートしました。"));
         }
     };
     let on_import_click = move |_: web_sys::MouseEvent| {
@@ -3602,11 +3605,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let file_clone = file.clone();
         spawn_local(async move {
             let Ok(buffer) = JsFuture::from(file_clone.text()).await else {
-                set_status.set("Failed to read the import file.".to_string());
+                set_status.set("インポートファイルを読み込めませんでした。".to_string());
                 return;
             };
             let Some(raw) = buffer.as_string() else {
-                set_status.set("Failed to read the import file.".to_string());
+                set_status.set("インポートファイルを読み込めませんでした。".to_string());
                 return;
             };
             let mut save_failed = false;
@@ -3618,7 +3621,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             match result {
                 Ok((count, history_count)) => {
                     set_status.set(format!(
-                        "Imported {count} reading positions and {history_count} histories."
+                        "読書位置を {count} 件、履歴を {history_count} 件インポートしました。"
                     ));
                 }
                 Err(error) => set_status.set(error),

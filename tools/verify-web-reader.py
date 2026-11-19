@@ -1012,7 +1012,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
     checker.check(
         "解決できないリンクは移動せず状態を表示する",
-        "cannot be opened" in status_text,
+        "このリンクは開けません" in status_text,
         f"(status={status_text!r})",
     )
     checker.check(
@@ -1440,7 +1440,11 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             await cdp.evaluate("localStorage.getItem('openrustbooks:settings') !== null"),
         )
         status_text = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
-        checker.check("削除後に状態メッセージが出る", "Removed" in status_text)
+        checker.check(
+            "削除後に状態メッセージが出る",
+            re.search(r"保存済みの読書位置を \d+ 件削除しました", status_text) is not None,
+            f"(status={status_text!r})",
+        )
     finally:
         await cdp.evaluate(
             "window.confirm = window.__orbOriginalConfirm; delete window.__orbOriginalConfirm;"
@@ -1541,7 +1545,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "全消去の保存失敗時に status と console へ通知する",
             clear_fail_shown
             and "ブラウザの設定または空き容量" in clear_fail_status
-            and "Removed" not in clear_fail_status  # 成功文言で失敗通知が消えない
+            and "件削除しました" not in clear_fail_status  # 成功文言で失敗通知が消えない
             and clear_error_count == 1
             and any("全消去 の保存に失敗しました" in line for line in clear_fail_console),
             f"(status={clear_fail_status!r}, console={clear_fail_console!r}, count={clear_error_count})",
@@ -1978,9 +1982,18 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     if node_id != 0:
         await select_import_file(cdp, node_id, import_path)
         imported = await wait_until(
-            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')", timeout=5
         )
-        checker.check("インポート後に状態メッセージが出る", imported)
+        import_status = await cdp.evaluate(
+            "document.querySelector('.reader-status')?.textContent ?? ''"
+        )
+        checker.check(
+            "インポート後に状態メッセージが出る",
+            imported
+            and re.search(r"読書位置を \d+ 件、履歴を \d+ 件インポートしました", import_status)
+            is not None,
+            f"(status={import_status!r})",
+        )
         await asyncio.sleep(1.0)
         imported_value = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:position:sample.epub:1:1')"
@@ -2128,7 +2141,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await cdp.evaluate("document.querySelector('#reader-page-go').click()")
     await asyncio.sleep(0.5)
     status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent || ''")
-    checker.check("存在しないページ番号では状態メッセージが出る", "not found" in status.lower() or "見つかりません" in status)
+    checker.check("存在しないページ番号では状態メッセージが出る", re.search(r"ページ \d+ が見つかりません", status) is not None)
 
     # 履歴一覧。
     checker.check(
@@ -2230,7 +2243,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     if node_id != 0:
         await select_import_file(cdp, node_id, hist_path)
         await wait_until(
-            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')", timeout=5
         )
         restored = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:history:sample.epub:1:1')"
@@ -2320,7 +2333,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     if node_id != 0:
         await select_import_file(cdp, node_id, merge_path)
         await wait_until(
-            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')", timeout=5
         )
         kept = await cdp.evaluate(
             "JSON.parse(localStorage.getItem('openrustbooks:position:merge-test'))"
@@ -2392,7 +2405,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     if node_id != 0:
         await select_import_file(cdp, node_id, preserve_path)
         await wait_until(
-            cdp, "document.querySelector('.reader-status')?.textContent.includes('Imported')", timeout=5
+            cdp, "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')", timeout=5
         )
         await asyncio.sleep(1.0)
         preserved = await cdp.evaluate(
@@ -2642,7 +2655,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         await select_import_file(cdp, node["result"]["nodeId"], version_path)
         await wait_until(
             cdp,
-            "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+            "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')",
             timeout=5,
         )
         imported_v1 = await cdp.evaluate(
@@ -2669,7 +2682,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         await select_import_file(cdp, node["result"]["nodeId"], unknown_path)
         await wait_until(
             cdp,
-            "document.querySelector('.reader-status')?.textContent.includes('Unsupported')",
+            "document.querySelector('.reader-status')?.textContent.includes('未対応')",
             timeout=5,
         )
         kept_v1 = await cdp.evaluate(
@@ -2960,7 +2973,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             await select_import_file(cdp, node["result"]["nodeId"], exported)
             await wait_until(
                 cdp,
-                "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')",
                 timeout=5,
             )
             restored = await cdp.evaluate(
@@ -3040,7 +3053,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             await select_import_file(cdp, node["result"]["nodeId"], draft_exported)
             await wait_until(
                 cdp,
-                "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')",
                 timeout=5,
             )
             restored_draft = await cdp.evaluate(
@@ -3330,7 +3343,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         await select_import_file(cdp, node["result"]["nodeId"], legacy_path)
         await wait_until(
             cdp,
-            "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+            "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')",
             timeout=5,
         )
         legacy_pos = await cdp.evaluate(
@@ -3377,7 +3390,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
                 await select_import_file(cdp, node["result"]["nodeId"], exported_path)
                 await wait_until(
                     cdp,
-                    "document.querySelector('.reader-status')?.textContent.includes('Imported')",
+                    "document.querySelector('.reader-status')?.textContent.includes('件インポートしました')",
                     timeout=5,
                 )
                 reimported = await cdp.evaluate(
@@ -3401,7 +3414,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await asyncio.sleep(1.0)
     no_warning = await cdp.evaluate(
         "(() => { const s = document.querySelector('.reader-status')?.textContent || '';"
-        " return !s.includes('Large image detected'); })()"
+        " return !s.includes('大きな画像を検出しました'); })()"
     )
     checker.check("4000px の画像では警告が出ない", no_warning is True)
 
@@ -3447,7 +3460,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         )
         warned = await wait_until(
             cdp,
-            "document.querySelector('.reader-status')?.textContent.includes('Large image detected')",
+            "document.querySelector('.reader-status')?.textContent.includes('大きな画像を検出しました')",
             timeout=5,
         )
         warning = await cdp.evaluate(
@@ -3570,7 +3583,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await asyncio.sleep(1.0)
     no_remote_warning = await cdp.evaluate(
         "(() => { const s = document.querySelector('.reader-status')?.textContent || '';"
-        " return !s.includes('remote resources'); })()"
+        " return !s.includes('リモートリソース'); })()"
     )
     checker.check("宣言なしでは remote-resources 警告が出ない", no_remote_warning is True)
 
@@ -3609,7 +3622,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         )
         remote_warned = await wait_until(
             cdp,
-            "document.querySelector('.reader-status')?.textContent.includes('remote resources')",
+            "document.querySelector('.reader-status')?.textContent.includes('リモートリソース')",
             timeout=5,
         )
         remote_status = await cdp.evaluate(
@@ -3776,7 +3789,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     checker.check(
         "リセットの状態メッセージが出る",
-        "settings reset" in str(reset_status).lower(),
+        "表示設定をリセットしました" in reset_status,
         f"(status={reset_status!r})",
     )
 
@@ -3818,7 +3831,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "リセット保存失敗時に成功文言を出さず status と console へ通知する",
             reset_fail_shown
             and "ブラウザの設定または空き容量" in reset_fail_status
-            and "Display settings reset." not in reset_fail_status
+            and "表示設定をリセットしました" not in reset_fail_status
             and any("表示設定 の保存に失敗しました" in line for line in reset_fail_console),
             f"(status={reset_fail_status!r}, console={reset_fail_console!r})",
         )
@@ -4117,7 +4130,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     no_data_status = await wait_until(
         cdp,
         "document.querySelector('.reader-status')?.textContent"
-        "?.includes('No saved reading positions to export.') === true",
+        "?.includes('エクスポートする読書位置がありません') === true",
         timeout=5,
     )
     checker.check("保存データ 0 件のエクスポートで状態メッセージが出る", no_data_status is True)
@@ -4704,7 +4717,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
                 fixed_status = await wait_until(
                     cdp,
                     "document.querySelector('.reader-status')?.textContent === "
-                    "'EPUB open failed. The file may be unsupported or damaged.'",
+                    "'EPUB を開けませんでした。形式が未対応かファイルが破損している可能性があります。'",
                     timeout=10,
                 )
             reader_error_status = await cdp.evaluate(
