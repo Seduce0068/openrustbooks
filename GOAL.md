@@ -1,44 +1,39 @@
 # Goal
 
-設定画面から危険な plugin / command を呼ばないことを静的ゲートで固定する（R6 A05 前提 2）。
+最終ドキュメント整合（A05 前提 2 / Chrome / Edge 実機 255 / VC-015）。
 
 ## Scope
 
 ### 背景
 
-ADR-0253 / 0274 は capability 最小権限を A05 前提 2 に列挙したが、
-完了証跡が無い。Tauri 2.12.5 では `invoke_handler` 登録済みの独自 command は ACL 非対象で、
-plugin fs / dialog / shell の scope が広い点が残リスク。
-現状の設定画面は `get_config` / `update_config_patch` のみを呼ぶ。
+監査で次が判明した:
+- `todo.md` の A05 前提 2 が ADR-0278 の静的ゲート完了を反映していない。
+- ADR-0274 の表は更新済みだが決定節が旧 classification のまま。
+- Chrome / Edge 実機 E2E 255/0 は 256 化前の履歴値で、現行 256 件は mock +1 を含む。
+- `docs/e2e-traceability.md` の VC-015 が「5 ブラウザ未検証」のまま。
 
 ### 成果物
 
-- `scripts/check-capability-scope.sh`: 追加
-- `scripts/verify.sh` / `.github/workflows/ci.yml`: 変更（ゲート配線）
-- `docs/decisions/0278-settings-ipc-capability-scope.md`: 追加
-- `docs/decisions/0253` / `0274`: 変更（前提 2 の完了証跡を記録）
-- `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `todo.md`: 変更（A05 前提 2、Chrome / Edge 履歴表記）
+- `docs/decisions/0274-a05-traceability-reconciliation.md`: 変更（決定節の更新）
+- `docs/decisions/0265-cross-browser-e2e.md`: 変更（255 を履歴と明記）
+- `docs/e2e-traceability.md`: 変更（VC-015 の一部カバー）
+- `GOAL.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 設定画面の IPC 呼び出しが `get_config` / `update_config_patch` のみであることを検査する。
-2. `plugin:` 参照、fs / dialog / shell / updater の invoke、`UpdaterExt::check` が web 側に無いことを検査する。
-3. 独自 command は ACL 非対象である ADR-0253:73-74 の判断を維持し、capability ファイルは追加しない。
-4. 負向 test（危険 command 追加 / plugin 参照追加）で失敗する。
-5. 全ゲート成功（E2E 256 維持）。
+1. capability 前提 2 を「静的ゲート完了、実ビルド / 実 WebView 未検証」に統一する。
+2. 255 件は当時の履歴、256 件は current（mock +1）と明示する。
+3. VC-015 は Chrome / Edge のみ実機確認、残り 3 ブラウザは環境ブロッカーとする。
+4. auto gate が参照する `Checker(expected=256)` / CI-H01 / documentation-operations の current 256 は変更しない。
+5. markdownlint 0 issues、verify.sh（256）成功。
 
 ## Acceptance criteria
 
-- 負向 test が失敗し、verify.sh 全ゲート成功。
+- 文書が実態と整合し、全ゲート成功。
 
 ## Constraints
 
-- tauri.conf.json / web / desktop コード / E2E check 名・件数は変更しない。
-- 共通 workflow、外部 secrets、実 Tauri WebView 検証は扱わない。
+- コード / E2E check 名・件数 / Cargo.* は変更しない。
+- 外部サービス / 実 WebView 検証は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- scripts/check-capability-scope.sh を追加し、設定画面 IPC を get_config/update_config_patch に固定。
-- 監査指摘（出典 0253、handler 抽出 fail-closed、静的解析の限界）を反映。
-- 負向 test 11/11 PASS、verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
