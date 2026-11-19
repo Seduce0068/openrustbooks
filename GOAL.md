@@ -1,20 +1,38 @@
 # Goal
 
-Reader の CoverImage DTO から未使用フィールドを削除する（R6 TD-L04、ADR-0203）。
+figment の環境変数マッピングを手動上書きから明示 map 方式へ置き換える（R6 TD-M08b、ADR-0122 の未決定）。
 
 ## Scope
 
+### 背景
+
+`AppConfig::load()` は `Env::prefixed("OPENRUSTBOOKS_").split("_")` を使うが、
+figment の split 挙動で `OPENRUSTBOOKS_AI__MAX_RETRIES` のような
+アンダースコア包含フィールドが正しく届かず、
+`apply_env_max_retries()` で `OPENRUSTBOOKS_AI_MAX_RETRIES` を手動読み込みしている。
+新しい env 対応フィールドが増えるたびに手動マッピングが増える。
+
 ### 成果物
 
-- `web/src/lib.rs`: CoverImage を href / bytes のみへ縮小、allow(dead_code) 削除
-- `docs/decisions/0203-cover-image-dto.md`: 追加
-- `todo.md`: TD-L04 を完了へ移動
+- `core/src/config.rs`: 変更（明示 map／プロバイダ、手動上書きの整理）
+- `docs/decisions/0204-env-mapping.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- core の WasmEpubCoverImage は変更せず、serde の未知フィールド無視に依存。
-- Blob URL 生成経路は不変、MIME 推定は href 拡張子のまま。
+1. figment の env マッピングを、既存の `OPENRUSTBOOKS_AI_MAX_RETRIES` を含む
+   明示的な変換へ置き換える。
+2. 既存の環境変数名・TOML / IPC 優先順位・不正値時の既定維持を壊さない。
+3. `apply_env_max_retries()` は不要なら削除し、必要なら役割を限定する（判断を記録）。
+4. env マッピングの unit test を追加／維持する（既存 3 件を含む）。
+5. 全ゲート成功（E2E 251 維持）。
 
 ## Acceptance criteria
 
-- E2E 251 項目、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 251 項目成功。
+
+## Constraints
+
+- 環境変数名の互換を壊さない（利用者設定を突然無効化しない）。
+- 新規依存を追加しない。
+- `master` へ push する。force push はしない。
