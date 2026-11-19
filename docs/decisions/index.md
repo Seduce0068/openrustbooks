@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 229 件）。
+openrustbooks の ADR 一覧（全 230 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -460,3 +460,5 @@ openrustbooks の ADR 一覧（全 229 件）。
   - status: accepted — 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
 - [ADR-0229: エラー文言と終了処理の整理](0229-error-message-cleanup.md)
   - status: accepted — 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
+- [ADR-0230: dark テーマのボタン文字コントラスト](0230-dark-button-contrast.md)
+  - status: accepted — dark のプライマリボタン文字色を暗色トークンへ変更し、WCAG AA を満たす決定を記録する。

@@ -403,6 +403,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0227-ai-client-injection](docs/decisions/0227-ai-client-injection.md)
 - [0228-ai-dead-config](docs/decisions/0228-ai-dead-config.md)
 - [0229-error-message-cleanup](docs/decisions/0229-error-message-cleanup.md)
+- [0230-dark-button-contrast](docs/decisions/0230-dark-button-contrast.md)
+  - dark のプライマリボタン文字色を暗色トークンへ変更し、WCAG AA を満たす決定を記録する。
   - 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
   - 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
   - core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
