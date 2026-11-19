@@ -36,3 +36,9 @@ desktop でも `fetch_config()` が `Err("desktop only")` になる可能性が�
 
 - 外部サービス・実 Tauri WebView 検証は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0264 で desktop IPC 未接続の可能性と 3 経路比較を記録（実機未検証）。
+- ADR-0253 / todo に追跡先を追記、ark 監査の軽微指摘（CSP 使い分け、リンク、重複行）を修正。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
