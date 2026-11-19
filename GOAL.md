@@ -1,51 +1,38 @@
 # Goal
 
-updater 死設定の正直表示と保存時 fail-closed を復元する（R6 A05 / ADR-0222 の再確認）。
+設定画面から危険な plugin / command を呼ばないことを静的ゲートで固定する（R6 A05 前提 2）。
 
 ## Scope
 
 ### 背景
 
-ADR-0222 は `check_updates` の値に関わらず「更新確認: 未配線」を表示すると決定した。
-しかし設定保存 UI の editable 化（ADR-0272）で `check_updates` が通常の checkbox になり、
-DTО 往復で config.toml へ保存されるようになった。
-updater は plugin 初期化のみで `UpdaterExt::check` / pubkey / endpoint は無く、
-値は動作に接続されないため、利用者へ誤解を与える。
+ADR-0253 / 0274 は capability 最小権限を A05 前提 2 に列挙したが、
+完了証跡が無い。Tauri 2.12.5 では `invoke_handler` 登録済みの独自 command は ACL 非対象で、
+plugin fs / dialog / shell の scope が広い点が残リスク。
+現状の設定画面は `get_config` / `update_config_patch` のみを呼ぶ。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（`check_updates` を固定表示へ復元、editable トグル廃止）
-- `desktop/src/commands/config.rs`: 変更（`merge_secrets` で現在値を保持し JS 変更を無視）
-- `scripts/check-updater-honesty.sh`: 追加（静的ゲート）
+- `scripts/check-capability-scope.sh`: 追加
 - `scripts/verify.sh` / `.github/workflows/ci.yml`: 変更（ゲート配線）
-- `tools/verify-web-reader.py`: 変更（既存 check の条件拡張、check 名・件数は 256 維持）
-- `docs/decisions/0277-updater-honesty-restoration.md`: 追加
-- `docs/decisions/0222-updater-deferred.md`: 変更（再確認節）
+- `docs/decisions/0278-settings-ipc-capability-scope.md`: 追加
+- `docs/decisions/0253` / `0274`: 変更（前提 2 の完了証跡を記録）
 - `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 設定画面に `check_updates` の editable checkbox を置かず、
-   「更新確認: 未配線」を固定表示する。
-2. desktop 側で `merge_secrets()` が `check_updates` の現在値を復元し、
-   JS からの変更が config.toml へ保存されないようにする。
-3. 静的ゲートで `UpdaterExt::check` / pubkey / endpoint が無く、
-   固定表示と現在値復元が残ることを検査する。
-4. E2E check 名・期待総数 256（check 239 + equal 17）を維持する。
-5. 全ゲート成功。
+1. 設定画面の IPC 呼び出しが `get_config` / `update_config_patch` のみであることを検査する。
+2. `plugin:` 参照、fs / dialog / shell / updater の invoke、`UpdaterExt::check` が web 側に無いことを検査する。
+3. 独自 command は ACL 非対象である ADR-0264 の判断を維持し、capability ファイルは追加しない。
+4. 負向 test（危険 command 追加 / plugin 参照追加）で失敗する。
+5. 全ゲート成功（E2E 256 維持）。
 
 ## Acceptance criteria
 
-- 負向 test が失敗し、verify.sh 全ゲート成功（E2E 256/0）。
+- 負向 test が失敗し、verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 公開鍵 / endpoint / 署名 secrets / 自動更新は導入しない。
-- E2E check 名・件数、共通 workflow、Cargo.* は変更しない。
+- tauri.conf.json / web / desktop コード / E2E check 名・件数は変更しない。
+- 共通 workflow、外部 secrets、実 Tauri WebView 検証は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 更新確認を固定表示へ復元し、merge_secrets で check_updates 現在値を保持。
-- check-updater-honesty 静的ゲートを verify.sh / ci.yml へ配線、負向 test 8/8 PASS。
-- E2E 256/0、check 名不変、verify.sh 全ゲート成功。
