@@ -91,6 +91,25 @@ impl From<async_openai::error::OpenAIError> for CoreError {
 pub type CoreResult<T> = Result<T, CoreError>;
 
 impl CoreError {
+    /// IPC 契約で使う固定エラーコードを返す（設定値・パスは含まない）。
+    ///
+    /// `Config` variant は native のみ存在するため、そのアームだけ cfg で分ける。
+    /// 新しい variant を追加した場合は既定で `CONFIG_INTERNAL` に fall back する。
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Conflict(_) => "CONFIG_CONFLICT",
+            Self::Validation(_) | Self::UnsupportedFormat(_) | Self::TomlDeserialize(_) => {
+                "CONFIG_VALIDATION"
+            }
+            Self::Io(_) | Self::Storage(_) | Self::Serde(_) | Self::TomlSerialize(_) => {
+                "CONFIG_STORAGE"
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Self::Config(_) => "CONFIG_STORAGE",
+            _ => "CONFIG_INTERNAL",
+        }
+    }
+
     /// Create a storage error
     pub fn storage(msg: impl Into<String>) -> Self {
         Self::Storage(msg.into())
@@ -135,5 +154,46 @@ mod tests {
     fn test_error_creation() {
         let err = CoreError::storage("test message");
         assert!(err.to_string().contains("test message"));
+    }
+
+    #[test]
+    fn code_returns_fixed_ipc_codes() {
+        assert_eq!(
+            CoreError::Conflict("stale".into()).code(),
+            "CONFIG_CONFLICT"
+        );
+        assert_eq!(CoreError::validation("bad").code(), "CONFIG_VALIDATION");
+        assert_eq!(
+            CoreError::UnsupportedFormat("x".into()).code(),
+            "CONFIG_VALIDATION"
+        );
+        assert_eq!(CoreError::storage("disk").code(), "CONFIG_STORAGE");
+        assert_eq!(CoreError::internal("bug").code(), "CONFIG_INTERNAL");
+        assert_eq!(
+            CoreError::DocumentNotFound("x".into()).code(),
+            "CONFIG_INTERNAL"
+        );
+    }
+
+    #[test]
+    fn code_maps_conversion_errors_without_changing_display() {
+        let toml_de = toml::from_str::<toml::Value>("x = ").unwrap_err();
+        let err = CoreError::from(toml_de);
+        assert_eq!(err.code(), "CONFIG_VALIDATION");
+        assert!(err.to_string().starts_with("TOML deserialization error:"));
+
+        let io = CoreError::from(std::io::Error::other("io"));
+        assert_eq!(io.code(), "CONFIG_STORAGE");
+        let serde = CoreError::from(serde_json::from_str::<serde_json::Value>("{").unwrap_err());
+        assert_eq!(serde.code(), "CONFIG_STORAGE");
+        let toml_ser = CoreError::from(toml::to_string(&Option::<u8>::None).unwrap_err());
+        assert_eq!(toml_ser.code(), "CONFIG_STORAGE");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn code_maps_native_config_error_to_storage() {
+        let err = CoreError::from(figment::Error::from("bad config"));
+        assert_eq!(err.code(), "CONFIG_STORAGE");
     }
 }

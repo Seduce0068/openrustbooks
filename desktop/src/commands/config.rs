@@ -18,6 +18,37 @@ fn map_err(e: CoreError) -> String {
     e.to_string()
 }
 
+/// 設定保存コマンド専用の構造化エラー。
+///
+/// `code` は [`CoreError::code()`] 由来の固定値、`message` は code ごとの固定文言のみ。
+/// 生エラー文字列・設定値・パス・秘密情報は一切含めない。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CommandError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl CommandError {
+    fn from_code(code: &'static str) -> Self {
+        let message = match code {
+            "CONFIG_CONFLICT" => "Configuration conflict",
+            "CONFIG_VALIDATION" => "Configuration validation failed",
+            "CONFIG_STORAGE" => "Configuration storage failed",
+            _ => "Internal configuration error",
+        };
+        Self {
+            code,
+            message: message.to_string(),
+        }
+    }
+}
+
+impl From<CoreError> for CommandError {
+    fn from(err: CoreError) -> Self {
+        Self::from_code(err.code())
+    }
+}
+
 /// Allow-list view of [`AppConfig`] returned to the JS side.
 ///
 /// Secret fields are never serialized; only `has_*` presence flags are sent.
@@ -254,6 +285,9 @@ impl From<&GoogleDriveConfig> for GoogleDriveConfigView {
 /// `has_*` フラグはデシリアライズのために受け取るが、更新時は無視して現在値を保持する。
 #[derive(Clone, Deserialize)]
 pub struct ConfigPatch {
+    /// UI が `get_config` で読んだ revision。CAS の `expected` として使う（必須）。
+    /// `ConfigView.revision` とは名前が異なるが、同じ値を入れる契約（ADR-0253）。
+    pub expected: u64,
     pub general: GeneralConfigView,
     pub ai: AiConfigView,
     pub lint: LintConfigView,
@@ -262,10 +296,11 @@ pub struct ConfigPatch {
     pub reader: ReaderConfig,
 }
 
-impl From<&AppConfig> for ConfigPatch {
-    fn from(config: &AppConfig) -> Self {
+impl From<(&AppConfig, u64)> for ConfigPatch {
+    fn from((config, expected): (&AppConfig, u64)) -> Self {
         let view = ConfigView::from(config);
         Self {
+            expected,
             general: view.general,
             ai: view.ai,
             lint: view.lint,
@@ -520,7 +555,8 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
 /// `apply_to()` は現在 `current` を参照しないが、将来復元処理が移っても挙動が
 /// 変わらないよう、呼び出し側の現在値をそのまま渡す。
 fn normalize_to_dto_boundary(raw: &AppConfig, current: &AppConfig) -> AppConfig {
-    ConfigPatch::from(raw).apply_to(current)
+    // expected は CAS の入力だが、この正規化は apply_to() だけを呼ぶため値は無関係。
+    ConfigPatch::from((raw, 0)).apply_to(current)
 }
 
 /// JS から届いた生の [`AiConfig`] のうち、DTO 外の `extra_headers` だけを落とす。
@@ -606,16 +642,28 @@ pub async fn update_config(
 pub async fn update_config_patch(
     state: State<'_, Arc<AppState>>,
     patch: ConfigPatch,
-) -> Result<ConfigView, String> {
-    let (current, expected) = state.config_with_revision();
+) -> Result<ConfigView, CommandError> {
+    update_config_patch_inner(state.inner(), patch).await
+}
+
+/// コマンド本体。テストから `AppState` を直接渡せるよう分離している。
+async fn update_config_patch_inner(
+    state: &AppState,
+    patch: ConfigPatch,
+) -> Result<ConfigView, CommandError> {
+    // UI が get_config で読んだ revision をそのまま CAS の expected に使う。
+    // 内部で再取得した revision で上書きしてはならない（ADR-0253 実装前提 3）。
+    let expected = patch.expected;
+    let (current, _internal_revision) = state.config_with_revision();
     // 不変条件: apply_to() の結果は必ず merge_secrets() を通してから保存する。
     let applied = patch.apply_to(&current);
     let merged = merge_secrets(&current, &applied);
-    validate_ai_base_urls(&merged.ai)?;
+    // 検証エラーの生メッセージは返さず、code ごとの固定文言へ変換する。
+    validate_ai_base_urls(&merged.ai).map_err(|_| CommandError::from_code("CONFIG_VALIDATION"))?;
     let changed = ai_or_lint_changed(&current, &merged);
-    commit_validated_config(state.inner(), expected, merged, changed)
+    commit_validated_config(state, expected, merged, changed)
         .await
-        .map_err(map_err)?;
+        .map_err(CommandError::from)?;
     let (config, revision) = state.config_with_revision();
     Ok(ConfigView::from_state(&config, revision))
 }
@@ -760,11 +808,20 @@ mod tests {
     }
 
     #[test]
-    fn config_patch_ignores_revision_from_view_json() {
+    fn config_patch_requires_expected_and_ignores_revision_from_view_json() {
         let current = AppConfig::default();
-        // get_config の DTO をそのまま patch として送っても extra フィールドは無視される。
-        let json = serde_json::to_string(&ConfigView::from_state(&current, 9)).unwrap();
-        let patch: ConfigPatch = serde_json::from_str(&json).unwrap();
+        let mut json = serde_json::to_value(ConfigView::from_state(&current, 9)).unwrap();
+
+        // ConfigView.revision は expected ではないため、そのままでは必須フィールド不足。
+        let missing = serde_json::from_value::<ConfigPatch>(json.clone());
+        assert!(missing.is_err(), "expected が欠けた DTO は拒否されること");
+
+        // expected を明示すれば revision は extra フィールドとして無視される。
+        json.as_object_mut()
+            .unwrap()
+            .insert("expected".to_string(), serde_json::json!(9));
+        let patch: ConfigPatch = serde_json::from_value(json).unwrap();
+        assert_eq!(patch.expected, 9);
         let merged = merge_secrets(&current, &patch.apply_to(&current));
         assert_eq!(
             serde_json::to_value(&merged).unwrap(),
@@ -1347,7 +1404,7 @@ mod tests {
     #[test]
     fn config_patch_apply_to_emits_placeholders_for_hidden_fields() {
         let current = config_with_paths();
-        let applied = ConfigPatch::from(&current).apply_to(&current);
+        let applied = ConfigPatch::from((&current, 0)).apply_to(&current);
 
         // DTO 外の 13 項目はすべてプレースホルダ／既定値になる。
         assert!(applied.general.data_dir.is_none());
@@ -1372,7 +1429,7 @@ mod tests {
     fn config_patch_preserves_hidden_fields() {
         let current = config_with_paths();
         // apply_to は DTO 外を空にし、merge_secrets() が現在値を復元する。
-        let applied = ConfigPatch::from(&current).apply_to(&current);
+        let applied = ConfigPatch::from((&current, 0)).apply_to(&current);
         let merged = merge_secrets(&current, &applied);
 
         // apply_to 単体では隠しフィールドが空／既定値になること。
@@ -1411,7 +1468,7 @@ mod tests {
     #[test]
     fn config_patch_updates_public_fields() {
         let current = config_with_paths();
-        let mut patch = ConfigPatch::from(&current);
+        let mut patch = ConfigPatch::from((&current, 0));
         patch.ai.enabled = true;
         patch.lint.enabled = false;
         patch.general.theme = "dark".to_string();
@@ -1437,9 +1494,12 @@ mod tests {
     #[test]
     fn config_patch_from_view_json_restores_paths_by_id() {
         let current = config_with_paths();
-        // Web が get_config の DTO をそのまま送り返すケースを模擬する。
-        let json = serde_json::to_string(&ConfigView::from(&current)).unwrap();
-        let mut patch: ConfigPatch = serde_json::from_str(&json).unwrap();
+        // Web が get_config の DTO に expected を添えて送り返すケースを模擬する。
+        let mut json = serde_json::to_value(ConfigView::from(&current)).unwrap();
+        json.as_object_mut()
+            .unwrap()
+            .insert("expected".to_string(), serde_json::json!(0));
+        let mut patch: ConfigPatch = serde_json::from_value(json).unwrap();
         patch.storage.local_roots.push(LocalRootView {
             id: "root-new".to_string(),
             name: "New".to_string(),
@@ -1474,7 +1534,7 @@ mod tests {
     #[test]
     fn config_patch_apply_to_leaves_local_root_paths_empty() {
         let current = config_with_paths();
-        let patch = ConfigPatch::from(&current);
+        let patch = ConfigPatch::from((&current, 0));
 
         let applied = patch.apply_to(&current);
 
@@ -1768,5 +1828,113 @@ mod tests {
         assert!(partial.api_key);
         assert!(!partial.client_secret);
         assert!(!partial.refresh_token);
+    }
+
+    #[test]
+    fn command_error_uses_fixed_code_messages_without_raw_values() {
+        let cases = [
+            (
+                CoreError::Conflict("stale revision at /secret/path".into()),
+                "CONFIG_CONFLICT",
+                "Configuration conflict",
+            ),
+            (
+                CoreError::validation("bad value sk-secret"),
+                "CONFIG_VALIDATION",
+                "Configuration validation failed",
+            ),
+            (
+                CoreError::storage("/secret/path"),
+                "CONFIG_STORAGE",
+                "Configuration storage failed",
+            ),
+            (
+                CoreError::internal("bug at /secret/path"),
+                "CONFIG_INTERNAL",
+                "Internal configuration error",
+            ),
+        ];
+
+        for (core_error, code, message) in cases {
+            let error = CommandError::from(core_error);
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, message);
+            // 生エラー・パス・設定値が fixed message に漏れていないこと。
+            for leaked in ["/secret", "sk-secret", "stale revision"] {
+                assert!(!error.message.contains(leaked), "leaked: {leaked}");
+            }
+        }
+
+        let json =
+            serde_json::to_value(CommandError::from(CoreError::Conflict("stale".into()))).unwrap();
+        assert_eq!(json["code"], "CONFIG_CONFLICT");
+        assert_eq!(json["message"], "Configuration conflict");
+    }
+
+    #[tokio::test]
+    async fn update_config_patch_stale_expected_returns_conflict() {
+        let state = AppState::new(AppConfig::default());
+        // state の revision は 0 だが、UI が古い 1 を読んだ想定の patch。
+        let patch = ConfigPatch::from((&AppConfig::default(), 1));
+
+        let error = match update_config_patch_inner(&state, patch).await {
+            Ok(_) => panic!("stale expected は Conflict になること"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code, "CONFIG_CONFLICT");
+        assert_eq!(error.message, "Configuration conflict");
+        assert_eq!(
+            state.config_with_revision().1,
+            0,
+            "Conflict で revision は不変"
+        );
+    }
+
+    /// 成功経路が触れる config.toml をテスト前後で保護する。
+    /// 既存ファイルは復元し、無ければ削除して環境を汚さない。
+    struct ConfigFileGuard {
+        path: Option<PathBuf>,
+        original: Option<Vec<u8>>,
+    }
+
+    impl ConfigFileGuard {
+        fn new() -> Self {
+            let path = directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+                .map(|dirs| dirs.config_dir().join("config.toml"));
+            let original = path.as_ref().and_then(|p| std::fs::read(p).ok());
+            Self { path, original }
+        }
+    }
+
+    impl Drop for ConfigFileGuard {
+        fn drop(&mut self) {
+            let Some(path) = &self.path else {
+                return;
+            };
+            match &self.original {
+                Some(bytes) => {
+                    let _ = std::fs::write(path, bytes);
+                }
+                None => {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn update_config_patch_fresh_expected_succeeds_and_advances_revision() {
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new(AppConfig::default());
+        let (current, expected) = state.config_with_revision();
+        let mut patch = ConfigPatch::from((&current, expected));
+        patch.general.theme = "dark".to_string();
+
+        let view = update_config_patch_inner(&state, patch).await.unwrap();
+
+        assert_eq!(view.revision, expected + 1);
+        assert_eq!(state.config_with_revision().1, expected + 1);
+        assert_eq!(state.config().general.theme, "dark");
     }
 }
