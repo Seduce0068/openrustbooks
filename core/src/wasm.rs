@@ -351,67 +351,6 @@ struct WasmArchiveEntry {
     compressed_size: u64,
 }
 
-/// Wasm-compatible document representation
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-#[derive(Serialize, Deserialize)]
-pub struct WasmDocument {
-    id: String,
-    format: String,
-    title: Option<String>,
-    content: String,
-    /// Front matter is arbitrary data, so it is kept as a JSON value rather
-    /// than a `JsValue` (which has no `serde` impls).
-    front_matter: Option<serde_json::Value>,
-    metadata: serde_json::Value,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmDocument {
-    #[wasm_bindgen(constructor)]
-    pub fn new(id: String, format: String, content: String) -> Self {
-        Self {
-            id,
-            format,
-            title: None,
-            content,
-            front_matter: None,
-            metadata: serde_json::Value::Null,
-        }
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn id(&self) -> String {
-        self.id.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn format(&self) -> String {
-        self.format.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn title(&self) -> Option<String> {
-        self.title.clone()
-    }
-
-    #[wasm_bindgen(setter)]
-    pub fn set_title(&mut self, title: String) {
-        self.title = Some(title);
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn content(&self) -> String {
-        self.content.clone()
-    }
-
-    #[wasm_bindgen(setter)]
-    pub fn set_content(&mut self, content: String) {
-        self.content = content;
-    }
-}
-
 /// Wasm-compatible AI pipeline result
 ///
 /// Not `serde`-derivable: [`WasmDiffResult`] holds `JsValue`s by design.
