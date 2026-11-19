@@ -1,48 +1,37 @@
 # Goal
 
-Tauri 設定保存 UI を接続する（R6 A05 段階 2、ADR-0271 の DTO 要件を実装）。
+実 Tauri WebView 検証の環境ブロッカーを根拠付きで記録する（R6 A05 実装前提 6）。
 
 ## Scope
 
 ### 背景
 
-IPC 経路（ADR-0270）と UI 起点 CAS / 構造化エラー（ADR-0269）は完了した。
-web 側 `SettingsView` は `ConfigPatch` へ Serialize できず、
-allow-list View の差分（general 1 / ai 6 / lint 2 / storage 14）と
-`expected` が不足していた（ADR-0271）。
+ADR-0272 で desktop 設定保存 UI を接続し、Tauri mock E2E 256/0 を確認した。
+しかし実 WebView での往路 / 復路 / 表示 / a11y 検証は未実施だった。
+確認の結果、この環境には `cargo-tauri` がインストールされておらず、
+`cargo tauri dev` / `build` を実行できない（DISPLAY=:1 / xdotool はある）。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（完全な ConfigView DTO、保存 IPC、入力可能 UI、a11y）
-- `tools/verify-web-reader.py`: 変更（Tauri mock 成功経路 +1、255 → 256）
-- `docs/e2e-traceability.md`: 変更（256 件追従）
-- `docs/documentation-operations.md`: 変更（current 256）
-- `docs/decisions/0272-settings-save-ui.md`: 追加
-- `todo.md`: A05 を「UI 接続完了、実 WebView 検証は後続」へ更新
+- `docs/decisions/0273-real-webview-verification-deferred.md`: 追加
+- `docs/decisions/0272-settings-save-ui.md`: 変更（未決定の具体化）
+- `todo.md`: A05 を「mock 完了・実 WebView は環境ブロッカー」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. web 側 DTO を desktop `ConfigView` / `ConfigPatch` と同形にし、
-   `revision` → `expected` マッピングで保存する。
-2. secret / path / extra_headers を DTO へ追加しない。
-3. browser は readonly / fail-closed を維持し、desktop（IPC 成功時）のみ編集可能にする。
-4. a11y: `label[for]` / `id` / `aria-invalid` / `aria-describedby` /
-   `role="status" aria-live="polite"` を満たす。
-5. E2E +1（成功経路）、期待総数 256、check 名一意、AST / 文書同期。
+1. `cargo tauri` 未導入を Runtime Proof として記録する。
+2. CDP / Tauri mock は実 WebView の代替ではないことを明記する。
+3. Tauri CLI 導入後の検証手順（起動、設定画面、保存往復、a11y）を残す。
+4. E2E 256 件・check 名・コードは変更しない。
+5. markdownlint 0 issues、verify.sh（256）成功。
 
 ## Acceptance criteria
 
-- E2E 256 項目、core / desktop / web / wasm / verify.sh 全ゲート成功。
+- 文書・索引が整合し、全ゲート成功。
 
 ## Constraints
 
-- desktop / core / Cargo.* は変更しない（IPC 契約は ADR-0269 を正とする）。
-- 実 Tauri WebView 往路検証は行わない（CDP mock のみ、未決定として残す）。
+- Tauri CLI のインストール / 外部ダウンロードは行わない。
+- 実 WebView を pass と記録しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- web DTO を ConfigView と同形化し、revision→expected で update_config_patch を呼ぶ保存 UI を接続。
-- browser readonly / fallback を維持しつつ desktop のみ編集可能、a11y 属性を追加。
-- Tauri mock E2E +1、期待総数 256（check 239 + equal 17）、verify.sh 全ゲート成功。
