@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- EPUB manifest の id/href 欠落を固定文言の fail-closed エラーへ統一（ADR-0248）。
 - EPUB 所有 API へ limits 指定を追加し core を 274→276 件へ拡充（ADR-0247）。
 - feature 差分の無い core 依存 18 件を workspace 参照へ統一（ADR-0246）。
 - 容量超過時の位置削除へ件数・残件数を通知し E2E を 254→255 件へ拡充（ADR-0245）。

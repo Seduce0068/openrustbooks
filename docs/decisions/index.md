@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 247 件）。
+openrustbooks の ADR 一覧（全 248 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -496,3 +496,5 @@ openrustbooks の ADR 一覧（全 247 件）。
   - status: accepted — feature 差分が無い core 依存を workspace.dependencies 参照へ統一する決定を記録する。
 - [ADR-0247: EPUB 所有 API への limits 指定](0247-epub-owned-limits.md)
   - status: accepted — EpubBook の所有権移譲 API に ArchiveLimits を指定可能にし、借用 API と同じ検証契約を共有する決定を記録する。
+- [ADR-0248: EPUB manifest 欠落エラーの統一](0248-epub-manifest-errors.md)
+  - status: accepted — manifest item の id / href 欠落を固定文言の Archive エラーとして fail-closed に報告する決定を記録する。
