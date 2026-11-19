@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 238 件）。
+openrustbooks の ADR 一覧（全 239 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -478,3 +478,5 @@ openrustbooks の ADR 一覧（全 238 件）。
   - status: accepted — wasm_targets と extra_gates の役割分担を確認し、verify.sh の trunk build に --locked を付けて Cargo.lock の不変を保証する決定。
 - [ADR-0238: 圧縮率依存テストの決定的化](0238-deterministic-compression-tests.md)
   - status: accepted — ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
+- [ADR-0239: Cargo をバージョンの単一情報源とする](0239-version-single-source.md)
+  - status: accepted — tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。

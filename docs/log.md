@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- Cargo workspace をバージョンの単一情報源とし、tauri.conf の version 省略を静的ゲート化（ADR-0239）。
 - deflate 圧縮率依存の test を方式／メタデータの直接検証へ変更（ADR-0238）。
 - CI / ローカルゲートの整合を監査し、`wasm_targets` は `rustup target add` のみ、
   `extra_gates` が wasm check / wasm-pack test を実行して二重実行ではないと判定。

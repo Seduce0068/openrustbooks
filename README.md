@@ -430,6 +430,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - `prefers-contrast: more` で枠線・補助文字を強化し、forced-colors 契約を後方で維持する決定。
 - [0237-ci-gate-consistency](docs/decisions/0237-ci-gate-consistency.md)
 - [0238-deterministic-compression-tests](docs/decisions/0238-deterministic-compression-tests.md)
+- [0239-version-single-source](docs/decisions/0239-version-single-source.md)
+  - tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
   - ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
   - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
 
