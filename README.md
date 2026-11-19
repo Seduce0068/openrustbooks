@@ -440,6 +440,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - `generated.at` は生成／正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
 - [0242-rumdl-feature-status](docs/decisions/0242-rumdl-feature-status.md)
 - [0243-unused-wasm-api-removal](docs/decisions/0243-unused-wasm-api-removal.md)
+- [0244-wasm-document-removal](docs/decisions/0244-wasm-document-removal.md)
+  - 未使用の WasmDocument export を削除し、Wasm API の第二段を完了する決定を記録する。
   - wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。
   - native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
 
