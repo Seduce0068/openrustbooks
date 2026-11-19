@@ -48,10 +48,6 @@ status: current
   E2E 254 件を共通ワークフローのマージゲートへ組み込む。
   根拠 `.github/workflows/ci.yml:6`（no-external-font-refs / audit /
   trunk build + E2E は verify.sh 側のゲート）。billing は外部要因のため低優先度。
-- 【D05 残 / OS キーチェーン】API キー / client_secret / refresh_token の
-  平文保存を OS キーチェーンへ移す判断は ADR-0098 の「未決定」を追跡先とする。
-  IPC マスク／マスク済み DTO／DTO 境界は完了済み（ADR-0098 / 0102 / 0128 / 0186）。
-
 - 【TD-L08】serde_yaml 0.9.34+deprecated / tikv-jemalloc 残存は上流 optional 化待ち。
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
@@ -74,6 +70,17 @@ status: current
 
 ## 完了
 
+- [x] 【D05 残 / OS キーチェーン】設計受容として完了。平文 config.toml 保存 +
+      redaction（REDACTED_SECRET / DTO の has_* / Debug マスク）+ Unix 0600 +
+      `update_ai_config` の `api_key` のみ IPC 書き込み可を受容済みリスクとして明記。
+      OS キーチェーン移行は ADR-0261 で設計受容とし、今回は実装しない。
+      追跡先は ADR-0098 / ADR-0261 の「未決定」に集約。
+      移行順序と失敗時挙動、ローテーション、プラットフォーム差、
+      Wasm / localStorage の平文性、CI 実キーストア検証、
+      keyring クレートの target / feature 一次確認は未決定として残す。
+      `core/src/config.rs` の "encrypted" コメントは実装と矛盾することを開示（コード未変更）。
+      decisions / docs 各 index（261 件）、README、runbook-release、log を追従。
+      コード・Cargo.toml / Cargo.lock は未変更、E2E 255 維持。markdownlint 0 issues。
 - [x] 【R2-crates#5】feature が一致しない依存を workspace 化せず設計受容・残置（ADR-0258）。
       chrono / uuid は member 側が feature を加算し、wasm dev tokio は member 側が限定。
       Cargo の feature は和集合で member 側から削除できず、workspace 定義へ上げると
@@ -181,8 +188,8 @@ status: current
 - [x] 【D06】AI の既定無効化・service ガード・送信先 allowlist・同意ダイアログを実装。
       全文プレビューは ADR-0104 の未決定として継続（ADR-0099 / 0100 / 0101 / 0104）。
 - [x] 【D05 完了分】秘密情報の IPC 露出をマスクし、マスク済み DTO と DTO 境界を整備。
-      OS キーチェーン移行は ADR-0098 の未決定として低優先度で継続
-      （ADR-0098 / 0102 / 0128 / 0186）。
+      OS キーチェーン移行は設計受容とし、追跡先は ADR-0098 / ADR-0261 の未決定へ集約
+      （ADR-0098 / 0102 / 0128 / 0186 / 0261）。
 - [x] 【B09】履歴が 1 件のときも localStorage を更新（ADR-0085）。
 - [x] 【独自 R2-arch-state#1】Markdown 保存時に front matter を保全（ADR-0087）。
 - [x] 【B01 / B02 / E03】Web と Desktop の CSP を強化し、外部フォントを削除。

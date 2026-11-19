@@ -39,3 +39,9 @@ Wasm 対象外・移行手順未定義・CI で実キーストア検証不可・
 - コード / Cargo.toml / Cargo.lock / E2E は変更しない。
 - 新規依存・外部サービス・秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0261 で平文保存 + redaction + Unix 0600 を受容済みリスクとして記録。
+- ADR-0098 の未決定 6 項目を ADR-0261 へ集約、runbook / todo / 索引を追従。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
