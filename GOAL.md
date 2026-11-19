@@ -20,7 +20,7 @@ R1 監査で次が判明した:
 ### 成果物
 
 - `docs/decisions/0253-tauri-settings-save-design.md`: 追加
-- `todo.md`: A05 を「高」から「段階設計決定・実装は後続」へ更新
+- `todo.md`: A05 は優先度「高」のまま「段階設計決定・実装は後続」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
@@ -43,3 +43,10 @@ R1 監査で次が判明した:
 - コード・CSP・capability・E2E は変更しない（本次は設計のみ）。
 - 外部サービス・署名鍵・秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0253 作成、R1 監査（IPC / Web）、R4 設計レビューを実施。
+- 採用指摘: capability は独自コマンド非対象の注記、verify.sh 証跡を ADR へ追記。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
+- markdownlint: 269 files / 0 issues。
