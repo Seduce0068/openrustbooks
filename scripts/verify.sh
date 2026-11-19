@@ -66,6 +66,60 @@ if [[ $RETAIN_DIST -eq 1 ]]; then
 	esac
 fi
 
+# E2E ブラウザ識別子（ADR-0265 / GOAL.md）。環境変数で上書き可能。
+E2E_BROWSER="${E2E_BROWSER:-google-chrome}"
+E2E_STATIC_PORT="${E2E_STATIC_PORT:-8099}"
+E2E_CDP_PORT="${E2E_CDP_PORT:-9222}"
+
+# 改行/制御文字が混入すると manifest の行構造を改ざんできるため、
+# ブラウザ識別子・ポート・version のすべてで fail-closed に拒否する。
+reject_control_chars() {
+	if [[ "$1" =~ [[:cntrl:]] ]]; then
+		echo "ERROR: $2 に改行/制御文字が含まれています" >&2
+		exit 1
+	fi
+}
+reject_control_chars "$E2E_BROWSER" "E2E_BROWSER"
+reject_control_chars "$E2E_STATIC_PORT" "E2E_STATIC_PORT"
+reject_control_chars "$E2E_CDP_PORT" "E2E_CDP_PORT"
+
+# ポートは十進数文字列のみ許可（python3 側は type=int だが、手前で明示的に検証）。
+if [[ ! "$E2E_STATIC_PORT" =~ ^[0-9]+$ ]]; then
+	echo "ERROR: E2E_STATIC_PORT が不正です: $E2E_STATIC_PORT" >&2
+	exit 1
+fi
+if [[ ! "$E2E_CDP_PORT" =~ ^[0-9]+$ ]]; then
+	echo "ERROR: E2E_CDP_PORT が不正です: $E2E_CDP_PORT" >&2
+	exit 1
+fi
+
+# ブラウザ version を E2E 起動前に取得し、失敗時は fail-closed で即時終了する。
+# 長い E2E を走らせる前にブラウザの存在を確定させ、manifest に
+# "unknown" を成功記録しない（manifest 改ざん防止）。
+e2e_version_rc=0
+E2E_BROWSER_VERSION="$("$E2E_BROWSER" --version 2>/dev/null)" || e2e_version_rc=$?
+if ((e2e_version_rc != 0)); then
+	echo "ERROR: ブラウザの version 取得に失敗しました: $E2E_BROWSER (rc=$e2e_version_rc)" >&2
+	exit 1
+fi
+reject_control_chars "$E2E_BROWSER_VERSION" "E2E_BROWSER_VERSION"
+if [[ -z "${E2E_BROWSER_VERSION//[[:space:]]/}" ]]; then
+	echo "ERROR: ブラウザの version が空/空白のみです: $E2E_BROWSER" >&2
+	exit 1
+fi
+if [[ "${E2E_BROWSER_VERSION,,}" == "unknown" ]]; then
+	echo "ERROR: ブラウザの version が unknown です: $E2E_BROWSER" >&2
+	exit 1
+fi
+
+# manifest には command -v で解決した実行ファイルの絶対パスも記録する。
+E2E_BROWSER_PATH="$(command -v "$E2E_BROWSER" 2>/dev/null || true)"
+if [[ -z "$E2E_BROWSER_PATH" ]]; then
+	echo "ERROR: ブラウザ実行ファイルのパスを解決できません: $E2E_BROWSER" >&2
+	exit 1
+fi
+reject_control_chars "$E2E_BROWSER_PATH" "E2E_BROWSER_PATH"
+
 # 開発ホストのホームを正規化（末尾の / を除去）し、remap と grep で同じ値を使う。
 home=${HOME%/}
 if [[ -z "$home" ]]; then
@@ -160,6 +214,11 @@ retain_verified_dist() {
 		echo "trunk        : $trunk_ver"
 		echo "e2e expected : $e2e_expected"
 		echo "e2e result   : $e2e_result"
+		echo "browser executable : $E2E_BROWSER"
+		echo "browser path       : $E2E_BROWSER_PATH"
+		echo "browser version    : $E2E_BROWSER_VERSION"
+		echo "static port       : $E2E_STATIC_PORT"
+		echo "cdp port          : $E2E_CDP_PORT"
 		echo "source dist  : temporary DIST_DIR (removed by trap on exit)"
 		echo ""
 		echo "SHA256 (relative paths under dist):"
@@ -315,7 +374,7 @@ echo "===== END: wasm path check rc=0 ====="
 echo "===== START: e2e ====="
 # 出力は従来どおりストリーミング表示しつつ、manifest 用に E2E_LOG へも保存する。
 # pipefail により python3 の失敗はパイプラインの終了コードへ伝播する。
-if python3 tools/verify-web-reader.py --dist "$DIST_DIR" 2>&1 | tee "$E2E_LOG"; then
+if python3 tools/verify-web-reader.py --dist "$DIST_DIR" --chrome "$E2E_BROWSER" --port "$E2E_STATIC_PORT" --debug-port "$E2E_CDP_PORT" 2>&1 | tee "$E2E_LOG"; then
 	echo "===== END: e2e rc=0 ====="
 else
 	rc=$?
