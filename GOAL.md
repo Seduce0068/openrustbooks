@@ -40,3 +40,10 @@ npm 依存追加は bundler / lock / オフライン再現性の追加が必要�
 - npm 依存 / `__TAURI_INTERNALS__` 直接利用 / E2E check 追加は行わない。
 - 外部サービス・実 WebView 起動は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- withGlobalTauri: true と __TAURI__ 参照へ統一し、CSP ゲートに IPC 経路を追加。
+- 監査の高優先指摘（末尾 __ 欠落）を修正、負向 test すべて rc=1。
+- ADR-0270 で経路を決定、実 WebView 往路検証は未決定として残す。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
