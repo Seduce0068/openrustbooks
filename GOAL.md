@@ -1,23 +1,36 @@
 # Goal
 
-エラー文言の二重付与と expect() を整理する（R6 C05 / R3-error#3,#5、ADR-0229）。
+dark テーマのボタン文字色を WCAG AA 水準へ修正する（R6 B07 のコントラスト）。
 
 ## Scope
 
+### 背景
+
+監査で、light の muted / dark の muted は AA を満たす一方、
+dark の `.btn-primary` は白文字 / `#3b82f6` で **3.68:1**、
+hover の `#60a5fa` では **2.54:1** となり WCAG 1.4.3（4.5:1）未達と判定された。
+`.btn-danger` も白文字で同型のリスクがある。
+
 ### 成果物
 
-- `desktop/src/main.rs`: run() -> tauri::Result<()>、expect 削除、終了コード 101 維持
-- `core/src/ai_markdown/lint.rs` / `client.rs`: 二重 prefix 削除
-- `web/src/lib.rs`: invoke / parse エラーを固定文言化
-- `docs/decisions/0229-error-message-cleanup.md`: 追加
-- `todo.md`: C05 / R3-error#3,#5 を完了へ移動（status 分離は未決定）
+- `web/index.html`: 変更（dark 用の `--color-on-accent` 追加、ボタン文字色を変数化）
+- `docs/decisions/0230-dark-button-contrast.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- Display で 1 行エラー表示、mobile は log::error!。
-- JsValue Debug / 生エラーを status へ出さない。
-- status の error/info 分離は ADR 未決定。
+1. dark テーマでプライマリ／デンジャーボタンの文字色を暗色へ変更する。
+2. hover 時も 4.5:1 以上を満たす（静的計算で確認）。
+3. light テーマの外観は変更しない。
+4. E2E 254 を維持する（色値への直接依存なしを確認）。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- E2E 254 項目、全ゲート成功（検証済み）。
+- 静的コントラスト比が dark 通常/hover ともに 4.5:1 以上、E2E 254 維持。
+
+## Constraints
+
+- 新規依存を追加しない。
+- レイアウト・操作挙動は変更しない。
+- `master` へ push する。force push はしない。
