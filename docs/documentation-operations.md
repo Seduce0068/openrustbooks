@@ -104,9 +104,14 @@ OKF `type: Decision` と `##` 見出しで記述する。追加時は次をす�
 - E2E 総数はコードの `Checker(expected=...)` を出典とし、文書側で手計算しない。
   コード出典への固定は [ADR-0090](decisions/0090-e2e-expected-count.md)、
   同名 check の重複検知は [ADR-0182](decisions/0182-e2e-unique-check-names.md)、
-  253 件への追従は [ADR-0220](decisions/0220-traceability-refresh.md)、
-  254 件（check 237 + equal 17）への更新は
-  [ADR-0225](decisions/0225-broken-image-settling.md) が根拠。
+  253 件への追従は [ADR-0220](decisions/0220-traceability-refresh.md) が根拠。
+- 254 件（check 237 + equal 17）は
+  [ADR-0225](decisions/0225-broken-image-settling.md) の履歴更新として保持する。
+- current 値は 255 件（check 238 + equal 17）で、
+  [ADR-0245](decisions/0245-position-prune-notification.md) が根拠。
+  出典は `tools/verify-web-reader.py` の `Checker(expected=255)` であり、
+  文書側の current 表記を追従させる決定は
+  [ADR-0262](decisions/0262-e2e-count-documentation-refresh.md) に記録する。
 
 ## markdownlint
 

@@ -45,7 +45,7 @@ status: current
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
-  E2E 254 件を共通ワークフローのマージゲートへ組み込む。
+  E2E 255 件を共通ワークフローのマージゲートへ組み込む。
   根拠 `.github/workflows/ci.yml:6`（no-external-font-refs / audit /
   trunk build + E2E は verify.sh 側のゲート）。billing は外部要因のため低優先度。
 - 【TD-L08】serde_yaml 0.9.34+deprecated / tikv-jemalloc 残存は上流 optional 化待ち。
