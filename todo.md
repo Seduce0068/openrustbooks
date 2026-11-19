@@ -126,9 +126,6 @@ status: current
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
 <!-- ADR-0207 の残リスク（低優先度で個別追跡） -->
-- 【TD-L10】並行設定更新の lost update を検出する。
-  世代カウンタ／CAS 等が無く、古い更新が新しい更新を上書きし得る。
-  既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
 
 - 【R1-tauri#8 / R3-release#1,#2】updater の公開鍵・署名設定と
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
@@ -154,6 +151,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L10】設定更新へ revision CAS と pending 予約を導入。stale expected は Conflict、config/service/disk 不変。
+      unit 6 件追加（desktop 79）、E2E 251 件・全ゲート成功 / ADR-0210。
 - [x] 【TD-L09】AppConfig::save() を tmp + rename の原子書き込みへ変更。0600 を維持し、unit 7 件追加（core 261）。
       E2E 251 件・全ゲート成功 / ADR-0209。lost update（TD-L10）は未解消。
 - [x] 【TD-L11】remove_document で unsaved_changes キーも削除。孤立フラグも掃除し、unit 2 件追加（desktop 74）。
