@@ -811,7 +811,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 234 + checker.equal 17 = 251。
+    # 期待 check 総数: checker.check 235 + checker.equal 17 = 252。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -836,7 +836,9 @@ async def run_checks(cdp: Cdp) -> int:
     # disabled、常時説明の settings-notice が表示される）+1（ADR-0128 / R6 PR-M11）。
     # Reader の ARIA 整合（可視ラベルは aria-labelledby を優先し aria-label を外す、
     # トグル状態は aria-pressed で dark と同期）+1（R6 PR-L02 / modern-web-guidance: accessibility）。
-    checker = Checker(expected=251)
+    # 不正 EPUB の読込失敗で status / console に固定文言のみ出る（Debug 表現・パス・
+    # 型名は出ない）ことと、サンプル EPUB の表示が壊れないこと +1（ADR-0212）。
+    checker = Checker(expected=252)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -866,7 +868,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 251 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 252 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -4505,6 +4507,88 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         await cdp.evaluate(
             "(() => { localStorage.removeItem('openrustbooks:editor:e2e'); return true; })()"
         )
+
+    # ADR-0212: 不正 EPUB の読込失敗では Debug 表現・パス・型名を status / console に
+    # 出さず、操作別の固定文言だけを出す。あわせてサンプル EPUB を開き直し、
+    # 既存の表示が壊れていないことを確認する（追加 check は 1 件だけ）。
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/reader/e2e"})
+    reader_ready = await wait_until(
+        cdp, "document.querySelector('#epub-file') !== null", timeout=10
+    )
+    broken_epub = SAMPLE.parent / "broken.epub"
+    broken_epub.write_bytes(b"not a valid epub")
+    fixed_status = False
+    reader_error_status = ""
+    reader_error_logs = "[]"
+    if reader_ready:
+        await cdp.evaluate("""(() => {
+          window.__orbReaderOriginalConsoleError = console.error;
+          window.__orbReaderErrors = [];
+          console.error = function (...args) {
+            window.__orbReaderErrors.push(args.map(String).join(' '));
+            return window.__orbReaderOriginalConsoleError.apply(console, args);
+          };
+          return true;
+        })()""")
+        try:
+            document = await cdp.send("DOM.getDocument", {"depth": -1})
+            root_id = document["result"]["root"]["nodeId"]
+            node = await cdp.send(
+                "DOM.querySelector", {"nodeId": root_id, "selector": "#epub-file"}
+            )
+            node_id = node["result"]["nodeId"]
+            if node_id != 0:
+                await cdp.send(
+                    "DOM.setFileInputFiles",
+                    {"nodeId": node_id, "files": [str(broken_epub)]},
+                )
+                await cdp.evaluate(
+                    "document.querySelector('#epub-file').dispatchEvent("
+                    "new Event('change', {bubbles: true}))"
+                )
+                fixed_status = await wait_until(
+                    cdp,
+                    "document.querySelector('.reader-status')?.textContent === "
+                    "'EPUB open failed. The file may be unsupported or damaged.'",
+                    timeout=10,
+                )
+            reader_error_status = await cdp.evaluate(
+                "document.querySelector('.reader-status')?.textContent ?? ''"
+            )
+            reader_error_logs = await cdp.evaluate(
+                "JSON.stringify(window.__orbReaderErrors ?? [])"
+            )
+        finally:
+            await cdp.evaluate("""(() => {
+              if (window.__orbReaderOriginalConsoleError) {
+                console.error = window.__orbReaderOriginalConsoleError;
+                delete window.__orbReaderOriginalConsoleError;
+              }
+              delete window.__orbReaderErrors;
+              return true;
+            })()""")
+    sample_restored = False
+    if reader_ready:
+        await open_sample(cdp)
+        sample_restored = await wait_until(
+            cdp,
+            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+    leak = re.search(
+        r"Err\(|JsValue|CoreError|ZipError|DocumentNotFound|broken\.epub|not a valid epub",
+        f"{reader_error_status} {reader_error_logs}",
+    )
+    checker.check(
+        "不正 EPUB は固定文言のみ通知しサンプル EPUB は通常どおり表示される",
+        reader_ready
+        and fixed_status
+        and "openrustbooks: EPUB open failed" in reader_error_logs
+        and leak is None
+        and sample_restored,
+        f"(status={reader_error_status!r}, console={reader_error_logs!r},"
+        f" leak={leak.group(0) if leak else None!r}, restored={sample_restored})",
+    )
 
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
     # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の

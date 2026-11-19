@@ -1394,6 +1394,31 @@ impl SaveErrorTarget {
     }
 }
 
+/// Reader の操作失敗を console.error へ操作名だけの固定文言で通知する。
+///
+/// 生エラー（JsValue / CoreError の Debug や to_string）はパス・本文・URL を
+/// 含み得るため渡さない（ADR-0098 / 0103 / 0154）。
+#[cfg(target_arch = "wasm32")]
+fn report_reader_error(operation: &str) {
+    web_sys::console::error_1(&JsValue::from_str(&format!("openrustbooks: {operation}")));
+}
+
+/// ファイル読込失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const FILE_READ_FAILED_MESSAGE: &str = "File read failed. Please try again.";
+/// EPUB オープン失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const EPUB_OPEN_FAILED_MESSAGE: &str = "EPUB open failed. The file may be unsupported or damaged.";
+/// 章一覧の読込失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const CHAPTER_LIST_FAILED_MESSAGE: &str = "Chapter list could not be read.";
+/// 章描画の失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const CHAPTER_RENDER_FAILED_MESSAGE: &str = "Chapter could not be displayed.";
+/// リンク解決の失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const LINK_RESOLUTION_FAILED_MESSAGE: &str = "Link resolution failed.";
+
 /// localStorage の保存失敗をコンソールと status に通知する。
 ///
 /// wasm では tracing の出力が確認しづらいため `console.error` を使う。
@@ -2386,11 +2411,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 .as_ref()
                 .ok_or_else(|| String::from("No EPUB is open."))
                 .and_then(|book| {
-                    let html = book
-                        .chapter_html(index)
-                        .map_err(|error| format!("{error:?}"))?;
+                    let html = book.chapter_html(index).map_err(|_| {
+                        report_reader_error("Chapter rendering failed");
+                        String::from(CHAPTER_RENDER_FAILED_MESSAGE)
+                    })?;
                     let safe = sanitize_epub_html(&html);
-                    resolve_images(book, index, &safe).map_err(|error| format!("{error:?}"))
+                    resolve_images(book, index, &safe).map_err(|_| {
+                        report_reader_error("Image resolution failed");
+                        String::from(CHAPTER_RENDER_FAILED_MESSAGE)
+                    })
                 });
             match result {
                 Ok((html, urls)) => {
@@ -2444,7 +2473,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         jpeg_quality: jpeg_quality.get(),
                     });
                 }
-                Err(error) => set_status.set(error),
+                // ここに来る文字列は上の map_err で固定文言化済み（生エラーは渡さない）。
+                Err(message) => set_status.set(message),
             }
         })
     };
@@ -2765,10 +2795,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }
                 let buffer = match JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => buffer,
-                    Err(error) => {
+                    Err(_) => {
                         // await 中に新しい選択が入っていれば status を書かない。
+                        report_reader_error("File read failed");
                         if load_gen == load_generation.get() {
-                            set_status.set(format!("File read failed: {error:?}"));
+                            set_status.set(FILE_READ_FAILED_MESSAGE.to_string());
                         }
                         return;
                     }
@@ -2779,11 +2810,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 let bytes = Uint8Array::new(&buffer).to_vec();
                 let opened = match WasmEpubBook::new(bytes) {
                     Ok(opened) => opened,
-                    Err(error) => {
+                    Err(_) => {
                         if load_gen != load_generation.get() {
                             return;
                         }
-                        set_status.set(format!("EPUB open failed: {error:?}"));
+                        report_reader_error("EPUB open failed");
+                        set_status.set(EPUB_OPEN_FAILED_MESSAGE.to_string());
                         return;
                     }
                 };
@@ -2803,11 +2835,12 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 for index in 0..count {
                     match opened.chapter_href(index) {
                         Ok(href) => spine.push((index, href)),
-                        Err(error) => {
+                        Err(_) => {
                             if load_gen != load_generation.get() {
                                 return;
                             }
-                            set_status.set(format!("Chapter list failed: {error:?}"));
+                            report_reader_error("Chapter list failed");
+                            set_status.set(CHAPTER_LIST_FAILED_MESSAGE.to_string());
                             return;
                         }
                     }
@@ -3183,8 +3216,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     serde_wasm_bindgen::from_value::<ChapterLink>(value).ok()
                 }
                 Ok(_) => None,
-                Err(error) => {
-                    set_status.set(format!("Link resolution failed: {error:?}"));
+                Err(_) => {
+                    report_reader_error("Link resolution failed");
+                    set_status.set(LINK_RESOLUTION_FAILED_MESSAGE.to_string());
                     return;
                 }
             };
