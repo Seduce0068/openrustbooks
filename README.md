@@ -396,6 +396,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - fail-closed な ZIP core を wasm32 向け API として公開し、UI は後段へ分離する決定を記録する。
 - [0224-todo-reconciliation](docs/decisions/0224-todo-reconciliation.md)
   - 解消済み TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
+- [0225-broken-image-settling](docs/decisions/0225-broken-image-settling.md)
+  - 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒セトリング待ちを防ぐ決定を記録する。
 
 ## ライセンス
 

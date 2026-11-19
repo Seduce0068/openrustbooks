@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 224 件）。
+openrustbooks の ADR 一覧（全 225 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -450,3 +450,5 @@ openrustbooks の ADR 一覧（全 224 件）。
   - status: accepted — fail-closed な ZIP core を wasm32 向け API として公開し、UI は後段へ分離する決定を記録する。
 - [ADR-0224: 古い TODO の ADR 実績による整理](0224-todo-reconciliation.md)
   - status: accepted — 解消済み TODO を ADR 実績へ照合し、残リスクを ADR の未決定へ集約する決定を記録する。
+- [ADR-0225: 壊れた画像のセトリング待ち解消](0225-broken-image-settling.md)
+  - status: accepted — 画像の error を記録して失敗画像を待ち対象外にし、章ごとの 2 秒セトリング待ちを防ぐ決定。
