@@ -436,6 +436,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
   - ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
   - wasm_targets と extra_gates の役割分担を確認し、trunk build へ `--locked` を付与する決定。
+- [0241-generated-timestamp-semantics](docs/decisions/0241-generated-timestamp-semantics.md)
+  - `generated.at` は生成／正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
 
 ## ライセンス
 

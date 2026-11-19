@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 240 件）。
+openrustbooks の ADR 一覧（全 241 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -482,3 +482,5 @@ openrustbooks の ADR 一覧（全 240 件）。
   - status: accepted — tauri.conf.json の version を削除し、Cargo workspace version へのフォールバックと静的ゲートで drift を防ぐ決定を記録する。
 - [ADR-0240: 正規化後同名 ZIP エントリの拒否](0240-duplicate-archive-entries.md)
   - status: accepted — parser differential を防ぐため、正規化後に同名となる ZIP エントリを含むアーカイブを fail-closed で拒否する決定を記録する。
+- [ADR-0241: generated.at の意味論と日付逆転の扱い](0241-generated-timestamp-semantics.md)
+  - status: accepted — `generated.at` は生成・正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。

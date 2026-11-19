@@ -2,6 +2,11 @@
 
 ## 2026-11-19
 
+- ADR の `generated.at` は生成／正規化時点の記録で作成時刻や決定順ではないことを
+  `docs/documentation-operations.md` へ明記。0001 / 0002 の 2026-11-17 は c030537 の
+  frontmatter 正規化による付与で、git 作成順は 0001〜0005 が連番どおり（10-11〜10-17）。
+  既存 240 件の値は変更せず、規約注記で日付逆転の誤解を解消。
+  decisions / docs 各 index（241 件）、README、todo を追従（ADR-0241）。
 - 正規化後同名 ZIP エントリを fail-closed で拒否し parser differential を防止（ADR-0240）。
 - Cargo workspace をバージョンの単一情報源とし、tauri.conf の version 省略を静的ゲート化（ADR-0239）。
 - deflate 圧縮率依存の test を方式／メタデータの直接検証へ変更（ADR-0238）。
