@@ -2,6 +2,9 @@
 
 ## 2026-11-19
 
+- updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化。
+  本番接続・自動チェック・自動インストールは実装せず、公開鍵 / endpoint /
+  署名 secrets / Release workflow は未決定として継続（ADR-0222、TD-M21 完了）。
 - OpenAI extra_headers / Ollama options を安全に配線し core を 260→267 件へ拡充（ADR-0221）。
 - E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れを解消）。
   不正 EPUB の固定文言通知を VC-009、reduce の即時フラグメント移動を VC-004 の

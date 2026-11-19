@@ -392,6 +392,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0221-ai-client-options](docs/decisions/0221-ai-client-options.md)
   - OpenAI extra_headers と Ollama options を安全にクライアントへ渡す決定を記録する。
   - ADR-0206 の追従漏れを解消し、2 件を VC-004 / VC-009 へ割り当てて E2E 対応表を 253 件へ更新する決定。
+- [0222-updater-deferred](docs/decisions/0222-updater-deferred.md)
+  - updater の未配線を設計受容とし、設定表示を「更新確認: 未配線」へ正直化する決定を記録する。
 
 ## ライセンス
 

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 221 件）。
+openrustbooks の ADR 一覧（全 222 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -444,3 +444,5 @@ openrustbooks の ADR 一覧（全 221 件）。
   - status: accepted — ADR-0206 の追従漏れを解消し、253 件の E2E check 名を VC 対応表へ完全一致で反映する決定。
 - [ADR-0221: AI クライアント設定の配線](0221-ai-client-options.md)
   - status: accepted — OpenAI extra_headers と Ollama options を安全にクライアントへ渡す決定を記録する。
+- [ADR-0222: updater 未配線の設計受容](0222-updater-deferred.md)
+  - status: accepted — 初期化のみの updater を見送り、設定表示を「未配線」へ正直化する決定を記録する。
