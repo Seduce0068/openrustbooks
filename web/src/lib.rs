@@ -930,6 +930,21 @@ fn find_large_image() -> Option<String> {
     None
 }
 
+/// OS/ブラウザで「動きを減らす」設定が有効かどうか。
+///
+/// E2E が emulation を動的に切り替えるため、起動時にキャッシュせず
+/// 位置を適用するたびに毎回読み直す。
+#[cfg(target_arch = "wasm32")]
+fn prefers_reduced_motion() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    match window.match_media("(prefers-reduced-motion: reduce)") {
+        Ok(Some(query)) => query.matches(),
+        Ok(None) | Err(_) => false,
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 fn apply_position_after_render(ctx: PositionApplyCtx) {
     let deadline = now_millis() + IMAGE_SETTLE_MS;
@@ -976,8 +991,11 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
         // レイアウトが終わるまで反映されないことがあるため。
         // フラグメント移動でも、画像のレイアウト確定前に scrollIntoView が
         // 走ると 0 のままになるため再試行する。
+        // Reduce では画像確定待ちの後に 1 回だけ適用し、この再試行ループを
+        // 回さない（位置保存や後始末は従来どおり必ず通す）。
+        let reduced_motion = prefers_reduced_motion();
         let fragment_not_applied = ctx.fragment.is_some() && actual == 0;
-        if ctx.fragment.is_some() && fragment_not_applied && attempt < 12 {
+        if !reduced_motion && ctx.fragment.is_some() && fragment_not_applied && attempt < 12 {
             // 画像のレイアウトが確定する前に scrollTop を設定すると 0 のまま
             // になるため、1 フレーム相当の間隔を空けて再試行する。
             let next = ctx.clone();
@@ -992,7 +1010,7 @@ fn apply_position_frame(ctx: PositionApplyCtx, attempt: u32, deadline: f64) {
             }
             return;
         }
-        if ctx.fragment.is_none() && actual != wanted && attempt < 3 {
+        if !reduced_motion && ctx.fragment.is_none() && actual != wanted && attempt < 3 {
             apply_position_frame(ctx.clone(), attempt + 1, deadline);
             return;
         }

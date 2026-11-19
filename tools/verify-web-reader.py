@@ -811,7 +811,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 235 + checker.equal 17 = 252。
+    # 期待 check 総数: checker.check 236 + checker.equal 17 = 253。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -838,7 +838,9 @@ async def run_checks(cdp: Cdp) -> int:
     # トグル状態は aria-pressed で dark と同期）+1（R6 PR-L02 / modern-web-guidance: accessibility）。
     # 不正 EPUB の読込失敗で status / console に固定文言のみ出る（Debug 表現・パス・
     # 型名は出ない）ことと、サンプル EPUB の表示が壊れないこと +1（ADR-0212）。
-    checker = Checker(expected=252)
+    # prefers-reduced-motion: reduce で色 transition を維持しつつ空間移動を止め、
+    # フラグメント移動が再試行なしで即時反映されること +1（R6 TD-M13）。
+    checker = Checker(expected=253)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -868,7 +870,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 252 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 253 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -2744,6 +2746,57 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     checker.check("強制カラーモードでも章移動ができる", moved)
     await cdp.send("Emulation.setEmulatedMedia", {"features": []})
+
+    # prefers-reduced-motion: reduce。色の transition は残し、空間移動は外す。
+    # フラグメント移動は画像確定待ちの後の 1 回の適用で即時に反映される。
+    try:
+        await cdp.send(
+            "Emulation.setEmulatedMedia",
+            {"features": [{"name": "prefers-reduced-motion", "value": "reduce"}]},
+        )
+        await asyncio.sleep(0.3)
+        reduce_state = await cdp.evaluate(
+            "(() => {"
+            " const btn = document.querySelector('.btn');"
+            " if (!btn || !window.matchMedia('(prefers-reduced-motion: reduce)').matches)"
+            " return {reduce: false};"
+            " const st = getComputedStyle(btn);"
+            " return {"
+            "  reduce: true,"
+            "  property: st.transitionProperty,"
+            "  duration: st.transitionDuration,"
+            "  animation: st.animationName,"
+            "  transform: st.transform,"
+            " }; })()"
+        )
+        # 第 1 章へ戻り、フラグメント付きリンクで第 2 章の目的位置へ移動する。
+        await cdp.evaluate("document.querySelector('#back')?.click()")
+        await wait_until(
+            cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')",
+            timeout=10,
+        )
+        await cdp.evaluate("document.querySelector('#to-ch2-part').click()")
+        fragment_ready = await wait_until(
+            cdp,
+            f"document.querySelector('.reader-html')?.textContent.includes('Part two text.') && {scroll_read_expr()} > 0",
+            timeout=3,
+        )
+        scroll_top = await cdp.evaluate(scroll_read_expr())
+        properties = reduce_state.get("property", "") if isinstance(reduce_state, dict) else ""
+        checker.check(
+            "Reduce で色 transition を保ち空間移動なしでフラグメントへ即時移動する",
+            isinstance(reduce_state, dict)
+            and reduce_state.get("reduce") is True
+            and "color" in properties
+            and "all" not in properties
+            and "transform" not in properties
+            and reduce_state.get("animation") == "none"
+            and reduce_state.get("transform") == "none"
+            and fragment_ready is True,
+            f"(state={reduce_state!r}, scrollTop={scroll_top!r})",
+        )
+    finally:
+        await cdp.send("Emulation.setEmulatedMedia", {"features": []})
 
     # 履歴サマリーの日時表示。章移動したエントリに日時が入る。
     await open_sample(cdp)

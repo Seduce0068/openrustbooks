@@ -128,7 +128,9 @@
             font-family: var(--font-sans);
             font-size: 0.875rem;
             cursor: pointer;
-            transition: all 0.2s;
+            /* 色の transition は reduce でも維持する。空間移動は下の
+               no-preference ブロックでのみ opt-in する。 */
+            transition: color 0.2s, background-color 0.2s, border-color 0.2s;
         }
 
         .btn:disabled {
@@ -159,6 +161,24 @@
             background: var(--color-danger);
             color: white;
             border-color: var(--color-danger);
+        }
+
+        /* 空間移動（transform / box-shadow）は no-preference のみ。
+           reduce では色の transition だけが残り、位置は瞬時に確定する。 */
+        @media (prefers-reduced-motion: no-preference) {
+            .btn:not(:disabled) {
+                transition:
+                    color 0.2s,
+                    background-color 0.2s,
+                    border-color 0.2s,
+                    transform 0.2s,
+                    box-shadow 0.2s;
+            }
+
+            .btn:hover:not(:disabled) {
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
         }
 
         /* Toolbar */
