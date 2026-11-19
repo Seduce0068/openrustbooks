@@ -51,9 +51,10 @@ status: accepted
 
 - 日時: 2026-11-20（JST）。
 - ビルド: `trunk build --offline --locked --dist /tmp/orb-cross-dist` rc=0。
-- Chrome: `Google Chrome 158.0.8127.36`、
-  `python3 tools/verify-web-reader.py --dist /tmp/orb-cross-dist --chrome /usr/bin/google-chrome --port 18099 --debug-port 19222`
-  → **passed: 255, failed: 0 / all checks passed**、
+- Chrome: `Google Chrome 158.0.8127.36`。
+  E2E は `--dist /tmp/orb-cross-dist --chrome /usr/bin/google-chrome`
+  `--port 18099 --debug-port 19222` で実行し、
+  **passed: 255, failed: 0 / all checks passed**、
   `ok` 行数 255、rc=0（`/tmp/e2e-chrome.log`）。
 - Edge: `Microsoft Edge 157.0.4341.60`、
   同 dist を `--chrome /usr/bin/microsoft-edge --port 18100 --debug-port 19223` で実行
