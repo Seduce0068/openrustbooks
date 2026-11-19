@@ -32,5 +32,5 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [ADR-0235: E2E 待機の条件待ち化と swipe 二重 dispatch の解消](decisions/0235-e2e-conditional-wait.md)
   — 未埋め込みイベントの二重発火を 1 回 dispatch へ、到達条件が明確な待機を条件待ちへ統一。
 - [ADR-0236: prefers-contrast: more の枠線・補助文字コントラスト強化](decisions/0236-prefers-contrast.md)
-   — media query 内で枠線・補助文字を強化し、forced-colors 契約を後方で維持。
+  — media query 内で枠線・補助文字を強化し、forced-colors 契約を後方で維持。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。
