@@ -13,6 +13,26 @@ generated:
 status: accepted
 ---
 
+## 実装状況（2026-11-19）
+
+以下の既存セクションは 2026-10-16 時点の決定履歴として保持する。rumdl feature に関する
+現状は本節および [ADR-0242](0242-rumdl-feature-status.md) を正とする。
+
+- 背景節の `rumdl (default)`（旧 25 行目）が指摘する問題は当時の背景である。
+  現在は `core/Cargo.toml:66`（native）と `:72`（wasm）の 2 行がいずれも
+  `rumdl = { version = "0.3", default-features = false }` である（ADR-0155 / 0168）。
+- 決定節の target 別 feature 選択（旧 40-42 行目）は廃止された。native / wasm とも
+  featureless であり、`wasm` feature は rumdl が公開する同名 `init` export との衝突で
+  禁止されている（ADR-0160）。
+- 影響節の「フィーチャー差異により非並列」（旧 76 行目）は根拠を失ったが、
+  featureless（parallel feature なし）のため非並列という結果は維持される。
+- 現状の担保は `scripts/check-rumdl-featureless.sh` による featureless 2 行の完全一致検査
+  （ADR-0195）。workspace 版 rumdl は削除済み（ADR-0168）。
+- 後続 ADR: [ADR-0155](0155-rumdl-feature-reduction.md) /
+  [ADR-0160](0160-real-wasm-lint.md) /
+  [ADR-0168](0168-workspace-rumdl-cleanup.md) /
+  [ADR-0195](0195-rumdl-feature-gate.md)。
+
 ## 背景
 
 ADR-0001/0002 は「デスクトップ (Tauri) とブラウザ (Wasm) が同一の共通コアを使う」ことを前提としている。しかし共通コアを `wasm32-unknown-unknown` でビルドすると失敗した。
