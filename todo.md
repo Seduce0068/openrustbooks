@@ -59,8 +59,6 @@ status: current
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
 - 【TD-M14】依存更新の自動検出（Dependabot / Renovate）未設定。
   根拠 `.github/workflows/ci.yml:1`。
-- 【TD-M15】rust-version（MSRV）未宣言で CI にも MSRV ゲートが無い。
-  根拠 `Cargo.toml:9,11`。
 - 【TD-M16】検証済み配布物が保持されずデプロイ／復旧の糸口が無い。
   根拠 `scripts/verify.sh:64-65` / `.github/workflows/ci.yml:22-44`。
 - 【TD-M17】AI カスタムエンドポイント opt-in が将来課題のまま。
@@ -145,6 +143,7 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M15】MSRV を 1.95 と宣言し CI ツールチェーンも固定。1.95 で fmt/check/test/clippy 成功、stable verify 253/0 / ADR-0214。
 - [x] 【TD-M13】prefers-reduced-motion 対応。色 transition を維持しつつ空間移動を opt-in 化、再試行のみ reduce で skip。
       E2E 253 件・全ゲート成功 / ADR-0213。
 - [x] 【TD-M12】Reader エラー status / console を操作別固定文言へ redaction。6 経路の `{error:?}` を削除し E2E 252 件・全ゲート成功 / ADR-0212。
