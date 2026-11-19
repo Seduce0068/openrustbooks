@@ -57,8 +57,6 @@ status: current
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
-- 【TD-M20】OpenAI extra_headers / Ollama options がクライアントへ渡っていない。
-  根拠 `core/src/ai_markdown/client.rs:203-206,328,352`。
 - 【TD-M21】updater プラグインが初期化されるが更新チェック未配線。
   根拠 `desktop/src/main.rs:38,63` / `desktop/tauri.conf.json:32`。
 - 【TD-M22】ZIP リーダーが core 実装済みで WASM API / UI 未公開。
@@ -133,6 +131,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M20】extra_headers / Ollama options をクライアントへ配線。予約ヘッダ拒否と options マージで unit 7 件追加（core 267）。
+      E2E 253 件・全ゲート成功 / ADR-0221。
 - [x] 【TD-L12】E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れ解消）。
       Python AST で checker.check 236 + checker.equal 17 = 253 件を抽出し、
       不正 EPUB の固定文言通知を VC-009、reduce の即時フラグメント移動を VC-004 の
