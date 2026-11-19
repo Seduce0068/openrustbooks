@@ -1,44 +1,42 @@
 # Goal
 
-meta CSP と desktop config CSP の差分を静的ゲートで検出する（ADR-0130 の未決定を解消）。
+設定保存 IPC に UI 起点の CAS と構造化エラーを追加する（R6 A05 実装前提 3）。
 
 ## Scope
 
 ### 背景
 
-`web/index.html` の meta CSP と `desktop/tauri.conf.json` の config CSP は
-意図的に allowlist が異なる（desktop は ipc / OpenAI / Ollama を許可）。
-ADR-0130 は desktop 側 CSP を直接検証する静的ゲートを未決定として残していた。
+`update_config_patch` は `expected` をコマンド内で再取得するため、
+UI が `get_config` で読んだ revision を CAS に渡せず、stale な画面内容が
+別更新を上書きし得る。また全設定コマンドが `Result<T, String>` で、
+Conflict / Validation / Storage を機械的に判別できない。
+ADR-0253 の実装前提 3 は、この 2 点を解消することを求めている。
 
 ### 成果物
 
-- `scripts/check-csp-consistency.sh`: 追加
-- `scripts/verify.sh`: 変更（静的ゲート追加）
-- `.github/workflows/ci.yml`: 変更（extra_gates に 1 行）
-- `docs/decisions/0268-csp-consistency-gate.md`: 追加
-- `docs/decisions/0130-desktop-csp.md`: 変更（未決定の解消を記録）
+- `core/src/error.rs`: 変更（`CoreError::code()` を追加）
+- `desktop/src/commands/config.rs`: 変更（`ConfigPatch.expected` 必須化、`CommandError { code, message }`、`update_config_patch` の契約変更、test 追加）
+- `docs/decisions/0269-ipc-cas-contract.md`: 追加
+- ADR-0131 / 0210 / 0253 / 0254: 変更（契約更新を記録）
+- `todo.md`: A05 の第三段完了、IPC 経路決定と UI 接続は後続
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. meta CSP / config CSP を解析し、script-src / style-src が一致することを検査する。
-2. config CSP に `default-src` / `img-src` / `font-src` / `connect-src` が存在することを検査する。
-3. meta CSP に外部オリジン（http/https）が無く、config に IPC / 既知 AI endpoint 以外の外部オリジンが無いことを検査する。
-4. 負向 test（不一致 / 欠落 / 未知オリジン / 不正 JSON / ファイル欠落）で失敗する。
-5. 全ゲート成功（E2E 255 維持）。
+1. `ConfigPatch` に必須 `expected: u64` を追加し、
+   `update_config_patch` がそれを `commit_validated_config` へ渡す。
+2. `CommandError { code, message }` を追加し、code は
+   `CONFIG_CONFLICT` / `CONFIG_VALIDATION` / `CONFIG_STORAGE` / `CONFIG_INTERNAL` に固定する。
+3. 構造化エラーの message は固定文言のみで、設定値 / パス / 秘密情報を出さない。
+4. CAS 成功 / stale conflict / validation / storage の regression test を追加する。
+5. 全ゲート成功（E2E 255 維持、web / E2E は変更しない）。
 
 ## Acceptance criteria
 
-- 負向 test が失敗し、通常 run で全ゲート成功。
+- core / desktop test 成功、E2E 255、全ゲート成功。
 
 ## Constraints
 
-- CSP / HTML / tauri.conf / E2E check 名・件数は変更しない。
-- 共通ワークフローは変更しない。
+- web / E2E / IPC 経路（withGlobalTauri 等）は変更しない（ADR-0264 の未決定を維持）。
+- `update_config` / `reset_config` / `clear_secrets` は既存 String エラーを維持。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- CSP 整合ゲートを追加し script-src / style-src、必須 directive、許可オリジンを fail-closed 検査。
-- 監査指摘（未知 directive / 'unsafe-eval' 同時緩和）を反映、負向 test 15/15 PASS。
-- ADR-0268 で ADR-0130 の静的ゲート未決定を解消、E2E 255/0 維持。
