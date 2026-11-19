@@ -79,6 +79,7 @@ status: current
 
 ## 完了
 
+- [x] 【CSP 静的ゲート】meta / desktop config の整合と許可オリジンを fail-closed 検査、負向 test 15/15 PASS（ADR-0268）。
 - [x] 【バンドルサイズ実測】verify.sh 同一条件で WASM raw 69,012,923 B / gzip 12,183,616 B を記録し、比較可能 before を確立（ADR-0267）。
 - [x] 【D05 残 / OS キーチェーン】設計受容として完了。平文 config.toml 保存 +
       redaction（REDACTED_SECRET / DTO の has_* / Debug マスク）+ Unix 0600 +

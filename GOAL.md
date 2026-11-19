@@ -36,3 +36,9 @@ ADR-0130 は desktop 側 CSP を直接検証する静的ゲートを未決定と
 - CSP / HTML / tauri.conf / E2E check 名・件数は変更しない。
 - 共通ワークフローは変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- CSP 整合ゲートを追加し script-src / style-src、必須 directive、許可オリジンを fail-closed 検査。
+- 監査指摘（未知 directive / 'unsafe-eval' 同時緩和）を反映、負向 test 15/15 PASS。
+- ADR-0268 で ADR-0130 の静的ゲート未決定を解消、E2E 255/0 維持。

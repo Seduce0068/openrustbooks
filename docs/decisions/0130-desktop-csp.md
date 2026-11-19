@@ -65,5 +65,5 @@ Web 側には設定済み）。ADR-0128 / 0129 の未決定。
   `wasm-unsafe-eval` 対応と Wasm 起動の実機確認。
 - `'unsafe-inline'` 残存と nonce 未決定（ADR-0091:64）、
   `inner_html` 経路（web/src/lib.rs:3171,3194）の残リスク。
-- desktop 側 CSP を直接検証する静的ゲート／`tauri build` の導入。
+- desktop 側 CSP を直接検証する静的ゲートは [ADR-0268](0268-csp-consistency-gate.md) で導入済み（`tauri build` は未決定）。
 - 両 CSP の directive 差分の統合、`withGlobalTauri` と CSP 強化の同時実施。
