@@ -39,7 +39,7 @@ browser の readonly 契約を維持しつつ desktop では非表示にする�
 
 ## 完了記録
 
-- browser-only 設定説明を editable=false 時のみ表示する <Show> 条件表示へ変更。
+- browser-only 設定説明を editable=false 時のみ表示する `<Show>` 条件表示へ変更。
 - Tauri mock check に desktop での非存在を追加（check 名・件数 256 不変）。
 - ADR-0275 で ADR-0193 / 0253 の常時説明契約を browser 限定へ更新。
 - /tmp 満杯による E2E 失敗は古い target キャッシュ削除後に再検証し 256/0 を確認。
