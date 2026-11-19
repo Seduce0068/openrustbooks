@@ -6,6 +6,9 @@
 # - config には default-src / img-src / font-src / connect-src が必須。
 # - meta に http:// / https:// オリジンは禁止。
 # - config の外部オリジンは許可リストのみ（未知オリジンは fail-closed）。
+# - app.withGlobalTauri は bool true（desktop の __TAURI__ 経路を有効化 / R6 A05）。
+# - web/src/lib.rs は __TAURI / core / invoke の reflect 経路と、
+#   browser fallback の固定文言 desktop only を保持する（GOAL.md）。
 #
 # 第 1 引数で検査対象の repo root を差し替えられる（負向 test 用）。
 set -euo pipefail
@@ -108,6 +111,42 @@ if conf is not None:
             else:
                 config_policy = csp
 
+# --- app.withGlobalTauri が bool true であること（R6 A05 / GOAL.md） -------------
+# Tauri 2.12.5 の bundle.global.js は window.__TAURI__.core.invoke を公開するが、
+# 既定の withGlobalTauri: false では注入されない。web の invoke ラッパーが
+# reflect で参照する経路を有効化するため、明示的な bool true を要求する。
+# `is True` により 1 / "true" 等の代替値は受け付けない。
+if isinstance(conf, dict):
+    app_conf = conf.get("app")
+    with_global = app_conf.get("withGlobalTauri") if isinstance(app_conf, dict) else None
+    if with_global is not True:
+        errors.append(
+            f"{CONF_REL} の app.withGlobalTauri は bool true である必要があります"
+            f"（実際: {with_global!r}）"
+        )
+
+# --- web/src/lib.rs の IPC reflect 経路と browser fallback（GOAL.md） -------------
+# own 実装の invoke ラッパーが Reflect::get で __TAURI__ / core / invoke を辿り、
+# __TAURI__ が無いブラウザでは Err("desktop only") へ fail-closed することを確認する。
+# Tauri 2.12.5 の bundle.global.js が公開するのは window.__TAURI__（末尾 __ 付き）。
+# 末尾が欠けた "__TAURI" は desktop でも解決できないため明示的に拒否する。
+WEB_LIB_REL = "web/src/lib.rs"
+web_lib = read_text(WEB_LIB_REL)
+if web_lib is not None:
+    for needle in ('"__TAURI__"', '"core"', '"invoke"'):
+        if needle not in web_lib:
+            errors.append(f"{WEB_LIB_REL} に reflect 経路の参照がありません: {needle}")
+    if '"__TAURI"' in web_lib:
+        errors.append(
+            f"{WEB_LIB_REL} に末尾 __ が欠落した __TAURI 参照があります（正: __TAURI__）"
+        )
+    if "Reflect::get" not in web_lib:
+        errors.append(f"{WEB_LIB_REL} に Reflect::get による reflect 経路がありません")
+    if '"desktop only"' not in web_lib:
+        errors.append(
+            f"{WEB_LIB_REL} に browser fallback の固定文言 desktop only がありません"
+        )
+
 # --- directive 名と token 集合を正規化（空白・順不同） ---------------------------
 # 既知集合外の directive は fail-closed で拒否する。特に script-src-elem /
 # style-src-elem は base の script-src / style-src より優先適用され、
@@ -206,6 +245,7 @@ if errors:
 
 print(
     "OK: meta/config の script-src / style-src は一致、"
-    "config の必須 directive とオリジン許可リストも適合"
+    "config の必須 directive とオリジン許可リストも適合、"
+    "withGlobalTauri=true と web の IPC reflect 経路 / desktop only fallback も適合"
 )
 PY

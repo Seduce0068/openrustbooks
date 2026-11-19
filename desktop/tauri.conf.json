@@ -9,6 +9,7 @@
     "beforeBuildCommand": "cd ../web && trunk build --release"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "openrustbooks",

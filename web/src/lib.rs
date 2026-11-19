@@ -4091,12 +4091,12 @@ struct SettingsView {
 
 /// Tauri IPC への薄いラッパ。
 ///
-/// `window.__TAURI` が無いブラウザ単体では invoke を呼ばず `Err("desktop only")` を返す。
+/// `window.__TAURI__` が無いブラウザ単体では invoke を呼ばず `Err("desktop only")` を返す。
 /// 保存コマンドの接続は ADR 未決定のため、今は読み取り専用の下準備にとどめる。
 async fn invoke(command: &str, args: &JsValue) -> Result<JsValue, String> {
     let window = web_sys::window().ok_or_else(|| "desktop only".to_string())?;
     let window: JsValue = window.into();
-    let tauri = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI"))
+    let tauri = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
         .map_err(|_| "desktop only".to_string())?;
     if tauri.is_undefined() || tauri.is_null() {
         return Err("desktop only".to_string());
