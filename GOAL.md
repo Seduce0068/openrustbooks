@@ -7,6 +7,7 @@
 ### 背景
 
 監査で次が判明した:
+
 - `docs/investigation/` は 2026-11-17 の別セッションによる一時調査レポート群。
 - ADR-0083 は「変更・コミットしない」と明文で決定している。
 - 成果は `todo.md` / ADR / `docs/index.md` に吸収済み。
@@ -36,3 +37,9 @@
 
 - 外部サービス / 実 WebView 検証は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0276 で investigation 生ファイルを一時スナップショットと明示、ADR-0083 の未追跡決定を維持。
+- docs/index の導線を「未追跡・非現行値・吸収済み」へ修正、相対リンク 14 件すべて解決。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 256 passed / 0 failed。
