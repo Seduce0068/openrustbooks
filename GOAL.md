@@ -1,49 +1,42 @@
 # Goal
 
-設定保存 IPC に UI 起点の CAS と構造化エラーを追加する（R6 A05 実装前提 3）。
+Tauri のグローバル IPC 経路を有効化し、desktop の読み取り表示を可能にする（R6 A05 実装前提 1）。
 
 ## Scope
 
 ### 背景
 
-`update_config_patch` は `expected` をコマンド内で再取得するため、
-UI が `get_config` で読んだ revision を CAS に渡せず、stale な画面内容が
-別更新を上書きし得る。また全設定コマンドが `Result<T, String>` で、
-Conflict / Validation / Storage を機械的に判別できない。
-ADR-0253 の実装前提 3 は、この 2 点を解消することを求めている。
+`web/src/lib.rs` の invoke ラッパーは `window.__TAURI.core.invoke` を参照する。
+Tauri 2.12.3 の `bundle.global.js` は `window.__TAURI__.core.invoke` を公開するが、
+既定の `withGlobalTauri: false` では注入されない。
+CSP の `script-src` は Trunk inline script のため既に `'unsafe-inline'` を含み、
+グローバルスクリプト追加による CSP 緩和は不要。
+npm 依存追加は bundler / lock / オフライン再現性の追加が必要で最小ではない。
 
 ### 成果物
 
-- `core/src/error.rs`: 変更（`CoreError::code()` を追加）
-- `desktop/src/commands/config.rs`: 変更（`ConfigPatch.expected` 必須化、
-  `CommandError { code, message }`、`update_config_patch` の契約変更、test 追加）
-- `docs/decisions/0269-ipc-cas-contract.md`: 追加
-- ADR-0131 / 0210 / 0253 / 0254: 変更（契約更新を記録）
-- `todo.md`: A05 の第三段完了、IPC 経路決定と UI 接続は後続
+- `desktop/tauri.conf.json`: 変更（`app.withGlobalTauri: true`）
+- `scripts/check-csp-consistency.sh`: 変更（IPC 経路と withGlobalTauri の整合を静的検査）
+- `docs/decisions/0270-tauri-global-ipc-path.md`: 追加
+- `docs/decisions/0264-tauri-ipc-path-acceptance.md`: 変更（経路決定を記録）
+- `docs/decisions/0253-tauri-settings-save-design.md`: 変更（実装前提 1 の解消）
+- `todo.md`: A05 を第一段完了・UI 接続は後続へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. `ConfigPatch` に必須 `expected: u64` を追加し、
-   `update_config_patch` がそれを `commit_validated_config` へ渡す。
-2. `CommandError { code, message }` を追加し、code は
-   `CONFIG_CONFLICT` / `CONFIG_VALIDATION` / `CONFIG_STORAGE` / `CONFIG_INTERNAL` に固定する。
-3. 構造化エラーの message は固定文言のみで、設定値 / パス / 秘密情報を出さない。
-4. CAS 成功 / stale conflict / validation / storage の regression test を追加する。
-5. 全ゲート成功（E2E 255 維持、web / E2E は変更しない）。
+1. `withGlobalTauri: true` を追加し、CSP 値は変更しない。
+2. 静的ゲートで `withGlobalTauri: true` と web の `__TAURI.core.invoke` 参照を検査する。
+3. browser 単体の fail-closed（`__TAURI` が無ければ `Err("desktop only")`）は維持する。
+4. 実 Tauri WebView での往路検証は未決定として残す（ローカルでは CDP 検証不可）。
+5. 全ゲート成功（E2E 255 維持）。
 
 ## Acceptance criteria
 
-- core / desktop test 成功、E2E 255、全ゲート成功。
+- 静的ゲート成功、全ゲート成功、E2E 255。
 
 ## Constraints
 
-- web / E2E / IPC 経路（withGlobalTauri 等）は変更しない（ADR-0264 の未決定を維持）。
-- `update_config` / `reset_config` / `clear_secrets` は既存 String エラーを維持。
+- npm 依存 / `__TAURI_INTERNALS__` 直接利用 / E2E check 追加は行わない。
+- 外部サービス・実 WebView 起動は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- ConfigPatch.expected 必須化と CommandError { code, message } を追加。
-- 監査指摘を反映し message は固定文言のみ、stale expected は CONFIG_CONFLICT。
-- core 287 / desktop 82 / web 2 / wasm 14、E2E 255/0、全ゲート成功。
