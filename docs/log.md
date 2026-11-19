@@ -2,6 +2,13 @@
 
 ## 2026-11-19
 
+- swipe の先頭 evaluate（引数未埋め込みの二重 dispatch）を削除し、f-string 版 1 回のみの
+  dispatch へ変更。到達条件が明確な章移動・縦 / マルチタッチ・ダーク切替・ファイル選択後の
+  DOM / 保存・リセット後を条件待ちへ置換（負向チェックは baseline＋第 1 章本文＋0.3 秒維持）。
+  到達条件のない 106 件の sleep は据え置き、`wait_until` の fail-closed は維持。
+  E2E check 名・254 件は不変で AST 254/254、`verify.sh` 全ゲート 0、E2E 254/0、
+  markdownlint 0 issues。ADR-0235 を追加し decisions / docs 各 index（235 件）、
+  README、GOAL、todo、e2e-traceability（概要 1 行）を追従。
 - OKF / 索引 / log / lint の運用を `docs/documentation-operations.md` へ明文化し、
   リポジトリ直下に `.markdownlint-cli2.jsonc` を追加（一時ファイル依存を解消）。
   ADR-0234 を追加して decisions / docs の各 index（234 件）、README、todo を追従させ、

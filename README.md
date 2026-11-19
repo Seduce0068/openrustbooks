@@ -184,6 +184,9 @@ cd web && trunk build --dist dist
 cd .. && python3 tools/verify-web-reader.py --dist web/dist
 ```
 
+待機は条件待ちを優先し、到達条件のない固定 sleep は据え置いている
+（[ADR-0235](docs/decisions/0235-e2e-conditional-wait.md)）。
+
 ## ドキュメント
 
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
@@ -419,6 +422,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 主要依存のライセンス / 鮮度 / 既知脆弱性 / Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
 - [0234-documentation-operations](docs/decisions/0234-documentation-operations.md)
   - OKF・索引・log・lint の規約と設定をリポジトリ内へ集約する決定。
+- [0235-e2e-conditional-wait](docs/decisions/0235-e2e-conditional-wait.md)
+  - swipe の二重 dispatch を 1 回へし、到達条件が明確な待機を条件待ちへ置換する決定。
 
 ## ライセンス
 
