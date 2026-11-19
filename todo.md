@@ -126,10 +126,6 @@ status: current
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
 <!-- ADR-0207 の残リスク（低優先度で個別追跡） -->
-- 【TD-L09】AppConfig::save() を tmp ファイル＋rename による原子書き込みへ変更。
-  現状は `core/src/config.rs:495-527` の truncate + write で、保存途中失敗時に
-  config.toml が部分破壊され、2 次 save 失敗時にディスクを復旧できない。
-  既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
 - 【TD-L10】並行設定更新の lost update を検出する。
   世代カウンタ／CAS 等が無く、古い更新が新しい更新を上書きし得る。
   既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
@@ -158,6 +154,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L09】AppConfig::save() を tmp + rename の原子書き込みへ変更。0600 を維持し、unit 7 件追加（core 261）。
+      E2E 251 件・全ゲート成功 / ADR-0209。lost update（TD-L10）は未解消。
 - [x] 【TD-L11】remove_document で unsaved_changes キーも削除。孤立フラグも掃除し、unit 2 件追加（desktop 74）。
       E2E 251 件・全ゲート成功 / ADR-0208。
 - [x] 【PR-M10】AppState の 4 RwLock 集約を Tauri の composition root として設計受容。

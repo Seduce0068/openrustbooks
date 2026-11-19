@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- config.toml を tmp + rename で原子保存し、0600 を維持（ADR-0209）。
 - 文書削除時に unsaved_changes を削除し、desktop を 72→74 件へ拡充（ADR-0208）。
 - AppState を composition root として設計受容し、設定系トランザクションの完了を確認。残リスク 3 件を低優先度 todo へ切り出し（ADR-0207）。
 - 検証条件へ VC ID を付与し E2E 251 件の対応表を追加（ADR-0206）。
