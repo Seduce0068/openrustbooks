@@ -380,6 +380,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - config.toml の Editor / Reader 値を DTO に残しつつ、動作に未接続であることを設定画面へ明記する決定を記録する。
   - ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
   - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
+- [0218-custom-ai-endpoint](docs/decisions/0218-custom-ai-endpoint.md)
+  - カスタム AI 送信先の opt-in を見送り、allowlist の現状契約と将来の最小安全設計を記録する。
 
 ## ライセンス
 

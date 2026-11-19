@@ -2,6 +2,8 @@
 
 ## 2026-11-19
 
+- AI カスタムエンドポイント opt-in を設計受容（見送り）。allowlist の現状契約と
+  将来の最小安全設計を記録し、ADR-0101 の未決定を継続（ADR-0218）。
 - Editor / Reader の死設定を注記で正直化し DTO 互換を維持（ADR-0217）。
 - ストリーミング未接続を設計受容し、設定表示を「未配線」へ正直化（ADR-0216）。
 - Dependabot で Cargo / GitHub Actions の patch / minor を週次自動検出（ADR-0215）。
