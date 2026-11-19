@@ -55,8 +55,8 @@ status: current
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
 - 【R3-release#4,#5】導入・更新・ロールバック手順、既知問題の開示、
   署名秘密鍵の `.gitignore` 登録。
-- 【R2-epub#2 / #4 残】EPUB 層の分割、Document 側の二重定義解消。
-  `open_owned_with_limits` と manifest 欠落エラーの統一は完了（ADR-0247 / 0248）。
+- 【R2-epub#2 残】EPUB 層の分割。
+  `open_owned_with_limits`、manifest 欠落エラーの統一、Document 側 EPUB 型削除は完了（ADR-0247 / 0248 / 0250）。
 - 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
   core の Web バインディング分離、workspace 依存の残り（feature 加算依存）。
   greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了（ADR-0243 / 0244 / 0246）。
