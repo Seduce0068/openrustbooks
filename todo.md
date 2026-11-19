@@ -33,9 +33,8 @@ status: current
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
   残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
-- 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
-  既存ソリューション選定根拠 ADR、REQ→ADR→テスト対応表、
-  測定可能な受け入れ基準を整備。
+- 【D02 / R4-trace#1,#4 / R5】既存ソリューション選定根拠 ADR、
+  REQ→ADR→テスト対応表、測定可能な受け入れ基準を整備。
 - 【C04 / R5-ops#1】docs 配下に `index.md` / `log.md` を整備し
   OKF・索引運用を明文化。
 
@@ -79,6 +78,9 @@ status: current
 
 ## 完了
 
+- [x] 【D01】初版スコープ ADR を追加し、native desktop / browser / text / AI /
+      保存・検証の実装範囲と初版に含まない項目・未決定を実証付きで明示。
+      requirements.md へ導線を追加、E2E 254 件・core 270 件 / ADR-0232。
 - [x] 【R4-unit#3】未検出 backend / provider の unit test を追加し core を 267→270 件へ拡充。
       E2E 254 件・全ゲート成功 / ADR-0231。
 - [x] 【C05 / R3-error#3,#5】二重 prefix と JsValue Debug を削除し、desktop run() を Result 化（終了コード 101 維持）。
