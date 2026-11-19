@@ -57,8 +57,6 @@ status: current
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
-- 【TD-M21】updater プラグインが初期化されるが更新チェック未配線。
-  根拠 `desktop/src/main.rs:38,63` / `desktop/tauri.conf.json:32`。
 - 【TD-M22】ZIP リーダーが core 実装済みで WASM API / UI 未公開。
   根拠 `core/src/archive.rs:68,158,168` / `core/src/wasm.rs:62`。
 
@@ -131,6 +129,10 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M21】updater の未配線を設計受容（見送り）。設定表示を「更新確認: 未配線」へ正直化。
+      本番接続・自動チェック・自動インストールは実装せず、check_updates は死設定のまま。
+      公開鍵 / endpoint / 署名 secrets / Release workflow は未決定として ADR に集約。
+      コード変更は表示のみ、E2E 253 維持 / ADR-0222。
 - [x] 【TD-M20】extra_headers / Ollama options をクライアントへ配線。予約ヘッダ拒否と options マージで unit 7 件追加（core 267）。
       E2E 253 件・全ゲート成功 / ADR-0221。
 - [x] 【TD-L12】E2E トレーサビリティを 251 → 253 件へ更新（ADR-0206 の追従漏れ解消）。
