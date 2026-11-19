@@ -6,8 +6,8 @@ Tauri のグローバル IPC 経路を有効化し、desktop の読み取り表�
 
 ### 背景
 
-`web/src/lib.rs` の invoke ラッパーは `window.__TAURI.core.invoke` を参照する。
-Tauri 2.12.3 の `bundle.global.js` は `window.__TAURI__.core.invoke` を公開するが、
+`web/src/lib.rs` の invoke ラッパーは `window.__TAURI__.core.invoke` を参照する。
+Tauri 2.12.5 の `bundle.global.js` は `window.__TAURI__.core.invoke` を公開するが、
 既定の `withGlobalTauri: false` では注入されない。
 CSP の `script-src` は Trunk inline script のため既に `'unsafe-inline'` を含み、
 グローバルスクリプト追加による CSP 緩和は不要。
@@ -26,8 +26,8 @@ npm 依存追加は bundler / lock / オフライン再現性の追加が必要�
 ### 必須事項
 
 1. `withGlobalTauri: true` を追加し、CSP 値は変更しない。
-2. 静的ゲートで `withGlobalTauri: true` と web の `__TAURI.core.invoke` 参照を検査する。
-3. browser 単体の fail-closed（`__TAURI` が無ければ `Err("desktop only")`）は維持する。
+2. 静的ゲートで `withGlobalTauri: true` と web の `__TAURI__.core.invoke` 参照を検査する。
+3. browser 単体の fail-closed（`__TAURI__` が無ければ `Err("desktop only")`）は維持する。
 4. 実 Tauri WebView での往路検証は未決定として残す（ローカルでは CDP 検証不可）。
 5. 全ゲート成功（E2E 255 維持）。
 
