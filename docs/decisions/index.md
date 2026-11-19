@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 276 件）。
+openrustbooks の ADR 一覧（全 277 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -554,3 +554,5 @@ openrustbooks の ADR 一覧（全 276 件）。
   - status: accepted — desktop で設定保存 UI が有効なとき、ブラウザ専用の読み取り説明を DOM から除外する決定を記録する。
 - [ADR-0276: 一時調査成果物のスナップショットとしての扱い](0276-investigation-artifacts-status.md)
   - status: accepted — 未追跡の調査レポート群を当時スナップショットとして導線に明示し、生ファイルは変更しない決定を記録する。
+- [ADR-0277: updater 死設定の fail-closed 復元](0277-updater-honesty-restoration.md)
+  - status: accepted — 設定保存 UI の editable 化で失われた ADR-0222 の固定表示と、check_updates の保存時 fail-closed を復元する決定。

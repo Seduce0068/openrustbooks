@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- updater 死設定の固定表示と保存時 fail-closed を復元、静的ゲートを追加（ADR-0277）。
 - R6 ドキュメント運用: `docs/investigation/` を別セッションの一時調査スナップショットとして
   導線に明示（ADR-0276）。未追跡の round-01〜05 / final-report
   （generated.by dsh、2026-11-17、HEAD 38e6dac / ADR 83 件 / E2E 219 件）の

@@ -43,3 +43,9 @@ updater は plugin 初期化のみで `UpdaterExt::check` / pubkey / endpoint �
 - 公開鍵 / endpoint / 署名 secrets / 自動更新は導入しない。
 - E2E check 名・件数、共通 workflow、Cargo.* は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 更新確認を固定表示へ復元し、merge_secrets で check_updates 現在値を保持。
+- check-updater-honesty 静的ゲートを verify.sh / ci.yml へ配線、負向 test 8/8 PASS。
+- E2E 256/0、check 名不変、verify.sh 全ゲート成功。

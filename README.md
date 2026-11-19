@@ -752,6 +752,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0275-settings-notice-visibility](docs/decisions/0275-settings-notice-visibility.md)
   - desktop で設定保存 UI が有効なとき、ブラウザ専用の読み取り説明を DOM から除外する決定を記録する。
 - [0276-investigation-artifacts-status](docs/decisions/0276-investigation-artifacts-status.md)
+- [0277-updater-honesty-restoration](docs/decisions/0277-updater-honesty-restoration.md)
+  - 設定保存 UI の editable 化で失われた ADR-0222 の固定表示と、check_updates の保存時 fail-closed を復元する決定。
   - 未追跡の調査レポート群を当時スナップショットとして導線に明示し、生ファイルは変更しない決定を記録する。
 
 ## ライセンス

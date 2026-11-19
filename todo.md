@@ -96,6 +96,7 @@ status: current
 
 ## 完了
 
+- [x] 【updater 正直化】更新確認を固定表示へ復元し、死設定の保存を fail-closed 化。静的ゲート追加、負向 test 8/8、E2E 256/0（ADR-0277）。
 - [x] 【R6 ドキュメント運用】`docs/investigation/` を一時調査スナップショットとして導線に明示（ADR-0276）。
       別セッションの round-01〜05 / final-report（generated.by dsh、2026-11-17、
       HEAD 38e6dac / ADR 83 件 / E2E 219 件）は未追跡のまま変更・コミットせず、ADR-0083 を維持。
