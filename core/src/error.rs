@@ -63,6 +63,10 @@ pub enum CoreError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    /// 設定が読み取られてから変更された場合の CAS 衝突（native / wasm 共通）。
+    #[error("Configuration conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

@@ -25,6 +25,9 @@ fn map_err(e: CoreError) -> String {
 /// local_roots[].path / recent_paths）も DTO から除外して JS への開示を防ぐ。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigView {
+    /// 現在の revision。コミット衝突後に `get_config` で再取得し、
+    /// 次のコミットの `expected` として使う（UI の再試行は ADR 未決定）。
+    pub revision: u64,
     pub general: GeneralConfigView,
     pub ai: AiConfigView,
     pub lint: LintConfigView,
@@ -33,9 +36,11 @@ pub struct ConfigView {
     pub reader: ReaderConfig,
 }
 
-impl From<&AppConfig> for ConfigView {
-    fn from(config: &AppConfig) -> Self {
+impl ConfigView {
+    /// IPC 返却用: 設定と同じ時点の revision を添えて DTO を作る。
+    pub fn from_state(config: &AppConfig, revision: u64) -> Self {
         Self {
+            revision,
             general: GeneralConfigView::from(&config.general),
             ai: AiConfigView::from(&config.ai),
             lint: LintConfigView::from(&config.lint),
@@ -43,6 +48,13 @@ impl From<&AppConfig> for ConfigView {
             editor: config.editor.clone(),
             reader: config.reader.clone(),
         }
+    }
+}
+
+impl From<&AppConfig> for ConfigView {
+    /// テスト／内部変換用。実 IPC の返却には `from_state` を使うこと。
+    fn from(config: &AppConfig) -> Self {
+        Self::from_state(config, 0)
     }
 }
 
@@ -549,6 +561,7 @@ pub(crate) fn ai_or_lint_changed(current: &AppConfig, merged: &AppConfig) -> boo
 /// ここでは行わない（clear_secrets の契約を守るため）。
 async fn commit_validated_config(
     state: &AppState,
+    expected: u64,
     merged: AppConfig,
     changed: bool,
 ) -> CoreResult<()> {
@@ -558,13 +571,15 @@ async fn commit_validated_config(
         // 差分なし: 現在の service を維持する（無効設定なら None）。
         state.ai_service()
     };
-    state.commit_config(merged, service)
+    // expected は各コマンドが await 前に取得した値をそのまま使う（再取得しない）。
+    state.commit_config(expected, merged, service)
 }
 
 /// Get current configuration (secrets redacted)
 #[command]
 pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
-    ConfigView::from(&state.config())
+    let (config, revision) = state.config_with_revision();
+    ConfigView::from_state(&config, revision)
 }
 
 /// Update configuration
@@ -573,14 +588,14 @@ pub async fn update_config(
     state: State<'_, Arc<AppState>>,
     config: AppConfig,
 ) -> Result<(), String> {
-    let current = state.config();
+    let (current, expected) = state.config_with_revision();
     // 生 AppConfig の DTO 外フィールドは JS の注入を許さない。境界まで落としてから
     // merge_secrets() に渡し、現在値の復元は従来どおり merge_secrets() に任せる。
     let normalized = normalize_to_dto_boundary(&config, &current);
     let merged = merge_secrets(&current, &normalized);
     validate_ai_base_urls(&merged.ai)?;
     let changed = ai_or_lint_changed(&current, &merged);
-    commit_validated_config(state.inner(), merged, changed)
+    commit_validated_config(state.inner(), expected, merged, changed)
         .await
         .map_err(map_err)?;
     Ok(())
@@ -592,16 +607,17 @@ pub async fn update_config_patch(
     state: State<'_, Arc<AppState>>,
     patch: ConfigPatch,
 ) -> Result<ConfigView, String> {
-    let current = state.config();
+    let (current, expected) = state.config_with_revision();
     // 不変条件: apply_to() の結果は必ず merge_secrets() を通してから保存する。
     let applied = patch.apply_to(&current);
     let merged = merge_secrets(&current, &applied);
     validate_ai_base_urls(&merged.ai)?;
     let changed = ai_or_lint_changed(&current, &merged);
-    commit_validated_config(state.inner(), merged, changed)
+    commit_validated_config(state.inner(), expected, merged, changed)
         .await
         .map_err(map_err)?;
-    Ok(ConfigView::from(&state.config()))
+    let (config, revision) = state.config_with_revision();
+    Ok(ConfigView::from_state(&config, revision))
 }
 
 /// Update AI configuration
@@ -610,7 +626,7 @@ pub async fn update_ai_config(
     state: State<'_, Arc<AppState>>,
     ai_config: AiConfig,
 ) -> Result<(), String> {
-    let current = state.config();
+    let (current, expected) = state.config_with_revision();
     let mut incoming = current.clone();
     // extra_headers は DTO 外。JS の注入を許さず空にし、merge_secrets() の
     // 現在値復元に任せる。api_key は ADR-0098 の明示的新値契約を維持する。
@@ -620,7 +636,7 @@ pub async fn update_ai_config(
     let changed = ai_or_lint_changed(&current, &config);
 
     // 差分がある時だけ再準備。失敗時はコミットしないため状態は不変。
-    commit_validated_config(state.inner(), config, changed)
+    commit_validated_config(state.inner(), expected, config, changed)
         .await
         .map_err(map_err)?;
     Ok(())
@@ -632,13 +648,13 @@ pub async fn update_lint_config(
     state: State<'_, Arc<AppState>>,
     lint_config: LintConfig,
 ) -> Result<(), String> {
-    let current = state.config();
+    let (current, expected) = state.config_with_revision();
     let mut incoming = current.clone();
     incoming.lint = lint_config;
     // DTO から除外した config_file / rule_config を消さないようマージを通す。
     let config = merge_secrets(&current, &incoming);
     let changed = ai_or_lint_changed(&current, &config);
-    commit_validated_config(state.inner(), config, changed)
+    commit_validated_config(state.inner(), expected, config, changed)
         .await
         .map_err(map_err)?;
     Ok(())
@@ -647,12 +663,15 @@ pub async fn update_lint_config(
 /// Reset configuration to defaults (secrets redacted)
 #[command]
 pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
+    // current 自体は不要だが、読み取った revision を expected として渡す。
+    let (_, expected) = state.config_with_revision();
     let config = AppConfig::default();
     // 既定は AI 無効。prepare は None を返し、保存後に service もクリアされる。
-    commit_validated_config(state.inner(), config.clone(), true)
+    commit_validated_config(state.inner(), expected, config, true)
         .await
         .map_err(map_err)?;
-    Ok(ConfigView::from(&config))
+    let (current, revision) = state.config_with_revision();
+    Ok(ConfigView::from_state(&current, revision))
 }
 
 /// 個別に消すシークレットの指定。既定はすべて false（消さない fail-closed）。
@@ -697,20 +716,22 @@ pub async fn clear_secrets(
     state: State<'_, Arc<AppState>>,
     targets: SecretTargets,
 ) -> Result<ConfigView, String> {
-    let mut config = state.config();
+    let (mut config, expected) = state.config_with_revision();
     let cleared = clear_targeted_secrets(&mut config, targets);
     if cleared.is_empty() {
         // 消す値がなければログ・ディスク書込み・再初期化は不要（no-op）。
-        return Ok(ConfigView::from(&state.config()));
+        let (current, revision) = state.config_with_revision();
+        return Ok(ConfigView::from_state(&current, revision));
     }
     // merge_secrets は意図的に通さない。通すと消した値が現在値として復元される。
     // 共有コミット経路にも merge は入れていないため、消した値は復元されない。
-    commit_validated_config(state.inner(), config, true)
+    commit_validated_config(state.inner(), expected, config, true)
         .await
         .map_err(map_err)?;
     // 保存成功後にのみ記録する。対象名だけを出力し、値やパスは出さない。
     log::info!("cleared secrets: {}", cleared.join(", "));
-    Ok(ConfigView::from(&state.config()))
+    let (current, revision) = state.config_with_revision();
+    Ok(ConfigView::from_state(&current, revision))
 }
 
 #[cfg(test)]
@@ -729,6 +750,26 @@ mod tests {
             scopes: vec!["scope".to_string()],
         });
         config
+    }
+
+    #[test]
+    fn config_view_exposes_revision_for_cas_retry() {
+        let view = ConfigView::from_state(&AppConfig::default(), 7);
+        let json = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["revision"], 7);
+    }
+
+    #[test]
+    fn config_patch_ignores_revision_from_view_json() {
+        let current = AppConfig::default();
+        // get_config の DTO をそのまま patch として送っても extra フィールドは無視される。
+        let json = serde_json::to_string(&ConfigView::from_state(&current, 9)).unwrap();
+        let patch: ConfigPatch = serde_json::from_str(&json).unwrap();
+        let merged = merge_secrets(&current, &patch.apply_to(&current));
+        assert_eq!(
+            serde_json::to_value(&merged).unwrap(),
+            serde_json::to_value(&current).unwrap()
+        );
     }
 
     #[test]

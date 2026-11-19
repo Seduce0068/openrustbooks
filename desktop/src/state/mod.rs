@@ -8,9 +8,18 @@ use openrustbooks_core::{
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+/// 設定とその revision を同じロックで保持する（CAS の比較単位）。
+struct ConfigState {
+    config: AppConfig,
+    revision: u64,
+    /// 保存中のコミットがあるか。write guard を保存の外で解放するため、
+    /// 同一 expected の二重通過を防ぐ予約フラグとして使う。
+    pending: bool,
+}
+
 /// Application state shared across commands
 pub struct AppState {
-    config: RwLock<AppConfig>,
+    config: RwLock<ConfigState>,
     documents: RwLock<HashMap<DocumentId, Document>>,
     ai_service: RwLock<Option<Arc<AiMarkdownService>>>,
     unsaved_changes: RwLock<HashMap<DocumentId, bool>>,
@@ -20,7 +29,11 @@ impl AppState {
     /// Create new application state
     pub fn new(config: AppConfig) -> Self {
         Self {
-            config: RwLock::new(config),
+            config: RwLock::new(ConfigState {
+                config,
+                revision: 0,
+                pending: false,
+            }),
             documents: RwLock::new(HashMap::new()),
             ai_service: RwLock::new(None),
             unsaved_changes: RwLock::new(HashMap::new()),
@@ -29,12 +42,23 @@ impl AppState {
 
     /// Get current configuration
     pub fn config(&self) -> AppConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().unwrap().config.clone()
     }
 
-    /// Update configuration
+    /// 現在の設定と revision を同一ロック・同一時点で取得する。
+    ///
+    /// 設定コマンドはここで得た `expected` を後続の `commit_config` へ渡す。
+    pub fn config_with_revision(&self) -> (AppConfig, u64) {
+        let state = self.config.read().unwrap();
+        (state.config.clone(), state.revision)
+    }
+
+    /// 低レベル更新（revision を進めない）。既存のテスト用に残す。
+    ///
+    /// 設定コマンドの保存経路には使わず、CAS を含む `commit_config` を使うこと。
+    #[cfg(test)]
     pub fn update_config(&self, config: AppConfig) -> CoreResult<()> {
-        *self.config.write().unwrap() = config;
+        self.config.write().unwrap().config = config;
         Ok(())
     }
 
@@ -54,34 +78,58 @@ impl AppState {
         Ok(Some(Arc::new(service)))
     }
 
-    /// 設定と AI service をまとめてコミットする。
+    /// 設定と AI service を revision CAS でまとめてコミットする。
     ///
-    /// 保存成功時のみ新しい設定と service を反映する。保存失敗時はメモリ上の
-    /// 設定を旧値へ戻し、旧設定での再保存を試みる。再保存も失敗した場合は
-    /// ディスク状態が不定であることを明示するエラーを返す（設定値は出さない）。
+    /// `expected` が現在の revision と不一致なら `CoreError::Conflict` を返し、
+    /// config / disk / service を一切変更しない。write guard は比較と予約だけの
+    /// 短いクリティカルセクションで解放し、ディスク保存はロックの外で行う
+    /// （`save_config()` は read guard を取るため、ここでは候補を直接保存する）。
     pub fn commit_config(
         &self,
+        expected: u64,
         config: AppConfig,
         service: Option<Arc<AiMarkdownService>>,
     ) -> CoreResult<()> {
-        let previous = self.config();
-        self.update_config(config)?;
+        // overflow は保存前に失敗させる（ADR 未決定のため fail-closed）。
+        let next_revision = expected
+            .checked_add(1)
+            .ok_or_else(|| CoreError::internal("configuration revision overflow"))?;
 
-        if let Err(save_error) = self.save_config() {
-            // update_config は失敗しないため、旧 config の復元は確実に行える。
-            let _ = self.update_config(previous);
-            // ディスクも旧値へ戻す試み（2 次失敗あり得る）。
-            if let Err(restore_error) = self.save_config() {
+        // --- 短い write クリティカルセクション: 比較と予約のみ ---
+        {
+            let mut state = self.config.write().unwrap();
+            if state.revision != expected || state.pending {
+                return Err(CoreError::Conflict(
+                    "Configuration changed since it was read".to_string(),
+                ));
+            }
+            state.pending = true;
+        }
+
+        // --- ロックを解放してから保存（await も guard 保持もしない） ---
+        if let Err(save_error) = config.save() {
+            // メモリはまだ変更していないため、旧 config / revision はそのまま。
+            // 予約を保持したまま旧設定を読み、ディスクを再保存する（他コミットの
+            // 割込みを防ぐ）。2 次失敗あり得る。
+            let previous = self.config.read().unwrap().config.clone();
+            if let Err(restore_error) = previous.save() {
+                self.config.write().unwrap().pending = false;
                 // エラーの表示文字列だけを連結し、設定値（シークレット含む）は出さない。
                 return Err(CoreError::internal(format!(
                     "config save failed and rollback re-save also failed: {save_error}; {restore_error}"
                 )));
             }
+            self.config.write().unwrap().pending = false;
             return Err(save_error);
         }
 
-        // 保存成功後のみ service を置換する。生成失敗時はここに到達しないため、
-        // 古い service が復活することも、意図せず消えることもない。
+        // --- 成功時のみ、短い guard で確定（revision 前進・service 置換） ---
+        // ロックは config -> ai_service の順で取得し（逆順の箇所は無い）、
+        // 設定と service を不可分に反映する。
+        let mut state = self.config.write().unwrap();
+        state.config = config;
+        state.revision = next_revision;
+        state.pending = false;
         *self.ai_service.write().unwrap() = service;
         Ok(())
     }
@@ -104,7 +152,7 @@ impl AppState {
 
     /// Check if AI features are enabled
     pub fn is_ai_enabled(&self) -> bool {
-        self.config.read().unwrap().ai.enabled
+        self.config.read().unwrap().config.ai.enabled
     }
 
     /// Clear the in-memory AI service (設定無効化時に呼ぶ)
@@ -182,9 +230,10 @@ impl AppState {
         self.unsaved_changes.read().unwrap().values().any(|&v| v)
     }
 
-    /// Save configuration to disk
+    /// Save configuration to disk（テスト用。commit は再ロック回避のため直接 save する）
+    #[cfg(test)]
     pub fn save_config(&self) -> CoreResult<()> {
-        self.config.read().unwrap().save()
+        self.config.read().unwrap().config.save()
     }
 }
 
@@ -193,6 +242,20 @@ mod tests {
     use super::*;
     use openrustbooks_core::document::{DocumentContent, DocumentFormat, DocumentMetadata};
     use std::path::PathBuf;
+
+    /// config.toml を触るテストは同じパスを共有するため直列化する。
+    /// async テストは guard を await を跨いで保持するため tokio の Mutex を使う。
+    static CONFIG_FILE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    /// 同期テスト用（tokio runtime 外で呼ぶこと）。
+    fn lock_config_file_blocking() -> tokio::sync::MutexGuard<'static, ()> {
+        CONFIG_FILE_TEST_LOCK.blocking_lock()
+    }
+
+    fn saved_config_toml() -> Option<Vec<u8>> {
+        directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+            .and_then(|dirs| std::fs::read(dirs.config_dir().join("config.toml")).ok())
+    }
 
     /// commit_config が触れる config.toml をテスト前後で保護する。
     /// 既存ファイルは内容を復元し、無ければ削除して環境を汚さない。
@@ -316,6 +379,22 @@ mod tests {
     }
 
     #[test]
+    fn save_config_writes_current_config() {
+        let _test_lock = lock_config_file_blocking();
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new(AppConfig::default());
+        let mut config = state.config();
+        config.general.theme = "solarized".to_string();
+        state.update_config(config).unwrap();
+
+        state.save_config().unwrap();
+
+        let bytes = saved_config_toml().expect("save_config が config.toml を書くこと");
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("solarized"));
+    }
+
+    #[test]
     fn ai_service_is_none_before_enabling() {
         let state = AppState::new(AppConfig::default());
         assert!(!state.is_ai_enabled());
@@ -406,10 +485,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn commit_config_success_replaces_config_and_service() {
+    async fn commit_config_success_replaces_config_and_service_and_advances_revision() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
         let _guard = ConfigFileGuard::new();
         let state = AppState::new(AppConfig::default());
         assert!(state.ai_service().is_none());
+        let (_, expected) = state.config_with_revision();
+        assert_eq!(expected, 0);
 
         let mut candidate = AppConfig::default();
         candidate.ai.enabled = true;
@@ -419,19 +501,115 @@ mod tests {
         assert!(prepared.is_some());
 
         state
-            .commit_config(candidate.clone(), prepared.clone())
+            .commit_config(expected, candidate.clone(), prepared.clone())
             .unwrap();
 
         assert_config_eq(&state.config(), &candidate);
+        assert_eq!(
+            state.config_with_revision().1,
+            1,
+            "成功時のみ revision が進む"
+        );
         let committed = state.ai_service().unwrap();
         assert!(Arc::ptr_eq(prepared.as_ref().unwrap(), &committed));
 
         // 無効設定をコミットすると service は None に置換される。
+        let (_, expected) = state.config_with_revision();
         let disabled = AppConfig::default();
         let none_service = state.prepare_ai_service(&disabled).await.unwrap();
         assert!(none_service.is_none());
-        state.commit_config(disabled.clone(), none_service).unwrap();
+        state
+            .commit_config(expected, disabled.clone(), none_service)
+            .unwrap();
         assert_config_eq(&state.config(), &disabled);
+        assert_eq!(state.config_with_revision().1, 2);
         assert!(state.ai_service().is_none());
+    }
+
+    #[tokio::test]
+    async fn commit_config_stale_expected_conflicts_and_keeps_everything() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new(AppConfig::default());
+        let (_, expected) = state.config_with_revision();
+
+        let mut accepted = AppConfig::default();
+        accepted.ai.enabled = true;
+        accepted.ai.default_provider = "ollama".to_string();
+        accepted.general.theme = "dark".to_string();
+        let prepared = state.prepare_ai_service(&accepted).await.unwrap();
+        state
+            .commit_config(expected, accepted.clone(), prepared.clone())
+            .unwrap();
+        let service_before = state.ai_service().unwrap();
+        let disk_before = saved_config_toml();
+        assert!(disk_before.is_some());
+
+        // 読み取ったままの古い expected で別設定をコミットしようとする。
+        let mut stale = accepted.clone();
+        stale.general.theme = "light".to_string();
+        let err = state.commit_config(expected, stale, None).unwrap_err();
+        match &err {
+            CoreError::Conflict(message) => {
+                assert_eq!(message, "Configuration changed since it was read");
+            }
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+        assert!(
+            err.to_string().starts_with("Configuration conflict:"),
+            "Conflict の表示は固定文言のみ（設定値を含まない）"
+        );
+
+        assert_config_eq(&state.config(), &accepted);
+        assert_eq!(
+            state.config_with_revision().1,
+            1,
+            "Conflict で revision は不変"
+        );
+        assert_eq!(
+            saved_config_toml(),
+            disk_before,
+            "Conflict でディスクは不変"
+        );
+        let service_after = state.ai_service().unwrap();
+        assert!(
+            Arc::ptr_eq(&service_before, &service_after),
+            "Conflict で service は不変"
+        );
+    }
+
+    #[tokio::test]
+    async fn two_commits_with_same_expected_only_one_succeeds() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = Arc::new(AppState::new(AppConfig::default()));
+        let (_, expected) = state.config_with_revision();
+
+        async fn commit(
+            state: Arc<AppState>,
+            expected: u64,
+            theme: &'static str,
+        ) -> CoreResult<()> {
+            let mut candidate = AppConfig::default();
+            candidate.general.theme = theme.to_string();
+            // 両者が同じ expected を保持したまま await を跨ぐ状況を明示する。
+            tokio::task::yield_now().await;
+            state.commit_config(expected, candidate, None)
+        }
+
+        let (first, second) = tokio::join!(
+            commit(state.clone(), expected, "dark"),
+            commit(state.clone(), expected, "light"),
+        );
+
+        let conflicts = [&first, &second]
+            .iter()
+            .filter(|result| matches!(result, Err(CoreError::Conflict(_))))
+            .count();
+        assert_eq!(first.is_ok() as usize + second.is_ok() as usize, 1);
+        assert_eq!(conflicts, 1, "古い expected の片方は必ず Conflict");
+        assert_eq!(state.config_with_revision().1, 1);
+        let winner = if first.is_ok() { "dark" } else { "light" };
+        assert_eq!(state.config().general.theme, winner);
     }
 }
