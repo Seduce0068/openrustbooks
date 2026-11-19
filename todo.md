@@ -33,8 +33,6 @@ status: current
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
   残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
-- 【C04 / R5-ops#1】docs 配下に `index.md` / `log.md` を整備し
-  OKF・索引運用を明文化。
 
 ### 優先度: 低
 
@@ -76,6 +74,10 @@ status: current
 
 ## 完了
 
+- [x] 【C04 / R5-ops#1】OKF・索引・log・lint の運用を `docs/documentation-operations.md`
+      へ明文化し、`.markdownlint-cli2.jsonc` を追加して一時ファイル依存を解消。
+      ADR-0234 を追加し、AGENTS.md のグローバル参照を `~/.agents/AGENTS.md`（正本）へ更新。
+      全索引（234 件）・README・log を追従し、markdownlint 0 issues。
 - [x] 【D02 / R4-trace#1,#4 / R5】REQ→ADR→E2E 対応表へ REQ / 主要 ADR 列を追加し、
       既存ソリューションの選定根拠（ライセンス / 鮮度 / 既知脆弱性 / Wasm 対応）
       を横断記録。VC は ADR-0233 により初版の測定可能な受け入れ基準として参照。
