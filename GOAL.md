@@ -1,21 +1,40 @@
 # Goal
 
-未検出バックエンド / provider の unit test を追加する（R6 R4-unit#3 残、ADR-0231）。
+初版スコープを ADR として確定する（R6 D01 / R5）。
 
 ## Scope
 
+### 背景
+
+`docs/requirements.md` は利用者の要望を網羅するが、
+「要件を書いても初版で実装するとは限らない」と明記しており、
+対象 OS / ブラウザ、対応形式、保存先、機能範囲が未決定だった。
+実装と ADR は 231 件に達し、初版で提供される境界を
+証拠付きで整理できる状態になった。
+
 ### 成果物
 
-- `core/src/io.rs`: 未検出 backend と成功経路の test
-- `core/src/ai_markdown/client.rs`: 未知 provider と API キー非漏洩の test
-- `docs/decisions/0231-unknown-backend-tests.md`: 追加
-- `todo.md`: R4-unit#3 を完了へ移動
+- `docs/decisions/0232-initial-release-scope.md`: 追加
+- `docs/requirements.md`: 変更（初版スコープ ADR への参照を追加）
+- `todo.md`: D01 を完了へ移動
+- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
-### 決定
+### 必須事項
 
-- 本番コードは変更せず、エラー分岐と文言を test で固定。
-- core 267→270（+3）、E2E 254 維持。
+1. 初版で提供する対象（native desktop / browser）、対応形式、
+   Editor / Reader / AI / 保存 / 配布の範囲を実装証拠付きで記載する。
+2. 初版に含まない項目（PDF 完全対応、Google Drive、OS ファイルマネージャー、
+   自動更新、モバイル、実機 5 ブラウザ等）を明確にする。
+3. 各決定を既存 ADR / E2E / コードへ対応付ける。
+4. `requirements.md` の未決定文言を保持しつつ、初版スコープへの導線を追加する。
+5. markdownlint 0 issues、verify.sh（E2E 254）成功。
 
 ## Acceptance criteria
 
-- core 270 tests、E2E 254、全ゲート成功（検証済み）。
+- markdownlint 0 issues、verify.sh 成功。
+
+## Constraints
+
+- ユーザー要件を削除しない（初版スコープは実装判断として記録）。
+- 外部サービス・配布・課金の決定は行わない（未決定として残す）。
+- `master` へ push する。force push はしない。
