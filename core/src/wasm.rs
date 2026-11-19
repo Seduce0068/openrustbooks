@@ -639,86 +639,6 @@ impl WasmLintFixResult {
     }
 }
 
-/// Wasm-compatible configuration
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-#[derive(Serialize, Deserialize)]
-pub struct WasmConfig {
-    ai_enabled: bool,
-    ai_provider: String,
-    ai_model: String,
-    lint_enabled: bool,
-    auto_fix: bool,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Default for WasmConfig {
-    fn default() -> Self {
-        Self {
-            // 送信スタブでもネイティブの AiConfig と揃え、既定はオフ（ADR-0099）。
-            ai_enabled: false,
-            ai_provider: "openai".to_string(),
-            ai_model: "gpt-4o-mini".to_string(),
-            lint_enabled: true,
-            auto_fix: true,
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-impl WasmConfig {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn ai_enabled(&self) -> bool {
-        self.ai_enabled
-    }
-    #[wasm_bindgen(setter)]
-    pub fn set_ai_enabled(&mut self, v: bool) {
-        self.ai_enabled = v;
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn ai_provider(&self) -> String {
-        self.ai_provider.clone()
-    }
-    #[wasm_bindgen(setter)]
-    pub fn set_ai_provider(&mut self, v: String) {
-        self.ai_provider = v;
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn ai_model(&self) -> String {
-        self.ai_model.clone()
-    }
-    #[wasm_bindgen(setter)]
-    pub fn set_ai_model(&mut self, v: String) {
-        self.ai_model = v;
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn lint_enabled(&self) -> bool {
-        self.lint_enabled
-    }
-    #[wasm_bindgen(setter)]
-    pub fn set_lint_enabled(&mut self, v: bool) {
-        self.lint_enabled = v;
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn auto_fix(&self) -> bool {
-        self.auto_fix
-    }
-    #[wasm_bindgen(setter)]
-    pub fn set_auto_fix(&mut self, v: bool) {
-        self.auto_fix = v;
-    }
-}
-
 /// Utility functions for Wasm
 #[cfg(target_arch = "wasm32")]
 pub mod utils {
@@ -767,7 +687,7 @@ pub mod utils {
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
-    use super::{WasmAiMarkdownService, WasmConfig, WasmMarkdownLinter};
+    use super::{WasmAiMarkdownService, WasmMarkdownLinter};
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -861,7 +781,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn auto_fix_false_keeps_content_unchanged() {
-        // WasmConfig.auto_fix ではなく、constructor に渡した LintConfig.auto_fix が権威。
+        // auto_fix の権威は native LintConfig（ADR-0160/0194）。constructor に渡した値が使われる。
         let config = crate::config::LintConfig {
             auto_fix: false,
             ..Default::default()
@@ -900,28 +820,6 @@ mod tests {
                 Some("Invalid lint config")
             ),
         }
-    }
-
-    #[wasm_bindgen_test]
-    fn ai_disabled_by_default() {
-        // ネイティブの AiConfig と同じく既定はオフ。
-        let config = WasmConfig::default();
-        assert!(!config.ai_enabled());
-    }
-
-    #[wasm_bindgen_test]
-    fn set_ai_enabled_switches_state() {
-        let mut config = WasmConfig::default();
-        config.set_ai_enabled(true);
-        assert!(config.ai_enabled());
-    }
-
-    #[wasm_bindgen_test]
-    fn other_defaults_are_unchanged() {
-        // lint / auto_fix の既定値は変更しない。
-        let config = WasmConfig::default();
-        assert!(config.lint_enabled());
-        assert!(config.auto_fix());
     }
 
     #[wasm_bindgen_test]
