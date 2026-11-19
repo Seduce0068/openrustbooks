@@ -1,47 +1,39 @@
 # Goal
 
-WASM binding の tests を `wasm/tests.rs` へ切り出す（R6 R2-crates#4 の第一段）。
+feature 加算を伴う workspace 依存の現状を設計受容として記録する（R6 R2-crates#5）。
 
 ## Scope
 
 ### 背景
 
-`core/src/wasm.rs` は 912 行（本編 533 / tests 379）で、
-tests 14 件は `#[cfg(all(test, target_arch = "wasm32"))]` の下にある。
-ADR-0255 の EPUB tests 分割と同じ手順で、
-公開 API・可視性・test 本文を変えずにファイルだけ分割する。
-本編の 4 モジュール分割（epub / archive / lint / support）は
-再エクスポート・native cfg・マクロスコープの調整が必要なため、
-本 ADR の未決定として残す。
+ADR-0246 で feature 差分の無い 18 依存を workspace 参照へ統一した。
+残る `chrono` / `uuid` / wasm dev `tokio` は workspace 定義より
+多くの feature を member 側で必要とし、
+Cargo の feature は加算で解決されるため単純な workspace 化は
+意図しない依存・挙動を招く。
+よって現状维持を設計受容とし、理由と再評価条件を記録する。
 
 ### 成果物
 
-- `core/src/wasm.rs`: 変更（tests module を #[path] 参照へ置換）
-- `core/src/wasm/tests.rs`: 追加（既存 tests 本文を移動）
-- `docs/decisions/0257-wasm-test-split.md`: 追加
-- `todo.md`: R2-crates#4 を「tests 分割完了、本編分割は未決定」へ更新
+- `docs/decisions/0258-workspace-feature-additive-deps.md`: 追加
+- `todo.md`: R2-crates#5 を「設計受容・残置」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. tests 本文を 1 行も変更せず `core/src/wasm/tests.rs` へ移動する。
-2. `#[cfg(all(test, target_arch = "wasm32"))] #[rustfmt::skip] #[path = "wasm/tests.rs"] mod tests;` で参照する。
-3. 本編 1–533 は変更しない（native / wasm 双方の公開 API を維持）。
-4. wasm test 14 件、core 284 件、E2E 255 を維持する。
-5. 全ゲート成功。
+1. 除外する 3 依存（chrono / uuid / wasm dev tokio）と feature 差分を列挙する。
+2. Cargo の feature 加算性と、workspace 側へ上げた場合の影響を記録する。
+3. ADR-0242 / 0246 の判断を引き継ぎ、rumdl は対象外と明記する。
+4. 再評価条件（MSRV 上の default-features override、Cargo 仕様変更、
+   依存更新）を未決定として残す。
+5. markdownlint 0 issues、verify.sh（E2E 255）成功。
 
 ## Acceptance criteria
 
-- wasm 14 / core 284 / E2E 255、全ゲート成功。
+- 規約・索引・todo が整合し、全ゲート成功。
 
 ## Constraints
 
-- 本編の 4 モジュール分割は行わない（ADR に未決定として残す）。
-- 公開 API / 可視性 / test 内容 / E2E は変更しない。
+- Cargo.toml / Cargo.lock / コード / E2E は変更しない。
+- 新規依存を追加しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- wasm.rs を 912→537 行、tests.rs へ 376 行・14 tests をバイト単位で移動。
-- ADR-0257: 本編 4 モジュール分割、wasm/mod.rs 化、integration test 化は未決定。
-- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
