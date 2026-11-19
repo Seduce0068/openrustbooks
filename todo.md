@@ -61,8 +61,6 @@ status: current
   根拠 `scripts/verify.sh:64-65` / `.github/workflows/ci.yml:22-44`。
 - 【TD-M17】AI カスタムエンドポイント opt-in が将来課題のまま。
   根拠 `core/src/ai_markdown/client.rs:105-113`。
-- 【TD-M18】ストリーミング API が実装済みだがパイプラインから呼ばれない。
-  根拠 `core/src/ai_markdown/client.rs:255` / `core/src/ai_markdown/pipeline.rs:108,119`。
 - 【TD-M19】EditorConfig / ReaderConfig が死設定。
   根拠 `core/src/config.rs:291,342` / `web/src/lib.rs:3700,3716`。
 - 【TD-M20】OpenAI extra_headers / Ollama options がクライアントへ渡っていない。
@@ -141,6 +139,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M18】ストリーミング未接続を設計受容。UI 表示を「未配線」とし、stream_generate を疑似ストリームと明記。
+      E2E 253 件・全ゲート成功 / ADR-0216。
 - [x] 【TD-M14】Dependabot を導入し Cargo / GitHub Actions の patch / minor を週次自動検出。
       major は手動判断、セキュリティ更新は既定継続。YAML 構文 OK / markdownlint 0 issues / ADR-0215。
 - [x] 【TD-M15】MSRV を 1.95 と宣言し CI ツールチェーンも固定。1.95 で fmt/check/test/clippy 成功、stable verify 253/0 / ADR-0214。

@@ -375,6 +375,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
     統合を却下する決定を記録する。
 
 - [0215-dependabot](docs/decisions/0215-dependabot.md)
+- [0216-streaming-deferred](docs/decisions/0216-streaming-deferred.md)
+  - ストリーミング API の本番接続を見送り、設定表示を未配線として正直化する決定を記録する。
   - Cargo と GitHub Actions の patch / minor 更新を週次で自動検出し、major は手動判断に残す決定を記録する。
 
 ## ライセンス
