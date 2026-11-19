@@ -33,9 +33,8 @@ status: current
 
 - 【R4-unit#3】設定・ストレージ・AI 主要モジュールのテストを追加。
   figment の優先順位、保存ラウンドトリップ、未検出バックエンドを検証。
-- 【B04-B07 / C01】UX と a11y。IME の `isComposing` 除外、
-  モーダル中のショートカット停止、reduced-motion、コントラスト、
-  Chrome 単一検証の多ブラウザ化。
+- 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
+  残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
 - 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
   既存ソリューション選定根拠 ADR、REQ→ADR→テスト対応表、
   測定可能な受け入れ基準を整備。
