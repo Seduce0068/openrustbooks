@@ -1,7 +1,7 @@
 ---
 type: Todo
 title: "openrustbooks プロジェクトTODO"
-description: "openrustbooks 固有のタスクを管理するプロジェクト内 TODO。クロスレビュー5回と第6回統合の結果を反映。"
+description: "openrustbooks 固有のタスクを管理するプロジェクト内 TODO。レビュー統合と ADR 実績の照合結果を反映。"
 tags:
   - todo
   - openrustbooks
@@ -22,82 +22,48 @@ status: current
 ### 優先度: 高
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
-- 【CI-H01】CI が trunk build・配布パス検査・E2E(246件) をマージゲートに入れていない。
-  根拠 `.github/workflows/ci.yml:24,42-44` / `scripts/verify.sh:64-121`。
-  CI billing 解消後に共通ワークフロー側で対応。
-
-- 【独自・最優先】Tauri IPC の任意パス読書き削除を防ぐ Rust 側パス検証。
-  `core/src/io.rs:268-274` の `resolve_path` が絶対パスを無条件採用。
-  `desktop/src/commands/fs.rs:60` と `document.rs:25,102` は root を経由せず
-  `tokio::fs` を直呼び。UI 未接続(A05)の裏側にあり、UI 接続時に Critical 化。
-  A05 と同時に `canonicalize` + root 対照を実装。
-- 【D05 / R1#3 / R3#1】API キーとクライアントシークレットの平文保存・
-  JS 露出を解消。`core/src/config.rs:103,224-226,341-371` と
-  `desktop/src/commands/config.rs:15`。`serde(skip_serializing)`、
-  マスク済み DTO、OS キーチェーン移行。
-- 【D06】同意なき本文送信を停止。AI 既定無効化、送信プレビューと
-  同意ダイアログを追加。
-- 【B03】既知脆弱性 2 件（ammonia 4.2.5 / pulldown-cmark 0.13.6）の修正と
-  配布 WASM の再ビルド。`cargo audit` を CI ゲートへ組み込む。
-- 【E01】配布 WASM に含まれる開発ホスト絶対パス 406 件を除去。
-  `--remap-path-prefix` / `-C strip=symbols` と検出ゲートを追加。
-- 【B09】履歴 1 件で localStorage が更新されないバグ。
-  `save_history` の早期リターンを廃止し E2E を追加。
-- 【独自 R2-arch-state#1】Markdown 保存時に front matter が失われる。
-  `desktop/src/commands/document.rs:57-60,98-102` と
-  `core/src/document.rs:236` の `as_text()` が body のみを返す。
-  保存時に front matter を再シリアライズして先頭へ戻す。
-- 【A05 + B01 + B02】Tauri コマンドの UI 接続と CSP 強化を同時に実施。
-  片面だけの修正は攻撃チェーンを残すため順序に注意。
+<!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
+- 【A05 残】Tauri コマンドの UI 接続（段階 2）と設定保存 UI のみ残存。
+  ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193 の「未決定」を追跡先とする。
+  CSP（B01 / B02）は ADR-0091 / ADR-0130 / ADR-0191 で解消済みのため重複計上しない。
 
 ### 優先度: 中
 
-<!-- R6-2026-11-19 中優先度 -->
+<!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224） -->
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
 
-- 【D03 / R2-crates#1】wasm `init()` の二重定義を解消。
-  `core/src/lib.rs:18-19,31` の明示定義と `core/src/wasm.rs:28` の
-  `#[wasm_bindgen]` 版が衝突。Rust 側から wasm.rs 版を呼べない点に限定的。
-- 【B01 / E03 / R1-sanitize#1,#2】Web CSP meta と外部 CSS の SRI、
-  SVG のプロトコル相対参照(`//`)拒否、複数 XML PI の削除を追加。
 - 【R1-ai#2,#5 / R2-ai#3,#4】死設定（timeout_secs / max_tokens_per_month /
   streaming / リトライ回数の誤導出）を配線するか削除。
   `core/src/ai_markdown/pipeline.rs:27` は専用リトライ設定へ変更。
-- 【R3-config#2,#3,#4】インポートのアトミック化と部分インポートの
-  ロールバック。設定保存のメモリ・ディスク乖離を解消。
-  ADR-0207 の低優先度 TD-L09（save 原子化） / TD-L10（lost update）と関連。
 - 【R4-unit#3】設定・ストレージ・AI 主要モジュールのテストを追加。
   figment の優先順位、保存ラウンドトリップ、未検出バックエンドを検証。
-- 【R4-e2e#1,#2 / C06】E2E に期待総数を宣言し未実行 check を失敗扱いに。
-  CDP 接続先を起動 PID と照合し他 Chrome への誤接続を防ぐ。
 - 【B04-B07 / C01】UX と a11y。IME の `isComposing` 除外、
   モーダル中のショートカット停止、reduced-motion、コントラスト、
   Chrome 単一検証の多ブラウザ化。
 - 【C05 / R3-error#3,#5】エラー文言の二重付与と status 分離、
   `desktop/src/main.rs:80` の `unwrap()` を Result 化。
-- 【D01 / D02 / A09 / R4-trace#1,#4 / R5】初版スコープ ADR、
+- 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
   既存ソリューション選定根拠 ADR、REQ→ADR→テスト対応表、
   測定可能な受け入れ基準を整備。
-- 【C07 / R5-adr#3】ADR-0081 の未決定を ADR-0082 の解決結果へ更新。
-- 【A09 / R3-ci#1】README のゲート表記「5」を「6」へ統一、
-  構成ツリーの ADR 一覧を 0083 まで更新、EPUB 状態表記を一意化。
-- 【B10 / C08】未使用依存と `__prune_*` デバッグ関数を削除。
-  ADR-0083 の dead code cleanup と調整する。
 - 【R2-ai#2】AI クライアントの注入点（`Arc<dyn AiClient>`）を追加し
   単体テスト可能性を確保。
-- 【R1-ai / R2-ai#4】lint auto-fix の no-op（`lint.rs:128`）を解消。
-- 【R5-adr#2】ADR-0044 の未決定（XML PI）を ADR-0045 の決定で
-  解決済みへ更新。
 - 【C04 / R5-ops#1】docs 配下に `index.md` / `log.md` を整備し
   OKF・索引運用を明文化。
-- 【R4-unit#5】エラー検証ヘルパー（`archive.rs:383-408`）を集約。
 
 ### 優先度: 低
 
-<!-- R6-2026-11-19 低優先度 -->
+<!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
+- 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
+  E2E 253 件を共通ワークフローのマージゲートへ組み込む。
+  根拠 `.github/workflows/ci.yml:6`（no-external-font-refs / audit /
+  trunk build + E2E は verify.sh 側のゲート）。billing は外部要因のため低優先度。
+- 【D05 残 / OS キーチェーン】API キー / client_secret / refresh_token の
+  平文保存を OS キーチェーンへ移す判断は ADR-0098 の「未決定」を追跡先とする。
+  IPC マスク／マスク済み DTO／DTO 境界は完了済み（ADR-0098 / 0102 / 0128 / 0186）。
+
 - 【TD-L08】serde_yaml 0.9.34+deprecated / tikv-jemalloc 残存は上流 optional 化待ち。
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
@@ -127,6 +93,33 @@ status: current
 
 ## 完了
 
+<!-- 2026-11-19: 監査で解消済みと判定した項目を ADR 実績へ照合して移動（ADR-0224）。 -->
+- [x] 【B03】既知脆弱性 2 件（ammonia / pulldown-cmark）を修正し、audit ゲートを整備。
+      ADR-0086 / 0125 / 0126。
+- [x] 【E01】配布 WASM の開発ホスト絶対パスを除去し、パス検査を fail-closed 化。
+      ADR-0088 / 0152。
+- [x] 【独自・最優先 Tauri パス検証】`resolve_path` の封じ込めと document command の
+      パス検証を実装（ADR-0097 / 0129）。
+- [x] 【D06】AI の既定無効化・service ガード・送信先 allowlist・同意ダイアログを実装。
+      全文プレビューは ADR-0104 の未決定として継続（ADR-0099 / 0100 / 0101 / 0104）。
+- [x] 【D05 完了分】秘密情報の IPC 露出をマスクし、マスク済み DTO と DTO 境界を整備。
+      OS キーチェーン移行は ADR-0098 の未決定として低優先度で継続
+      （ADR-0098 / 0102 / 0128 / 0186）。
+- [x] 【B09】履歴が 1 件のときも localStorage を更新（ADR-0085）。
+- [x] 【独自 R2-arch-state#1】Markdown 保存時に front matter を保全（ADR-0087）。
+- [x] 【B01 / B02 / E03】Web と Desktop の CSP を強化し、外部フォントを削除。
+      SVG の参照制御と XML PI 除去も完了（ADR-0044 / 0045 / 0091 / 0130 / 0191）。
+- [x] 【D03 / R2-crates#1】wasm `init()` の二重定義を解消し初期化を一本化（ADR-0089）。
+- [x] 【R3-config#2,#3,#4】設定保存の原子化・revision CAS・インポート時の保護を実装
+      （ADR-0157 / 0158 / 0209 / 0210 / 0211）。
+- [x] 【R4-e2e#1,#2 / C06】E2E 期待総数と CDP 接続先の決定的照合を実装
+      （ADR-0090 / 0143 / 0182）。
+- [x] 【C07 / R5-adr#2】ADR の未決定を解決結果へ更新（mailto / XML PI、ADR-0045 / 0082）。
+- [x] 【A09 / B10 / C08】README 表記、古い契約値、未使用依存とデバッグ関数を整理
+      （ADR-0083）。
+- [x] 【R1-ai lint auto-fix】lint 自動修正を実装し、検証分岐を一元化
+      （ADR-0110 / 0194）。
+- [x] 【R4-unit#5】エラー検証ヘルパーを集約（ADR-0096 等のテスト整理）。
 - [x] 【TD-M22 段階 1】WasmArchive を公開（entries/read/is_epub）、固定文言エラーと wasm test 7 件追加（wasm 14）。
       E2E 253 件・全ゲート成功 / ADR-0223。UI 接続は段階 2 の未決定。
 - [x] 【TD-M21】updater の未配線を設計受容（見送り）。設定表示を「更新確認: 未配線」へ正直化。
@@ -289,6 +282,9 @@ status: current
 - 2026-11-19 補足: 既存の高優先度項目のうち path validation / secret DTO /
   AI 既定無効 / audit gate / CSP / config patch / secret clear / audit log 等は
   既に ADR とコミットで解消済み。着手前に現 HEAD の ADR を確認すること。
+- 2026-11-19: 監査で解消済みと判定した TODO を ADR 実績へ照合し、未着手から完了へ
+  移動した。CI-H01 は billing 依存の外部要因として低優先度へ移し、E2E は 253 で統一。
+  残リスクは個別 TODO を増やさず ADR の「未決定」へ集約（ADR-0224）。
 
 - エージェント動員: Round 1 = 4 観点（初回 3 件失敗 → 再委譲で回収）、
   Round 2 = 4、Round 3 = 4、Round 4 = 4、Round 5 = 3。
@@ -304,9 +300,8 @@ status: current
 - 未確認: 呼び出し先 `rust-gates.yml@v1` の入力実体、wasm ゲートの
   二重指定の有無、CI の実際の実行状態、外部脆弱性情報の照合、
   Tauri v2 capability の実挙動、EPUB 2 / 固定レイアウトの実データ。
-- 「5 ゲート vs 6 ゲート」: `README.md:149` と `.github/workflows/ci.yml:3`
-  は「5 ゲート」と記載。実際の検証コマンドは 6 行
-  （fmt / check / test / clippy / wasm32 × 2）。
+- ゲート表記: README は数字を記載せず、`.github/workflows/ci.yml:6` のコメントが
+  verify.sh 側のゲート（no-external-font-refs / audit / trunk build + E2E）を定義する。
 - `GOAL.md` はレビュー中に 4 回差し替わった。契約値は着手時に
   現 HEAD で再確認すること。
 - 並行セッションが `docs/investigation/` と `scripts/` を追加中。
