@@ -92,12 +92,14 @@ openrustbooks/
   移動履歴の永続化、タッチ操作（スワイプ、横・縦の閾値設定可能）、
   章タイトルの検索フィルター、巨大画像の警告とオプトインの縮小（JPEG 品質設定付き）
 - **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
-- **テキスト編集 (設計段階)**: TXT, Markdown (CodeMirror 6ベース)
+- **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）、format 選択と Lint は desktop 向け。
 - **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +
   `rumdl`品質保証
 - **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
 - **フォルダ操作 (設計段階)**: 既存フォルダ直接参照, インポート不要
 - **クラウド連携 (設計段階)**: Google Drive (手動保存から開始)
+- **初版スコープ**: 実装・検証済みの提供範囲と未決定の境界は
+  [ADR-0232: 初版リリーススコープ](docs/decisions/0232-initial-release-scope.md) を参照。
 
 ## キーボードショートカット
 
@@ -401,15 +403,17 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0226-status-message-language](docs/decisions/0226-status-message-language.md)
   - lang=\"ja\" 固定の Web UI で Reader status を日本語へ統一し、aria-live 分離は後段へ残す決定を記録する。
 - [0227-ai-client-injection](docs/decisions/0227-ai-client-injection.md)
+  - core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
 - [0228-ai-dead-config](docs/decisions/0228-ai-dead-config.md)
+  - 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
 - [0229-error-message-cleanup](docs/decisions/0229-error-message-cleanup.md)
+  - 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
 - [0230-dark-button-contrast](docs/decisions/0230-dark-button-contrast.md)
+  - dark のプライマリボタン文字色を暗色トークンへ変更し、WCAG AA を満たす決定を記録する。
 - [0231-unknown-backend-tests](docs/decisions/0231-unknown-backend-tests.md)
   - 未検出ストレージバックエンドと未知 AI provider のエラー分岐を unit test で固定する決定を記録する。
-  - dark のプライマリボタン文字色を暗色トークンへ変更し、WCAG AA を満たす決定を記録する。
-  - 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
-  - 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
-  - core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
+- [0232-initial-release-scope](docs/decisions/0232-initial-release-scope.md)
+  - 実装・検証済みの初版スコープと、含まない項目・未決定を実証付きで切り分ける決定を記録する。
 
 ## ライセンス
 

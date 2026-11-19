@@ -2,6 +2,9 @@
 
 ## 2026-11-19
 
+- 初版スコープ ADR を追加し、native desktop / browser / text / AI / 保存・検証の
+  実装範囲と初版に含まない項目・未決定を実装証拠（E2E 254 件・core 270 件）付きで
+  明示。requirements.md に導線を追加し、各索引を 232 件へ更新（ADR-0232）。
 - 未検出 backend / provider の unit test を追加し core を 267→270 件へ拡充（ADR-0231）。
 - dark のプライマリボタン文字色を暗色トークンへ変更し WCAG AA を達成（ADR-0230）。
 - エラー文言の二重付与と JsValue Debug 露出を解消し、desktop run() を Result 化（ADR-0229）。
