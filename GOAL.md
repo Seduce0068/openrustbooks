@@ -1,29 +1,36 @@
 # Goal
 
-実 Tauri WebView 検証の環境ブロッカーを根拠付きで記録する（R6 A05 実装前提 6）。
+A05 の達成 / 未達をドキュメントへ正確に反映する（R6 要件トレーサビリティ整合）。
 
 ## Scope
 
 ### 背景
 
-ADR-0272 で desktop 設定保存 UI を接続し、Tauri mock E2E 256/0 を確認した。
-しかし実 WebView での往路 / 復路 / 表示 / a11y 検証は未実施だった。
-確認の結果、この環境には `cargo-tauri` がインストールされておらず、
-`cargo tauri dev` / `build` を実行できない（DISPLAY=:1 / xdotool はある）。
+監査で次が判明した:
+- A05 前提 1 は IPC 経路のみ完了、nonce/hash と meta/config CSP 一本化は未決定。
+- 前提 2（capability 最小権限）は方針のみで、完了証跡なし。
+- 前提 3 / 5 は完了、前提 4 は実装済みだが実 WebView の a11y 未検証。
+- 前提 6 は Tauri CLI 未導入の環境ブロッカー。
+- `docs/runbook-release.md` が「desktop は未接続」と古い現状を記載。
+- README の主な機能に desktop 設定保存が未反映。
+- ADR-0254 に 0272 / 0273 の事後経緯がない。
 
 ### 成果物
 
-- `docs/decisions/0273-real-webview-verification-deferred.md`: 追加
-- `docs/decisions/0272-settings-save-ui.md`: 変更（未決定の具体化）
-- `todo.md`: A05 を「mock 完了・実 WebView は環境ブロッカー」へ更新
-- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `docs/decisions/0274-a05-traceability-reconciliation.md`: 追加
+- `docs/runbook-release.md`: 変更（desktop 接続済み・実 WebView 未検証）
+- `README.md`: 変更（主な機能に desktop 設定保存を追加）
+- `docs/decisions/0253-tauri-settings-save-design.md`: 変更（前提ごとの状態表）
+- `docs/decisions/0254-release-operations-disclosure.md`: 変更（0272 / 0273 の事後経緯）
+- `todo.md`: A05 の前提別状態を明記
+- `GOAL.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. `cargo tauri` 未導入を Runtime Proof として記録する。
-2. CDP / Tauri mock は実 WebView の代替ではないことを明記する。
-3. Tauri CLI 導入後の検証手順（起動、設定画面、保存往復、a11y）を残す。
-4. E2E 256 件・check 名・コードは変更しない。
+1. 前提 1〜6 を「完了 / 一部完了 / 未検証 / 環境ブロッカー」に分類して記録する。
+2. A05 全体は完了とせず、実 WebView 検証と capability 完了証跡を残す。
+3. Tauri mock E2E 256/0 は JS / IPC 契約レベルであり実 WebView の代替ではないと明記する。
+4. E2E check 名・件数・コードは変更しない（256 維持）。
 5. markdownlint 0 issues、verify.sh（256）成功。
 
 ## Acceptance criteria
@@ -32,13 +39,6 @@ ADR-0272 で desktop 設定保存 UI を接続し、Tauri mock E2E 256/0 を確�
 
 ## Constraints
 
-- Tauri CLI のインストール / 外部ダウンロードは行わない。
-- 実 WebView を pass と記録しない。
+- コード / E2E / Cargo.* は変更しない。
+- 外部サービス / 実 WebView 検証は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 実 WebView 検証は cargo-tauri 未導入を Runtime Proof として記録し、環境ブロッカーとして未実施を維持。
-- ADR-0273 で導入後検証手順を明記、0272 / todo / 索引 / log を追従。
-- docs/index / runbook-release の current 表記を 256 件へ修正。
-- E2E 256/0、verify.sh 全ゲート成功。
