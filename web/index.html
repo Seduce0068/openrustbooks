@@ -26,6 +26,8 @@
             --color-secondary: #f3f4f6;
             --color-secondary-hover: #e5e7eb;
             --color-danger: #dc2626;
+            /* アクセント背景（primary / danger）上の文字色。dark では暗色へ上書き。 */
+            --color-on-accent: #ffffff;
             --color-success: #16a34a;
             --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Consolas, monospace;
             --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans JP', sans-serif;
@@ -51,6 +53,7 @@
                 --color-primary-hover: #60a5fa;
                 --color-secondary: #1e293b;
                 --color-secondary-hover: #334155;
+                --color-on-accent: #0f172a;
             }
         }
 
@@ -63,6 +66,7 @@
             --color-primary-hover: #60a5fa;
             --color-secondary: #1e293b;
             --color-secondary-hover: #334155;
+            --color-on-accent: #0f172a;
         }
 
         body {
@@ -140,7 +144,7 @@
 
         .btn-primary {
             background: var(--color-primary);
-            color: white;
+            color: var(--color-on-accent);
             border-color: var(--color-primary);
         }
 
