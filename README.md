@@ -356,6 +356,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0132-preserve-logic-unification](docs/decisions/0132-preserve-logic-unification.md)
   - ConfigPatch::apply_to を公開フィールドの上書きのみとし、隠しフィールドの保持を merge_secrets に一本化する決定を記録する。
 - [0207-appstate-scope](docs/decisions/0207-appstate-scope.md)
+- [0208-unsaved-changes-cleanup](docs/decisions/0208-unsaved-changes-cleanup.md)
+  - 文書削除時に unsaved_changes のキーも削除し、force close 後の終了確認誤作動を防ぐ決定を記録する。
   - AppState を composition root として設計受容し残リスクを個別追跡（ADR-0177 完了）。
 
 ## ライセンス

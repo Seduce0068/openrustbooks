@@ -133,10 +133,6 @@ status: current
 - 【TD-L10】並行設定更新の lost update を検出する。
   世代カウンタ／CAS 等が無く、古い更新が新しい更新を上書きし得る。
   既存 【R3-config#2,#3,#4】（優先度: 中）と関連 / ADR-0177 未決定 / ADR-0207。
-- 【TD-L11】close_document の unsaved_changes が残留する。
-  `desktop/src/commands/document.rs:261` の remove_document() は
-  `desktop/src/state/mod.rs:140-142` の documents のみ削除し、
-  `desktop/src/state/mod.rs:176-178` の has_unsaved_changes() に古いフラグが残る。
 
 - 【R1-tauri#8 / R3-release#1,#2】updater の公開鍵・署名設定と
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
@@ -162,6 +158,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L11】remove_document で unsaved_changes キーも削除。孤立フラグも掃除し、unit 2 件追加（desktop 74）。
+      E2E 251 件・全ゲート成功 / ADR-0208。
 - [x] 【PR-M10】AppState の 4 RwLock 集約を Tauri の composition root として設計受容。
       設定系トランザクションは ADR-0177 で完了（6 コマンドが commit_validated_config を共有、
       生成失敗時 3 状態不変、ロック同時保持なし）。Repository/Store 分離は見送り。
