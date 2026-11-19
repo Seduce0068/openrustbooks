@@ -39,3 +39,12 @@ temp/
 
 # opencode goal loop（ローカル検証ツール。ログと agent 定義を追跡しない）
 .opencode/
+
+# Release signing secrets（minisign 秘密鍵 / 署名 material のみ。公開鍵は追跡対象）
+*.minisign.key
+*.minisign.key.*
+minisign.key
+minisign.key.*
+*.sec
+release/secrets/
+release-signing/
