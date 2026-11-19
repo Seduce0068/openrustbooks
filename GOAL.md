@@ -1,41 +1,41 @@
 # Goal
 
-未使用の Wasm AI cluster を削除し、ADR-0156 の該当部分を supersede する（R6 R2-crates#3）。
+WASM binding の tests を `wasm/tests.rs` へ切り出す（R6 R2-crates#4 の第一段）。
 
 ## Scope
 
 ### 背景
 
-`WasmAiMarkdownService` / `WasmPipelineResult` / `WasmDiffResult` は
-4 メソッドすべてが固定エラーを返す fail-closed スタブで、
-追跡対象の web / E2E / wasm test 以外に参照が無い。
-唯一の wasm test `ai_methods_fail_closed` は API 自体の契約を検証する
-自己言及 test で、削除範囲に含める。
-ADR-0156 の「JS 型互換のため残置」は実態と乖離している。
+`core/src/wasm.rs` は 912 行（本編 533 / tests 379）で、
+tests 14 件は `#[cfg(all(test, target_arch = "wasm32"))]` の下にある。
+ADR-0255 の EPUB tests 分割と同じ手順で、
+公開 API・可視性・test 本文を変えずにファイルだけ分割する。
+本編の 4 モジュール分割（epub / archive / lint / support）は
+再エクスポート・native cfg・マクロスコープの調整が必要なため、
+本 ADR の未決定として残す。
 
 ### 成果物
 
-- `core/src/wasm.rs`: 変更（3 型・impl・test・import を削除）
-- `docs/decisions/0256-wasm-ai-cluster-removal.md`: 追加
-- ADR-0156 / 0227 / 0232 / 0243 / 0244 / 0246: 変更（supersede と参照更新）
-- `todo.md`: R2-crates#3 の AI cluster 完了、#4 / #5 残存
+- `core/src/wasm.rs`: 変更（tests module を #[path] 参照へ置換）
+- `core/src/wasm/tests.rs`: 追加（既存 tests 本文を移動）
+- `docs/decisions/0257-wasm-test-split.md`: 追加
+- `todo.md`: R2-crates#4 を「tests 分割完了、本編分割は未決定」へ更新
 - `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 3 型と `ai_methods_fail_closed` test を属性ごと削除する。
-2. lint cluster（`WasmMarkdownLinter` / `WasmLintIssue` / `WasmLintFixResult`）と
-   `assert_js_error` helper は維持する。
-3. ADR-0156 に「AI 部分のみ ADR-0256 に supersede、lint 部分は維持」と記録する。
-4. ADR-0232 のブラウザ AI 契約を「API を公開しない」へ更新する。
-5. 全ゲート成功（E2E 255 維持、wasm test は 15 → 14、core 284 維持）。
+1. tests 本文を 1 行も変更せず `core/src/wasm/tests.rs` へ移動する。
+2. `#[cfg(all(test, target_arch = "wasm32"))] #[rustfmt::skip] #[path = "wasm/tests.rs"] mod tests;` で参照する。
+3. 本編 1–533 は変更しない（native / wasm 双方の公開 API を維持）。
+4. wasm test 14 件、core 284 件、E2E 255 を維持する。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- wasm test 14 件、core 284 件維持、E2E 255、全ゲート成功。
+- wasm 14 / core 284 / E2E 255、全ゲート成功。
 
 ## Constraints
 
-- web / E2E / 公開 JS 契約の追跡ソースは変更しない（stale web/dist は対象外）。
-- 外部 JS 利用者の有無は未決定として ADR に残す。
+- 本編の 4 モジュール分割は行わない（ADR に未決定として残す）。
+- 公開 API / 可視性 / test 内容 / E2E は変更しない。
 - `master` へ push する。force push はしない。
