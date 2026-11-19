@@ -42,3 +42,10 @@ ADR-0257 で tests 379 行を `wasm/tests.rs` へ切り出し、
 - 公開 API・既存 test 本文・E2E・Cargo.toml は変更しない。
 - `unsafe` を追加しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- wasm.rs を 537→134 行、epub/archive/lint へ分割（440 行）。tests.rs 376 行は無変更。
+- 監査指摘（WasmArchiveEntry private 復元、ERR_ENTRIES 可視化）を反映。
+- ADR-0259: support モジュール、integration test 化、外部 JS 利用者、バンドルサイズは未決定。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
