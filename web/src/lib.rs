@@ -4021,72 +4021,127 @@ fn Preview(content: ReadSignal<String>, set_content: WriteSignal<String>) -> imp
     }
 }
 
-/// `get_config` (ConfigView) を Web 側で受け取る読み取り専用 DTO。
+/// `get_config` (ConfigView) を Web 側で受け取る DTO。
 ///
+/// desktop の `ConfigView` / 保存時は `ConfigPatch` と同じ公開フィールドだけを持つ。
 /// 秘密情報・パスフィールドは開示されない（API Key は `has_api_key` フラグのみ）。
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct SettingsView {
+    /// `ConfigView.revision`。保存時に `ConfigPatch.expected` へコピーする。
+    revision: u64,
+    general: SettingsGeneralView,
+    ai: SettingsAiView,
+    lint: SettingsLintView,
+    storage: StorageConfigView,
+    editor: SettingsEditorView,
+    reader: SettingsReaderView,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SettingsGeneralView {
     language: String,
     theme: String,
     telemetry: bool,
+    check_updates: bool,
     log_level: String,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SettingsOpenAiView {
-    model: String,
+    base_url: String,
+    /// `true` when an API key is configured; the value itself is never sent.
     has_api_key: bool,
-}
-
-#[derive(serde::Deserialize, Clone)]
-struct SettingsOllamaView {
     model: String,
+    organization: Option<String>,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct SettingsOllamaView {
+    base_url: String,
+    model: String,
+    keep_alive_minutes: u32,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SettingsAiView {
     enabled: bool,
     default_provider: String,
     openai: SettingsOpenAiView,
     ollama: SettingsOllamaView,
     max_tokens_per_request: usize,
+    max_tokens_per_month: Option<u64>,
     prefer_local: bool,
     timeout_secs: u64,
+    streaming: bool,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SettingsLintView {
     enabled: bool,
+    enable_rules: Vec<String>,
+    disable_rules: Vec<String>,
     auto_fix: bool,
     warnings_as_errors: bool,
 }
 
-#[derive(serde::Deserialize, Clone)]
-struct SettingsEditorView {
-    font_size: f32,
-    line_numbers: bool,
-    word_wrap: bool,
-    vim_mode: bool,
+/// desktop `StorageConfigView` と同形。path / recent_paths は持たない。
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct StorageConfigView {
+    default_backend: String,
+    local_roots: Vec<LocalRootView>,
+    google_drive: Option<GoogleDriveConfigView>,
+    max_recent: usize,
 }
 
-#[derive(serde::Deserialize, Clone)]
+/// desktop `LocalRootView` と同形。`path` は持たない。
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct LocalRootView {
+    id: String,
+    name: String,
+    read_only: bool,
+    watch: bool,
+}
+
+/// desktop `GoogleDriveConfigView` と同形。secret 値は持たない。
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct GoogleDriveConfigView {
+    client_id: String,
+    has_client_secret: bool,
+    has_refresh_token: bool,
+    root_folder_id: Option<String>,
+    use_app_data_folder: bool,
+    scopes: Vec<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct SettingsEditorView {
+    font_family: String,
+    font_size: f32,
+    line_height: f32,
+    tab_size: usize,
+    insert_spaces: bool,
+    line_numbers: bool,
+    word_wrap: bool,
+    minimap: bool,
+    auto_save_delay: u32,
+    vim_mode: bool,
+    match_brackets: bool,
+    auto_close_brackets: bool,
+    indent_with_tabs: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SettingsReaderView {
     font_family: String,
     font_size: f32,
     line_height: f32,
     theme: String,
+    column_width: Option<u32>,
     scroll_mode: String,
+    hyphenation: bool,
+    vertical_writing: bool,
     show_page_numbers: bool,
     remember_position: bool,
-}
-
-#[derive(serde::Deserialize, Clone)]
-struct SettingsView {
-    general: SettingsGeneralView,
-    ai: SettingsAiView,
-    lint: SettingsLintView,
-    editor: SettingsEditorView,
-    reader: SettingsReaderView,
 }
 
 /// Tauri IPC への薄いラッパ。
@@ -4120,6 +4175,81 @@ async fn invoke(command: &str, args: &JsValue) -> Result<JsValue, String> {
         .map_err(|_| "デスクトップ版の設定を取得できませんでした".to_string())
 }
 
+/// 保存コマンド専用のエラー。Promise reject が Object なら `code` だけを取り、
+/// 生 `message`（設定値・パス・秘密情報を含み得る）は保持しない（ADR-0269 / 0226）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CommandError {
+    code: String,
+}
+
+impl CommandError {
+    /// code ごとの固定日本語文言。生 message は status へ出さない。
+    fn status_message(&self) -> &'static str {
+        match self.code.as_str() {
+            "CONFIG_CONFLICT" => {
+                "設定が他の更新と競合しました。再読み込みしてからもう一度お試しください。"
+            }
+            "CONFIG_VALIDATION" => "設定値が正しくありません。入力内容を確認してください。",
+            "CONFIG_STORAGE" => {
+                "設定の保存に失敗しました。しばらくしてからもう一度お試しください。"
+            }
+            _ => "設定を保存できませんでした。",
+        }
+    }
+}
+
+/// `update_config_patch` 呼び出し用。reflect 経路は `invoke` と同じで、
+/// reject から `code` のみを取り出して `CommandError` に変換する。
+async fn invoke_update(command: &str, args: &JsValue) -> Result<JsValue, CommandError> {
+    let window = web_sys::window().ok_or_else(|| CommandError {
+        code: "desktop only".to_string(),
+    })?;
+    let window: JsValue = window.into();
+    let tauri = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__")).map_err(|_| {
+        CommandError {
+            code: "desktop only".to_string(),
+        }
+    })?;
+    if tauri.is_undefined() || tauri.is_null() {
+        return Err(CommandError {
+            code: "desktop only".to_string(),
+        });
+    }
+    let core =
+        js_sys::Reflect::get(&tauri, &JsValue::from_str("core")).map_err(|_| CommandError {
+            code: "desktop only".to_string(),
+        })?;
+    if core.is_undefined() || core.is_null() {
+        return Err(CommandError {
+            code: "desktop only".to_string(),
+        });
+    }
+    let invoke_fn =
+        js_sys::Reflect::get(&core, &JsValue::from_str("invoke")).map_err(|_| CommandError {
+            code: "desktop only".to_string(),
+        })?;
+    let invoke_fn: js_sys::Function = invoke_fn.dyn_into().map_err(|_| CommandError {
+        code: "desktop only".to_string(),
+    })?;
+    let promise = invoke_fn
+        .call2(&core, &JsValue::from_str(command), args)
+        .map_err(|_| CommandError {
+            code: "desktop only".to_string(),
+        })?;
+    let promise: js_sys::Promise = promise.dyn_into().map_err(|_| CommandError {
+        code: "desktop only".to_string(),
+    })?;
+    wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .map_err(|reason| {
+            let code = js_sys::Reflect::get(&reason, &JsValue::from_str("code"))
+                .ok()
+                .and_then(|value| value.as_string())
+                .unwrap_or_else(|| "CONFIG_INTERNAL".to_string());
+            CommandError { code }
+        })
+}
+
 /// `get_config` を呼び出して DTO に変換する（ブラウザでは Err）。
 async fn fetch_config() -> Result<SettingsView, String> {
     let args: JsValue = js_sys::Object::new().into();
@@ -4127,89 +4257,75 @@ async fn fetch_config() -> Result<SettingsView, String> {
     serde_wasm_bindgen::from_value(value).map_err(|_| "設定の形式が正しくありません".to_string())
 }
 
-/// Settings form component（読み取り表示のみ）。
+/// 設定を保存する。`revision` を `expected` へコピーした `ConfigPatch` JSON を渡し、
+/// 成功時は更新後の `ConfigView` を返す（ADR-0253 / 0269）。
+async fn save_config(view: &SettingsView) -> Result<SettingsView, CommandError> {
+    let mut patch = serde_json::to_value(view).map_err(|_| CommandError {
+        code: "CONFIG_INTERNAL".to_string(),
+    })?;
+    if let Some(object) = patch.as_object_mut() {
+        object.insert("expected".to_string(), serde_json::json!(view.revision));
+    } else {
+        return Err(CommandError {
+            code: "CONFIG_INTERNAL".to_string(),
+        });
+    }
+    let args = serde_wasm_bindgen::to_value(&patch).map_err(|_| CommandError {
+        code: "CONFIG_INTERNAL".to_string(),
+    })?;
+    let value = invoke_update("update_config_patch", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| CommandError {
+        code: "CONFIG_INTERNAL".to_string(),
+    })
+}
+
+/// 入力イベントから HTMLInputElement の値を取り出す。
+fn input_value(event: &web_sys::Event) -> Option<String> {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|input| input.value())
+}
+
+/// 入力イベントから checkbox の checked を取り出す。
+fn input_checked(event: &web_sys::Event) -> Option<bool> {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|input| input.checked())
+}
+
+/// change イベントから select の value を取り出す。
+fn select_value(event: &web_sys::Event) -> Option<String> {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::HtmlSelectElement>().ok())
+        .map(|select| select.value())
+}
+
+/// Settings form component。
 ///
-/// 保存は行わない: DTO (ConfigView) をそのまま `update_config` (AppConfig) に渡すと
-/// デシリアライズに失敗し、完全な AppConfig を Web で再構成すると隠しフィールドを
-/// 既定値で上書きするリスクがあるため、submit は disabled のままとする。
+/// browser は fetch 失敗で readonly / disabled / 常時説明のまま（ADR-0193 / 0253）。
+/// desktop は `get_config` の IPC 成功を権威に編集可能へ切り替え、
+/// `ConfigPatch.expected` による CAS で保存する。
 #[component]
 fn SettingsForm() -> impl IntoView {
     let status = RwSignal::new(String::new());
-    let general_info = RwSignal::new(String::new());
-    let ai_enabled = RwSignal::new(false);
-    let provider = RwSignal::new(String::new());
-    let openai_model = RwSignal::new(String::new());
-    let api_key_state = RwSignal::new(String::new());
-    let ollama_model = RwSignal::new(String::new());
-    let ai_info = RwSignal::new(String::new());
-    let lint_enabled = RwSignal::new(false);
-    let auto_fix = RwSignal::new(false);
-    let lint_info = RwSignal::new(String::new());
-    let editor_font_size = RwSignal::new(String::new());
-    let line_numbers = RwSignal::new(false);
-    let word_wrap = RwSignal::new(false);
-    let vim_mode = RwSignal::new(false);
-    let reader_info = RwSignal::new(String::new());
+    let config = RwSignal::new(Option::<SettingsView>::None);
+    let editable = RwSignal::new(false);
+    let revision = RwSignal::new(0u64);
+    let max_tokens_error = RwSignal::new(String::new());
+    let timeout_error = RwSignal::new(String::new());
 
     // Leptos 0.8 に on_mount は無いため、Effect::new（初回のみ実行）で代替する。
     Effect::new(move |_| {
         wasm_bindgen_futures::spawn_local(async move {
             match fetch_config().await {
                 Ok(cfg) => {
-                    general_info.set(format!(
-                        "言語: {} / テーマ: {} / テレメトリ: {} / 更新確認: 未配線 / ログレベル: {}",
-                        cfg.general.language,
-                        cfg.general.theme,
-                        if cfg.general.telemetry {
-                            "有効"
-                        } else {
-                            "無効"
-                        },
-                        cfg.general.log_level,
-                    ));
-                    ai_enabled.set(cfg.ai.enabled);
-                    provider.set(cfg.ai.default_provider);
-                    openai_model.set(cfg.ai.openai.model);
-                    // 実値は signal / DOM に書かず、有無だけを表示する。
-                    api_key_state.set(
-                        if cfg.ai.openai.has_api_key {
-                            "設定済み"
-                        } else {
-                            "未設定"
-                        }
-                        .to_string(),
-                    );
-                    ollama_model.set(cfg.ai.ollama.model);
-                    ai_info.set(format!(
-                        "最大トークン/要求: {} / 月間上限: 未配線 / ローカル優先: {} / タイムアウト: {}s（Ollama のみ） / ストリーミング: 未配線",
-                        cfg.ai.max_tokens_per_request,
-                        if cfg.ai.prefer_local { "有効" } else { "無効" },
-                        cfg.ai.timeout_secs,
-                    ));
-                    lint_enabled.set(cfg.lint.enabled);
-                    auto_fix.set(cfg.lint.auto_fix);
-                    lint_info.set(format!(
-                        "警告をエラーとして扱う: {}",
-                        if cfg.lint.warnings_as_errors {
-                            "有効"
-                        } else {
-                            "無効"
-                        }
-                    ));
-                    editor_font_size.set(cfg.editor.font_size.to_string());
-                    line_numbers.set(cfg.editor.line_numbers);
-                    word_wrap.set(cfg.editor.word_wrap);
-                    vim_mode.set(cfg.editor.vim_mode);
-                    reader_info.set(format!(
-                        "フォント: {} / サイズ: {} / 行間: {} / テーマ: {} / スクロール: {} / ページ番号: {} / 位置記憶: {}",
-                        cfg.reader.font_family,
-                        cfg.reader.font_size,
-                        cfg.reader.line_height,
-                        cfg.reader.theme,
-                        cfg.reader.scroll_mode,
-                        if cfg.reader.show_page_numbers { "表示" } else { "非表示" },
-                        if cfg.reader.remember_position { "有効" } else { "無効" },
-                    ));
+                    revision.set(cfg.revision);
+                    config.set(Some(cfg));
+                    // __TAURI__ の存在ではなく IPC 成功を権威にする。
+                    editable.set(true);
                 }
                 Err(_) => {
                     status.set("デスクトップ版のみ利用可能".to_string());
@@ -4218,76 +4334,611 @@ fn SettingsForm() -> impl IntoView {
         });
     });
 
+    let on_save = move |_event: web_sys::MouseEvent| {
+        let Some(view) = config.get() else {
+            status.set("デスクトップ版のみ利用可能".to_string());
+            return;
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            match save_config(&view).await {
+                Ok(updated) => {
+                    revision.set(updated.revision);
+                    config.set(Some(updated));
+                    status.set("設定を保存しました。".to_string());
+                }
+                Err(error) => status.set(error.status_message().to_string()),
+            }
+        });
+    };
+
     view! {
         <form class="settings-form">
-            // ADR-0128: ブラウザ版は読み取り専用。常時表示の説明と、fetch_config の
-            // 成否を伝える status（「デスクトップ版のみ利用可能」）を併記する。
+            // ADR-0128 / 0193: ブラウザ版は読み取り専用。常時表示の説明と、
+            // fetch_config の成否を伝える status（「デスクトップ版のみ利用可能」）を併記する。
             <p class="settings-notice">"ブラウザ版は表示のみです。設定の変更・保存はデスクトップ版で行ってください。"</p>
             <p class="settings-notice" role="status" aria-live="polite">{move || status.get()}</p>
+            <p class="settings-revision">
+                "Revision: "
+                <span id="settings-revision">{move || revision.get().to_string()}</span>
+            </p>
             <section>
                 <h3>"General Settings"</h3>
-                <p class="settings-readonly">{move || general_info.get()}</p>
+                <label for="settings-language">"言語"</label>
+                <input id="settings-language" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.general.language).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.general.language = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-theme">"テーマ"</label>
+                <input id="settings-theme" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.general.theme).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.general.theme = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-log-level">"ログレベル"</label>
+                <input id="settings-log-level" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.general.log_level).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.general.log_level = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-telemetry">"テレメトリ"</label>
+                <input id="settings-telemetry" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.general.telemetry).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.general.telemetry = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-check-updates">"更新確認"</label>
+                <input id="settings-check-updates" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.general.check_updates).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.general.check_updates = checked; }
+                            });
+                        }
+                    }/>
             </section>
             <section>
                 <h3>"AI Settings"</h3>
-                <label>
-                    <input type="checkbox" prop:checked=move || ai_enabled.get() disabled=true/> "Enable AI Features"
-                </label>
-                <label>
-                    "Provider: "
-                    <select prop:value=move || provider.get() disabled=true>
-                        <option value="openai">"OpenAI"</option>
-                        <option value="ollama">"Ollama (Local)"</option>
-                    </select>
-                </label>
-                <label>
-                    "Model: "
-                    <input type="text" placeholder="gpt-4o-mini" prop:value=move || openai_model.get() readonly=true/>
-                </label>
-                <label>
-                    "API Key: "
-                    <input type="password" placeholder="設定済みの場合は変更不要" readonly=true/>
-                    <span class="api-key-state">{move || api_key_state.get()}</span>
-                </label>
-                <label>
-                    "Ollama Model: "
-                    <input type="text" placeholder="llama3.1:8b" prop:value=move || ollama_model.get() readonly=true/>
-                </label>
-                <p class="settings-readonly">{move || ai_info.get()}</p>
+                <label for="settings-ai-enabled">"Enable AI Features"</label>
+                <input id="settings-ai-enabled" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.ai.enabled).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.enabled = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-provider">"Provider"</label>
+                <select id="settings-provider" prop:disabled=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.default_provider).unwrap_or_default()
+                    on:change=move |event| {
+                        if let Some(value) = select_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.default_provider = value; }
+                            });
+                        }
+                    }>
+                    <option value="openai">"OpenAI"</option>
+                    <option value="ollama">"Ollama (Local)"</option>
+                </select>
+                <label for="settings-openai-base-url">"OpenAI Base URL"</label>
+                <input id="settings-openai-base-url" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.openai.base_url).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.openai.base_url = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-openai-model">"OpenAI Model"</label>
+                <input id="settings-openai-model" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.openai.model).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.openai.model = value; }
+                            });
+                        }
+                    }/>
+                // API Key の値は DTO へ送らない。has_api_key の有無だけを表示する。
+                <label for="settings-api-key">"API Key"</label>
+                <input id="settings-api-key" type="password" placeholder="設定済みの場合は変更不要" readonly=true/>
+                <span id="settings-api-key-state" class="api-key-state">
+                    {move || if config.get().map(|v| v.ai.openai.has_api_key).unwrap_or(false) { "設定済み" } else { "未設定" }}
+                </span>
+                <label for="settings-organization">"Organization"</label>
+                <input id="settings-organization" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().and_then(|v| v.ai.openai.organization).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot {
+                                    view.ai.openai.organization = if value.is_empty() { None } else { Some(value) };
+                                }
+                            });
+                        }
+                    }/>
+                <label for="settings-ollama-base-url">"Ollama Base URL"</label>
+                <input id="settings-ollama-base-url" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.ollama.base_url).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.ollama.base_url = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-ollama-model">"Ollama Model"</label>
+                <input id="settings-ollama-model" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.ollama.model).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.ollama.model = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-keep-alive">"Ollama Keep Alive (minutes)"</label>
+                <input id="settings-keep-alive" type="number" min="0" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.ai.ollama.keep_alive_minutes.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.ai.ollama.keep_alive_minutes = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-max-tokens">"最大トークン/要求"</label>
+                <input id="settings-max-tokens" type="number" min="1" readonly=move || !editable.get()
+                    aria-invalid=move || (!max_tokens_error.get().is_empty()).to_string()
+                    aria-describedby="settings-max-tokens-error"
+                    prop:value=move || config.get().map(|v| v.ai.max_tokens_per_request.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            match value.parse::<usize>() {
+                                Ok(parsed) if parsed > 0 => {
+                                    max_tokens_error.set(String::new());
+                                    config.update(|slot| {
+                                        if let Some(view) = slot { view.ai.max_tokens_per_request = parsed; }
+                                    });
+                                }
+                                _ => max_tokens_error.set("最大トークン数は 1 以上の整数で入力してください。".to_string()),
+                            }
+                        }
+                    }/>
+                <p id="settings-max-tokens-error" class="settings-error" role="alert">{move || max_tokens_error.get()}</p>
+                <label for="settings-max-tokens-month">"月間トークン上限"</label>
+                <input id="settings-max-tokens-month" type="number" min="1" readonly=move || !editable.get()
+                    prop:value=move || config.get().and_then(|v| v.ai.max_tokens_per_month.map(|n| n.to_string())).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            let parsed = value.parse::<u64>().ok().filter(|n| *n > 0);
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.max_tokens_per_month = parsed; }
+                            });
+                        }
+                    }/>
+                <label for="settings-timeout">"タイムアウト (秒)"</label>
+                <input id="settings-timeout" type="number" min="1" readonly=move || !editable.get()
+                    aria-invalid=move || (!timeout_error.get().is_empty()).to_string()
+                    aria-describedby="settings-timeout-error"
+                    prop:value=move || config.get().map(|v| v.ai.timeout_secs.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            match value.parse::<u64>() {
+                                Ok(parsed) if parsed > 0 => {
+                                    timeout_error.set(String::new());
+                                    config.update(|slot| {
+                                        if let Some(view) = slot { view.ai.timeout_secs = parsed; }
+                                    });
+                                }
+                                _ => timeout_error.set("タイムアウトは 1 以上の整数で入力してください。".to_string()),
+                            }
+                        }
+                    }/>
+                <p id="settings-timeout-error" class="settings-error" role="alert">{move || timeout_error.get()}</p>
+                <label for="settings-prefer-local">"ローカル優先"</label>
+                <input id="settings-prefer-local" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.ai.prefer_local).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.prefer_local = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-streaming">"ストリーミング"</label>
+                <input id="settings-streaming" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.ai.streaming).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.ai.streaming = checked; }
+                            });
+                        }
+                    }/>
+            </section>
+            <section>
+                <h3>"Lint Settings"</h3>
+                <label for="settings-lint-enabled">"Enable Linting"</label>
+                <input id="settings-lint-enabled" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.lint.enabled).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.lint.enabled = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-lint-enable-rules">"有効なルール (カンマ区切り)"</label>
+                <input id="settings-lint-enable-rules" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.lint.enable_rules.join(", ")).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            let rules = split_rules(&value);
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.lint.enable_rules = rules; }
+                            });
+                        }
+                    }/>
+                <label for="settings-lint-disable-rules">"無効なルール (カンマ区切り)"</label>
+                <input id="settings-lint-disable-rules" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.lint.disable_rules.join(", ")).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            let rules = split_rules(&value);
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.lint.disable_rules = rules; }
+                            });
+                        }
+                    }/>
+                <label for="settings-auto-fix">"Auto-fix on Save"</label>
+                <input id="settings-auto-fix" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.lint.auto_fix).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.lint.auto_fix = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-warnings-as-errors">"警告をエラーとして扱う"</label>
+                <input id="settings-warnings-as-errors" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.lint.warnings_as_errors).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.lint.warnings_as_errors = checked; }
+                            });
+                        }
+                    }/>
             </section>
             <section>
                 <h3>"Editor Settings"</h3>
                 <p class="settings-notice">"エディタ設定: config.toml の設定値です。エディタの動作には未接続です。"</p>
-                <label>
-                    "Font Size: "
-                    <input type="number" prop:value=move || editor_font_size.get() readonly=true min="10" max="24"/>
-                </label>
-                <label>
-                    <input type="checkbox" prop:checked=move || line_numbers.get() disabled=true/> "Line Numbers"
-                </label>
-                <label>
-                    <input type="checkbox" prop:checked=move || word_wrap.get() disabled=true/> "Word Wrap"
-                </label>
-                <label>
-                    <input type="checkbox" prop:checked=move || vim_mode.get() disabled=true/> "Vim Mode"
-                </label>
-            </section>
-            <section>
-                <h3>"Lint Settings"</h3>
-                <label>
-                    <input type="checkbox" prop:checked=move || lint_enabled.get() disabled=true/> "Enable Linting"
-                </label>
-                <label>
-                    <input type="checkbox" prop:checked=move || auto_fix.get() disabled=true/> "Auto-fix on Save"
-                </label>
-                <p class="settings-readonly">{move || lint_info.get()}</p>
+                <label for="settings-editor-font-family">"Font Family"</label>
+                <input id="settings-editor-font-family" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.editor.font_family).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.font_family = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-font-size">"Font Size"</label>
+                <input id="settings-editor-font-size" type="number" min="10" max="24" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.editor.font_size.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.editor.font_size = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-editor-line-height">"Line Height"</label>
+                <input id="settings-editor-line-height" type="number" step="0.1" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.editor.line_height.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.editor.line_height = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-editor-tab-size">"Tab Size"</label>
+                <input id="settings-editor-tab-size" type="number" min="1" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.editor.tab_size.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<usize>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.editor.tab_size = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-editor-auto-save-delay">"Auto Save Delay (ms)"</label>
+                <input id="settings-editor-auto-save-delay" type="number" min="0" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.editor.auto_save_delay.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.editor.auto_save_delay = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-editor-line-numbers">"Line Numbers"</label>
+                <input id="settings-editor-line-numbers" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.line_numbers).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.line_numbers = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-word-wrap">"Word Wrap"</label>
+                <input id="settings-editor-word-wrap" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.word_wrap).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.word_wrap = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-minimap">"Minimap"</label>
+                <input id="settings-editor-minimap" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.minimap).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.minimap = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-insert-spaces">"Insert Spaces"</label>
+                <input id="settings-editor-insert-spaces" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.insert_spaces).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.insert_spaces = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-vim-mode">"Vim Mode"</label>
+                <input id="settings-editor-vim-mode" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.vim_mode).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.vim_mode = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-match-brackets">"Match Brackets"</label>
+                <input id="settings-editor-match-brackets" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.match_brackets).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.match_brackets = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-auto-close-brackets">"Auto Close Brackets"</label>
+                <input id="settings-editor-auto-close-brackets" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.auto_close_brackets).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.auto_close_brackets = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-editor-indent-with-tabs">"Indent With Tabs"</label>
+                <input id="settings-editor-indent-with-tabs" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.editor.indent_with_tabs).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.editor.indent_with_tabs = checked; }
+                            });
+                        }
+                    }/>
             </section>
             <section>
                 <h3>"Reader Settings"</h3>
                 <p class="settings-notice">"リーダー設定: config.toml の設定値です。実際の表示はブラウザに保存された表示設定が権威です（ADR-0211）。"</p>
-                <p class="settings-readonly">{move || reader_info.get()}</p>
+                <label for="settings-reader-font-family">"Font Family"</label>
+                <input id="settings-reader-font-family" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.reader.font_family).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.font_family = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-font-size">"Font Size"</label>
+                <input id="settings-reader-font-size" type="number" min="10" max="48" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.reader.font_size.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.reader.font_size = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-reader-line-height">"Line Height"</label>
+                <input id="settings-reader-line-height" type="number" step="0.1" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.reader.line_height.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.reader.line_height = parsed; }
+
+                            });
+
+                        }
+                    }/>
+                <label for="settings-reader-theme">"Theme"</label>
+                <input id="settings-reader-theme" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.reader.theme).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.theme = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-column-width">"Column Width"</label>
+                <input id="settings-reader-column-width" type="number" min="1" readonly=move || !editable.get()
+                    prop:value=move || config.get().and_then(|v| v.reader.column_width.map(|n| n.to_string())).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            let parsed = value.parse::<u32>().ok();
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.column_width = parsed; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-scroll-mode">"Scroll Mode"</label>
+                <input id="settings-reader-scroll-mode" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.reader.scroll_mode).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.scroll_mode = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-hyphenation">"Hyphenation"</label>
+                <input id="settings-reader-hyphenation" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.reader.hyphenation).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.hyphenation = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-vertical-writing">"Vertical Writing"</label>
+                <input id="settings-reader-vertical-writing" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.reader.vertical_writing).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.vertical_writing = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-page-numbers">"Show Page Numbers"</label>
+                <input id="settings-reader-page-numbers" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.reader.show_page_numbers).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.show_page_numbers = checked; }
+                            });
+                        }
+                    }/>
+                <label for="settings-reader-remember-position">"Remember Position"</label>
+                <input id="settings-reader-remember-position" type="checkbox" prop:disabled=move || !editable.get()
+                    prop:checked=move || config.get().map(|v| v.reader.remember_position).unwrap_or(false)
+                    on:change=move |event| {
+                        if let Some(checked) = input_checked(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.reader.remember_position = checked; }
+                            });
+                        }
+                    }/>
             </section>
-            <button type="submit" class="btn btn-primary" disabled>"保存はデスクトップ版のみ（パス検証と CSP 強化後に接続）"</button>
+            <section>
+                <h3>"Storage Settings"</h3>
+                <p class="settings-notice">"保存先設定は config.toml が権威です。path と秘密情報は画面へ表示しません。"</p>
+                <label for="settings-storage-backend">"Default Backend"</label>
+                <input id="settings-storage-backend" type="text" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.storage.default_backend).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(value) = input_value(&event) {
+                            config.update(|slot| {
+                                if let Some(view) = slot { view.storage.default_backend = value; }
+                            });
+                        }
+                    }/>
+                <label for="settings-storage-max-recent">"Max Recent"</label>
+                <input id="settings-storage-max-recent" type="number" min="0" readonly=move || !editable.get()
+                    prop:value=move || config.get().map(|v| v.storage.max_recent.to_string()).unwrap_or_default()
+                    on:input=move |event| {
+                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<usize>().ok()) {
+
+                            config.update(|slot| {
+
+                                if let Some(view) = slot { view.storage.max_recent = parsed; }
+
+                            });
+
+                        }
+                    }/>
+            </section>
+            <button id="settings-save" type="button" class="btn btn-primary" prop:disabled=move || !editable.get() on:click=on_save>
+                {move || if editable.get() { "設定を保存" } else { "保存はデスクトップ版のみ" }}
+            </button>
         </form>
     }
+}
+
+/// カンマ区切りのルール入力を trim して Vec へ分ける（空要素は除外）。
+fn split_rules(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|rule| rule.trim().to_string())
+        .filter(|rule| !rule.is_empty())
+        .collect()
 }

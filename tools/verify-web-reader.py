@@ -851,7 +851,7 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 238 + checker.equal 17 = 255。
+    # 期待 check 総数: checker.check 239 + checker.equal 17 = 256。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -884,7 +884,9 @@ async def run_checks(cdp: Cdp) -> int:
     # 位置適用完了までが 1.5 秒未満であること +1（R6 TD-M10 / ADR-0225）。
     # localStorage 容量超過で古い位置を削除して再保存したとき、status に削除件数と
     # 残件数だけが出てキー名・生エラーが出ず現在の本の位置が残ること +1（ADR-0245）。
-    checker = Checker(expected=255)
+    # Tauri mock の get_config / update_config_patch 成功経路で、保存ボタン押下後に
+    # 固定成功文言・revision +1・JS エラー 0 を 1 check で検証する +1（ADR-0271 / 0272）。
+    checker = Checker(expected=256)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -914,7 +916,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 255 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 256 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -4448,6 +4450,136 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         and settings_readonly.get("notice") is True,
         f"(state={settings_readonly!r})",
     )
+
+    # ADR-0271 / 0272: desktop 相当の Tauri mock 成功経路。get_config は完全な
+    # ConfigView を返し、update_config_patch は expected + 1 の ConfigView を返す。
+    # 保存ボタン押下後に固定成功文言・revision の +1・JS エラー 0 を 1 check で検証する。
+    # 注入は addScriptToEvaluateOnNewDocument、後始末は identifier を使う try/finally で
+    # 確実に削除し、再 navigated する後続チェックへ漏らさない。
+    mock_config = {
+        "revision": 0,
+        "general": {
+            "language": "ja",
+            "theme": "auto",
+            "telemetry": False,
+            "check_updates": True,
+            "log_level": "info",
+        },
+        "ai": {
+            "enabled": False,
+            "default_provider": "openai",
+            "openai": {
+                "base_url": "https://api.openai.com/v1",
+                "has_api_key": True,
+                "model": "gpt-4o-mini",
+                "organization": None,
+            },
+            "ollama": {
+                "base_url": "http://localhost:11434",
+                "model": "llama3.1:8b",
+                "keep_alive_minutes": 5,
+            },
+            "max_tokens_per_request": 4096,
+            "max_tokens_per_month": None,
+            "prefer_local": False,
+            "timeout_secs": 60,
+            "streaming": True,
+        },
+        "lint": {
+            "enabled": True,
+            "enable_rules": [],
+            "disable_rules": [],
+            "auto_fix": False,
+            "warnings_as_errors": False,
+        },
+        "storage": {
+            "default_backend": "local",
+            "local_roots": [
+                {"id": "root-1", "name": "Local", "read_only": False, "watch": True}
+            ],
+            "google_drive": None,
+            "max_recent": 20,
+        },
+        "editor": {
+            "font_family": "monospace",
+            "font_size": 14.0,
+            "line_height": 1.6,
+            "tab_size": 2,
+            "insert_spaces": True,
+            "line_numbers": True,
+            "word_wrap": True,
+            "minimap": False,
+            "auto_save_delay": 2000,
+            "vim_mode": False,
+            "match_brackets": True,
+            "auto_close_brackets": True,
+            "indent_with_tabs": False,
+        },
+        "reader": {
+            "font_family": "serif",
+            "font_size": 16.0,
+            "line_height": 1.8,
+            "theme": "auto",
+            "column_width": None,
+            "scroll_mode": "vertical",
+            "hyphenation": False,
+            "vertical_writing": False,
+            "show_page_numbers": True,
+            "remember_position": True,
+        },
+    }
+    tauri_mock_source = (
+        "window.__orbTauriErrors = [];"
+        "window.addEventListener('error', (e) => window.__orbTauriErrors.push(String(e.message)));"
+        "window.addEventListener('unhandledrejection', (e) => window.__orbTauriErrors.push(String(e.reason)));"
+        "window.__TAURI__ = { core: { invoke: async (command, args) => {"
+        f"const cfg = {json.dumps(mock_config)};"
+        "if (command === 'get_config') return cfg;"
+        "if (command === 'update_config_patch') {"
+        "return Object.assign({}, cfg, {"
+        "revision: (args && typeof args.expected === 'number' ? args.expected : 0) + 1"
+        "});"
+        "}"
+        "throw { code: 'CONFIG_INTERNAL', message: 'unexpected command' };"
+        "} } };"
+    )
+    injected = await cdp.send(
+        "Page.addScriptToEvaluateOnNewDocument", {"source": tauri_mock_source}
+    )
+    identifier = injected.get("result", {}).get("identifier")
+    try:
+        await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/settings"})
+        await wait_until(cdp, "document.querySelector('#settings-revision')?.textContent === '0'")
+        await wait_until(cdp, "document.querySelector('#settings-save')?.disabled === false")
+        await cdp.evaluate("document.querySelector('#settings-save').click()")
+        saved = await wait_until(
+            cdp,
+            "(() => {"
+            " const status = document.querySelector('.settings-form [role=\"status\"]')?.textContent || '';"
+            " const rev = document.querySelector('#settings-revision')?.textContent;"
+            " return status.includes('設定を保存しました。') && rev === '1';"
+            "})()",
+            timeout=10,
+        )
+        tauri_status = await cdp.evaluate(
+            "document.querySelector('.settings-form [role=\"status\"]')?.textContent || ''"
+        )
+        tauri_revision = await cdp.evaluate(
+            "document.querySelector('#settings-revision')?.textContent"
+        )
+        tauri_errors = await cdp.evaluate(
+            "Array.isArray(window.__orbTauriErrors) ? window.__orbTauriErrors : ['listener missing']"
+        )
+        checker.check(
+            "Tauri モックの設定保存で成功文言と revision +1 と JS エラー 0 を検証",
+            saved and tauri_errors == [],
+            f"(status={tauri_status!r}, revision={tauri_revision!r}, errors={tauri_errors!r})",
+        )
+    finally:
+        if identifier:
+            await cdp.send(
+                "Page.removeScriptToEvaluateOnNewDocument", {"identifier": identifier}
+            )
 
     # エディタ画面 (ADR-0127): textarea の入力が content シグナルを経由して
     # Preview に反映されることと、ブラウザ版で使えない操作が disabled かつ

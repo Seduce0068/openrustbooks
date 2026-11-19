@@ -23,7 +23,7 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残 / IPC 契約完了・UI 接続は DTO 設計後】Tauri 設定保存 UI の接続（段階 2）。
+- 【A05 残 / UI 接続完了・実 WebView 検証は後続】Tauri 設定保存 UI の接続（段階 2）。
   段階設計は ADR-0253 で決定。さらに R6 A05 第一段の設計補強として、
   withGlobalTauri 未設定で desktop も IPC が動かない可能性（実機未検証）と
   3 経路（npm / `__TAURI_INTERNALS__` / withGlobalTauri）の比較、
@@ -34,8 +34,7 @@ status: current
   Serialize できず `expected` を除く 23 フィールドが不足し、
   storage allow-list / a11y / `CommandError.code` → 日本語 status 変換 /
   Tauri mock E2E 成功経路 / 実 WebView 検証は未実装・未検証（ADR-0271）。
-  本次はコード変更なしの設計受容とし、UI 接続は完全な `ConfigPatch` DTO を
-  web 側に定義した後に行う。
+  完全な `ConfigPatch` DTO 往復と Tauri mock E2E による UI 接続は ADR-0272 で完了。
   browser は読み取り専用 fail-closed を維持し、
   desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
   `ConfigPatch.expected` + 構造化エラー + 最新 ConfigView / a11y /
@@ -59,7 +58,7 @@ status: current
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
-  E2E 255 件を共通ワークフローのマージゲートへ組み込む。
+  E2E 256 件を共通ワークフローのマージゲートへ組み込む。
   E2E 件数の current 表記は `scripts/check-e2e-count-consistency.sh` が
   verify.sh / CI extra_gates からコード出典と突き合わせて自動検査する。
   根拠 `.github/workflows/ci.yml:6`（no-external-font-refs / audit /
