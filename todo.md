@@ -62,12 +62,14 @@ status: current
 - 【R2-crates#2-#5】ADR-0003 の rumdl feature 記述更新、
   未実装 Wasm API の非公開化、core の Web バインディング分離、
   workspace 依存の一元化。
-- 【R1-archive#2-#5】実展開サイズの累計上限、入力パーサ側の深さ上限、
-  正規化後同名エントリの拒否、表紙 media-type 検証。
+- 【R1-archive#2,#3,#5 残】実展開サイズの累計上限、入力パーサ側の深さ上限、表紙 media-type 検証。
+  正規化後同名エントリの拒否は完了（ADR-0240）。
 - 【R5-adr 全体評価】ADR-0002 と ADR-0003 の日付逆転（推測）を確認。
 
 ## 完了
 
+- [x] 【R1-archive#4】正規化後同名の ZIP エントリを fail-closed で拒否。archive / epub / wasm に test 5 件追加。
+      core 274・wasm 15・E2E 254 件・全ゲート成功 / ADR-0240。完全一致 raw 名は未決定。
 - [x] 【R3-release#3】tauri.conf.json の version を削除し Cargo workspace を単一情報源へ。
       check-version-consistency.sh を verify.sh / ci.yml へ配線。負向 test 4 ケース失敗、E2E 254 件・全ゲート成功 / ADR-0239。
 - [x] 【R4-unit#4】deflate 圧縮率依存の assertion を方式／メタデータの直接検証へ置換（archive.rs / wasm.rs）。
