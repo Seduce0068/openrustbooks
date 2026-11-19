@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 233 件）。
+openrustbooks の ADR 一覧（全 234 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -468,3 +468,5 @@ openrustbooks の ADR 一覧（全 233 件）。
   - status: accepted — 要件と実装の境界を実証付きで明示し、初版の提供範囲と未決定を切り分ける決定を記録する。
 - [ADR-0233: 既存ソリューション選定根拠の横断記録](0233-solution-selection-rationale.md)
   - status: accepted — 主要依存のライセンス / 鮮度 / 既知脆弱性 / Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
+- [ADR-0234: ドキュメント運用の一本化](0234-documentation-operations.md)
+  - status: accepted — OKF・索引・log・lint の規約と設定をリポジトリ内へ集約する決定。

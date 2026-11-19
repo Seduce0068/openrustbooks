@@ -189,6 +189,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
+- [ドキュメント運用規約](docs/documentation-operations.md) - OKF・索引・log・ADR・lint の運用
 - [0001-use-system-webview](docs/decisions/0001-use-system-webview.md) - デスクトップ版にOS WebViewを採用する
 - [0002-ai-markdown-pipeline](docs/decisions/0002-ai-markdown-pipeline.md) - AI支援Markdown生成・修正パイプラインを導入する
 - [0003-native-wasm-target-split](docs/decisions/0003-native-wasm-target-split.md) - 共通コアをターゲット別依存でNative/Wasm両対応にする
@@ -416,6 +417,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - 実装・検証済みの初版スコープと、含まない項目・未決定を実証付きで切り分ける決定を記録する。
 - [0233-solution-selection-rationale](docs/decisions/0233-solution-selection-rationale.md)
   - 主要依存のライセンス / 鮮度 / 既知脆弱性 / Wasm 対応を横断比較し、選定根拠を一箇所に記録する決定。
+- [0234-documentation-operations](docs/decisions/0234-documentation-operations.md)
+  - OKF・索引・log・lint の規約と設定をリポジトリ内へ集約する決定。
 
 ## ライセンス
 

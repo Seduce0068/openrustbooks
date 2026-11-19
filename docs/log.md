@@ -2,6 +2,11 @@
 
 ## 2026-11-19
 
+- OKF / 索引 / log / lint の運用を `docs/documentation-operations.md` へ明文化し、
+  リポジトリ直下に `.markdownlint-cli2.jsonc` を追加（一時ファイル依存を解消）。
+  ADR-0234 を追加して decisions / docs の各 index（234 件）、README、todo を追従させ、
+  AGENTS.md のグローバル参照を `~/.agents/AGENTS.md`（正本）へ更新。
+  `npx markdownlint-cli2 'docs/**/*.md' README.md todo.md` は 0 issues（ADR-0234）。
 - E2E トレーサビリティへ REQ / 主要 ADR 列を追加し、未カバー行も含め VC 全件を
   対応付け。VC は ADR-0233 により初版の測定可能な受け入れ基準として参照し、
   要件側の「候補」表記は維持。主要依存の選定根拠をライセンス / 鮮度 /
