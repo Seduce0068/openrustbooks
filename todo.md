@@ -36,8 +36,6 @@ status: current
 - 【B04-B07 / C01】UX と a11y。IME の `isComposing` 除外、
   モーダル中のショートカット停止、reduced-motion、コントラスト、
   Chrome 単一検証の多ブラウザ化。
-- 【C05 / R3-error#3,#5】エラー文言の二重付与と status 分離、
-  `desktop/src/main.rs:80` の `unwrap()` を Result 化。
 - 【D01 / D02 / R4-trace#1,#4 / R5】初版スコープ ADR、
   既存ソリューション選定根拠 ADR、REQ→ADR→テスト対応表、
   測定可能な受け入れ基準を整備。
@@ -84,6 +82,8 @@ status: current
 
 ## 完了
 
+- [x] 【C05 / R3-error#3,#5】二重 prefix と JsValue Debug を削除し、desktop run() を Result 化（終了コード 101 維持）。
+      status 分離は ADR 未決定。E2E 254 件・全ゲート成功 / ADR-0229。
 - [x] 【R1-ai#2,#5 / R2-ai#3,#4】AI 死設定を設計受容。月間上限を「未配線」、timeout を「Ollama のみ」と表示し、E2E 254 件・全ゲート成功 / ADR-0228。
 - [x] 【R2-ai#2】AI クライアント注入点を設計受容（公開注入点は追加せず）。
       `#[cfg(test)]` 内の `CountingAiClient` ＋ `pipeline_with_mock()` による非公開フィールド
