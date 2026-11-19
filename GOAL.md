@@ -15,7 +15,8 @@ ADR-0253 の実装前提 3 は、この 2 点を解消することを求めて�
 ### 成果物
 
 - `core/src/error.rs`: 変更（`CoreError::code()` を追加）
-- `desktop/src/commands/config.rs`: 変更（`ConfigPatch.expected` 必須化、`CommandError { code, message }`、`update_config_patch` の契約変更、test 追加）
+- `desktop/src/commands/config.rs`: 変更（`ConfigPatch.expected` 必須化、
+  `CommandError { code, message }`、`update_config_patch` の契約変更、test 追加）
 - `docs/decisions/0269-ipc-cas-contract.md`: 追加
 - ADR-0131 / 0210 / 0253 / 0254: 変更（契約更新を記録）
 - `todo.md`: A05 の第三段完了、IPC 経路決定と UI 接続は後続
