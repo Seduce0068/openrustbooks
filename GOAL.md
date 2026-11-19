@@ -7,6 +7,7 @@ Tauri 設定保存 UI の段階設計を確定する（R6 A05 残、swarm-coding
 ### 背景
 
 R1 監査で次が判明した:
+
 - `desktop/tauri.conf.json` に `withGlobalTauri` が無く、
   ブラウザ版 WebView から `__TAURI.core.invoke` を取得できない。
 - `ConfigView.revision` は返るが更新コマンドが expected を受け取らず、
