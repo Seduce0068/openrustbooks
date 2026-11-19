@@ -2,6 +2,17 @@
 
 ## 2026-11-20
 
+- R6 A05: 設定保存 UI 接続スコープを設計受容。withGlobalTauri / `__TAURI__.core.invoke`
+  （ADR-0270）、UI 起点 CAS と構造化エラー（ADR-0269）は完了した一方、web 側
+  `SettingsView` は `ConfigPatch` へ Serialize できず `expected` を除く 23 フィールドが不足。
+  storage allow-list（path / secret 非開示）、a11y（`for` / `id` / `aria-invalid` /
+  `aria-describedby`）、`CommandError.code` → 日本語 status、Tauri mock E2E 成功経路、
+  実 WebView は未実装・未検証。今すぐ接続 / 設計受容（採用）/ 読み取り表示も廃止を比較し、
+  コード変更なしの設計受容を選択。UI 接続は完全な `ConfigPatch` DTO を web 側へ定義後に行う。
+  ADR-0253 に命名ドリフト（`ConfigUpdateRequest.expected` → `ConfigPatch.expected`、
+  `window.__TAURI.core.invoke` → `window.__TAURI__.core.invoke`）を追記。
+  ADR-0271 を追加し decisions / docs 各 index（271 件）、README、todo を追従。
+  コード / E2E は未変更で E2E 255 件・check 名は不変。markdownlint 0 issues（ADR-0271）。
 - Tauri の withGlobalTauri と __TAURI__.core.invoke 経路を確定（ADR-0270）。
 - ConfigPatch.expected と CommandError で UI 起点 CAS と構造化エラーを実装（ADR-0269）。
 - meta / desktop config の CSP 整合を静的ゲート化、負向 test 15/15 PASS（ADR-0268）。

@@ -37,3 +37,9 @@ R1 監査で次が判明した:
 - web / desktop / E2E / Cargo.* は変更しない。
 - 外部サービス・実 WebView 検証は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- ADR-0271 で IPC 完了 / UI 未実装を分離し、23 フィールド不足の内訳を記録。
+- ADR-0253 の旧命名を履歴注記、docs/index に 0269 / 0270 の導線を追加。
+- コード・E2E 不変、`./scripts/verify.sh` 全ゲート成功、E2E 255 passed / 0 failed。

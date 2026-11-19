@@ -8,7 +8,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 270 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 271 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -56,4 +56,10 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — current 表記をコード出典の 255 件へ追従し、254 件は履歴として保持する決定。
 - [ADR-0264: Tauri IPC 経路の設計受容](decisions/0264-tauri-ipc-path-acceptance.md)
    — desktop も IPC 未接続の可能性を記録し、3 経路比較と CSP 未決定を残して設計受容とする。
+- [ADR-0269: 設定保存 IPC の UI 起点 CAS と構造化エラー](decisions/0269-ipc-cas-contract.md)
+  — `ConfigPatch.expected` と `CommandError` で stale 更新を検出し、固定文言のみを JS へ渡す。
+- [ADR-0270: Tauri グローバル IPC 経路の選択](decisions/0270-tauri-global-ipc-path.md)
+  — `withGlobalTauri` と `__TAURI__.core.invoke` を採用し、CSP 値を変更せず desktop IPC を有効化。
+- [ADR-0271: 設定保存 UI 接続スコープの設計受容](decisions/0271-settings-ui-scope.md)
+  — IPC 契約完了と DTO / a11y / E2E 未実装を切り分け、UI 接続を完全な ConfigPatch DTO 定義後に留める。
 - [investigation/](investigation/) — 別セッションによる残タスク調査レポート。

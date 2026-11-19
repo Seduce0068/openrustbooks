@@ -23,17 +23,22 @@ status: current
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
-- 【A05 残 / 第一段・第三段完了・UI 接続と実 WebView 検証は後続】Tauri 設定保存 UI の接続（段階 2）。
+- 【A05 残 / IPC 契約完了・UI 接続は DTO 設計後】Tauri 設定保存 UI の接続（段階 2）。
   段階設計は ADR-0253 で決定。さらに R6 A05 第一段の設計補強として、
   withGlobalTauri 未設定で desktop も IPC が動かない可能性（実機未検証）と
   3 経路（npm / `__TAURI_INTERNALS__` / withGlobalTauri）の比較、
   CSP 未決定を ADR-0264 に記録した（設計受容のみ・コード変更なし）。
-  実装前提 3（UI 起点 expected + 構造化エラー）は ADR-0269 で完了。
-  実装前提 1（withGlobalTauri + __TAURI__.core.invoke）は ADR-0270 で完了。
-  残る実装は a11y / E2E 成功経路 / 実 WebView 検証の後続作業とする。
+  実装前提 3（UI 起点 expected + 構造化エラー）は ADR-0269 で、
+  実装前提 1（withGlobalTauri + `__TAURI__.core.invoke`）は ADR-0270 で完了。
+  すなわち IPC 契約は完了。一方 web 側 `SettingsView` は `ConfigPatch` へ
+  Serialize できず `expected` を除く 23 フィールドが不足し、
+  storage allow-list / a11y / `CommandError.code` → 日本語 status 変換 /
+  Tauri mock E2E 成功経路 / 実 WebView 検証は未実装・未検証（ADR-0271）。
+  本次はコード変更なしの設計受容とし、UI 接続は完全な `ConfigPatch` DTO を
+  web 側に定義した後に行う。
   browser は読み取り専用 fail-closed を維持し、
   desktop のみ実装前提 1〜6（withGlobalTauri + CSP / capability 最小権限 /
-  ConfigUpdateRequest.expected + 構造化エラー + 最新 ConfigView / a11y /
+  `ConfigPatch.expected` + 構造化エラー + 最新 ConfigView / a11y /
   E2E 成功経路 +1 / 実 Tauri WebView 検証）を順に満たしてから接続する。
   AI / Lint / format の 4 操作は ADR-0232 の初版外で対象外。
   ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193（desktop 側を ADR-0253 が
@@ -81,6 +86,12 @@ status: current
 
 ## 完了
 
+- [x] 【A05 / 設定 UI 接続スコープ】IPC 契約（withGlobalTauri / CAS / 構造化エラー）は
+      完了、UI 接続は完全な `ConfigPatch` DTO 定義後とする設計受容を記録（ADR-0271）。
+      web / desktop / E2E / Cargo.* は未変更、E2E 255 件・check 名は不変。
+      ADR-0253 に命名ドリフト（`ConfigUpdateRequest.expected` → `ConfigPatch.expected`、
+      `window.__TAURI.core.invoke` → `window.__TAURI__.core.invoke`）を追記。
+      decisions / docs 各 index（271 件）、README、log を追従。markdownlint 0 issues。
 - [x] 【CSP 静的ゲート】meta / desktop config の整合と許可オリジンを fail-closed 検査、負向 test 15/15 PASS（ADR-0268）。
 - [x] 【バンドルサイズ実測】verify.sh 同一条件で WASM raw 69,012,923 B / gzip 12,183,616 B を記録し、比較可能 before を確立（ADR-0267）。
 - [x] 【D05 残 / OS キーチェーン】設計受容として完了。平文 config.toml 保存 +

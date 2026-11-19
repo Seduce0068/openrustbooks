@@ -91,6 +91,16 @@ R1 監査で次が判明した。
 6. 実 Tauri WebView で検証する。
    mock ではなく実際の WebView で IPC 往路・復路と表示を確認する。
 
+### 命名の正規化（2026-11-20 追記）
+
+- 本文の `ConfigUpdateRequest.expected` は設計時の仮名であり、実装では
+  `ConfigPatch.expected` が正（ADR-0269 / 0270）。`ConfigPatch` に必須の
+  `expected` を追加する形で決着し、別型の `ConfigUpdateRequest` は導入しない。
+- 本文の `window.__TAURI.core.invoke` も設計時の仮名であり、実装では
+  `window.__TAURI__.core.invoke`（末尾 `__` 付き）が正（ADR-0270）。
+- 旧名は履歴として保持する。実装・新規文書では上記の正しい名前を使い、
+  DTO 往復の残作業は [ADR-0271](0271-settings-ui-scope.md) へ集約する。
+
 ### supersede の範囲
 
 - ADR-0128（設定フォームの読み取り表示と保存見送り）および
@@ -135,7 +145,9 @@ R1 監査で次が判明した。
   経路選択と往路検証の未決定は [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md) に集約する。
 - `withGlobalTauri` の inline script と CSP nonce / hash の具体策。
 - capability の実ビルド挙動（最小権限の記述が実際の ACL にどう反映されるか）。
-- `ConfigUpdateRequest.expected` の DTO 形（既存 `ConfigPatch` との統合または別型）。
+- ~~`ConfigUpdateRequest.expected` の DTO 形（既存 `ConfigPatch` との統合または別型）~~
+  は ADR-0269 で `ConfigPatch.expected` として解決済み。完全な web 側 DTO の形は
+  [ADR-0271](0271-settings-ui-scope.md) の未決定へ集約。
 - conflict 時の UI（再取得して再試行するか、固定文言のみ告知するか）。
 - `api_key` 非対称（存在フラグのみ保持し、更新・削除ができない契約）の扱い。
 - `local_roots`（新規 id の空 path を許容するか、ADR-0131 の未決定を継続）。

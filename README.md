@@ -738,6 +738,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - update_config_patch に UI が読んだ revision を必須で渡し、衝突を構造化エラーで判別可能にする決定。
 - [0270-tauri-global-ipc-path](docs/decisions/0270-tauri-global-ipc-path.md)
   - withGlobalTauri を有効化し、web の `__TAURI__.core.invoke` 参照を公式グローバル経路へ統一する決定。
+- [0271-settings-ui-scope](docs/decisions/0271-settings-ui-scope.md)
+  - IPC 契約の完了と DTO / a11y / E2E の未実装を切り分け、UI 接続を完全な ConfigPatch DTO 定義後に留める設計受容。
 
 ## ライセンス
 
