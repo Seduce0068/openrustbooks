@@ -7,10 +7,11 @@ feature 加算を伴う workspace 依存の現状を設計受容として記録�
 ### 背景
 
 ADR-0246 で feature 差分の無い 18 依存を workspace 参照へ統一した。
-残る `chrono` / `uuid` / wasm dev `tokio` は workspace 定義より
-多くの feature を member 側で必要とし、
-Cargo の feature は加算で解決されるため単純な workspace 化は
-意図しない依存・挙動を招く。
+残る `chrono` / `uuid` / wasm dev `tokio` は workspace 定義と feature が異なる。
+`chrono` / `uuid` は member 側が feature を加算し、
+wasm dev `tokio` は member 側が限定しているため、
+workspace 化すると逆方向へ feature が加算される。
+Cargo の feature は加算で解決され member 側から削除できない。
 よって現状维持を設計受容とし、理由と再評価条件を記録する。
 
 ### 成果物
