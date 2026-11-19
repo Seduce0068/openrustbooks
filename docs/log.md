@@ -2,6 +2,16 @@
 
 ## 2026-11-20
 
+- R6 R2-crates#5: feature が一致しない chrono / uuid / wasm dev tokio を workspace 化せず
+  現状を設計受容。chrono / uuid は member 側が feature を加算し、wasm dev tokio は
+  member 側が限定するため、workspace 化すると逆方向へ feature が加算される。
+  Cargo の feature は和集合で member 側から削除できないことを根拠に、
+  desktop chrono へ wasmbind / uuid js の波及と wasm dev tokio への full 加算を記録。
+  rumdl は workspace に無く ADR-0242 / check-rumdl-featureless.sh で除外。
+  加算による具体的なビルド影響と MSRV 1.95 の override 制限は未検証の推測として
+  断定せず、ADR-0242 / 0246 を継承。ADR-0258 を追加し decisions / docs 各 index
+  （258 件）、README、todo を追従。Cargo.toml / Cargo.lock / コードは未変更で
+  E2E 255 維持。markdownlint 0 issues。
 - WASM binding の 14 tests を wasm/tests.rs へ切り出し、本編を 912→537 行へ削減（ADR-0257）。
 - 未使用の Wasm AI cluster（`WasmAiMarkdownService` / `WasmPipelineResult` /
   `WasmDiffResult`）と自己言及 test `ai_methods_fail_closed` を属性ごと削除。
