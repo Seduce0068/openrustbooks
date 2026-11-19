@@ -486,6 +486,46 @@ async def wait_until(cdp: Cdp, expression: str, timeout: float = 20.0) -> bool:
     return False
 
 
+async def wait_swipe_done(cdp: Cdp, needle: str, baseline: int, timeout: float = 3.0) -> bool:
+    """swipe の touchstart/touchend が処理され、指定章が表示されるまで待つ。
+
+    ``window.__orbSwipeDone`` は swipe() が touchend の dispatchEvent を
+    同期で戻した直後に立てる印。固定 sleep ではなく、イベント処理の完了と
+    章本文（第 1 章の固定文言）の両方を条件にする。
+    """
+    return await wait_until(
+        cdp,
+        f"(window.__orbSwipeDone ?? 0) > {baseline} && "
+        f"document.querySelector('.reader-html')?.textContent.includes({json.dumps(needle)})",
+        timeout=timeout,
+    )
+
+
+async def wait_swipe_ignored(
+    cdp: Cdp, needle: str, baseline: int, settle: float = 0.3, timeout: float = 3.0
+) -> bool:
+    """swipe が処理された後、指定章が変わらず維持されることを待つ。
+
+    負向チェック（縦移動・マルチタッチで章が変わらない）では dispatch の
+    同期完了だけでは不十分なので、処理完了後に短い確認窓を設けて章本文が
+    変わらないことを繰り返し確認する（旧 sleep(0.3) の意味を条件待ちで保持）。
+    """
+    if not await wait_swipe_done(cdp, needle, baseline, timeout=timeout):
+        return False
+    expr = f"document.querySelector('.reader-html')?.textContent.includes({json.dumps(needle)})"
+    deadline = time.time() + settle
+    while time.time() < deadline:
+        try:
+            if not await cdp.evaluate(expr):
+                return False
+        except RuntimeError:
+            raise
+        except Exception:
+            raise
+        await asyncio.sleep(0.05)
+    return True
+
+
 async def select_import_file(cdp: Cdp, node_id: int, path: Path, confirm: bool = True) -> None:
     """Import のファイル選択と change 発火を confirm 固定で行い、必ず元へ戻す。
 
@@ -1643,7 +1683,11 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     # ダーク表示を一度オフにしてから d でオンになることを確認する。
     if await cdp.evaluate("document.querySelector('.reader-container')?.classList.contains('reader-dark')"):
         await key("d")
-        await asyncio.sleep(0.3)
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-container')?.classList.contains('reader-dark') === false",
+            timeout=2,
+        )
     before_dark = await cdp.evaluate(
         "document.querySelector('.reader-container')?.classList.contains('reader-dark')"
     )
@@ -1653,7 +1697,12 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     checker.check("d でダーク表示が切り替わる", dark_after_d)
     await key("d")
-    await asyncio.sleep(0.2)
+    # 元の状態へ戻ったことを条件に待つ（後続の負向チェックの基準を安定させる）。
+    await wait_until(
+        cdp,
+        f"document.querySelector('.reader-container')?.classList.contains('reader-dark') === {str(bool(before_dark)).lower()}",
+        timeout=2,
+    )
 
     # 目次の select にフォーカスがあるときは d が効かない。
     await cdp.evaluate("document.querySelector('.reader-chapter-select').focus()")
@@ -1706,9 +1755,11 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     # ダークを一度オフにしてからオンにする。
     if await cdp.evaluate("document.documentElement.classList.contains('dark')"):
         await cdp.evaluate("document.querySelector('#reader-theme').click()")
-        await asyncio.sleep(0.3)
+        await wait_until(
+            cdp, "document.documentElement.classList.contains('dark') === false", timeout=3
+        )
     await cdp.evaluate("document.querySelector('#reader-theme').click()")
-    await asyncio.sleep(0.3)
+    # 直後の wait_until が dark 付与を確認するため、ここでは固定 sleep を廃止。
     html_dark = await wait_until(
         cdp, "document.documentElement.classList.contains('dark') === true", timeout=3
     )
@@ -1735,40 +1786,18 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
 
     # Light で dark クラスが外れる。
     await cdp.evaluate("document.querySelector('#reader-theme').click()")
-    await asyncio.sleep(0.3)
+    await wait_until(
+        cdp, "document.documentElement.classList.contains('dark') === false", timeout=3
+    )
     html_light = await cdp.evaluate(
         "!document.documentElement.classList.contains('dark')"
     )
     checker.check("Light で dark クラスが外れる", bool(html_light))
 
     # タッチ操作（スワイプ）。
+    # touchstart/touchend は 1 回だけ dispatch する。引数未埋め込みの
+    # 先頭 evaluate（arguments[0..2] を使う二重発火）は削除済み。
     async def swipe(dx: int, dy: int = 0, touches: int = 1) -> None:
-        await cdp.evaluate(
-            "(() => {"
-            " const target = document.querySelector('.reader-content');"
-            " const rect = target.getBoundingClientRect();"
-            " const startX = rect.left + rect.width / 2;"
-            " const startY = rect.top + rect.height / 2;"
-            " const makeTouch = (x, y) => new Touch({"
-            "  identifier: 0, target, clientX: x, clientY: y, pageX: x, pageY: y"
-            " });"
-            " let touchesList = [makeTouch(startX, startY)];"
-            " if (arguments[2] > 1) touchesList.push(makeTouch(startX + 10, startY + 10));"
-            " const startEvent = new TouchEvent('touchstart', {"
-            "  touches: touchesList, targetTouches: touchesList, changedTouches: touchesList, bubbles: true, cancelable: true"
-            " });"
-            " target.dispatchEvent(startEvent);"
-            " const endX = startX + arguments[0];"
-            " const endY = startY + arguments[1];"
-            " const endTouches = [makeTouch(endX, endY)];"
-            " const endEvent = new TouchEvent('touchend', {"
-            "  touches: [], targetTouches: [], changedTouches: endTouches, bubbles: true, cancelable: true"
-            " });"
-            " target.dispatchEvent(endEvent);"
-            " })()",
-            # pass dx, dy, touches via separate eval is not possible; inline them
-        )
-        # Re-dispatch with actual dx/dy/touches embedded.
         await cdp.evaluate(
             "(() => {"
             f" const dx = {dx}; const dy = {dy}; const nTouches = {touches};"
@@ -1788,9 +1817,11 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             " target.dispatchEvent(new TouchEvent('touchend', {"
             "  touches: [], targetTouches: [], changedTouches: endTouches, bubbles: true, cancelable: true"
             " }));"
+            # dispatchEvent は同期なので、この時点で touchstart/touchend の
+            # ハンドラは完了している。呼び出し側が条件待ちできる印を残す。
+            " window.__orbSwipeDone = (window.__orbSwipeDone ?? 0) + 1;"
             " })()"
         )
-        await asyncio.sleep(0.4)
 
     await select_chapter(cdp, 0)
     await wait_until(
@@ -1813,25 +1844,21 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     await wait_until(
         cdp, "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
     )
-    await asyncio.sleep(0.3)
+    baseline = await cdp.evaluate("window.__orbSwipeDone ?? 0")
     await swipe(-60, 80)
-    await asyncio.sleep(0.3)
-    checker.check(
-        "縦移動が大きいスワイプでは章が変わらない",
-        await cdp.evaluate(
-            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
-        ),
+    # touchstart/touchend の処理完了と第 1 章の維持を条件に待つ（固定 sleep を置換）。
+    vertical_ignored = await wait_swipe_ignored(
+        cdp, "Hello from chapter one.", baseline
     )
+    checker.check("縦移動が大きいスワイプでは章が変わらない", vertical_ignored)
 
     # マルチタッチでは章が変わらない。
+    baseline = await cdp.evaluate("window.__orbSwipeDone ?? 0")
     await swipe(-60, 0, touches=2)
-    await asyncio.sleep(0.3)
-    checker.check(
-        "マルチタッチでは章が変わらない",
-        await cdp.evaluate(
-            "document.querySelector('.reader-html')?.textContent.includes('Hello from chapter one.')"
-        ),
+    multi_ignored = await wait_swipe_ignored(
+        cdp, "Hello from chapter one.", baseline
     )
+    checker.check("マルチタッチでは章が変わらない", multi_ignored)
 
     # 読書位置の保存時刻と掃除。
     await open_sample(cdp)
@@ -1994,7 +2021,12 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             is not None,
             f"(status={import_status!r})",
         )
-        await asyncio.sleep(1.0)
+        # インポートの状態メッセージは保存後に出るが、位置キーの反映も条件で待つ。
+        await wait_until(
+            cdp,
+            "localStorage.getItem('openrustbooks:position:sample.epub:1:1') !== null",
+            timeout=3,
+        )
         imported_value = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:position:sample.epub:1:1')"
         )
@@ -2017,7 +2049,12 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node_id = node["result"]["nodeId"]
     if node_id != 0:
         await select_import_file(cdp, node_id, bad_path)
-        await asyncio.sleep(0.5)
+        # ファイル選択後の非同期処理（JSON 解析エラー表示）を条件待ちへ。
+        await wait_until(
+            cdp,
+            "document.querySelector('.reader-status')?.textContent.includes('JSON の解析に失敗しました')",
+            timeout=3,
+        )
         bad_status = await cdp.evaluate("document.querySelector('.reader-status')?.textContent ?? ''")
         checker.check(
             "不正な JSON ではエラーが表示される",
@@ -2043,7 +2080,11 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     node_id = node["result"]["nodeId"]
     if node_id != 0:
         await select_import_file(cdp, node_id, old_path)
-        await asyncio.sleep(0.5)
+        await wait_until(
+            cdp,
+            "localStorage.getItem('openrustbooks:position:sample.epub:9:9') !== null",
+            timeout=3,
+        )
         old_value = await cdp.evaluate(
             "localStorage.getItem('openrustbooks:position:sample.epub:9:9')"
         )
@@ -3759,7 +3800,13 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "(() => { const input = document.querySelector('#reader-swipe-threshold');"
         " input.value = '100'; input.dispatchEvent(new Event('change', {bubbles: true})); })()"
     )
-    await asyncio.sleep(0.5)
+    # 設定変更は保存完了を条件に待つ（固定 sleep を置換）。
+    await wait_until(
+        cdp,
+        "(() => { const s = JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}');"
+        " return s.swipeThreshold === 100 && s.dark === true; })()",
+        timeout=3,
+    )
     modified = await cdp.evaluate(
         "JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}')"
     )
@@ -3769,7 +3816,15 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f"(settings={modified!r})",
     )
     await cdp.evaluate("document.querySelector('#reader-reset-settings').click()")
-    await asyncio.sleep(0.5)
+    # リセット後の設定保存と状態メッセージの両方を条件に待つ。
+    await wait_until(
+        cdp,
+        "(() => { const s = JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}');"
+        " return s.swipeThreshold === 50 && s.dark === false"
+        " && (document.querySelector('.reader-status')?.textContent ?? '')"
+        "      .includes('表示設定をリセットしました'); })()",
+        timeout=3,
+    )
     reset = await cdp.evaluate(
         "JSON.parse(localStorage.getItem('openrustbooks:settings') || '{}')"
     )
