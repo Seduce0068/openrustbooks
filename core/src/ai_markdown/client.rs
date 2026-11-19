@@ -1135,4 +1135,45 @@ mod tests {
             Some(&serde_json::json!(2048))
         );
     }
+
+    // ---- 未知 provider のテスト（R6 R4-unit#3 / GOAL.md） ----
+
+    #[tokio::test]
+    async fn create_client_with_unknown_provider_returns_ai_provider_error() {
+        let api_key = "sk-SHOULD_NOT_LEAK_API_KEY";
+        let config = AiConfig {
+            default_provider: "unknown-provider".to_string(),
+            openai: OpenAiConfig {
+                api_key: Some(api_key.to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // `Arc<dyn AiClient>` は Debug を実装しないため `.err().expect()` を使う。
+        let error = create_client(&config)
+            .await
+            .err()
+            .expect("未知 provider はクライアント生成に失敗する");
+        let message = error.to_string();
+
+        match error {
+            CoreError::AiProvider(_) => {}
+            other => panic!("expected AiProvider error, got {other:?}"),
+        }
+        assert!(
+            message.contains("Unknown provider"),
+            "想定外のエラー: {message}"
+        );
+        assert!(
+            message.contains("unknown-provider"),
+            "指定した provider 名が文言に含まれること: {message}"
+        );
+        // 未知 provider の分岐は認証情報を一切読まないため、キーが漏れてはならない。
+        assert!(!message.contains(api_key), "API キーが漏れた: {message}");
+        assert!(
+            !message.contains("SHOULD_NOT_LEAK"),
+            "秘密情報が漏れた: {message}"
+        );
+    }
 }

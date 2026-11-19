@@ -1292,3 +1292,138 @@ pub mod local {
         }
     }
 }
+
+/// `StorageManager::set_default_backend()` の既定切替テスト（R6 R4-unit#3）。
+///
+/// `local` モジュール内の `LocalStorage` は id が `"local"` でファイルシステムも
+/// 必要なため、`"known"` を返す独立した最小 stub を使う（本番コードは変更しない）。
+#[cfg(test)]
+mod storage_manager_tests {
+    use super::*;
+
+    struct KnownBackend;
+
+    #[async_trait]
+    impl StorageBackend for KnownBackend {
+        fn id(&self) -> &str {
+            "known"
+        }
+
+        fn name(&self) -> &str {
+            "Known Test Backend"
+        }
+
+        fn capabilities(&self) -> StorageCapabilities {
+            StorageCapabilities::default()
+        }
+
+        async fn initialize(&mut self) -> CoreResult<()> {
+            Ok(())
+        }
+
+        async fn health_check(&self) -> CoreResult<bool> {
+            Ok(true)
+        }
+
+        async fn list(&self, _path: &Path, _options: ListOptions) -> CoreResult<Vec<FileEntry>> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn read(&self, _path: &Path, _options: ReadOptions) -> CoreResult<Vec<u8>> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn read_text(&self, _path: &Path, _options: ReadOptions) -> CoreResult<String> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn write(
+            &self,
+            _path: &Path,
+            _data: &[u8],
+            _options: WriteOptions,
+        ) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn write_text(
+            &self,
+            _path: &Path,
+            _text: &str,
+            _options: WriteOptions,
+        ) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn create_dir(&self, _path: &Path, _recursive: bool) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn delete(&self, _path: &Path, _recursive: bool) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn move_item(&self, _from: &Path, _to: &Path, _overwrite: bool) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn metadata(&self, _path: &Path) -> CoreResult<FileEntry> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn exists(&self, _path: &Path) -> CoreResult<bool> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn open_in_system(&self, _path: &Path) -> CoreResult<()> {
+            Err(CoreError::storage("not used in this test"))
+        }
+
+        async fn watch(&self, _path: &Path) -> CoreResult<Box<dyn StorageWatchStream>> {
+            Err(CoreError::storage("not used in this test"))
+        }
+    }
+
+    /// 登録済み backend を既定に設定できること（成功経路の維持）。
+    #[test]
+    fn set_default_backend_with_known_backend_succeeds() {
+        let mut manager = StorageManager::new();
+        manager.add_backend(Box::new(KnownBackend));
+
+        // add_backend() が最初の backend を既定にすることも併せて確認する。
+        assert_eq!(manager.default_backend().map(|b| b.id()), Some("known"));
+
+        manager
+            .set_default_backend("known")
+            .expect("登録済み backend は既定に設定できる");
+        assert_eq!(manager.default_backend().map(|b| b.id()), Some("known"));
+    }
+
+    /// 未検出 backend が `CoreError::Storage` になり、固定文言のみで
+    /// パス・秘密・本文を含まないこと（R6 R4-unit#3 / GOAL.md）。
+    #[test]
+    fn set_default_backend_with_missing_backend_returns_storage_error() {
+        let mut manager = StorageManager::new();
+        manager.add_backend(Box::new(KnownBackend));
+
+        let error = manager
+            .set_default_backend("missing")
+            .expect_err("未登録 backend は既定に設定できない");
+        let rendered = error.to_string();
+
+        assert!(
+            rendered.contains("Backend not found: missing"),
+            "想定外のエラー: {rendered}"
+        );
+        // エラー文言は id だけから組み立てられ、それ以外の情報は一切載らない。
+        assert_eq!(rendered, "Storage error: Backend not found: missing");
+
+        match error {
+            CoreError::Storage(message) => assert_eq!(message, "Backend not found: missing"),
+            other => panic!("expected Storage error, got {other:?}"),
+        }
+
+        // 失敗しても既定 backend は変化しない。
+        assert_eq!(manager.default_backend().map(|b| b.id()), Some("known"));
+    }
+}
