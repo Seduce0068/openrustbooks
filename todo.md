@@ -48,20 +48,22 @@ status: current
   導入後の検証手順は ADR-0273 を追跡先とする。
   前提別状態（詳細は ADR-0274）: 前提 1 withGlobalTauri / CSP は一部完了
   （経路確定、nonce/hash と meta/config 一本化は未決定）、
-  前提 2 capability 最小権限は方針のみで完了証跡なし、
+  前提 2 capability 最小権限は静的スコープゲート完了（2 command 固定・負向 test 11/11、ADR-0278）、
+  実 WebView の権限挙動と実ビルド完了証跡は未検証、
   前提 3 UI 起点 CAS + 構造化エラーは完了（ADR-0269）、
   前提 4 a11y は実装完了・実 WebView 検証未実施（ADR-0272 / 0273）、
   前提 5 Tauri mock E2E +1 は完了（256/0、ADR-0272）、
   前提 6 実 WebView は環境ブロッカー（ADR-0273）。
   未達: A05 全体は完了としない。JS / IPC 契約レベル（mock E2E 256/0 を含む）は達成だが、
-  実 WebView 検証と capability 完了証跡は残す。E2E 256 件・check 名・コードは変更しない。
+  実 WebView 検証と capability の実ビルド完了証跡は残す。E2E 256 件・check 名・コードは変更しない。
 
 ### 優先度: 中
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラスト、
-  `prefers-contrast: more` は完了（ADR-0236）。Chrome / Edge の実機 255/0 も完了（ADR-0265）。
+  `prefers-contrast: more` は完了（ADR-0236）。Chrome / Edge の実機 255/0 は当時の結果
+  （ADR-0265、履歴値。現行は mock +1 を含む 256 件、ADR-0272）。256 件での実機再検証は未実施。
   残るは Firefox（CDP 非対応）、Brave（未インストール）、Safari（macOS 必須）の環境ブロッカー
   （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 

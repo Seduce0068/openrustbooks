@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: "ADR-0265: E2E のブラウザ横断実行"
-description: "現行 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。"
+description: "当時 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。"
 tags:
   - ADR
   - e2e
@@ -63,6 +63,9 @@ status: accepted
 - Firefox: `Mozilla Firefox 160.0.1` は installed だが CDP 非対応のため未実行。
 - Brave / Safari: `command -v` で not_found。Safari は macOS 専用。
 - `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
+- 本 ADR の 255 件は 2026-11-20 時点の履歴値。現行は `Checker(expected=256)`
+  （check 239 + equal 17、ADR-0272 の Tauri mock +1）で、
+  256 件での Chrome / Edge 実機再検証は未実施。
 
 ## 未決定
 

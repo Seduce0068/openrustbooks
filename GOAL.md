@@ -37,3 +37,11 @@
 - コード / E2E check 名・件数 / Cargo.* は変更しない。
 - 外部サービス / 実 WebView 検証は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- A05 前提 2 を静的ゲート完了 / 実ビルド未検証へ統一。
+- Chrome / Edge 実機 255/0 を履歴、現行 256（mock +1）を current と明記。
+- VC-015 を Chrome / Edge のみ実機確認、残り 3 ブラウザは環境ブロッカーへ更新。
+- auto gate が参照する Checker(expected=256) / CI-H01 / documentation-operations は不変。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 256 passed / 0 failed。
