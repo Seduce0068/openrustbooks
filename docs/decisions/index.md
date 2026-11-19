@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 228 件）。
+openrustbooks の ADR 一覧（全 229 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -458,3 +458,5 @@ openrustbooks の ADR 一覧（全 228 件）。
   - status: accepted — core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
 - [ADR-0228: AI 死設定の設計受容](0228-ai-dead-config.md)
   - status: accepted — 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
+- [ADR-0229: エラー文言と終了処理の整理](0229-error-message-cleanup.md)
+  - status: accepted — 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。

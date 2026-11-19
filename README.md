@@ -402,6 +402,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - lang=\"ja\" 固定の Web UI で Reader status を日本語へ統一し、aria-live 分離は後段へ残す決定を記録する。
 - [0227-ai-client-injection](docs/decisions/0227-ai-client-injection.md)
 - [0228-ai-dead-config](docs/decisions/0228-ai-dead-config.md)
+- [0229-error-message-cleanup](docs/decisions/0229-error-message-cleanup.md)
+  - 二重 prefix と JsValue Debug の露出を解消し、desktop の panic を Result ベースのエラー表示へ変更する決定を記録する。
   - 月間上限の未配線と timeout の Ollama 限定適用を設定画面へ明示し、実装を見送る決定を記録する。
   - core 内のモック注入を維持し、公開注入点を追加しない決定と将来の最小設計を記録する。
 
