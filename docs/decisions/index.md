@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 242 件）。
+openrustbooks の ADR 一覧（全 243 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -483,6 +483,8 @@ openrustbooks の ADR 一覧（全 242 件）。
 - [ADR-0240: 正規化後同名 ZIP エントリの拒否](0240-duplicate-archive-entries.md)
   - status: accepted — parser differential を防ぐため、正規化後に同名となる ZIP エントリを含むアーカイブを fail-closed で拒否する決定を記録する。
 - [ADR-0241: generated.at の意味論と日付逆転の扱い](0241-generated-timestamp-semantics.md)
-  - status: accepted — `generated.at` は生成・正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
+  - status: accepted — ADR の generated.at は生成・正規化時点の記録であり作成時刻ではないと明記し、既存メタデータを保持する決定。
 - [ADR-0242: rumdl feature 選択の現状と ADR-0003 の履歴化](0242-rumdl-feature-status.md)
-  - status: accepted — native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定。
+  - status: accepted — native / wasm とも rumdl featureless である現状を正とし、ADR-0003 の target 別 feature 選択を履歴として扱う決定を記録する。
+- [ADR-0243: 未使用 Wasm API の削除](0243-unused-wasm-api-removal.md)
+  - status: accepted — wasm_bindgen の JS export を属性ごと削除し、未使用の greet / detect_format を公開面から外す決定を記録する。

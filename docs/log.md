@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- 未使用 Wasm API（greet / detect_format）を属性ごと削除し JS export 面を縮小（ADR-0243）。
 - ADR-0003 に rumdl feature の実装状況注記（2026-11-19）を追加。target 別 feature
   選択は廃止され、native / wasm とも `default-features = false` であることを記録。
   ADR-0242 を追加して ADR-0003 を履歴化し、rumdl の workspace 化を行わず
