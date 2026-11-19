@@ -199,6 +199,27 @@ fn build_openai_request(
     })
 }
 
+/// `extra_headers` の検証失敗時に返す固定文言。
+///
+/// ヘッダ名・値を一切含めないことで、機微値がエラー文言や Debug へ漏れることを防ぐ（ADR-0102）。
+const INVALID_EXTRA_HEADER: &str = "OpenAI extra header is invalid";
+
+/// 予約ヘッダを拒否した際の固定文言（キー・値を含めない）。
+const RESERVED_EXTRA_HEADER: &str = "OpenAI extra header is reserved";
+
+/// async-openai の custom headers は既存ヘッダを上書きする
+/// （`async-openai-0.42.2/src/config.rs` の `with_header` 参照）。
+/// `authorization` / `openai-organization` / `openai-project` / `openai-beta` を
+/// config から差し込めると `with_api_key` / `with_org_id` の認証情報を上書きできるため、
+/// 大文字小文字を問わず拒否する（ADR-0221）。
+fn is_reserved_extra_header(name: &reqwest::header::HeaderName) -> bool {
+    let name = name.as_str();
+    name.eq_ignore_ascii_case("authorization")
+        || name.eq_ignore_ascii_case("openai-organization")
+        || name.eq_ignore_ascii_case("openai-project")
+        || name.eq_ignore_ascii_case("openai-beta")
+}
+
 impl OpenAiClient {
     pub async fn new(config: &OpenAiConfig) -> CoreResult<Self> {
         validate_base_url(&config.base_url, ProviderKind::OpenAi)?;
@@ -207,6 +228,25 @@ impl OpenAiClient {
             .with_api_base(&config.base_url)
             .with_api_key(config.api_key.as_deref().unwrap_or(""))
             .with_org_id(config.organization.as_deref().unwrap_or(""));
+
+        // config.toml の extra_headers を全リクエストへ付与する（ADR-0102）。
+        // HashMap の反復順に依存しないようキーでソートし、順序を決定的にする。
+        // キーは `HeaderName` にパースしてから渡す（`String` は `IntoHeaderName` ではない）。
+        // 認証情報を上書きし得る予約ヘッダは拒否し、それ以外の検証失敗も含め
+        // 固定文言で fail-closed として値を漏らさない（ADR-0221）。
+        let mut headers: Vec<_> = config.extra_headers.iter().collect();
+        headers.sort_by(|a, b| a.0.cmp(b.0));
+        let mut openai_config = openai_config;
+        for (name, value) in headers {
+            let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|_| CoreError::ai_provider(INVALID_EXTRA_HEADER))?;
+            if is_reserved_extra_header(&header_name) {
+                return Err(CoreError::ai_provider(RESERVED_EXTRA_HEADER));
+            }
+            openai_config = openai_config
+                .with_header(header_name, value)
+                .map_err(|_| CoreError::ai_provider(INVALID_EXTRA_HEADER))?;
+        }
 
         let client = Client::with_config(openai_config);
         let tokenizer = bpe_for_model(&config.model)?;
@@ -316,12 +356,47 @@ impl TokenStream for OpenAiTokenStream {
     }
 }
 
+/// Ollama の `/api/generate` リクエストを組み立てる。
+///
+/// `options` は固定値（num_predict / temperature / top_p）をベースに、
+/// config.toml 由来の `config_options` を上書きマージする。ただし
+/// `num_predict` / `model` / `stream` は予約キーとし、config 側からは上書きできない
+/// （num_predict は呼び出し側の max_tokens、model / stream はトップレベル項目を優先）。
+fn build_ollama_request(
+    prompt: &str,
+    model: &str,
+    max_tokens: usize,
+    stream: bool,
+    config_options: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
+    let mut options = serde_json::Map::new();
+    options.insert("num_predict".to_string(), serde_json::json!(max_tokens));
+    options.insert("temperature".to_string(), serde_json::json!(0.3));
+    options.insert("top_p".to_string(), serde_json::json!(0.9));
+
+    for (key, value) in config_options {
+        if matches!(key.as_str(), "num_predict" | "model" | "stream") {
+            continue;
+        }
+        options.insert(key.clone(), value.clone());
+    }
+
+    serde_json::json!({
+        "model": model,
+        "prompt": prompt,
+        "stream": stream,
+        "options": options,
+    })
+}
+
 /// Ollama local LLM client
 pub struct OllamaClient {
     client: reqwest::Client,
     base_url: String,
     model: String,
     tokenizer: &'static CoreBPE,
+    /// config.toml の `ollama.options`。リクエストの options へマージされる。
+    options: serde_json::Map<String, serde_json::Value>,
 }
 
 impl OllamaClient {
@@ -334,12 +409,18 @@ impl OllamaClient {
             .build()
             .map_err(|e| CoreError::ai_provider(format!("Ollama client build error: {}", e)))?;
         let tokenizer = cl100k_base_singleton(); // Approximation
+        let options = config
+            .options
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
 
         Ok(Self {
             client,
             base_url: config.base_url.clone(),
             model: config.model.clone(),
             tokenizer,
+            options,
         })
     }
 }
@@ -352,16 +433,7 @@ impl AiClient for OllamaClient {
         max_tokens: usize,
         _streaming: bool,
     ) -> CoreResult<AiResponse> {
-        let request = serde_json::json!({
-            "model": self.model,
-            "prompt": prompt,
-            "stream": false,
-            "options": {
-                "num_predict": max_tokens,
-                "temperature": 0.3,
-                "top_p": 0.9,
-            }
-        });
+        let request = build_ollama_request(prompt, &self.model, max_tokens, false, &self.options);
 
         let response = self
             .client
@@ -392,16 +464,7 @@ impl AiClient for OllamaClient {
         prompt: &str,
         max_tokens: usize,
     ) -> CoreResult<Box<dyn TokenStream + Send>> {
-        let request = serde_json::json!({
-            "model": self.model,
-            "prompt": prompt,
-            "stream": true,
-            "options": {
-                "num_predict": max_tokens,
-                "temperature": 0.3,
-                "top_p": 0.9,
-            }
-        });
+        let request = build_ollama_request(prompt, &self.model, max_tokens, true, &self.options);
 
         let response = self
             .client
@@ -925,5 +988,148 @@ mod tests {
             },
             other => panic!("user message ではない: {other:?}"),
         }
+    }
+
+    // ---- OpenAiClient.extra_headers の配線テスト ----
+
+    #[tokio::test]
+    async fn openai_valid_extra_headers_are_accepted() {
+        let config = OpenAiConfig {
+            extra_headers: std::collections::HashMap::from([
+                ("X-Custom".to_string(), "custom-value".to_string()),
+                ("another-header".to_string(), "test".to_string()),
+            ]),
+            ..Default::default()
+        };
+        OpenAiClient::new(&config)
+            .await
+            .expect("妥当な extra_headers は受理されるべき");
+    }
+
+    #[tokio::test]
+    async fn openai_invalid_extra_header_value_is_rejected_without_leaking() {
+        let secret = "SHOULD_NOT_LEAK_VALUE";
+        let config = OpenAiConfig {
+            extra_headers: std::collections::HashMap::from([(
+                "X-Custom".to_string(),
+                format!("{secret}\n"), // 改行は HeaderValue として不正
+            )]),
+            ..Default::default()
+        };
+        let err = OpenAiClient::new(&config)
+            .await
+            .err()
+            .expect("不正なヘッダ値は拒否されるべき");
+        let message = err.to_string();
+        assert!(
+            message.contains("OpenAI extra header is invalid"),
+            "想定外のエラー: {message}"
+        );
+        assert!(!message.contains(secret), "値が漏れた: {message}");
+    }
+
+    #[tokio::test]
+    async fn openai_invalid_extra_header_name_is_rejected_without_leaking() {
+        let name = "Bad Header Name"; // 空白は HeaderName として不正
+        let config = OpenAiConfig {
+            extra_headers: std::collections::HashMap::from([(
+                name.to_string(),
+                "value".to_string(),
+            )]),
+            ..Default::default()
+        };
+        let err = OpenAiClient::new(&config)
+            .await
+            .err()
+            .expect("不正なヘッダ名は拒否されるべき");
+        let message = err.to_string();
+        assert!(
+            message.contains("OpenAI extra header is invalid"),
+            "想定外のエラー: {message}"
+        );
+        assert!(!message.contains(name), "キーが漏れた: {message}");
+    }
+
+    #[tokio::test]
+    async fn openai_reserved_extra_headers_are_rejected_case_insensitively() {
+        for name in [
+            "authorization",
+            "AUTHORIZATION",
+            "OpenAI-Organization",
+            "openai-project",
+            "OpenAI-BETA",
+        ] {
+            let value = format!("SECRET_FOR_{name}");
+            let config = OpenAiConfig {
+                extra_headers: std::collections::HashMap::from([(name.to_string(), value.clone())]),
+                ..Default::default()
+            };
+            let err = OpenAiClient::new(&config)
+                .await
+                .err()
+                .expect("予約ヘッダは拒否されるべき");
+            let message = err.to_string();
+            assert!(
+                message.contains("OpenAI extra header is reserved"),
+                "想定外のエラー: {message}"
+            );
+            assert!(!message.contains(&value), "値が漏れた: {message}");
+            assert!(!message.contains(name), "キーが漏れた: {message}");
+        }
+    }
+
+    // ---- Ollama options マージのテスト ----
+
+    #[test]
+    fn ollama_options_merge_keeps_fixed_values_and_custom_values() {
+        let mut config_options = serde_json::Map::new();
+        config_options.insert("num_ctx".to_string(), serde_json::json!(4096));
+        config_options.insert("temperature".to_string(), serde_json::json!(0.7));
+        // 予約キーは config 側から上書きできない。
+        config_options.insert("num_predict".to_string(), serde_json::json!(999));
+        config_options.insert("model".to_string(), serde_json::json!("evil-model"));
+        config_options.insert("stream".to_string(), serde_json::json!(true));
+
+        let request = build_ollama_request("hi", "llama3.1:8b", 128, false, &config_options);
+        let options = &request["options"];
+
+        assert_eq!(
+            options["num_predict"],
+            serde_json::json!(128),
+            "max_tokens 優先"
+        );
+        assert_eq!(options["top_p"], serde_json::json!(0.9), "固定値");
+        assert_eq!(
+            options["temperature"],
+            serde_json::json!(0.7),
+            "custom 採用"
+        );
+        assert_eq!(options["num_ctx"], serde_json::json!(4096), "custom 採用");
+        assert!(
+            options.get("model").is_none(),
+            "model は options に混入しない"
+        );
+        assert!(
+            options.get("stream").is_none(),
+            "stream は options に混入しない"
+        );
+        assert_eq!(request["model"], serde_json::json!("llama3.1:8b"));
+        assert_eq!(request["stream"], serde_json::json!(false));
+        assert_eq!(request["prompt"], serde_json::json!("hi"));
+    }
+
+    #[tokio::test]
+    async fn ollama_client_keeps_config_options() {
+        let options =
+            std::collections::HashMap::from([("num_ctx".to_string(), serde_json::json!(2048))]);
+        let config = OllamaConfig {
+            options,
+            ..Default::default()
+        };
+        let client = OllamaClient::new(&config, 60).await.unwrap();
+        assert_eq!(
+            client.options.get("num_ctx"),
+            Some(&serde_json::json!(2048))
+        );
     }
 }
