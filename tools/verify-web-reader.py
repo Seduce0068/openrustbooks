@@ -4431,6 +4431,10 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         'input[type="checkbox"], select'));
       const notice = Array.from(form.querySelectorAll('.settings-notice'))
         .some((el) => el.textContent.includes('ブラウザ版は表示のみです'));
+      // ADR-0222 / ADR-0277: updater 未実装の固定文言が常時あり、editable input は無い。
+      const updaterNotice = Array.from(form.querySelectorAll('.settings-notice'))
+        .some((el) => el.textContent.includes('更新確認: 未配線'));
+      const updaterInputAbsent = form.querySelector('#settings-check-updates') === null;
       return {
         mounted: true,
         textCount: texts.length,
@@ -4439,6 +4443,8 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         toggleCount: toggles.length,
         togglesDisabled: toggles.length > 0 && toggles.every((el) => el.disabled === true),
         notice: notice,
+        updaterNotice: updaterNotice,
+        updaterInputAbsent: updaterInputAbsent,
       };
     })()""") or {}
     checker.check(
@@ -4447,7 +4453,9 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         and settings_readonly.get("textsReadonly") is True
         and settings_readonly.get("passwordReadonly") is True
         and settings_readonly.get("togglesDisabled") is True
-        and settings_readonly.get("notice") is True,
+        and settings_readonly.get("notice") is True
+        and settings_readonly.get("updaterNotice") is True
+        and settings_readonly.get("updaterInputAbsent") is True,
         f"(state={settings_readonly!r})",
     )
 
@@ -4576,10 +4584,24 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "!Array.from(document.querySelectorAll('.settings-form .settings-notice'))"
             ".some((el) => el.textContent.includes('ブラウザ版は表示のみです'))"
         )
+        # ADR-0222 / ADR-0277: desktop でも updater 固定文言は常時表示され、
+        # check_updates の editable input は DOM に存在しないこと。
+        # mock_config の check_updates=true と無関係に固定表示が出る点も同時に確認する。
+        updater_notice = await cdp.evaluate(
+            "Array.from(document.querySelectorAll('.settings-form .settings-notice'))"
+            ".some((el) => el.textContent.includes('更新確認: 未配線'))"
+        )
+        updater_input_absent = await cdp.evaluate(
+            "document.querySelector('#settings-check-updates') === null"
+        )
         checker.check(
             "Tauri モックの設定保存で成功文言と revision +1 と JS エラー 0 を検証",
-            saved and tauri_errors == [] and browser_notice_absent is True,
-            f"(status={tauri_status!r}, revision={tauri_revision!r}, errors={tauri_errors!r}, browserNoticeAbsent={browser_notice_absent!r})",
+            saved
+            and tauri_errors == []
+            and browser_notice_absent is True
+            and updater_notice is True
+            and updater_input_absent is True,
+            f"(status={tauri_status!r}, revision={tauri_revision!r}, errors={tauri_errors!r}, browserNoticeAbsent={browser_notice_absent!r}, updaterNotice={updater_notice!r}, updaterInputAbsent={updater_input_absent!r})",
         )
     finally:
         if identifier:

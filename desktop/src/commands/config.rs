@@ -516,6 +516,10 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     merged.ai.model_overrides = current.ai.model_overrides.clone();
     // max_retries は DTO から除外したため、JS 往復で現在値を保持する。
     merged.ai.max_retries = current.ai.max_retries;
+    // ADR-0222 / ADR-0277: check_updates は updater 未実装の死設定。UI 側は固定表示へ
+    // 変更したが、DTO 往復のためフィールド自体は残る。JS が値を書き換えても現在値を
+    // 復元し、config.toml へ誤った値が保存されないようにする（fail-closed）。
+    merged.general.check_updates = current.general.check_updates;
 
     // local_roots[].path は id が一意に一致した場合のみ現在値を復元する。
     // id が空／不一致／現在側で重複している場合は空 PathBuf に統一する
@@ -937,6 +941,20 @@ mod tests {
 
         // incoming が 3 でも current の 5 を保持すること。
         assert_eq!(merged.ai.max_retries, 5);
+    }
+
+    #[test]
+    fn merge_secrets_preserves_check_updates_value() {
+        // ADR-0222 / ADR-0277: updater 未実装の死設定。UI は固定表示だが DTO 往復で
+        // 値が届くため、JS が false へ書き換えても current の true を保持すること。
+        let mut current = AppConfig::default();
+        current.general.check_updates = true;
+        let mut incoming = current.clone();
+        incoming.general.check_updates = false;
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert!(merged.general.check_updates);
     }
 
     #[test]
