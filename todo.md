@@ -53,8 +53,6 @@ status: current
 
 - 【R1-tauri#8 / R3-release#1,#2】updater の公開鍵・署名設定と
   リリース専用ワークフロー（`contents: write` + 署名 secrets）。
-- 【R3-release#3】バージョン二重管理（Cargo workspace と tauri.conf）
-  のドリフト対策。
 - 【R3-release#4,#5】導入・更新・ロールバック手順、既知問題の開示、
   署名秘密鍵の `.gitignore` 登録。
 - 【R3-config#5】容量超過時の位置削除を通知・退避方式へ変更。
@@ -70,6 +68,8 @@ status: current
 
 ## 完了
 
+- [x] 【R3-release#3】tauri.conf.json の version を削除し Cargo workspace を単一情報源へ。
+      check-version-consistency.sh を verify.sh / ci.yml へ配線。負向 test 4 ケース失敗、E2E 254 件・全ゲート成功 / ADR-0239。
 - [x] 【R4-unit#4】deflate 圧縮率依存の assertion を方式／メタデータの直接検証へ置換（archive.rs / wasm.rs）。
       core 270・wasm 14・E2E 254 件・全ゲート成功 / ADR-0238。
 - [x] 【R3-ci#3-#5】wasm ゲートの二重指定の有無、CI とローカルのビルドプロファイル差、
