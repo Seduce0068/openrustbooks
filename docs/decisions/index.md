@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 263 件）。
+openrustbooks の ADR 一覧（全 264 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -528,3 +528,5 @@ openrustbooks の ADR 一覧（全 263 件）。
   - status: accepted — E2E 総数の current 表記をコード出典（255）へ追従させ、履歴的数値は保持する決定を記録する。
 - [ADR-0263: E2E 期待件数の整合ゲート](0263-e2e-count-gate.md)
   - status: accepted — Checker(expected=N) を唯一の出典として current 文書表記とのズレを fail-closed で検出する静的ゲートを記録する。
+- [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md)
+  - status: accepted — withGlobalTauri 未設定で desktop も IPC が動かない可能性を記録し、3 経路比較と未決定を残してコード変更なしの設計受容を選択する。

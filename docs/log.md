@@ -2,6 +2,17 @@
 
 ## 2026-11-20
 
+- R6 A05 第一段の設計補強。`web/src/lib.rs:4096-4121` が
+  `window.__TAURI.core.invoke` を参照する一方 `desktop/tauri.conf.json` に
+  withGlobalTauri が無く、Tauri 公式はグローバル経路に有効化を求めるため、
+  desktop も `Err("desktop only")` になる可能性がある（実機未検証）。
+  npm / `__TAURI_INTERNALS__` / withGlobalTauri の 3 経路を比較し、
+  invoke 経路・Trunk inline script の nonce/hash・meta/config CSP 一本化・
+  withGlobalTauri script の CSP 適合・静的ゲート・実 WebView 往路検証・
+  internals の upgrade 契約を未決定として残した。
+  ADR-0264 を追加し ADR-0253 の背景と未決定を追記、decisions / docs 各 index
+  （264 件）、README、todo を追従。コード・CSP・capability・E2E は未変更で
+  E2E 255 件は不変。markdownlint 0 issues（ADR-0264）。
 - Checker(expected=N) と文書 current 値を突き合わせる静的ゲートを追加（ADR-0263）。
 - R6 ドキュメント整合: E2E 件数の current 表記をコード出典（255）へ追従。
   `Checker(expected=255)`（check 238 + equal 17）と
