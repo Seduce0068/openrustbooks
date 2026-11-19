@@ -1,39 +1,37 @@
 # Goal
 
-ドキュメント運用（OKF / 索引 / log / lint）をリポジトリ内へ明文化する（R6 C04 / R5-ops#1）。
+E2E の swipe スタブ二重発火と固定 sleep を条件待ちへ置換する（R6 R4-e2e#3,#4 / C08）。
 
 ## Scope
 
 ### 背景
 
-`docs/index.md` / `docs/decisions/index.md` / `docs/log.md` は整備済みだが、
-OKF フロントマター、RFC 3339、見出し階層、索引更新、markdownlint 設定の
-運用がリポジトリ内に一本化されていない。
-lint 設定は `/tmp/mdlint.jsonc` に依存しており再現性が弱い。
+`tools/verify-web-reader.py` の `swipe()` は最初の `cdp.evaluate()` で
+引数未埋め込みの TouchEvent を dispatch した後、同じイベントを
+実引数付きで再 dispatch していた（二重発火）。
+また `asyncio.sleep()` が多数残り、状態変化を条件待ちではなく
+固定時間で決めつけていた。
 
 ### 成果物
 
-- `.markdownlint-cli2.jsonc`: 追加（リポジトリ内 lint 設定）
-- `docs/documentation-operations.md`: 追加（OKF / 索引 / log / ADR / lint 手順）
-- `AGENTS.md`: 変更（グローバル規約への参照を現行パスへ更新）
-- `docs/decisions/0234-documentation-operations.md`: 追加
-- `docs/index.md` / `README.md` / `docs/decisions/index.md` / `docs/log.md` / `todo.md`: 更新
-- `GOAL.md`: 本契約
+- `tools/verify-web-reader.py`: 変更（swipe を 1 回 dispatch、fixed sleep を条件待ちへ）
+- `docs/decisions/0235-e2e-conditional-wait.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
 ### 必須事項
 
-1. OKF 必須キー・RFC3339 オフセット・`##` 見出し・index/log 予約ファイルの規約を記載する。
-2. ADR 追加時の `docs/decisions/index.md` / `docs/index.md` / `docs/log.md` 更新手順を明記する。
-3. `.markdownlint-cli2.jsonc` を追加し、`npx markdownlint-cli2 'docs/**/*.md' README.md todo.md` が 0 issues になることを確認する。
-4. `AGENTS.md` のグローバル参照を `~/.agents/AGENTS.md`（現行正本）へ更新する。
-5. C04 を完了へ移動し、既存 ADR / 索引 / log を更新する。
+1. `swipe()` から最初の evaluate（二重 dispatch）を削除し、1 回だけ dispatch する。
+2. 引数は f-string で整数を埋め込み、既存の swipe 意味（dx / dy / touches）を維持する。
+3. 状態変化を待つ固定 sleep を `wait_until()` ベースへ置換する（全 27 件を無理に置換せず、swipe 周辺と明確に状態依存な箇所を対象とする）。
+4. `wait_until()` の RuntimeError / その他の例外は fail-closed を維持する（R6 TD-M02）。
+5. E2E check 名・期待総数 254 を維持し、全ゲート成功。
 
 ## Acceptance criteria
 
-- markdownlint 0 issues、verify.sh（E2E 254）成功。
+- E2E 254 項目、全ゲート成功。
 
 ## Constraints
 
-- グローバル AGENTS.md 自体は変更しない。
-- 既存 ADR / 要件 / 実装は変更しない。
+- CDP 接続先照合（ADR-0143）と check 名一意性（ADR-0182）を維持。
+- 新規依存を追加しない。
 - `master` へ push する。force push はしない。
