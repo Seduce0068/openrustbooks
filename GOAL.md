@@ -39,3 +39,9 @@ ADR-0255 の EPUB tests 分割と同じ手順で、
 - 本編の 4 モジュール分割は行わない（ADR に未決定として残す）。
 - 公開 API / 可視性 / test 内容 / E2E は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- wasm.rs を 912→537 行、tests.rs へ 376 行・14 tests をバイト単位で移動。
+- ADR-0257: 本編 4 モジュール分割、wasm/mod.rs 化、integration test 化は未決定。
+- `./scripts/verify.sh`: 全ゲート成功、E2E 255 passed / 0 failed。
