@@ -53,8 +53,6 @@ status: current
 ### 優先度: 中
 
 <!-- R6-2026-11-19 中優先度 -->
-- 【PR-M08 / TD-M08 残】設定モデルが AppConfig / ReaderSettings / SettingsView の 3 重（WasmConfig は ADR-0205 で削除）。
-  根拠 `core/src/config.rs:14` / `web/src/lib.rs:1501`。
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
@@ -151,6 +149,13 @@ status: current
 
 ## 完了
 
+- [x] 【PR-M08 / TD-M08】AppConfig / ReaderSettings / SettingsView の 3 重を
+      権威・寿命が異なるレイヤー分離として設計受容。WasmConfig は ADR-0205 で削除済み。
+      統合は wasm 単体の永続化（ADR-0018 / 0038）、ADR-0157 の現在値保護・
+      `exportedAt` 拒否、E2E 251、DTO 境界の秘密マスキング（ADR-0128 / 0186）の観点から却下。
+      localStorage `openrustbooks:settings` と camelCase 8 項目を互換契約として固定。
+      残課題（ReaderConfig 死設定、ConfigPatch 保存配線、auto_save_delay 供給元、
+      UI 設定保存接続）は ADR-0211 の未決定へ集約。コード変更なし・E2E 251 維持 / ADR-0211。
 - [x] 【TD-L10】設定更新へ revision CAS と pending 予約を導入。stale expected は Conflict、config/service/disk 不変。
       unit 6 件追加（desktop 79）、E2E 251 件・全ゲート成功 / ADR-0210。
 - [x] 【TD-L09】AppConfig::save() を tmp + rename の原子書き込みへ変更。0600 を維持し、unit 7 件追加（core 261）。
@@ -164,7 +169,7 @@ status: current
       コード変更なし・E2E 251 維持。
 - [x] 【TD-L05 / TD-L07】検証条件へ VC-001〜015 を付与し、E2E 251 件との対応表を追加。
       AST 再抽出で missing/duplicate/extra 0、未カバー要件も明記。E2E 251 件・全ゲート成功 / ADR-0206。
-- [x] 【PR-M08 / TD-M08 一部】WasmConfig と Wasm test 3 件を削除（wasm 10→7）。
+- [x] 【TD-M08a】WasmConfig と Wasm test 3 件を削除（wasm 10→7）。
       Rust ソースの参照 0、他 wasm API 維持。E2E 251 件・全ゲート成功 / ADR-0205。
 - [x] 【TD-M08b】figment env を明示マップ＋生値検証 filter へ変更。
       不正 max_retries は toml/default を維持、unit 7 件追加（core 255）。
@@ -264,6 +269,9 @@ status: current
 
 ## メモ
 
+- 2026-11-19: PR-M08 / TD-M08 は 2 段階で完了（TD-M08a: WasmConfig 削除 / ADR-0205、
+  PR-M08: 3 レイヤー分離の設計受容 / ADR-0211）。設定モデル統合の残課題は
+  `todo.md` の未着手ではなく ADR-0211 の「未決定」へ集約した（追跡先は同 ADR）。
 - 2026-11-19 R6: レビュー 5（architecture / error-handling / input-validation /
   cicd / documentation+ergonomics）と探索 5（static / feature / test / deps /
   value）を同時起動。子は読み取り専用で、秘密情報・子間通信・shell は禁止。
