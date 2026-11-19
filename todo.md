@@ -31,8 +31,9 @@ status: current
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
-- 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
-  残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
+- 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラスト、
+  `prefers-contrast: more` は完了（ADR-0236）。残るは実機 5 ブラウザ検証のみ
+  （ADR-0230 / 0224 / 0236 の未決定を追跡先とする）。
 
 ### 優先度: 低
 
@@ -72,6 +73,12 @@ status: current
 
 ## 完了
 
+- [x] 【B06 / C01】`prefers-contrast: more` で枠線・補助文字のコントラストを強化。
+       light border 4.83:1 / muted 10.31:1、dark border 6.96:1 / muted 12.02:1 を
+       light / dark と `prefers-color-scheme: dark` の両経路へ適用。
+       forced-colors ブロックは非変更・後方配置を契約化（ADR-0039 維持）。
+       E2E 254/0・verify.sh rc=0・静的計算再現・markdownlint 0 issues / ADR-0236。
+       残る実機 5 ブラウザ検証は未着手に継続。
 - [x] 【R4-e2e#3,#4 / C08】swipe スタブの二重発火と固定 sleep を条件待ちへ統一。
       先頭 evaluate（`arguments[0..2]` 未埋め込み）を削除し、f-string 版 1 回のみ dispatch。
       到達条件が明確な章移動・縦 / マルチタッチ・ダーク切替・ファイル選択後の DOM / 保存・
