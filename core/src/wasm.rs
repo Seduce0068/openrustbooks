@@ -260,6 +260,97 @@ impl From<EpubCoverImage> for WasmEpubCoverImage {
     }
 }
 
+/// ZIP アーカイブの読み取り専用 Wasm API（TD-M22 段階 1 / ADR-0223）。
+///
+/// パス検証・サイズ制限・不正エントリ拒否の権威は
+/// [`crate::archive::ArchiveReader`] が持ち、ここでは JS 境界向けの変換と
+/// fail-closed な固定エラー文言だけを提供する。
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub struct WasmArchive {
+    inner: crate::archive::ArchiveReader,
+}
+
+// JS 境界に出すエラーは固定文言のみ。CoreError の `to_string()` はパスや
+// ZipError 本文を含むため絶対に流用しない（既存の `js_error()` も使わない）。
+#[cfg(target_arch = "wasm32")]
+const ERR_INVALID_ARCHIVE: &str = "Invalid ZIP archive";
+#[cfg(target_arch = "wasm32")]
+const ERR_ENTRY_READ: &str = "ZIP entry read failed";
+#[cfg(target_arch = "wasm32")]
+const ERR_INVALID_UTF8: &str = "ZIP entry is not valid UTF-8";
+#[cfg(target_arch = "wasm32")]
+const ERR_ENTRIES: &str = "ZIP entries unavailable";
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl WasmArchive {
+    /// ZIP バイト列から読み取り専用ビューを開く。
+    ///
+    /// 所有権をそのまま `ArchiveReader::from_owned` へ渡し二重コピーを避ける。
+    /// いかなる失敗も固定文言へ変換し、内部の理由は露出しない。
+    #[wasm_bindgen(constructor)]
+    pub fn new(bytes: Vec<u8>) -> Result<WasmArchive, JsValue> {
+        let inner = crate::archive::ArchiveReader::from_owned(
+            bytes,
+            crate::archive::ArchiveLimits::default(),
+        )
+        .map_err(|_| JsValue::from_str(ERR_INVALID_ARCHIVE))?;
+        Ok(Self { inner })
+    }
+
+    /// エントリ一覧を camelCase の JS 配列で返す。
+    pub fn entries(&self) -> Result<JsValue, JsValue> {
+        let entries: Vec<WasmArchiveEntry> = self
+            .inner
+            .entries()
+            .iter()
+            .map(|entry| WasmArchiveEntry {
+                path: entry.path.clone(),
+                is_dir: entry.is_dir,
+                size: entry.size,
+                compressed_size: entry.compressed_size,
+            })
+            .collect();
+        serde_wasm_bindgen::to_value(&entries).map_err(|_| JsValue::from_str(ERR_ENTRIES))
+    }
+
+    /// 指定パスのエントリをバイト列で返す。
+    ///
+    /// パス逸脱・未検出・壊れたデータなど、全失敗を固定文言にする。
+    pub fn read_entry(&self, path: &str) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .read_entry(path)
+            .map_err(|_| JsValue::from_str(ERR_ENTRY_READ))
+    }
+
+    /// 指定パスのエントリを UTF-8 テキストで返す（先頭 BOM は除去）。
+    ///
+    /// 読み出し失敗と UTF-8 不正を別の固定文言にするため、バイト列取得は
+    /// `ArchiveReader::read_entry` に委譲し、デコードのみここで行う。
+    pub fn read_entry_text(&self, path: &str) -> Result<String, JsValue> {
+        let bytes = self.read_entry(path)?;
+        let text = String::from_utf8(bytes).map_err(|_| JsValue::from_str(ERR_INVALID_UTF8))?;
+        Ok(text.strip_prefix('\u{FEFF}').unwrap_or(&text).to_string())
+    }
+
+    /// `mimetype` が先頭で内容が `application/epub+zip` なら true。
+    pub fn is_epub(&self) -> bool {
+        self.inner.is_epub()
+    }
+}
+
+/// `entries()` の JS 公開用 DTO（camelCase: `path` / `isDir` / `size` / `compressedSize`）。
+#[cfg(target_arch = "wasm32")]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmArchiveEntry {
+    path: String,
+    is_dir: bool,
+    size: u64,
+    compressed_size: u64,
+}
+
 /// Wasm-compatible document representation
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -687,9 +778,16 @@ pub mod utils {
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
-    use super::{WasmAiMarkdownService, WasmMarkdownLinter};
+    use super::{
+        ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmAiMarkdownService, WasmArchive,
+        WasmArchiveEntry, WasmMarkdownLinter,
+    };
+    use crate::archive::{ArchiveLimits, ArchiveReader};
+    use std::io::Write;
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
 
     /// `Result<T, JsValue>` が期待どおりのエラー文字列を返すことを検証する。
     /// `unwrap_err()` は `T: Debug` を要求するため `match` で回避する。
@@ -830,5 +928,234 @@ mod tests {
         png.extend_from_slice(&1u32.to_be_bytes());
         assert_eq!(super::image_dimensions_wasm(&png), Some(vec![1, 1]));
         assert_eq!(super::image_dimensions_wasm(b"not an image"), None);
+    }
+
+    /// テスト用 ZIP のエントリ。
+    enum Item<'a> {
+        File(&'a str, &'a [u8], CompressionMethod),
+        Dir(&'a str),
+    }
+
+    /// 渡したエントリを順に書き込んだ ZIP バイト列を組み立てる。
+    fn build_zip(items: &[Item<'_>]) -> Vec<u8> {
+        let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for item in items {
+            match item {
+                Item::File(name, data, method) => {
+                    let options = SimpleFileOptions::default().compression_method(*method);
+                    writer
+                        .start_file(*name, options)
+                        .expect("start_file should succeed");
+                    writer.write_all(data).expect("write_all should succeed");
+                }
+                Item::Dir(name) => writer
+                    .add_directory(*name, SimpleFileOptions::default())
+                    .expect("add_directory should succeed"),
+            }
+        }
+        writer.finish().expect("finish should succeed").into_inner()
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_archive_lists_entries_and_reads_content() {
+        let bytes = build_zip(&[
+            Item::Dir("docs/"),
+            Item::File("docs/readme.txt", b"hello", CompressionMethod::Stored),
+            Item::File(
+                "docs/body.txt",
+                b"world world world",
+                CompressionMethod::Deflated,
+            ),
+        ]);
+        let archive = WasmArchive::new(bytes).expect("valid zip should open");
+
+        let entries: Vec<WasmArchiveEntry> =
+            serde_wasm_bindgen::from_value(archive.entries().expect("entries should serialize"))
+                .expect("entries should deserialize");
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].path, "docs");
+        assert!(entries[0].is_dir);
+        assert_eq!(entries[1].path, "docs/readme.txt");
+        assert!(!entries[1].is_dir);
+        assert_eq!(entries[1].size, 5);
+        assert_eq!(entries[1].compressed_size, 5);
+        assert_eq!(entries[2].path, "docs/body.txt");
+        assert_eq!(entries[2].size, 17);
+        assert!(entries[2].compressed_size < entries[2].size);
+
+        assert_eq!(
+            archive
+                .read_entry("docs/readme.txt")
+                .expect("read should succeed"),
+            b"hello"
+        );
+        assert_eq!(
+            archive
+                .read_entry_text("./docs//body.txt")
+                .expect("read text should succeed"),
+            "world world world"
+        );
+        assert!(!archive.is_epub());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_archive_detects_epub() {
+        let bytes = build_zip(&[
+            Item::File(
+                "mimetype",
+                b"application/epub+zip\n",
+                CompressionMethod::Stored,
+            ),
+            Item::File(
+                "META-INF/container.xml",
+                b"<container/>",
+                CompressionMethod::Stored,
+            ),
+        ]);
+        let archive = WasmArchive::new(bytes).expect("valid epub should open");
+        assert!(archive.is_epub());
+        assert_eq!(
+            archive
+                .read_entry_text("mimetype")
+                .expect("mimetype should read"),
+            "application/epub+zip\n"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_archive_rejects_path_traversal() {
+        let bytes = build_zip(&[Item::File("../evil.txt", b"x", CompressionMethod::Stored)]);
+        assert_js_error(WasmArchive::new(bytes), ERR_INVALID_ARCHIVE);
+
+        // 正常なアーカイブでも、照合パスの逸脱は読み出し時に拒否する。
+        let bytes = build_zip(&[Item::File("ok.txt", b"x", CompressionMethod::Stored)]);
+        let archive = WasmArchive::new(bytes).expect("valid zip should open");
+        assert_js_error(archive.read_entry("../evil.txt"), ERR_ENTRY_READ);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_archive_rejects_invalid_bytes() {
+        assert_js_error(
+            WasmArchive::new(b"not a zip archive".to_vec()),
+            ERR_INVALID_ARCHIVE,
+        );
+        assert_js_error(WasmArchive::new(Vec::new()), ERR_INVALID_ARCHIVE);
+
+        let valid = build_zip(&[Item::File("a.txt", b"a", CompressionMethod::Stored)]);
+        assert_js_error(
+            WasmArchive::new(valid[..valid.len() / 2].to_vec()),
+            ERR_INVALID_ARCHIVE,
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_archive_read_errors_use_fixed_messages() {
+        let bytes = build_zip(&[Item::File(
+            "bad.txt",
+            &[0xFF, 0xFE, 0xFD],
+            CompressionMethod::Stored,
+        )]);
+        let archive = WasmArchive::new(bytes).expect("valid zip should open");
+
+        assert_js_error(archive.read_entry("missing.txt"), ERR_ENTRY_READ);
+        assert_js_error(archive.read_entry_text("missing.txt"), ERR_ENTRY_READ);
+        assert_js_error(archive.read_entry_text("bad.txt"), ERR_INVALID_UTF8);
+    }
+
+    /// エラー文言にパス・本文・内部型名が混ざらないことを明示的に検証する。
+    #[wasm_bindgen_test]
+    fn wasm_archive_errors_never_leak_details() {
+        const MARKERS: [&str; 6] = [
+            "SECRET_TRAVERSAL",
+            "SECRET_MISSING",
+            "SECRET_BODY",
+            "CoreError",
+            "Validation",
+            "ZipError",
+        ];
+
+        let traversal = build_zip(&[Item::File(
+            "../SECRET_TRAVERSAL.txt",
+            b"SECRET_BODY",
+            CompressionMethod::Stored,
+        )]);
+        let mut errors: Vec<JsValue> = Vec::new();
+        if let Err(error) = WasmArchive::new(traversal) {
+            errors.push(error);
+        }
+        if let Err(error) = WasmArchive::new(b"SECRET_BODY-not-a-zip".to_vec()) {
+            errors.push(error);
+        }
+
+        let valid = build_zip(&[Item::File(
+            "ok.txt",
+            b"SECRET_BODY\xff\xfe",
+            CompressionMethod::Stored,
+        )]);
+        let archive = WasmArchive::new(valid).expect("valid zip should open");
+        if let Err(error) = archive.read_entry("SECRET_MISSING.txt") {
+            errors.push(error);
+        }
+        if let Err(error) = archive.read_entry_text("SECRET_MISSING.txt") {
+            errors.push(error);
+        }
+        if let Err(error) = archive.read_entry_text("ok.txt") {
+            errors.push(error);
+        }
+
+        assert!(!errors.is_empty(), "at least one error should be produced");
+        for error in errors {
+            let message = error.as_string().expect("fixed errors are strings");
+            for marker in MARKERS {
+                assert!(
+                    !message.contains(marker),
+                    "error message leaked {marker:?}: {message:?}"
+                );
+            }
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn archive_limits_are_enforced_on_wasm() {
+        let bytes = build_zip(&[
+            Item::File("a.txt", b"aaaa", CompressionMethod::Stored),
+            Item::File("b.txt", b"bbbb", CompressionMethod::Deflated),
+        ]);
+
+        // Wasm 側の new は既定 limits を使うため、小さな limits での拒否は
+        // 権威である ArchiveReader 側の既存カバレッジを wasm 上でも確認する。
+        assert!(
+            ArchiveReader::with_limits(
+                &bytes,
+                ArchiveLimits {
+                    max_entries: 1,
+                    ..ArchiveLimits::default()
+                },
+            )
+            .is_err()
+        );
+        assert!(
+            ArchiveReader::with_limits(
+                &bytes,
+                ArchiveLimits {
+                    max_entry_size: 3,
+                    ..ArchiveLimits::default()
+                },
+            )
+            .is_err()
+        );
+        assert!(
+            ArchiveReader::with_limits(
+                &bytes,
+                ArchiveLimits {
+                    max_total_size: 7,
+                    ..ArchiveLimits::default()
+                },
+            )
+            .is_err()
+        );
+
+        // 既定 limits では Wasm の new が成功する。
+        assert!(WasmArchive::new(bytes).is_ok());
     }
 }
