@@ -466,6 +466,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0253-tauri-settings-save-design](docs/decisions/0253-tauri-settings-save-design.md)
   - browser の読み取り専用を維持し、desktop のみ最小 IPC と実装前提を順に満たして保存 UI を接続する段階設計を記録する。
 - [0254-release-operations-disclosure](docs/decisions/0254-release-operations-disclosure.md)
+- [0255-epub-test-split](docs/decisions/0255-epub-test-split.md)
+  - EPUB の 92 tests を epub/tests.rs へ切り出し、本編のモジュール分割は未決定として残す決定を記録する。
   - 導入・更新・ロールバックと既知問題を先に開示し、公開 / 署名 / endpoint は未決定として残す決定を記録する。
 
 ## ライセンス

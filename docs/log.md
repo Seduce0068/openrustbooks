@@ -2,6 +2,7 @@
 
 ## 2026-11-20
 
+- EPUB の 92 tests を epub/tests.rs へ切り出し、本編を 3780→1884 行へ削減（ADR-0255）。
 - R6 R3-release#4,#5: 運用文書を先行開示し、公開・署名・endpoint は未決定として残す。
   `docs/runbook-release.md` を追加し、現状（公開 installer / updater / 署名済み成果物 /
   公開 endpoint は無い、設定表示は「更新確認: 未配線」、check_updates は死設定）と、
