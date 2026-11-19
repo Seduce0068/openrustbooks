@@ -1,20 +1,34 @@
 # Goal
 
-AI コマンドの confirmation 異常系と入力変換の不正値を unit test で固定する（R6 TD-L06、ADR-0202）。
+Reader の `CoverImage` DTO から未使用フィールドと `allow(dead_code)` を削除する（R6 TD-L04）。
 
 ## Scope
 
+### 背景
+
+`web/src/lib.rs` の `CoverImage` は `id` / `media_type` を保持するが参照されず、
+型全体に `#[allow(dead_code)]` が付いている（R6 TD-L04）。
+デシリアライズしたメタデータを捨てるより、必要なフィールドだけを受け取るべき。
+
 ### 成果物
 
-- `desktop/src/commands/ai.rs`: interpret_confirmation / parse_table_format / parse_table_alignment + test 10 件
-- `docs/decisions/0202-ai-command-error-tests.md`: 追加
-- `todo.md`: TD-L06 を完了へ移動
+- `web/src/lib.rs`: 変更（`CoverImage` を `href` / `bytes` のみへ縮小、`allow(dead_code)` 削除）
+- `docs/decisions/0203-cover-image-dto.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
-### 決定
+### 必須事項
 
-- AppHandle 非依存の純粋関数へ抽出し、既存文言と大小文字/未知値挙動を維持。
-- 4 コマンドの confirm_send 呼び出しと format/alignment の順序を維持。
+1. `CoverImage` から `id` / `media_type` を削除する。
+2. `#[allow(dead_code)]` を削除しても警告が出ないことを確認する。
+3. `cover_image()` の JSON から `href` / `bytes` が従来どおり読めることを確認する。
+4. 全ゲート成功（E2E 251 維持）。
 
 ## Acceptance criteria
 
-- desktop 72 tests / E2E 251、全ゲート成功（検証済み）。
+- 全ゲート成功、E2E 251 項目成功。
+
+## Constraints
+
+- 表紙表示・Blob URL 生成の挙動は変更しない。
+- serde の未知フィールドは無視される既存契約を維持する。
+- `master` へ push する。force push はしない。
