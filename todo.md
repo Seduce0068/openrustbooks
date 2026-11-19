@@ -123,10 +123,6 @@ status: current
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 -->
-- 【TD-L05】E2E のコメントが期待総数 245 のまま（`Checker(expected=246)` と不整合）。
-  根拠 `tools/verify-web-reader.py:820,850`。
-- 【TD-L07】要件の検証条件と E2E check 名のトレーサビリティ欠損。
-  根拠 `docs/requirements.md:142,144,164` / `tools/verify-web-reader.py:820`。
 - 【TD-L08】serde_yaml 0.9.34+deprecated / tikv-jemalloc 残存は上流 optional 化待ち。
   根拠 `Cargo.lock:5894` / `docs/decisions/0155:45,69`。受容リスクを ADR に明記済み。
 
@@ -154,6 +150,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-L05 / TD-L07】検証条件へ VC-001〜015 を付与し、E2E 251 件との対応表を追加。
+      AST 再抽出で missing/duplicate/extra 0、未カバー要件も明記。E2E 251 件・全ゲート成功 / ADR-0206。
 - [x] 【PR-M08 / TD-M08 一部】WasmConfig と Wasm test 3 件を削除（wasm 10→7）。
       Rust ソースの参照 0、他 wasm API 維持。E2E 251 件・全ゲート成功 / ADR-0205。
 - [x] 【TD-M08b】figment env を明示マップ＋生値検証 filter へ変更。
