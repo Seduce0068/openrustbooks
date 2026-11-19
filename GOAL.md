@@ -1,38 +1,43 @@
 # Goal
 
-AI カスタムエンドポイント opt-in を設計受容として記録する（R6 TD-M17）。
+検証済み配布物をローカルへ保持し、復旧の糸口を作る（R6 TD-M16 の即時対応）。
 
 ## Scope
 
 ### 背景
 
-`validate_base_url()` は OpenAI の公式ホストと Ollama loopback のみを許可する
-allowlist を実装済み（ADR-0101）。カスタムホストを許可すると
-`api_key` / `extra_headers` / 本文がそのまま送信され、
-reqwest の既定リダイレクトや path/query の迂回も考慮が必要になる。
-Web 設定フォームは読み取り専用（ADR-0128）、wasm AI は fail-closed で、
-opt-in の需要先も設定面も未整備。
+`scripts/verify.sh` は `trunk build --offline` を `mktemp -d` へ出力し、
+`trap` で毎回削除するため、検証成功後の配布物が残らない。
+`web/dist` は git 管理外で、現行物は開発パス残存の可能性があり
+「検証済み」ではない。CI の共通 `rust-gates.yml@v1` は
+artifact upload 入力を持たず、billing issue も未解消。
 
 ### 成果物
 
-- `docs/decisions/0218-custom-ai-endpoint.md`: 追加
-- `todo.md`: TD-M17 を完了（設計受容）へ移動
-- `docs/index.md` / `docs/decisions/index.md` / `README.md` / `docs/log.md`: 更新
+- `scripts/verify.sh`: 変更（`--dist <dir>` オプション、成功時のみコピーと manifest 生成）
+- `docs/runbook-verified-build.md`: 追加（再利用／復旧手順）
+- `docs/decisions/0219-verified-artifact-retention.md`: 追加
+- `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `todo.md`: TD-M16 を完了（即時対応完了・恒久策は未決定）へ移動
 - `GOAL.md`: 本契約
 
 ### 必須事項
 
-1. allowlist の現状契約と設計受容の根拠を ADR に明記する。
-2. 将来 opt-in する場合の最小安全設計（フラグ配置、同意、許可対象、秘密、wasm）を記載する。
-3. ADR-0101 の未決定を継続し、ADR-0100 / 0102 / 0104 / 0117 / 0128 を参照する。
-4. markdownlint 0 issues、既存ゲート（E2E 253）を壊さない。
+1. `./scripts/verify.sh --dist <dir>` で、全ゲート成功時のみ
+   検証済み dist を `<dir>/<short-sha>-<UTC>/` へコピーする。
+2. manifest に commit sha、rustc / trunk バージョン、
+   dist ファイルの SHA256、E2E 期待／結果、検証日時を記録する。
+3. ゲート失敗時はコピーしない。既定の動作（引数なし）は従来どおり一時 dist を削除する。
+4. runbook に再取得／SHA 検証／serve／復旧手順を記載する。
+5. markdownlint 0 issues、引数なし／`--dist` 両方の verify.sh が成功する。
 
 ## Acceptance criteria
 
-- markdownlint 0 issues、verify.sh 成功。
+- 両 verify.sh が成功し、manifest と成果物が生成される。
 
 ## Constraints
 
-- コード・設定・E2E は変更しない。
-- 秘密情報・トークンは ADR に書かない。
+- 67MB の wasm を git 追跡しない（`.gitignore` 維持）。
+- 新規依存・外部送信・破壊的操作を追加しない。
+- 共通ワークフロー `rust-gates.yml@v1` は変更しない。
 - `master` へ push する。force push はしない。
