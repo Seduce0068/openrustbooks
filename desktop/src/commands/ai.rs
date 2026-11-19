@@ -32,6 +32,18 @@ fn build_summary(operation: &str, fields: &[(&str, String)]) -> String {
     summary
 }
 
+/// 確認ダイアログの応答を解釈し、キャンセル／無応答をエラーにする純粋関数。
+fn interpret_confirmation(
+    operation: &str,
+    result: Result<bool, oneshot::error::RecvError>,
+) -> Result<(), String> {
+    match result {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!("{operation} がキャンセルされました")),
+        Err(_) => Err(format!("{operation} の確認ダイアログが応答しませんでした")),
+    }
+}
+
 /// 送信前にネイティブ確認ダイアログを出し、キャンセルなら Err を返す。
 async fn confirm_send(
     app: &AppHandle,
@@ -51,11 +63,7 @@ async fn confirm_send(
             let _ = tx.send(accepted);
         });
 
-    match rx.await {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(format!("{operation} がキャンセルされました")),
-        Err(_) => Err(format!("{operation} の確認ダイアログが応答しませんでした")),
-    }
+    interpret_confirmation(operation, rx.await)
 }
 
 /// Generate Markdown from natural language prompt
@@ -128,6 +136,30 @@ pub async fn refine_markdown(
         .map_err(map_err)
 }
 
+/// format 文字列を TableFormat に解釈する（大小文字無視）。
+fn parse_table_format(format: &str) -> Result<TableFormat, String> {
+    match format.to_lowercase().as_str() {
+        "csv" => Ok(TableFormat::Csv),
+        "json" => Ok(TableFormat::Json),
+        "tsv" => Ok(TableFormat::Tsv),
+        _ => Err(CoreError::validation("Invalid format. Use csv, json, or tsv").to_string()),
+    }
+}
+
+/// alignment 文字列群を TableAlignment に解釈する（大小文字無視、未知値は Left）。
+fn parse_table_alignment(alignment: Option<Vec<String>>) -> Option<Vec<TableAlignment>> {
+    alignment.map(|a| {
+        a.into_iter()
+            .map(|s| match s.to_lowercase().as_str() {
+                "left" => TableAlignment::Left,
+                "center" => TableAlignment::Center,
+                "right" => TableAlignment::Right,
+                _ => TableAlignment::Left,
+            })
+            .collect()
+    })
+}
+
 /// Convert structured data to Markdown table
 #[command]
 pub async fn convert_to_table(
@@ -142,14 +174,7 @@ pub async fn convert_to_table(
         .ai_service()
         .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
 
-    let table_format = match format.to_lowercase().as_str() {
-        "csv" => TableFormat::Csv,
-        "json" => TableFormat::Json,
-        "tsv" => TableFormat::Tsv,
-        _ => {
-            return Err(CoreError::validation("Invalid format. Use csv, json, or tsv").to_string());
-        }
-    };
+    let table_format = parse_table_format(&format)?;
 
     confirm_send(
         &app,
@@ -169,16 +194,7 @@ pub async fn convert_to_table(
     )
     .await?;
 
-    let table_alignment = alignment.map(|a| {
-        a.into_iter()
-            .map(|s| match s.to_lowercase().as_str() {
-                "left" => TableAlignment::Left,
-                "center" => TableAlignment::Center,
-                "right" => TableAlignment::Right,
-                _ => TableAlignment::Left,
-            })
-            .collect()
-    });
+    let table_alignment = parse_table_alignment(alignment);
 
     service
         .pipeline()
@@ -296,5 +312,95 @@ mod tests {
         let summary = build_summary("テスト", &[("context", String::new())]);
 
         assert!(summary.contains("context: 0 chars"));
+    }
+
+    // --- interpret_confirmation: 3 分岐 ---
+
+    #[test]
+    fn confirmation_ok_true_returns_ok() {
+        assert_eq!(interpret_confirmation("Markdown 生成", Ok(true)), Ok(()));
+    }
+
+    #[test]
+    fn confirmation_ok_false_returns_canceled_error() {
+        assert_eq!(
+            interpret_confirmation("Markdown 生成", Ok(false)),
+            Err("Markdown 生成 がキャンセルされました".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn confirmation_err_returns_no_response_error() {
+        // 送信側をドロップすると rx.await が RecvError を返す。
+        let (tx, rx) = oneshot::channel::<bool>();
+        drop(tx);
+        assert_eq!(
+            interpret_confirmation("Markdown 生成", rx.await),
+            Err("Markdown 生成 の確認ダイアログが応答しませんでした".to_string())
+        );
+    }
+
+    // --- parse_table_format: csv / json / TSV(大小混在) / 不正 ---
+
+    #[test]
+    fn table_format_csv() {
+        assert!(matches!(parse_table_format("csv"), Ok(TableFormat::Csv)));
+    }
+
+    #[test]
+    fn table_format_json() {
+        assert!(matches!(parse_table_format("json"), Ok(TableFormat::Json)));
+    }
+
+    #[test]
+    fn table_format_mixed_case_tsv() {
+        assert!(matches!(parse_table_format("TsV"), Ok(TableFormat::Tsv)));
+    }
+
+    #[test]
+    fn table_format_invalid_returns_error() {
+        assert_eq!(
+            parse_table_format("xml").unwrap_err(),
+            CoreError::validation("Invalid format. Use csv, json, or tsv").to_string()
+        );
+    }
+
+    // --- parse_table_alignment: left / center / right / 未知 / None ---
+
+    #[test]
+    fn table_alignment_left_center_right() {
+        let parsed = parse_table_alignment(Some(vec![
+            "left".to_string(),
+            "center".to_string(),
+            "right".to_string(),
+        ]))
+        .expect("Some を渡したので Some が返る");
+
+        assert_eq!(parsed.len(), 3);
+        assert!(matches!(parsed[0], TableAlignment::Left));
+        assert!(matches!(parsed[1], TableAlignment::Center));
+        assert!(matches!(parsed[2], TableAlignment::Right));
+    }
+
+    #[test]
+    fn table_alignment_case_insensitive_and_unknown_falls_back_to_left() {
+        let parsed = parse_table_alignment(Some(vec![
+            "LEFT".to_string(),
+            "CeNtEr".to_string(),
+            "RIGHT".to_string(),
+            "bogus".to_string(),
+        ]))
+        .expect("Some を渡したので Some が返る");
+
+        assert_eq!(parsed.len(), 4);
+        assert!(matches!(parsed[0], TableAlignment::Left));
+        assert!(matches!(parsed[1], TableAlignment::Center));
+        assert!(matches!(parsed[2], TableAlignment::Right));
+        assert!(matches!(parsed[3], TableAlignment::Left)); // 未知値は Left にフォールバック
+    }
+
+    #[test]
+    fn table_alignment_none_returns_none() {
+        assert!(parse_table_alignment(None).is_none());
     }
 }
