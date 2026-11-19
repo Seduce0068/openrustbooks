@@ -66,9 +66,10 @@ status: current
   署名秘密鍵の `.gitignore` 登録は完了（公開鍵は追跡対象）。
 - 【R2-epub#2 残 / 本編分割は未決定】EPUB 層の分割。
   tests.rs 切り出し完了（ADR-0255）。`open_owned_with_limits` / manifest 欠落エラー統一 / Document 型削除も完了（ADR-0247 / 0248 / 0250）。
-- 【R2-crates#3 AI cluster残 / #4 / #5 残】AI cluster の削除または非公開化（ADR-0156 supersede 必要）、
-  core の Web バインディング分離、workspace 依存の残り（feature 加算依存）。
-  greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了（ADR-0243 / 0244 / 0246）。
+- 【R2-crates#4 / #5 残】core の Web バインディング分離、
+  workspace 依存の残り（feature 加算依存）。
+  greet / detect_format / WasmDocument 削除と完全一致依存 18 件の workspace 化は完了
+  （ADR-0243 / 0244 / 0246）、AI cluster 削除も完了（ADR-0256）。
 
 ## 完了
 
@@ -86,6 +87,13 @@ status: current
       サニタイザ深い入れ子テスト前例（ADR-0050 / 0065）により受容。
       wasm DoS 実測、JS DTO の信頼境界、XML/TOC 深さとの一本化は未決定。
 - [x] 【R3-config#5】容量超過時の位置削除へ削除件数・残件数を通知。E2E 255 件・全ゲート成功 / ADR-0245。
+- [x] 【R2-crates#3】未使用の Wasm AI cluster を削除（ADR-0256）。
+      `WasmAiMarkdownService` / `WasmPipelineResult` / `WasmDiffResult` と
+      自己言及 test `ai_methods_fail_closed` を属性ごと削除。
+      lint cluster は ADR-0160 実装済みのため維持し、ADR-0156 の AI 部分のみ supersede。
+      wasm-bindgen-test 15 → 14 件、core 284 維持、E2E 255 維持。
+      外部 JS 利用者の有無、deprecation shim、バンドルサイズ実測は未決定。
+      decisions / docs 各 index（256 件）、README、log を追従。
 - [x] 【R2-crates#2】ADR-0003 の rumdl feature 記述を現状へ追従。
       default / wasm の target 別選択は廃止され、native / wasm とも featureless。
       wasm feature は同名 `init` export 衝突で禁止（ADR-0160）。
