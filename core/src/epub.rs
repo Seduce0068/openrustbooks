@@ -3442,6 +3442,16 @@ mod tests {
     }
 
     #[test]
+    fn is_image_media_type_accepts_empty_and_image_types() {
+        // 未宣言（空）を許容し、明示された image/ を大文字・前後空白も含めて受け付け、
+        // 画像以外（text/html）は拒否する（ADR-0008 の契約）。
+        assert!(is_image_media_type(""));
+        assert!(is_image_media_type("image/png"));
+        assert!(is_image_media_type(" IMAGE/SVG+XML "));
+        assert!(!is_image_media_type("text/html"));
+    }
+
+    #[test]
     fn reads_cover_image_from_epub3_properties() {
         let bytes = epub_with_opf_and_files(OPF_COVER3, &[("OEBPS/images/cover.png", COVER)]);
         let book = EpubBook::open(&bytes).unwrap();
