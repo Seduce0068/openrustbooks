@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 202 件）。
+openrustbooks の ADR 一覧（全 203 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -406,3 +406,5 @@ openrustbooks の ADR 一覧（全 202 件）。
   - status: accepted — desktop / mobile の build_app で重複していた共通プラグイン設定を 1 関数へ集約する決定を記録する。
 - [ADR-0202: AI コマンド異常系のテスト固定](0202-ai-command-error-tests.md)
   - status: accepted — confirmation / format / alignment の分岐を純粋関数へ抽出し、既存挙動を unit test で固定する決定を記録する。
+- [ADR-0203: CoverImage DTO の縮小](0203-cover-image-dto.md)
+  - status: accepted — Web 側の CoverImage を受信に必要な 2 フィールドへ縮小し、allow(dead_code) を削除する決定を記録する。
