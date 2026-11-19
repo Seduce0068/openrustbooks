@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- prefers-reduced-motion を尊重し、reduce 時も色 transition と位置復元を維持（ADR-0213、E2E 253）。
 - Reader エラー status/console を固定文言化し情報漏洩を防止（ADR-0212、E2E 252）。
 - AppConfig / ReaderSettings / SettingsView を権威・寿命が異なるレイヤー分離として設計受容。
   localStorage `openrustbooks:settings` と camelCase 8 項目を互換契約化し、統合を却下（ADR-0211）。

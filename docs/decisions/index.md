@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 212 件）。
+openrustbooks の ADR 一覧（全 213 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -426,3 +426,5 @@ openrustbooks の ADR 一覧（全 212 件）。
   - status: accepted — 3 設定レイヤーの権威・寿命分離を設計受容し、統合を却下する決定。
 - [ADR-0212: Reader エラー status の redaction](0212-status-error-redaction.md)
   - status: accepted — 内部エラーの Debug 表現を status と console から排除し、操作別の固定文言のみを表示する決定を記録する。
+- [ADR-0213: prefers-reduced-motion の尊重](0213-reduced-motion.md)
+  - status: accepted — OS の reduce 設定で空間移動を抑制し、色 transition と位置復元の正確性を維持する決定を記録する。
