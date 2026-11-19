@@ -739,28 +739,6 @@ pub mod utils {
     pub fn version() -> String {
         env!("CARGO_PKG_VERSION").to_string()
     }
-
-    #[wasm_bindgen]
-    pub fn greet(name: &str) -> String {
-        format!("Hello, {} from openrustbooks-core!", name)
-    }
-
-    #[wasm_bindgen]
-    pub fn detect_format(filename: &str) -> String {
-        let ext = std::path::Path::new(filename)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        match ext.to_lowercase().as_str() {
-            "txt" => "txt",
-            "md" | "markdown" | "mkd" => "markdown",
-            "epub" => "epub",
-            "pdf" => "pdf",
-            "zip" => "zip",
-            _ => "unknown",
-        }
-        .to_string()
-    }
 }
 
 // Non-Wasm stubs for native compilation
