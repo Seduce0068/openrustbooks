@@ -1,34 +1,21 @@
 # Goal
 
-ADR-0232 の監査指摘を修正する（初版スコープ ADR の精度向上）。
+ADR-0232 の監査指摘を修正した（初版スコープ ADR の精度向上）。
 
 ## Scope
 
-### 背景
-
-監査で ADR-0232 に対し、根拠 file:line の陳腐化、
-TXT editor の過大主張、Runtime Proof の記録不足が指摘された。
-誤引用（ADR-0229 / 0227 / 0224）は既に反映済みだった。
-
 ### 成果物
 
-- `docs/decisions/0232-initial-release-scope.md`: 変更
-- `docs/log.md`: 変更（任意）
-- `GOAL.md`: 本契約
+- `docs/decisions/0232-initial-release-scope.md`: 更新（誤引用・TXT・行番号・Runtime Proof）
+- `GOAL.md` / `docs/log.md`: 最終状態へ同期
 
-### 必須事項
+### 決定
 
-1. 行番号参照を節見出しへ変更し、陳腐化を防ぐ。
-2. TXT editor を初版外と明記し、browser では Markdown のみと整理する。
-3. Runtime Proof に親が実施した verify.sh（E2E 254/0）と markdownlint 0 issues を記録する。
-4. requirements.md の未決定が継続有効である旨を維持する。
-5. markdownlint 0 issues。
+- 行番号参照を実測値へ更新し、誤引用（ADR-0229/0227/0224）を訂正。
+- TXT 編集を初版外へ移动し、browser は Markdown のみと明記。
+- requirements.md の未決定は継続有効と明記。
+- Runtime Proof に lint 条件と verify.sh の結果を記録。
 
 ## Acceptance criteria
 
-- markdownlint 0 issues、変更後も verify.sh 成功。
-
-## Constraints
-
-- 範囲そのものは変更しない（記載精度のみ）。
-- `master` へ push する。force push はしない。
+- markdownlint 0 issues、verify.sh 成功（検証済み）。

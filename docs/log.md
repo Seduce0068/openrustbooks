@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+- ADR-0232 の監査指摘（誤引用・TXT 範囲・根拠行番号・Runtime Proof）を修正。
 - 初版スコープ ADR を追加し、native desktop / browser / text / AI / 保存・検証の
   実装範囲と初版に含まない項目・未決定を実装証拠（E2E 254 件・core 270 件）付きで
   明示。requirements.md に導線を追加し、各索引を 232 件へ更新（ADR-0232）。
