@@ -40,3 +40,9 @@ allow-list View の差分（general 1 / ai 6 / lint 2 / storage 14）と
 - desktop / core / Cargo.* は変更しない（IPC 契約は ADR-0269 を正とする）。
 - 実 Tauri WebView 往路検証は行わない（CDP mock のみ、未決定として残す）。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- web DTO を ConfigView と同形化し、revision→expected で update_config_patch を呼ぶ保存 UI を接続。
+- browser readonly / fallback を維持しつつ desktop のみ編集可能、a11y 属性を追加。
+- Tauri mock E2E +1、期待総数 256（check 239 + equal 17）、verify.sh 全ゲート成功。
