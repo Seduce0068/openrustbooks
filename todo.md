@@ -57,8 +57,6 @@ status: current
   根拠 `core/src/config.rs:14` / `core/src/wasm.rs:645` / `web/src/lib.rs:1501`。
 - 【PR-M10】AppState が設定・文書・AI service・保存を抱え更新トランザクションが無い。
   根拠 `desktop/src/state/mod.rs:12,76,136`。
-- 【TD-M08b】figment の env マッピングが手動上書きワークアラウンドのまま。
-  根拠 `docs/decisions/0122:25,50,65`。
 - 【TD-M10】壊れた画像が章ごとに 2 秒のセトリング待ちを引き起こす。
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
@@ -156,6 +154,9 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M08b】figment env を明示マップ＋生値検証 filter へ変更。
+      不正 max_retries は toml/default を維持、unit 7 件追加（core 255）。
+      E2E 251 件・全ゲート成功 / ADR-0204。
 - [x] 【TD-L04】CoverImage を href / bytes のみへ縮小し allow(dead_code) を削除。
       serde 未知フィールド無視で core 契約を維持。E2E 251 件・全ゲート成功 / ADR-0203。
 - [x] 【TD-L06】AI コマンドの確認／format／alignment を純粋関数へ抽出し異常系 10 件を追加。
