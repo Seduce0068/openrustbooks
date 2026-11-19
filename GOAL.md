@@ -1,37 +1,38 @@
 # Goal
 
-PR-M08 / TD-M08 の設定モデル 3 重を「権威と寿命が異なるレイヤー分離」として設計受容する。
+Reader の status に内部エラーの Debug 表現が流出する問題を修正する（R6 TD-M12）。
 
 ## Scope
 
 ### 背景
 
-監査で、AppConfig / ReaderSettings / SettingsView は同じ値のコピーではなく、
-core の永続設定 / web の localStorage UI 状態 / IPC 読み取り DTO という
-異なる権威・寿命を持つことが確認された（WasmConfig は ADR-0205 で削除済み）。
-統合は ADR-0018 / 0038 / 0157 / 0193 の契約と E2E 251 を壊すリスクが高い。
+`web/src/lib.rs` のファイル読込／EPUB オープン／章一覧／リンク解決のエラー経路が
+`format!("... {error:?}")` で status に表示している。
+内部エラー文字列にはパスや実装詳細が含まれ得ず、
+ADR-0098 / 0103 / 0154 の redaction 方針と一貫しない。
 
 ### 成果物
 
-- `docs/decisions/0211-config-layer-boundaries.md`: 追加（設計受容）
-- `todo.md`: PR-M08 を「設計受容」として完了へ移動
-- `docs/decisions/index.md` / `docs/index.md` / `README.md` / `docs/log.md`: 更新
-- `GOAL.md`: 本契約
+- `web/src/lib.rs`: 変更（`{error:?}` の固定文言化、详细は console.error へ）
+- `tools/verify-web-reader.py`: 変更（E2E 1 件、251 → 252）
+- `docs/decisions/0212-status-error-redaction.md`: 追加
+- `GOAL.md` / `todo.md`: 契約・完了反映
 
 ### 必須事項
 
-1. 3 モデルの責任分界を ADR に明記する。
-2. localStorage キー `openrustbooks:settings` と camelCase スキーマを互換契約として固定する。
-3. 統合を却下する根拠（wasm 単体の永続化、ADR-0157 契約、E2E、DTO 境界）を記載する。
-4. 未決定（ReaderConfig 死設定、ConfigPatch 保存配線、auto_save_delay 供給元）を継続する。
-5. markdownlint が通り、コード変更なし（E2E 251 維持）。
+1. 5 箇所の `{error:?}` status を操作別の固定文言へ置換する。
+2. 内部エラー詳細は `console.error` にのみ出力する（本文・パスはログにも出さない方針なら固定種別のみ）。
+3. 既存の E2E「解決できないリンクは移動せず状態を表示する」等を壊さない。
+4. E2E を 1 件追加（不正 EPUB 読込時に固定文言が出され、Debug 表現やパスが出ない）。
+   期待総数 251 → 252。
+5. 全ゲート成功。
 
 ## Acceptance criteria
 
-- markdownlint 0 issues、既存ゲート（E2E 251）を壊さない。
+- E2E 252 項目、全ゲート成功。
 
 ## Constraints
 
-- コード・E2E は変更しない。
-- 既存 ADR の本文は履歴として保持し、新規 ADR で design acceptance を記録する。
+- エラー文言にファイル名・パス・本文・URL を出さない。
+- 既存の Reader operation は変更しない。
 - `master` へ push する。force push はしない。
