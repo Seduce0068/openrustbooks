@@ -2210,12 +2210,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         fragment: Option<String>,
     }
 
-    #[allow(dead_code)]
     #[derive(Deserialize)]
     struct CoverImage {
-        id: String,
         href: String,
-        media_type: String,
         bytes: Vec<u8>,
     }
 
