@@ -57,8 +57,6 @@ status: current
   根拠 `web/src/lib.rs:392,544,823,1162`。
 - 【TD-M11】status 文言が日英混在し、エラーと通常情報が単一 aria-live に混在。
   根拠 `web/src/lib.rs:1342,1391,2664,3284,3591`。
-- 【TD-M22】ZIP リーダーが core 実装済みで WASM API / UI 未公開。
-  根拠 `core/src/archive.rs:68,158,168` / `core/src/wasm.rs:62`。
 
 - 【D03 / R2-crates#1】wasm `init()` の二重定義を解消。
   `core/src/lib.rs:18-19,31` の明示定義と `core/src/wasm.rs:28` の
@@ -129,6 +127,8 @@ status: current
 
 ## 完了
 
+- [x] 【TD-M22 段階 1】WasmArchive を公開（entries/read/is_epub）、固定文言エラーと wasm test 7 件追加（wasm 14）。
+      E2E 253 件・全ゲート成功 / ADR-0223。UI 接続は段階 2 の未決定。
 - [x] 【TD-M21】updater の未配線を設計受容（見送り）。設定表示を「更新確認: 未配線」へ正直化。
       本番接続・自動チェック・自動インストールは実装せず、check_updates は死設定のまま。
       公開鍵 / endpoint / 署名 secrets / Release workflow は未決定として ADR に集約。
