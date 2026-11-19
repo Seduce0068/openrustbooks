@@ -1,45 +1,45 @@
 # Goal
 
-状態: **完了（検証済み）**。R6 R1-archive#3 / ADR-0252 の契約は満たされた。
-
-ZIP パスの深さ上限を設計受容として記録する（R6 R1-archive#3）。
+Tauri 設定保存 UI の段階設計を確定する（R6 A05 残、swarm-coding / design）。
 
 ## Scope
 
 ### 背景
 
-`normalize_path()` はコンポーネント数を制限していないが、
-再帰せず O(入力長) のヒープ確保のみで動作する。ZIP エントリ名（u16 長、
-最大 65535 バイト）は `normalize_path()` 側の制約として扱い、
-`resolve_reference()` が受け取る href は XML 内容のため u16 長ではなく
-`max_entry_size = 64 MiB`（1 エントリの非圧縮サイズ上限）が実質的な上限になる。
-入力サイズ・エントリ数・宣言サイズ・実展開予算の既存防御に加え、
-サニタイザには深さ制限を避けた前例（ADR-0050 / 0065、ただし回帰テスト併用）があり、
-即時のセキュリティ必須対応ではないと判定された。
+R1 監査で次が判明した:
+- `desktop/tauri.conf.json` に `withGlobalTauri` が無く、
+  ブラウザ版 WebView から `__TAURI.core.invoke` を取得できない。
+- `ConfigView.revision` は返るが更新コマンドが expected を受け取らず、
+  CAS 衝突を UI が判別できない（`Result<T, String>` も同じ）。
+- 保存 UI を接続するには patch DTO + `get_config` /
+  `update_config_patch` の最小 IPC、CSP / capability、
+  a11y（label / aria-invalid / aria-describedby）、E2E 成功経路が必要。
+- AI / Lint / format の 4 操作は ADR-0232 の初版外で、
+  今回の対象に含めない。
 
-### 成果物（完了）
+### 成果物
 
-- `docs/decisions/0252-path-depth-limit.md`: 追加・監査指摘反映済み。
-- `todo.md`: R1-archive#3 を「設計受容」として完了へ移動（既存）。
-- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新。
-  本セッションの書き込み範囲は `GOAL.md` と `docs/index.md`（254 → 255）。
+- `docs/decisions/0253-tauri-settings-save-design.md`: 追加
+- `todo.md`: A05 を「高」から「段階設計決定・実装は後続」へ更新
+- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
-### 必須事項（すべて完了）
+### 必須事項
 
-1. 深さ上限を追加せず、既存防御との責任分界を ADR に記録した。
-2. 実装時に選ぶなら `ArchiveLimits` フィールド案が望ましい旨と、
-   128 は出典なしの例示値（ADR-0188 / 0209 の retry 回数とは無関係）であることを明記した。
-3. 未決定（wasm DoS 実測、JS DTO の信頼境界、XML/TOC 深さとの一本化）を残した。
-4. markdownlint 0 issues。E2E 255 件はコード・E2E 未変更のため不変
-   （本セッションでは verify.sh を再実行せず、前回の成功実績を継承）。
+1. browser 単体の読み取り専用 / fail-closed を維持し、desktop のみ保存 UI を接続する方針を記録する。
+2. 最小 IPC を `get_config` + `update_config_patch` に限定し、
+   fs / ai / window / updater を設定画面から呼ばない旨を明記する。
+3. 実装前提（withGlobalTauri、CSP、capability、expected revision、
+   構造化エラー、a11y、E2E 成功経路）を ordered list で残す。
+4. ADR-0128 / 0193 の desktop 側のみ supersede し、
+   browser 側の読み取り専用は維持する。
+5. markdownlint 0 issues、verify.sh（E2E 255）成功。
 
-## Acceptance criteria（検証済み）
+## Acceptance criteria
 
-- 規約・索引・todo が整合し、全ゲート成功（前回 verify.sh の実績）。
-- 監査指摘を ADR-0252 / `docs/index.md` / 本契約へ反映済み。
+- 設計 ADR と索引が整合し、全ゲート成功。
 
 ## Constraints
 
-- コード・E2E は変更しない。
-- 新規依存を追加しない。
-- 本セッションでは git 操作を行わない（push は範囲外）。
+- コード・CSP・capability・E2E は変更しない（本次は設計のみ）。
+- 外部サービス・署名鍵・秘密情報は扱わない。
+- `master` へ push する。force push はしない。
