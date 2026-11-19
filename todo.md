@@ -33,8 +33,6 @@ status: current
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラストは完了。
   残るは `prefers-contrast: more` と実機 5 ブラウザ検証（ADR-0230 / 0224 未決定）。
-- 【D02 / R4-trace#1,#4 / R5】既存ソリューション選定根拠 ADR、
-  REQ→ADR→テスト対応表、測定可能な受け入れ基準を整備。
 - 【C04 / R5-ops#1】docs 配下に `index.md` / `log.md` を整備し
   OKF・索引運用を明文化。
 
@@ -78,6 +76,11 @@ status: current
 
 ## 完了
 
+- [x] 【D02 / R4-trace#1,#4 / R5】REQ→ADR→E2E 対応表へ REQ / 主要 ADR 列を追加し、
+      既存ソリューションの選定根拠（ライセンス / 鮮度 / 既知脆弱性 / Wasm 対応）
+      を横断記録。VC は ADR-0233 により初版の測定可能な受け入れ基準として参照。
+      E2E check 名 254 件不変、AST 254/254（missing / duplicate / extra 0）、
+      markdownlint 0 issues / ADR-0233。
 - [x] 【D01】初版スコープ ADR を追加し、native desktop / browser / text / AI /
       保存・検証の実装範囲と初版に含まない項目・未決定を実証付きで明示。
       requirements.md へ導線を追加、E2E 254 件・core 270 件 / ADR-0232。
