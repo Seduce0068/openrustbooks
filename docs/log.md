@@ -1,5 +1,9 @@
 # log
 
+## 2026-11-21
+
+- Tauri config の無効 plugin scope を削除し、静的ゲートを追加（ADR-0280）。
+
 ## 2026-11-20
 
 - updater 静的ゲートの `.check()` 検出漏れを修正（ADR-0279）。

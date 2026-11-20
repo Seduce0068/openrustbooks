@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 279 件）。
+openrustbooks の ADR 一覧（全 280 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -560,3 +560,5 @@ openrustbooks の ADR 一覧（全 279 件）。
   - status: accepted — 設定画面から呼ぶ Tauri command を get_config / update_config_patch に限定する静的ゲートを記録する。
 - [ADR-0279: updater チェック呼び出しの検出パターン拡張](0279-updater-check-pattern.md)
   - status: accepted — 静的ゲートが Tauri v2 の実呼び出し `.check()` を見逃す fail-open を修正する決定を記録する。
+- [ADR-0280: Tauri plugin config の無効キー削除](0280-tauri-plugin-config-cleanup.md)
+  - status: accepted — tauri.conf.json の plugins.*.scope.allowedPaths が無効キーであるため、plugins ブロックを削除し再混入を静的ゲートで防ぐ決定を記録する。
