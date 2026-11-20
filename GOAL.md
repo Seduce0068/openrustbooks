@@ -39,3 +39,9 @@ dialog には config 型が無い。
 - capability ファイルは追加しない（ADR-0278 の判断を維持）。
 - 実 Tauri WebView の起動確認は環境ブロッカーとして残す。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- tauri.conf.json から無効な plugins ブロックを削除し、check-tauri-plugin-config.sh を配線。
+- 負向 test 5 ケースと R4 指摘（部分文字列誤検知、古いコメント）を反映。
+- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。

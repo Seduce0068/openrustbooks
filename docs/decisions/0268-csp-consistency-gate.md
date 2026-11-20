@@ -65,6 +65,8 @@ ADR-0130 は desktop 側 CSP を直接検証する静的ゲートを未決定と
 
 ## 未決定
 
+- tauri.conf.json の plugins 設定は ADR-0280 の別ゲートで検査する。
+
 - WebView 系統ごとの `wasm-unsafe-eval` 対応と
   meta/config 共存時の実効（ADR-0130 を継続）。
 - nonce/hash 化（ADR-0091）と `withGlobalTauri` の同時実施（ADR-0264）。

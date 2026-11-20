@@ -47,7 +47,7 @@ plugin fs / dialog / shell の scope が広い点は残リスクとして残る�
   runtime の権限制限ではない。
 - 危険 command は desktop の `invoke_handler` に残り得るが、
   設定画面のコードから呼ばれないことを検査する。
-- `tauri.conf.json` の plugin scope（`$HOME/*` 等）は現状維持。
+- `tauri.conf.json` の plugin scope は無効キーと判明し、ADR-0280 で削除済み。
 - E2E check 名・件数（256）は不変。
 
 ## 検証（Runtime Proof）
