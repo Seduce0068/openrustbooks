@@ -26,7 +26,8 @@ plugin fs / dialog / shell の scope が広い点は残リスクとして残る�
 - web 側の `invoke(...)` / `invoke_update(...)` 第 1 引数リテラルを抽出し、
   許可集合 `{get_config, update_config_patch}` との完全一致を検査する。
 - 欠落 / 過剰、`plugin:` 参照、`UpdaterExt::check` / `checkUpdates` /
-  `check_update` を検出したら fail-closed で rc=1 とする。
+  `check_update` / `.check()` / `.check_updates()` を検出したら fail-closed で rc=1 とする
+  （後ろ 2 つは ADR-0279 で追加）。
 - `desktop/src/main.rs` の `generate_handler!` から 2 command の登録を確認し、
   抽出不能時も rc=1 とする。
 - `verify.sh` と `ci.yml` の `extra_gates` から同じ script を呼ぶ。

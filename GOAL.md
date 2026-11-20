@@ -1,48 +1,46 @@
 # Goal
 
-最終ドキュメント整合（A05 前提 2 / Chrome / Edge 実機 255 / VC-015）。
+updater 静的ゲートの `.check()` 検出漏れを修正する（R6 R1 で発見した fail-open の解消）。
 
 ## Scope
 
 ### 背景
 
-監査で次が判明した:
-
-- `todo.md` の A05 前提 2 が ADR-0278 の静的ゲート完了を反映していない。
-- ADR-0274 の表は更新済みだが決定節が旧 classification のまま。
-- Chrome / Edge 実機 E2E 255/0 は 256 化前の履歴値で、現行 256 件は mock +1 を含む。
-- `docs/e2e-traceability.md` の VC-015 が「5 ブラウザ未検証」のまま。
+R1 監査で、2 つの静的ゲートが `UpdaterExt::check` と
+`.check_update(` などしか検出せず、Tauri v2 の実際の呼び出しである
+`updater.check().await` と `app.updater()?.check().await` を検出しないことが分かった。
+このままだと、更新チェックを配線してもゲートが成功する。
 
 ### 成果物
 
-- `todo.md`: 変更（A05 前提 2、Chrome / Edge 履歴表記）
-- `docs/decisions/0274-a05-traceability-reconciliation.md`: 変更（決定節の更新）
-- `docs/decisions/0265-cross-browser-e2e.md`: 変更（255 を履歴と明記）
-- `docs/e2e-traceability.md`: 変更（VC-015 の一部カバー）
-- `GOAL.md` / `docs/log.md`: 更新
+- `scripts/check-updater-honesty.sh`: 変更（`.check(` 検出を追加）
+- `scripts/check-capability-scope.sh`: 変更（`.check(` 検出を追加）
+- `docs/decisions/0279-updater-check-pattern.md`: 追加
+- `todo.md`: 完了反映
+- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. capability 前提 2 を「静的ゲート完了、実ビルド / 実 WebView 未検証」に統一する。
-2. 255 件は当時の履歴、256 件は current（mock +1）と明示する。
-3. VC-015 は Chrome / Edge のみ実機確認、残り 3 ブラウザは環境ブロッカーとする。
-4. auto gate が参照する `Checker(expected=256)` / CI-H01 / documentation-operations の current 256 は変更しない。
+1. 両スクリプトで `.check(` を検出する。
+2. `.check_updates(` などの正当なフィールド名と誤爆しない。
+3. 既存の負向 test を維持し、`.check()` の負向 test を追加する。
+4. E2E 256 件・check 名を変更しない。
 5. markdownlint 0 issues、verify.sh（256）成功。
 
 ## Acceptance criteria
 
-- 文書が実態と整合し、全ゲート成功。
+- `.check()` を入れた一時コピーが rc=1 になり、現行ツリーが rc=0 になる。
+- 全ゲート成功。
 
 ## Constraints
 
-- コード / E2E check 名・件数 / Cargo.* は変更しない。
-- 外部サービス / 実 WebView 検証は行わない。
+- desktop / web / Cargo.* / E2E スクリプトは変更しない。
+- 公開鍵 / endpoint / 署名 secrets は導入しない。
 - `master` へ push する。force push はしない。
 
 ## 完了記録
 
-- A05 前提 2 を静的ゲート完了 / 実ビルド未検証へ統一。
-- Chrome / Edge 実機 255/0 を履歴、現行 256（mock +1）を current と明記。
-- VC-015 を Chrome / Edge のみ実機確認、残り 3 ブラウザは環境ブロッカーへ更新。
-- auto gate が参照する Checker(expected=256) / CI-H01 / documentation-operations は不変。
-- `./scripts/verify.sh`: 全ゲート成功、E2E 256 passed / 0 failed。
+- 両スクリプトに `.check(` と capability-scope に `.check_updates(` を追加。
+- 一時コピーによる負向 test 3 ケースすべて rc=1、現行ツリー rc=0。
+- ADR-0279 を作成し、0277 / 0278 の検出対象を更新。
+- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。

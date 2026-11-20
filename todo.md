@@ -98,6 +98,7 @@ status: current
 
 ## 完了
 
+- [x] 【updater ゲート】Tauri v2 の `.check()` 実呼び出しを検出、負向 test 3 ケース確認（ADR-0279）。
 - [x] 【A05 前提 2】設定画面 IPC の静的スコープゲートを追加、負向 test 11/11、E2E 256/0（ADR-0278）。
 - [x] 【updater 正直化】更新確認を固定表示へ復元し、死設定の保存を fail-closed 化。静的ゲート追加、負向 test 8/8、E2E 256/0（ADR-0277）。
 - [x] 【R6 ドキュメント運用】`docs/investigation/` を一時調査スナップショットとして導線に明示（ADR-0276）。

@@ -30,7 +30,7 @@ updater は plugin 初期化のみで、
 - `merge_secrets()` で `merged.general.check_updates = current.general.check_updates`
   とし、JS からの変更を config.toml へ保存しない（二段構えの fail-closed）。
 - `scripts/check-updater-honesty.sh` を追加し、次を静的検査する:
-  - `UpdaterExt::check` / `.check_update` が無い
+  - `UpdaterExt::check` / `.check_update` / `.check()` が無い（検出パターンの拡張は ADR-0279）
   - `plugins.updater.pubkey` / `endpoints` が無い
   - 固定表示が残り `id="settings-check-updates"` が無い
   - 現在値復元行と単体 test が残る
