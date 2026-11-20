@@ -1,46 +1,41 @@
 # Goal
 
-updater 静的ゲートの `.check()` 検出漏れを修正する（R6 R1 で発見した fail-open の解消）。
+Tauri 設定の無効な plugin scope キーを削除し、再混入を静的ゲートで防ぐ（R6 R2）。
 
 ## Scope
 
 ### 背景
 
-R1 監査で、2 つの静的ゲートが `UpdaterExt::check` と
-`.check_update(` などしか検出せず、Tauri v2 の実際の呼び出しである
-`updater.check().await` と `app.updater()?.check().await` を検出しないことが分かった。
-このままだと、更新チェックを配線してもゲートが成功する。
+`desktop/tauri.conf.json` の `plugins.fs/dialog/shell.scope.allowedPaths` は、
+Tauri 2.12.5 の plugin config で有効なキーではない。
+fs / shell の config は `deny_unknown_fields` で未知キーを拒否し、
+dialog には config 型が無い。
+現状の capability は存在せず、実効スコープは元から空である。
+`desktop/gen/schemas/desktop-schema.json` は CapabilityFile 用で config 検証には使えない。
 
 ### 成果物
 
-- `scripts/check-updater-honesty.sh`: 変更（`.check(` 検出を追加）
-- `scripts/check-capability-scope.sh`: 変更（`.check(` 検出を追加）
-- `docs/decisions/0279-updater-check-pattern.md`: 追加
-- `todo.md`: 完了反映
-- `GOAL.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `desktop/tauri.conf.json`: 変更（plugins ブロック全体を削除）
+- `scripts/check-tauri-plugin-config.sh`: 追加（無効キー再混入の静的ゲート）
+- `scripts/verify.sh` / `.github/workflows/ci.yml`: 変更（ゲート配線）
+- `docs/decisions/0280-tauri-plugin-config-cleanup.md`: 追加
+- `docs/decisions/0268-csp-consistency-gate.md` / `0278-settings-ipc-capability-scope.md`: 変更（参照更新）
+- `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
 
 ### 必須事項
 
-1. 両スクリプトで `.check(` を検出する。
-2. `.check_updates(` などの正当なフィールド名と誤爆しない。
-3. 既存の負向 test を維持し、`.check()` の負向 test を追加する。
-4. E2E 256 件・check 名を変更しない。
-5. markdownlint 0 issues、verify.sh（256）成功。
+1. `plugins.fs/dialog/shell.scope.allowedPaths` を削除する。
+2. plugin 初期化と独自 command 登録は維持する。
+3. 静的ゲートで `plugins.*.scope` / `allowedPaths` の再混入を fail-closed で拒否する。
+4. 負向 test（既知無効キー、ファイル欠落、不正 JSON）で失敗すること。
+5. E2E 256 件・check 名・Cargo.* は変更しない。
 
 ## Acceptance criteria
 
-- `.check()` を入れた一時コピーが rc=1 になり、現行ツリーが rc=0 になる。
-- 全ゲート成功。
+- 負向 test が失敗し、verify.sh 全ゲート成功。
 
 ## Constraints
 
-- desktop / web / Cargo.* / E2E スクリプトは変更しない。
-- 公開鍵 / endpoint / 署名 secrets は導入しない。
+- capability ファイルは追加しない（ADR-0278 の判断を維持）。
+- 実 Tauri WebView の起動確認は環境ブロッカーとして残す。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 両スクリプトに `.check(` と capability-scope に `.check_updates(` を追加。
-- 一時コピーによる負向 test 3 ケースすべて rc=1、現行ツリー rc=0。
-- ADR-0279 を作成し、0277 / 0278 の検出対象を更新。
-- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
