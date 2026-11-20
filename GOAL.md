@@ -1,47 +1,37 @@
 # Goal
 
-Tauri 設定の無効な plugin scope キーを削除し、再混入を静的ゲートで防ぐ（R6 R2）。
+設定 DTO の `read_only` / `watch` を現在値から復元し、read-only root の書き込み昇格を防ぐ（R6 レビュー / R3-AU01）。
 
 ## Scope
 
 ### 背景
 
-`desktop/tauri.conf.json` の `plugins.fs/dialog/shell.scope.allowedPaths` は、
-Tauri 2.12.5 の plugin config で有効なキーではない。
-fs / shell の config は `deny_unknown_fields` で未知キーを拒否し、
-dialog には config 型が無い。
-現状の capability は存在せず、実効スコープは元から空である。
-`desktop/gen/schemas/desktop-schema.json` は CapabilityFile 用で config 検証には使えない。
+`LocalRootView` は `read_only` / `watch` / 配列順をクライアント writable で公開する。
+`merge_secrets()` は id 一致時に `path` だけを現在値から復元するため、
+IPC を呼べるスクリプトが `read_only=false` を送ると、隠された実パスを持つ root が
+writable へ永続的に昇格する。incoming 側の id 重複も検査されていない。
 
 ### 成果物
 
-- `desktop/tauri.conf.json`: 変更（plugins ブロック全体を削除）
-- `scripts/check-tauri-plugin-config.sh`: 追加（無効キー再混入の静的ゲート）
-- `scripts/verify.sh` / `.github/workflows/ci.yml`: 変更（ゲート配線）
-- `docs/decisions/0280-tauri-plugin-config-cleanup.md`: 追加
-- `docs/decisions/0268-csp-consistency-gate.md` / `0278-settings-ipc-capability-scope.md`: 変更（参照更新）
+- `desktop/src/commands/config.rs`: 変更（fail-closed 復元と単体 test）
+- `docs/decisions/0281-config-root-flags-fail-closed.md`: 追加
 - `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `GOAL.md`: 更新
 
 ### 必須事項
 
-1. `plugins.fs/dialog/shell.scope.allowedPaths` を削除する。
-2. plugin 初期化と独自 command 登録は維持する。
-3. 静的ゲートで `plugins.*.scope` / `allowedPaths` の再混入を fail-closed で拒否する。
-4. 負向 test（既知無効キー、ファイル欠落、不正 JSON）で失敗すること。
-5. E2E 256 件・check 名・Cargo.* は変更しない。
+1. `merge_secrets()` で id 一意一致時に `path` に加えて `read_only` / `watch` も現在値を採用する。
+2. incoming 側の `local_roots[].id` が空／重複の場合は fail-closed で path を空にし、flags も現在値を採用しない。
+3. 単体 test で `read_only=true` の現在 root に incoming の `false` を渡しても `true` が保持されること。
+4. E2E 256 件・check 名・Cargo.* は変更しない。
+5. markdownlint 0 issues、verify.sh 全ゲート成功。
 
 ## Acceptance criteria
 
-- 負向 test が失敗し、verify.sh 全ゲート成功。
+- 負向の flags 変更が無視され、全ゲート成功。
 
 ## Constraints
 
-- capability ファイルは追加しない（ADR-0278 の判断を維持）。
-- 実 Tauri WebView の起動確認は環境ブロッカーとして残す。
+- DTO 構造・web 画面・E2E スクリプト・Cargo.* は変更しない（flags は DTO 往復のため残す）。
+- 実 Tauri WebView 検証は別タスクとして残す。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- tauri.conf.json から無効な plugins ブロックを削除し、check-tauri-plugin-config.sh を配線。
-- 負向 test 5 ケースと R4 指摘（部分文字列誤検知、古いコメント）を反映。
-- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
