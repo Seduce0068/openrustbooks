@@ -35,3 +35,9 @@ writable へ永続的に昇格する。incoming 側の id 重複も検査され�
 - DTO 構造・web 画面・E2E スクリプト・Cargo.* は変更しない（flags は DTO 往復のため残す）。
 - 実 Tauri WebView 検証は別タスクとして残す。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- merge_secrets が id 一意一致で read_only/watch も現在値へ復元。
+- incoming/current 側 id 重複は fail-closed。R4 指摘の新規 id / 順序・name の回帰 test を追加。
+- cargo test merge_secrets 16 passed / 0 failed、verify.sh 全ゲート成功、E2E 256 passed / 0 failed。

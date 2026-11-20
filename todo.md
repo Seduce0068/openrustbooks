@@ -21,6 +21,30 @@ status: current
 
 ### 優先度: 高
 
+<!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
+- [ ] 【実 WebView 検証を実行】Tauri CLI 2.12.5 は導入済み（2026-11-21 Runtime Proof）だが、
+      ADR-0273 の手順（起動 / settings / get_config / 保存 / config.toml 永続化 / a11y）は未実施。
+      ADR-0273 / README / docs/index.md / runbook-release / GOAL の「未導入」表記も更新する。
+      根拠 `docs/decisions/0273-real-webview-verification-deferred.md:41,88` /
+      R1-FG01 / 重大度 high。
+- [ ] 【設定 DTO の read_only / watch を fail-closed 化】`LocalRootView` の
+      `read_only` / `watch` / 順序がクライアント writable で、
+      `merge_secrets()` は path しか現在値復元しない。隠し path を持つ root を writable へ昇格できる。
+      incoming 側 id 重複も拒否する。根拠 `desktop/src/commands/config.rs:236-242,425-436,524-546` /
+      R3-AU01 / 重大度 high。
+- [ ] 【IPC エラーの redaction を全コマンドへ統一】legacy config / AI provider / fs path エラーが
+      `CoreError::to_string()` で IPC へ漏れる。全コマンドを `CommandError` / code + 固定文言へ寄せ、
+      host / path / レスポンス本文の非含有 test を追加。根拠 `desktop/src/commands/config.rs:16-19`、
+      `core/src/ai_markdown/client.rs:277,310,343`、`desktop/src/commands/fs.rs:15-17` /
+      R1-ER01 / 重大度 high。
+- [ ] 【ホーム画面へ Reader / Editor の導線を追加】`/` の nav は Settings / About のみで、
+      主要機能へ URL 直入力が必要。未接続ボタン / ダミー file tree も disabled 化または実配線。
+      根拠 `web/src/lib.rs:56-63,70-95,190-208` / R2-UX01 / 重大度 high。
+- [ ] 【Tauri / desktop の実ビルド依存を検証】verify.sh は trunk build を一時 DIST へ出すため
+      `web/dist` を更新せず、desktop の `frontendDist=../web/dist` 依存が cargo build グラフに無い。
+      配布前に frontend 生成を明示する。根拠 `desktop/tauri.conf.json:6-9` /
+      `scripts/verify.sh:331-333` / R1-AR01 / 重大度 medium-high。
+
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
 - 【A05 残 / UI 接続完了・実 WebView は環境ブロッカー】Tauri 設定保存 UI の接続（段階 2）。
@@ -59,6 +83,44 @@ status: current
 
 ### 優先度: 中
 
+- [ ] 【ユーザー入力のサイズ境界を追加】desktop `open_document` は無制限 `read_to_string`、
+      Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
+      core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
+      `web/src/lib.rs:2974,2988,3682,3691` / R3-IV01 / 重大度 medium。
+- [ ] 【文書保存を atomic 化】`save_document` は既存ファイルを truncate して書き込み、
+      失敗時に元データを失う。`tokenize::io::write_atomic` 経由へ変更し、
+      成功後のみ mark_saved / emit する。根拠 `desktop/src/commands/document.rs:216-243` /
+      R1-ER01 / 重大度 medium。
+- [ ] 【設定 service の生成競合を修正】`refresh_ai_service` は await 後に revision を再確認せず、
+      commit_config の新 service を古い生成結果で上書きし得る。根拠 `desktop/src/state/mod.rs:167-174` /
+      R2-BV01 / 重大度 medium。
+- [ ] 【autosave / 保存の lost update を修正】保存 in-flight 中のローカル編集が成功レスポンスで失われる。
+      手動 Save 後の last_text 未更新、doc_id 変更時のクリア漏れも修正。
+      根拠 `web/src/lib.rs:261,266-274,330-348,424-428,4337-4351` /
+      R1-ER01 + R2-BV01 / 重大度 medium。
+- [ ] 【CI ゲートの欠落を解消】no-external-font-refs / trunk build + E2E / 配布パス検査 /
+      シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
+      billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
+      `scripts/verify.sh:250-269,331-387` / R4-CI01 / 重大度 medium-high。
+- [ ] 【runbook / README / ADR の現行値を修正】runbook-verified-build の E2E 255 → 256、
+      ADR-0273 の Tauri CLI 未導入表記、README ADR 要約の誤配置、ADR-0265 の「現行 255」、
+      runbook-release の updater 文言、README build.rs 配置、`--locked` 未決定表記を更新し、
+      ゲート対象を拡張。根拠 `docs/runbook-verified-build.md:60-61,130` / `README.md:733,754-763` /
+      `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
+- [ ] 【未使用 Tauri plugin / 依存を削除】store / global-shortcut / shell / fs / opener / notification は登録のみ。
+      desktop の anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc も未使用。
+      ゲートの必須 init 一覧も見直す。根拠 `desktop/src/main.rs:27-53` / `desktop/Cargo.toml:16-21,28-45` /
+      R1-AR01 + R2-DP01 / 重大度 medium。
+- [ ] 【dead config を配線または明示】Ollama `keep_alive_minutes`、`LocalRootConfig.watch`、
+      `default_backend`、`auto_save_delay`、`model_overrides`、`config_file`、`telemetry`、
+      `max_recent`、`max_tokens_per_month` を DTO から除外するか未配線表示へ変更する。
+      根拠 `core/src/config.rs:40,92,174,196,227,233,257,313`、
+      `core/src/ai_markdown/client.rs:402-422` / R1-ST01 + R3-AU01 / 重大度 medium。
+- [ ] 【EPUB / ZIP の解釈差を解消】BOM 入り mimetype、percent-encoded fragment、
+      重複 manifest id、%XX 復号失敗の Validation 飲み込み、外部スキーム判定を core / web で統一。
+      根拠 `core/src/archive.rs:193-226`、`core/src/epub/opf.rs:395`、
+      `core/src/epub/xmlutil.rs:13-24,85-97` / R3-IV01 / 重大度 medium。
+
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラスト、
@@ -68,6 +130,25 @@ status: current
   （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 
 ### 優先度: 低
+
+- [ ] 【a11y 文言とリンク表示を改善】lang=ja と英語ラベル混在、巨大画像の実行不能な警告、
+      破壊操作の window.confirm、Clear data の名称、非表示 file input の focus、
+      リンクの色のみ識別、ライセンス導線を修正。
+      根拠 `web/src/lib.rs:3869-3888,959-961,3621-3638,3881`、
+      `web/index.html:2,344-351,486-488` / R2-UX01 / 重大度 medium-low。
+- [ ] 【cargo audit / 依存ゲートを強化】rumdl featureless ゲートは serde_yaml /
+      tikv-jemalloc-sys の lock 残存を検出できず、cargo audit は unmaintained 警告を許容。
+      `cargo tree -i` と lock 残存チェック、既知例外の ID / 期限管理を追加。
+      根拠 `scripts/check-rumdl-featureless.sh:15-37` / `scripts/verify.sh:295-305` /
+      R2-DP01 / 重大度 medium-low。
+- [ ] 【StorageBackend の TOCTOU と watch stub を整理】overwrite チェックと rename、
+      move_item、canonicalize と open の競合を解消。未実装 watch は実装するか trait から分離。
+      根拠 `core/src/io.rs:112-165,363-364,399-410,560,577-581,619-631,688-690` /
+      R1-AR01 + R2-BV01 + R1-ST01 / 重大度 medium-low。
+- [ ] 【イベント発行失敗とインポート混在状態を可視化】`let _ = app.emit(...)` を警告ログ化し、
+      import の成功 / 失敗件数を固定文言で返す。目次 / landmark / page list の解析失敗も status 化。
+      根拠 `desktop/src/commands/fs.rs:83,108,135-138` /
+      `web/src/lib.rs:2071-2099,3027-3031` / R1-ER01 / 重大度 low。
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
@@ -98,6 +179,7 @@ status: current
 
 ## 完了
 
+- [x] 【設定 DTO flags】read_only / watch を server-authoritative 化し、権限昇格を fail-closed 化（ADR-0281）。
 - [x] 【Tauri plugin config】tauri.conf.json の無効 plugin scope を削除し、再混入を静的ゲート化（ADR-0280）。
 - [x] 【updater ゲート】Tauri v2 の `.check()` 実呼び出しを検出、負向 test 3 ケース確認（ADR-0279）。
 - [x] 【A05 前提 2】設定画面 IPC の静的スコープゲートを追加、負向 test 11/11、E2E 256/0（ADR-0278）。
