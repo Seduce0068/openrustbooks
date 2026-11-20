@@ -41,7 +41,9 @@ if main_rs is not None:
 
     # 実際の更新チェック呼び出しは禁止。設定フィールド名 check_updates と誤判定しない
     # よう、呼び出し形式（トレイト修飾 / メソッド呼び出し）のみを検出する。
-    for pattern in (r"UpdaterExt::check", r"\.check_updates?\s*\("):
+    # Tauri v2 の `updater.check().await` / `app.updater()?.check().await` は
+    # `.check(` なので、`\s*\(` を要求して `.check_updates(` 等と誤爆しないようにする。
+    for pattern in (r"UpdaterExt::check", r"\.check_updates?\s*\(", r"\.check\s*\("):
         if re.search(pattern, main_rs) is not None:
             errors.append(
                 "desktop/src/main.rs に更新チェック呼び出しがあります "

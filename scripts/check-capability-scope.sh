@@ -70,10 +70,14 @@ if web_rs is not None:
     # 更新チェック API / command は web 側に置かない。
     # 設定フィールドの `check_updates`（複数形）は現状の正当なコードなので、
     # 語境界で複数形を除外し、単数形の API 呼び出しのみを検出する。
+    # Tauri v2 の `updater.check().await` 等は `.check(` なので直後に `(` を要求し、
+    # `.check_updates(` / `.check_update(` / `.checked()` と誤爆しないようにする。
     updater_patterns = [
         (r"UpdaterExt::check", "UpdaterExt::check"),
         (r"\bcheckUpdates\b", "checkUpdates"),
         (r"\bcheck_update\b", "check_update"),
+        (r"\.check_updates?\s*\(", ".check_update(s)("),
+        (r"\.check\s*\(", ".check("),
     ]
     for pattern, label in updater_patterns:
         if re.search(pattern, web_rs) is not None:
