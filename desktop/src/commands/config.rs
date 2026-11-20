@@ -521,11 +521,31 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     // 復元し、config.toml へ誤った値が保存されないようにする（fail-closed）。
     merged.general.check_updates = current.general.check_updates;
 
-    // local_roots[].path は id が一意に一致した場合のみ現在値を復元する。
-    // id が空／不一致／現在側で重複している場合は空 PathBuf に統一する
-    // （ADR-0129 の fail-closed に整合）。apply_to も同じ規則で空を返す。
+    // local_roots[].path / read_only / watch は id が一意に一致した場合のみ現在値を復元する。
+    // id が空／不一致／現在側で重複している場合は空 PathBuf に統一し、flags も現在値を
+    // 採用せず incoming の値をそのまま残す（新規 root として扱う）。incoming 側で id が
+    // 重複した group も fail-closed で同様に扱う（ADR-0129 / ADR-0281 の fail-closed）。
+    // DTO は flags をクライアント writable で公開するため、一意一致以外で現在値を
+    // 採用すると read-only root が writable へ昇格し得る（R3-AU01）。
+    let mut incoming_id_counts: HashMap<String, usize> = HashMap::new();
+    for root in &merged.storage.local_roots {
+        if !root.id.is_empty() {
+            *incoming_id_counts.entry(root.id.clone()).or_insert(0) += 1;
+        }
+    }
+
     for root in &mut merged.storage.local_roots {
+        // 空 id は復元対象外（path を空にし、flags は incoming のまま）。
         if root.id.is_empty() {
+            root.path = PathBuf::new();
+            continue;
+        }
+        // incoming 側で id が重複した group は誤マージを避け、path を空にして
+        // flags も現在値へ復元しない。
+        if incoming_id_counts
+            .get(&root.id)
+            .is_some_and(|&count| count > 1)
+        {
             root.path = PathBuf::new();
             continue;
         }
@@ -542,7 +562,11 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
             root.path = PathBuf::new(); // 現在側で id 重複: 誤マージを避け空にする
             continue;
         }
+        // id 一意一致: path に加えて read_only / watch も現在値を採用する。
+        // incoming の read_only=false / watch=true を無視し、昇格を防ぐ。
         root.path = current_root.path.clone();
+        root.read_only = current_root.read_only;
+        root.watch = current_root.watch;
     }
 
     merged
@@ -1417,6 +1441,148 @@ mod tests {
         let merged = merge_secrets(&current, &incoming);
 
         assert!(merged.storage.local_roots[0].path.as_os_str().is_empty());
+    }
+
+    /// R3-AU01: id 一意一致時は `read_only` / `watch` も現在値へ復元し、
+    /// incoming の false / true（昇格・監視変更）を無視すること。
+    #[test]
+    fn merge_secrets_restores_local_root_flags_by_id() {
+        let current = config_with_paths();
+        let current_root = &current.storage.local_roots[1];
+        // root-b は read_only=true / watch=false。
+        assert!(current_root.read_only);
+        assert!(!current_root.watch);
+
+        let mut incoming = current.clone();
+        incoming.storage.local_roots[1].path.clear();
+        // 攻撃者の送入: read_only を false へ、watch を true へ書き換える。
+        incoming.storage.local_roots[1].read_only = false;
+        incoming.storage.local_roots[1].watch = true;
+
+        let merged = merge_secrets(&current, &incoming);
+
+        let root = &merged.storage.local_roots[1];
+        assert_eq!(root.path, current_root.path);
+        assert!(root.read_only, "read_only は現在値 true を保持すること");
+        assert!(!root.watch, "watch は現在値 false を保持すること");
+    }
+
+    /// R3-AU01: incoming 側で同一 id が重複した group は path を空にし、
+    /// flags を現在値へ復元しない（incoming の値をそのまま残す）こと。
+    #[test]
+    fn merge_secrets_ignores_duplicate_incoming_local_root_ids() {
+        let current = config_with_paths();
+        let current_root = &current.storage.local_roots[1]; // root-b: true / false
+
+        let mut incoming = current.clone();
+        // 重複 group の双方で path を空にし、flags を現在値と逆へ書き換える。
+        incoming.storage.local_roots[1].path.clear();
+        incoming.storage.local_roots[1].read_only = false;
+        incoming.storage.local_roots[1].watch = true;
+        let duplicate = incoming.storage.local_roots[1].clone();
+        incoming.storage.local_roots.push(duplicate);
+
+        let merged = merge_secrets(&current, &incoming);
+
+        // 一意な root-a は従来どおり path / flags が現在値へ復元される。
+        let unique = &merged.storage.local_roots[0];
+        assert_eq!(unique.path, current.storage.local_roots[0].path);
+        assert_eq!(unique.read_only, current.storage.local_roots[0].read_only);
+        assert_eq!(unique.watch, current.storage.local_roots[0].watch);
+
+        // 重複 group は path が空で、flags は incoming（現在値と逆）のまま。
+        for index in [1, 2] {
+            let root = &merged.storage.local_roots[index];
+            assert!(
+                root.path.as_os_str().is_empty(),
+                "重複 id の path は空になること"
+            );
+            assert_eq!(
+                root.read_only,
+                incoming.storage.local_roots[index].read_only
+            );
+            assert_eq!(root.watch, incoming.storage.local_roots[index].watch);
+            assert_ne!(root.read_only, current_root.read_only);
+            assert_ne!(root.watch, current_root.watch);
+        }
+    }
+
+    /// R4: 現在側に存在しない新規 id は、現在側の flags を継承しない。
+    #[test]
+    fn merge_secrets_does_not_inherit_flags_for_new_local_root_ids() {
+        let current = config_with_paths();
+        let mut incoming = current.clone();
+        // 先頭を新規 id に置き換える。現在側 root-a は false / true。
+        incoming.storage.local_roots[0].id = "new-root".to_string();
+        incoming.storage.local_roots[0].name = "New".to_string();
+        incoming.storage.local_roots[0].path = PathBuf::from("/incoming/new");
+        incoming.storage.local_roots[0].read_only = false;
+        incoming.storage.local_roots[0].watch = true;
+
+        let merged = merge_secrets(&current, &incoming);
+        let root = &merged.storage.local_roots[0];
+
+        assert!(root.path.as_os_str().is_empty());
+        assert!(!root.read_only, "新規 id は現在値を継承しないこと");
+        assert!(root.watch, "新規 id は incoming の値を維持すること");
+    }
+
+    /// R4: 順序変更と name 変更は incoming のまま、path / flags は id に追随する。
+    #[test]
+    fn merge_secrets_preserves_local_root_order_and_name() {
+        let current = config_with_paths();
+        let mut incoming = current.clone();
+        incoming.storage.local_roots.swap(0, 1);
+        incoming.storage.local_roots[0].name = "Renamed B".to_string();
+        incoming.storage.local_roots[1].name = "Renamed A".to_string();
+        for root in &mut incoming.storage.local_roots {
+            root.path.clear();
+            root.read_only = false;
+            root.watch = false;
+        }
+
+        let merged = merge_secrets(&current, &incoming);
+        let roots = &merged.storage.local_roots;
+
+        assert_eq!(roots[0].id, "root-b");
+        assert_eq!(roots[0].name, "Renamed B");
+        assert_eq!(roots[0].path, PathBuf::from("/secret/root-b"));
+        assert!(roots[0].read_only);
+        assert!(!roots[0].watch);
+        assert_eq!(roots[1].id, "root-a");
+        assert_eq!(roots[1].name, "Renamed A");
+        assert_eq!(roots[1].path, PathBuf::from("/secret/root-a"));
+        assert!(!roots[1].read_only);
+        assert!(roots[1].watch);
+    }
+
+    /// 現在側で id が重複した場合は incoming 側が一意でも復元しない（既存ロジックの維持）。
+    #[test]
+    fn merge_secrets_skips_current_side_duplicate_local_root_flags() {
+        let mut current = config_with_paths();
+        current.storage.local_roots.push(LocalRootConfig {
+            id: "root-a".to_string(),
+            name: "Duplicate".to_string(),
+            path: PathBuf::from("/secret/duplicate"),
+            read_only: true,
+            watch: false,
+        });
+        // incoming は root-a / root-b のみで id は一意。
+        let mut incoming = config_with_paths();
+        incoming.storage.local_roots[0].path.clear();
+        // 現在値は false / true。復元されれば false / true に上書きされる。
+        incoming.storage.local_roots[0].read_only = true;
+        incoming.storage.local_roots[0].watch = false;
+
+        let merged = merge_secrets(&current, &incoming);
+
+        let root = &merged.storage.local_roots[0];
+        assert!(
+            root.path.as_os_str().is_empty(),
+            "現在側重複では path を復元しないこと"
+        );
+        assert!(root.read_only, "現在側重複では flags を復元しないこと");
+        assert!(!root.watch, "現在側重複では flags を復元しないこと");
     }
 
     #[test]
