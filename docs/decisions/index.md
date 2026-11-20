@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 278 件）。
+openrustbooks の ADR 一覧（全 279 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -531,7 +531,7 @@ openrustbooks の ADR 一覧（全 278 件）。
 - [ADR-0264: Tauri IPC 経路の設計受容](0264-tauri-ipc-path-acceptance.md)
   - status: accepted — withGlobalTauri 未設定で desktop も IPC が動かない可能性を記録し、3 経路を比較してコード変更なしの設計受容を選択する。
 - [ADR-0265: E2E のブラウザ横断実行](0265-cross-browser-e2e.md)
-  - status: accepted — 現行 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。
+  - status: accepted — 当時 E2E 255 件を Chrome / Edge で実機実行し、他ブラウザの環境ブロッカーを記録する決定。
 - [ADR-0266: 検証済み配布物へのブラウザ情報記録](0266-browser-metadata-manifest.md)
   - status: accepted — verify.sh の manifest に E2E のブラウザ実行ファイル・解決パス・バージョン・ポートを記録する決定。
 - [ADR-0267: WASM バンドルサイズの比較可能ベースライン](0267-bundle-size-baseline.md)
@@ -558,3 +558,5 @@ openrustbooks の ADR 一覧（全 278 件）。
   - status: accepted — 設定保存 UI の editable 化で失われた ADR-0222 の固定表示と、check_updates の保存時 fail-closed を復元する決定。
 - [ADR-0278: 設定画面 IPC の静的スコープゲート](0278-settings-ipc-capability-scope.md)
   - status: accepted — 設定画面から呼ぶ Tauri command を get_config / update_config_patch に限定する静的ゲートを記録する。
+- [ADR-0279: updater チェック呼び出しの検出パターン拡張](0279-updater-check-pattern.md)
+  - status: accepted — 静的ゲートが Tauri v2 の実呼び出し `.check()` を見逃す fail-open を修正する決定を記録する。
