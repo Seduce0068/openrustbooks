@@ -2,6 +2,7 @@
 
 ## 2026-11-21
 
+- local root flags を server-authoritative 化、権限昇格を fail-closed 化（ADR-0281）。
 - Tauri config の無効 plugin scope を削除し、静的ゲートを追加（ADR-0280）。
 
 ## 2026-11-20
