@@ -47,22 +47,5 @@
     "longDescription": "A modern document reader and editor built with Rust, supporting EPUB, PDF, Markdown, and more.",
     "publisher": "onoderakeita",
     "createUpdaterArtifacts": true
-  },
-  "plugins": {
-    "fs": {
-      "scope": {
-        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
-      }
-    },
-    "dialog": {
-      "scope": {
-        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
-      }
-    },
-    "shell": {
-      "scope": {
-        "allowedPaths": ["$APPDATA/*", "$HOME/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
-      }
-    }
   }
 }

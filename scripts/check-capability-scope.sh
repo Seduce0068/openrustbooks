@@ -105,8 +105,8 @@ if main_rs is not None:
                 + ", ".join(sorted(missing_in_handler))
             )
 
-# desktop/tauri.conf.json の plugins.fs / dialog / shell の scope は現状として許容し、
-# 本ゲートでは検査しない（GOAL.md の Constraints: tauri.conf.json は変更しない）。
+# desktop/tauri.conf.json の plugins ブロックは完全削除済みで、
+# check-tauri-plugin-config.sh が担当する。本ゲートは web 側の IPC 表面のみを検査する。
 
 if errors:
     for error in errors:

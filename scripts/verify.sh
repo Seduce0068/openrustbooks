@@ -280,6 +280,7 @@ run rumdl-featureless check_rumdl_featureless
 run version-consistency bash scripts/check-version-consistency.sh
 run e2e-count-consistency bash scripts/check-e2e-count-consistency.sh
 run csp-consistency bash scripts/check-csp-consistency.sh
+run tauri-plugin-config bash scripts/check-tauri-plugin-config.sh
 run updater-honesty bash scripts/check-updater-honesty.sh
 run capability-scope bash scripts/check-capability-scope.sh
 run check cargo check --all-targets --locked
