@@ -23,9 +23,6 @@ status: current
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
-- [ ] 【ホーム画面へ Reader / Editor の導線を追加】`/` の nav は Settings / About のみで、
-      主要機能へ URL 直入力が必要。未接続ボタン / ダミー file tree も disabled 化または実配線。
-      根拠 `web/src/lib.rs:56-63,70-95,190-208` / R2-UX01 / 重大度 high。
 - [ ] 【Tauri / desktop の実ビルド依存を検証】verify.sh は trunk build を一時 DIST へ出すため
       `web/dist` を更新せず、desktop の `frontendDist=../web/dist` 依存が cargo build グラフに無い。
       配布前に frontend 生成を明示する。根拠 `desktop/tauri.conf.json:6-9` /
