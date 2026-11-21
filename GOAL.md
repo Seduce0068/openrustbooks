@@ -1,38 +1,34 @@
 # Goal
 
-WDIO 実 WebView E2E に設定保存往復を追加する（R6 レビュー / R5-DC01）。
+Markdown front matter の往復で元バイト列を保全する（R6 レビュー / R2-ER01）。
 
 ## Scope
 
 ### 背景
 
-現在の e2e/specs/settings.e2e.ts は get_config 読み取りのみで、
-ADR-0282 で手動 probe 確認した update_config_patch の成功・revision +1・
-config.toml 永続化を回帰検証していない。
+extract_front_matter は lines()/join("\n") で CRLF を LF に変換し、
+full_text は serde_norway で YAML を再シリアライズするため、
+コメント・クォート・キー順・数値表記・末尾改行が変更され得る。
+編集していない Markdown を開いて保存するだけで差分ノイズが発生する。
 
 ### 成果物
 
-- `e2e/specs/settings.e2e.ts`: 変更
-- `e2e/types.d.ts`: 必要なら変更
-- `docs/decisions/0296-wdio-save-roundtrip.md`: 追加
+- `core/src/document.rs`: 変更（元 front matter テキスト保持と再利用）
+- `docs/decisions/0297-front-matter-byte-preservation.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. 実 WebView から update_config_patch を呼び、revision +1 を検証する。
-2. config.toml の非秘密キー（例: log_level）が更新されることを検証する。
-3. テスト後は元の設定値へ復元する（失敗時も finally で復元）。
-4. 既存 Tauri mock E2E 256 件・check 名・WDIO 既存 spec 名を変更しない。
-5. verify.sh 全ゲート成功。
+1. front matter を構造化値に加えて元テキストも保持する。
+2. full_text は body が未変更なら元の front matter 区切り・改行スタイル・
+   末尾改行をそのまま返す。
+3. body が変更されても front matter は元テキストを保持する。
+4. 既存 API 互換を壊さない（必要なら内部フィールドのみ変更）。
+5. 単体 test: CRLF / 末尾改行 / YAML コメント・キー順を保持。
+6. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- API key / secret / path はログ・test 出力へ出さない。
-- 外部 AI API への送信は行わない。
+- 外部サービス / 秘密情報は扱わない。
+- E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- WDIO settings spec に update_config_patch の revision +1 と config.toml 永続化を追加。
-- R4 high を反映（セクション抽出、復元の堅牢化、パス非露出）。
-- npm run test:wdio 1 passing、verify.sh 全ゲート成功（E2E 256）。
