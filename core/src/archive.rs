@@ -222,6 +222,9 @@ impl ArchiveReader {
         let Ok(text) = std::str::from_utf8(&data) else {
             return false;
         };
+        // `read_entry_text` と同じく先頭の BOM を 1 個だけ除く。連続 BOM の
+        // 2 個目は本文として残るため、比較に失敗して EPUB ではないと判定する。
+        let text = text.strip_prefix('\u{FEFF}').unwrap_or(text);
         text.trim() == EPUB_MIMETYPE_VALUE
     }
 
@@ -815,6 +818,22 @@ mod tests {
             CompressionMethod::Stored,
         )]);
         assert!(!ArchiveReader::new(&other).unwrap().is_epub());
+    }
+
+    /// `mimetype` の先頭 BOM は 1 個だけ除いて判定する（read_entry_text と同じ規則）。
+    #[test]
+    fn detects_epub_with_single_leading_bom() {
+        let mimetype = b"\xEF\xBB\xBFapplication/epub+zip";
+        let bytes = build_zip(&[Item::File("mimetype", mimetype, CompressionMethod::Stored)]);
+        assert!(ArchiveReader::new(&bytes).unwrap().is_epub());
+    }
+
+    /// 連続 BOM の 2 個目は本文として残るため EPUB として扱わない。
+    #[test]
+    fn rejects_epub_with_consecutive_boms() {
+        let mimetype = b"\xEF\xBB\xBF\xEF\xBB\xBFapplication/epub+zip";
+        let bytes = build_zip(&[Item::File("mimetype", mimetype, CompressionMethod::Stored)]);
+        assert!(!ArchiveReader::new(&bytes).unwrap().is_epub());
     }
 
     #[test]

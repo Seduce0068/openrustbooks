@@ -23,8 +23,10 @@ use self::navigation::{collect_nav_entries, parse_nav, parse_ncx, select_nav_typ
 use self::opf::{
     ManifestItem, has_property, parse_container, parse_opf, path_dir, read_text_entry,
 };
-use self::text::{extract_text, extract_title, normalized_chapter_path, percent_decode};
-use self::xmlutil::{has_scheme, resolve_reference, split_fragment};
+use self::text::{extract_text, extract_title, normalized_chapter_path};
+// web 側の同等 helper と cross-check できるよう、規則の权威だけを公開する。
+pub use self::xmlutil::{has_scheme, percent_decode};
+use self::xmlutil::{resolve_reference, split_fragment};
 
 use crate::archive::{ArchiveLimits, ArchiveReader};
 use crate::{CoreError, CoreResult};
@@ -159,8 +161,9 @@ pub struct EpubTocEntry {
     pub title: String,
     /// 本文と同じ規則で解決済みのアーカイブ内パス（フラグメントは含まない）。
     pub href: String,
-    /// 生の `href` の最初の `#` の後ろ（`#` を除き、前後の空白を除いたもの）。
-    /// 元の綴りのまま保持し、パーセント復号しない。`#` が無い・空なら `None`。
+    /// `href` の最初の `#` の後ろ（`#` を除き、前後の空白を除いたもの）。
+    /// `%XX` は [`split_fragment`] で復号済み。`#` が無い・空なら `None`。
+    /// 不正な `%XX` は [`CoreError::Validation`] として拒否される。
     pub fragment: Option<String>,
     /// 入れ子の深さ。最上位を 0 とする。
     pub depth: usize,
@@ -312,7 +315,8 @@ impl EpubBook {
         let href = self.chapter(index)?.href.clone();
         match self.archive.read_entry(&href) {
             Ok(data) => Ok(data),
-            Err(first) => self.read_decoded_entry(&href).ok_or(first),
+            // `%XX` の復号そのものが失敗した場合は Validation を伝播する。
+            Err(first) => self.read_decoded_entry(&href)?.ok_or(first),
         }
     }
 
@@ -355,7 +359,7 @@ impl EpubBook {
         let path = resolve_reference(path_dir(&chapter_href), href, "章リソースの href")?;
         match self.archive.read_entry(&path) {
             Ok(data) => Ok(data),
-            Err(first) => self.read_decoded_entry(&path).ok_or(first),
+            Err(first) => self.read_decoded_entry(&path)?.ok_or(first),
         }
     }
 
@@ -364,14 +368,17 @@ impl EpubBook {
     /// `#fragment` だけのリンクは同じ章を返す。スキーム付き URL・先頭 `/`・
     /// 空のリンク・spine に無いパス・ルートを越える参照は `None` を返し、
     /// 外部や本の外へは移動しない（fail-closed）。範囲外の `index` は
-    /// [`CoreError::DocumentNotFound`]。`%XX` は復号して比較する。
+    /// [`CoreError::DocumentNotFound`]。`%XX` は復号して比較するが、リテラル
+    /// `%` を含む実文件名は生のまま読める。`fragment` は [`split_fragment`] で
+    /// 復号されて返るため、未復号の文字列を位置指定子として使わない。不正な
+    /// `%XX` は [`CoreError::Validation`] を返す。
     pub fn resolve_chapter_link(
         &self,
         index: usize,
         href: &str,
     ) -> CoreResult<Option<ChapterLink>> {
         let chapter_href = self.chapter(index)?.href.clone();
-        let (path, fragment) = split_fragment(href);
+        let (path, fragment) = split_fragment(href)?;
         if path.is_empty() {
             return Ok(fragment.map(|fragment| ChapterLink {
                 chapter_index: index,
@@ -381,11 +388,13 @@ impl EpubBook {
         if path.starts_with('/') || has_scheme(path) {
             return Ok(None);
         }
+        // 解決失敗のうち空・絶対・スキーム・ルート越えは既存どおり None に落とす。
+        // リテラル `%` を含む実文件名を生名で読めるよう、ここでは復号検証しない。
         let Ok(target) = resolve_reference(path_dir(&chapter_href), path, "章リンクの href")
         else {
             return Ok(None);
         };
-        let Some(chapter_index) = self.chapter_index_for_path(&target) else {
+        let Some(chapter_index) = self.chapter_index_for_path(&target)? else {
             return Ok(None);
         };
         Ok(Some(ChapterLink {
@@ -397,11 +406,23 @@ impl EpubBook {
     /// アーカイブ内パスに対応する章の index を返す。
     ///
     /// spine の `href` と比較するとき、`%XX` を復号した形でも一致を調べる。
-    fn chapter_index_for_path(&self, target: &str) -> Option<usize> {
-        let target = normalized_chapter_path(target);
-        self.chapters
+    /// 復号に失敗した場合は [`CoreError::Validation`] を返す。
+    fn chapter_index_for_path(&self, target: &str) -> CoreResult<Option<usize>> {
+        // リテラル `%` を含む実文件名は、復号せず生名で先に照合する。
+        if let Some(index) = self
+            .chapters
             .iter()
-            .position(|chapter| normalized_chapter_path(&chapter.href) == target)
+            .position(|chapter| chapter.href == target)
+        {
+            return Ok(Some(index));
+        }
+        let target = normalized_chapter_path(target)?;
+        for (index, chapter) in self.chapters.iter().enumerate() {
+            if normalized_chapter_path(&chapter.href)? == target {
+                return Ok(Some(index));
+            }
+        }
+        Ok(None)
     }
 
     /// 章の表示名を返す。情報源が無い場合は `None`。
@@ -452,7 +473,8 @@ impl EpubBook {
             Ok(data) => data,
             // エントリが無い場合は `%XX` を復号した名前でも試す
             // （`chapter_bytes` と同じフォールバック）。それでも無ければ表紙なし。
-            Err(CoreError::DocumentNotFound(_)) => match self.read_decoded_entry(&item.href) {
+            // 復号そのものの失敗は Validation として報告する。
+            Err(CoreError::DocumentNotFound(_)) => match self.read_decoded_entry(&item.href)? {
                 Some(data) => data,
                 None => return Ok(None),
             },
@@ -501,12 +523,16 @@ impl EpubBook {
     }
 
     /// `href` の `%XX` を復号した名前で読めたらその内容を返す。
-    fn read_decoded_entry(&self, href: &str) -> Option<Vec<u8>> {
-        let decoded = percent_decode(href)?;
+    ///
+    /// 復号そのものが失敗した場合は [`CoreError::Validation`] を返す。復号後の
+    /// パスが存在しない等の読み出し失敗は、呼び出し側が最初のエラーを報告できる
+    /// ように `None` を返す（既存の `%XX` フォールバックの契約を維持する）。
+    fn read_decoded_entry(&self, href: &str) -> CoreResult<Option<Vec<u8>>> {
+        let decoded = percent_decode(href, "アーカイブのパス")?;
         if decoded == href {
-            return None;
+            return Ok(None);
         }
-        self.archive.read_entry(&decoded).ok()
+        Ok(self.archive.read_entry(&decoded).ok())
     }
 
     /// 目次の情報源のテキストを読む。エントリが無い場合は `None`。

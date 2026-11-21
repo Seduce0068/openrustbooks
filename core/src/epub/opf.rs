@@ -392,7 +392,13 @@ fn push_manifest_item(
     let properties = attribute_value(element, "properties")?.unwrap_or_default();
     let resolved = resolve_href(base_dir, &href)?;
 
-    index.entry(id.clone()).or_insert(manifest.len());
+    // 重複 id は先着を黙って残さず OPF 全体を拒否する。spine の idref が
+    // どちらの item を指すかが実装依存になり、parser differential の原因になる。
+    if index.insert(id.clone(), manifest.len()).is_some() {
+        return Err(CoreError::validation(
+            "manifest の item の id が重複しています",
+        ));
+    }
     manifest.push(ManifestItem {
         id,
         href: resolved,

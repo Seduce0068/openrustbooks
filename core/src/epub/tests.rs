@@ -624,6 +624,36 @@
         assert_fixed_archive_error(open_error(&bytes), "manifest の item に href がありません");
     }
 
+    /// manifest の id 重複は、先着を黙って残さず Validation で拒否する。
+    #[test]
+    fn rejects_duplicate_manifest_ids() {
+        let opf = OPF.replace(
+            r#"<item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>"#,
+            r#"<item id="ch1" href="ch2.xhtml" media-type="application/xhtml+xml"/>"#,
+        );
+        match open_error(&epub_with_opf(&opf)) {
+            CoreError::Validation(message) => {
+                assert_eq!(message, "manifest の item の id が重複しています");
+                // ADR-0212 の redaction 契約: id 値をエラー文言に出さない。
+                assert!(!message.contains("ch1"));
+            }
+            other => panic!("Validation を期待したが {other:?} だった"),
+        }
+    }
+
+    /// 不正な `%XX` の href は生名で開けても、復号フォールバック時に Validation になる。
+    ///
+    /// リテラル `%` を含む実文件名を受容するため、OPF 解析時点では拒否しない。
+    #[test]
+    fn rejects_manifest_href_with_malformed_percent_encoding_on_read() {
+        let opf = OPF.replace("href=\"ch2.xhtml\"", "href=\"ch%zz2.xhtml\"");
+        let book = EpubBook::open(&epub_with_opf(&opf)).unwrap();
+        assert!(matches!(
+            book.chapter_bytes(1),
+            Err(CoreError::Validation(_))
+        ));
+    }
+
     #[test]
     fn rejects_href_escaping_root() {
         let bytes = epub_with_opf(&OPF.replace("href=\"ch1.xhtml\"", "href=\"../../evil.xhtml\""));
@@ -707,6 +737,29 @@
             book.chapter_bytes(1),
             Err(CoreError::DocumentNotFound(_))
         ));
+    }
+
+    /// リテラル `%` を含む実文件名は、復号フォールバックより先に生名で読める。
+    #[test]
+    fn reads_chapter_with_literal_percent_in_name() {
+        let opf = OPF.replace("href=\"ch2.xhtml\"", "href=\"100%.xhtml\"");
+        let bytes = build_epub(&[
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", opf.as_bytes()),
+            ("OEBPS/ch1.xhtml", CH1.as_bytes()),
+            ("OEBPS/100%.xhtml", CH2.as_bytes()),
+        ]);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.chapters()[1].href, "OEBPS/100%.xhtml");
+        assert!(book.chapter_text(1).unwrap().contains("第二章"));
+        assert_eq!(
+            book.resolve_chapter_link(0, "100%.xhtml").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: None,
+            })
+        );
     }
 
     #[test]
@@ -880,10 +933,25 @@
         let book = EpubBook::open(&bytes).unwrap();
         let toc = book.toc().unwrap();
 
-        // パーセントエンコードは復号しない。
-        assert_eq!(toc[0].fragment.as_deref(), Some("%E3%81%82"));
+        // パーセントエンコードは split_fragment で復号してから保持する。
+        // （テスト名は ADR-0007 由来の履歴名。実際の保持値は復号済み。）
+        assert_eq!(toc[0].fragment.as_deref(), Some("あ"));
         // 2 個目以降の `#` は区切りにしない。
         assert_eq!(toc[1].fragment.as_deref(), Some("a#b"));
+    }
+
+    /// nav / NCX の不正な `%XX` は目次解析時に Validation で拒否する。
+    #[test]
+    fn rejects_nav_and_ncx_fragments_with_malformed_percent_encoding() {
+        let nav = nav_with_hrefs(&[Some("ch1.xhtml#%zz")]);
+        assert!(matches!(
+            toc_error(&epub_with_nav(&nav)),
+            CoreError::Validation(_)
+        ));
+
+        let ncx = ncx_with_sources(&["ch1.xhtml#%2"]);
+        let bytes = epub_with_toc(None, Some(&ncx), OPF_NCX);
+        assert!(matches!(toc_error(&bytes), CoreError::Validation(_)));
     }
 
     #[test]
@@ -1853,6 +1921,80 @@
                 book.resolve_chapter_link(0, href).unwrap(),
                 None,
                 "unexpected link: {href:?}"
+            );
+        }
+    }
+
+    /// http(s) 以外のスキームも core と同じ規則で拒否する。
+    #[test]
+    fn rejects_non_http_external_schemes_in_chapter_links() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+        for href in [
+            "file:///etc/passwd",
+            "data:text/html,<p>x</p>",
+            "javascript:alert(1)",
+            "ftp://example.com/ch2.xhtml",
+            "mailto:test@example.com",
+        ] {
+            assert_eq!(
+                book.resolve_chapter_link(0, href).unwrap(),
+                None,
+                "unexpected link: {href:?}"
+            );
+        }
+    }
+
+    /// fragment は percent decode してから `ChapterLink` に格納する。
+    #[test]
+    fn decodes_percent_encoded_chapter_link_fragment() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+        assert_eq!(
+            book.resolve_chapter_link(0, "ch2.xhtml#%E7%AC%AC1%E7%AF%80").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 1,
+                fragment: Some("第1節".to_string()),
+            })
+        );
+        assert_eq!(
+            book.resolve_chapter_link(0, "#%E7%AC%AC1%E7%AF%80").unwrap(),
+            Some(ChapterLink {
+                chapter_index: 0,
+                fragment: Some("第1節".to_string()),
+            })
+        );
+    }
+
+    /// 復号失敗は Validation として報告し、未復号文字列を位置指定子に使わない。
+    #[test]
+    fn rejects_malformed_percent_encoded_chapter_link() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+        for href in [
+            "ch2.xhtml#%zz",
+            "#%2",
+            "ch%zz2.xhtml",
+            "ch2.xhtml#%C3%28",
+        ] {
+            assert!(
+                matches!(
+                    book.resolve_chapter_link(0, href),
+                    Err(CoreError::Validation(_))
+                ),
+                "Validation を期待したが {href:?} だった"
+            );
+        }
+    }
+
+    /// 章リソースの `%XX` 復号失敗も Validation として報告する。
+    #[test]
+    fn rejects_malformed_percent_encoded_resource() {
+        let book = EpubBook::open(&sample_epub()).unwrap();
+        for href in ["%zz.png", "%2.png", "%C3%28.png"] {
+            assert!(
+                matches!(
+                    resource_error(&book, 0, href),
+                    CoreError::Validation(_)
+                ),
+                "Validation を期待したが {href:?} だった"
             );
         }
     }

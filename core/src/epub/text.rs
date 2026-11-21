@@ -5,6 +5,7 @@ use quick_xml::events::Event;
 
 use crate::{CoreError, CoreResult};
 
+use super::xmlutil::percent_decode;
 use super::{BLOCK_ELEMENTS, BODY_ELEMENT, SKIPPED_ELEMENTS, TITLE_ELEMENT};
 
 /// XHTML の `<head>` の最初の `<title>` の内容を正規化して返す。無ければ `None`。
@@ -228,50 +229,10 @@ fn normalize_lines(raw: &str) -> String {
         .join("\n")
 }
 
-/// `%XX`（16 進 2 桁）を 1 バイトに復号する。
-///
-/// `%` を含まない場合と、復号結果が不正な UTF-8 になる場合は `None` を返す
-/// （呼び出し側は元の名前を使う）。`+` は空白にしない。
-pub(super) fn percent_decode(name: &str) -> Option<String> {
-    if !name.contains('%') {
-        return None;
-    }
-
-    let bytes = name.as_bytes();
-    let mut decoded: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut position = 0;
-    while position < bytes.len() {
-        if bytes[position] == b'%'
-            && position + 2 < bytes.len()
-            && let (Some(high), Some(low)) = (
-                hex_digit(bytes[position + 1]),
-                hex_digit(bytes[position + 2]),
-            )
-        {
-            decoded.push(high * 16 + low);
-            position += 3;
-            continue;
-        }
-        decoded.push(bytes[position]);
-        position += 1;
-    }
-
-    String::from_utf8(decoded).ok()
-}
-
 /// 章の `href` を比較するための正規化したパスを返す。
 ///
-/// `%XX` を復号した形にする。復号できなければ生の値をそのまま使う。
-pub(super) fn normalized_chapter_path(path: &str) -> String {
-    percent_decode(path).unwrap_or_else(|| path.to_string())
-}
-
-/// 16 進 1 桁を数値にする。
-fn hex_digit(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
+/// `%XX` を復号した形にする。復号に失敗した場合は [`CoreError::Validation`] を
+/// 返し、未復号の文字列をパスとして使わない。
+pub(super) fn normalized_chapter_path(path: &str) -> CoreResult<String> {
+    percent_decode(path, "章の href")
 }

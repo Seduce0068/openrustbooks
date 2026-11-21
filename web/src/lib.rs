@@ -482,6 +482,62 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     }
 }
 
+/// core の `has_scheme` と同じ規則でスキーム付き URL かどうかを判定する。
+///
+/// RFC 3986 の scheme（先頭は英字、以後は英数か `+` `-` `.`）を `:` の前から
+/// 検出する。`http://` などの前方一致だけでは `file:` / `data:` / `javascript:`
+/// を見逃すため、判定を core と同じ規則に揃える。
+#[cfg(any(target_arch = "wasm32", test))]
+fn has_external_scheme(value: &str) -> bool {
+    let Some((prefix, _)) = value.split_once(':') else {
+        return false;
+    };
+    let mut chars = prefix.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_alphabetic()
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+/// `#fragment` の `%XX` を復号する。不正な並び・不正な UTF-8 なら `None`。
+#[cfg(any(target_arch = "wasm32", test))]
+fn decode_fragment(fragment: &str) -> Option<String> {
+    let bytes = fragment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut position = 0;
+    while position < bytes.len() {
+        if bytes[position] == b'%' {
+            if position + 2 >= bytes.len() {
+                return None;
+            }
+            let (Some(high), Some(low)) = (
+                hex_digit(bytes[position + 1]),
+                hex_digit(bytes[position + 2]),
+            ) else {
+                return None;
+            };
+            decoded.push(high * 16 + low);
+            position += 3;
+        } else {
+            decoded.push(bytes[position]);
+            position += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+/// 16 進 1 桁を数値にする。
+#[cfg(any(target_arch = "wasm32", test))]
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// 章内のフラグメントへスクロールする。
 #[cfg(target_arch = "wasm32")]
 fn scroll_to_fragment(fragment: &str) {
@@ -3413,13 +3469,19 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             event.prevent_default();
-            if let Some(fragment) = href.strip_prefix('#') {
+            if let Some(raw_fragment) = href.strip_prefix('#') {
+                // 未復号の文字列を位置指定子として使わない。復号失敗は
+                // リンクを開かせず fail-closed で報告する（core と同じ規則）。
+                let Some(fragment) = decode_fragment(raw_fragment) else {
+                    set_status.set("このリンクは開けません。".to_string());
+                    return;
+                };
                 // 同じフラグメントへの再移動なら履歴を増やさない。
-                if current_fragment.borrow().as_deref() != Some(fragment) {
-                    push_history_entry(current.get(), Some(fragment.to_string()), 0);
-                    *current_fragment.borrow_mut() = Some(fragment.to_string());
+                if current_fragment.borrow().as_deref() != Some(fragment.as_str()) {
+                    push_history_entry(current.get(), Some(fragment.clone()), 0);
+                    *current_fragment.borrow_mut() = Some(fragment.clone());
                 }
-                scroll_to_fragment(fragment);
+                scroll_to_fragment(&fragment);
                 // スクロール後の実位置を新しい履歴エントリへ反映する。
                 if let Some(entry) = history.borrow_mut().last_mut() {
                     entry.scroll_top = content_scroll_top();
@@ -3429,7 +3491,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         key,
                         &SavedPosition {
                             chapter_index: current.get(),
-                            fragment: Some(fragment.to_string()),
+                            fragment: Some(fragment),
                             scroll_top: content_scroll_top(),
                             saved_at: 0.0,
                         },
@@ -3437,10 +3499,18 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }
                 return;
             }
-            if href.starts_with("http://")
-                || href.starts_with("https://")
-                || href.starts_with("mailto:")
-            {
+            if has_external_scheme(&href) {
+                // スキームの検出規則は core の `has_scheme` と同じ。外部リンクとして
+                // 開くのは http(s) / mailto だけに限り、file: / data: / javascript:
+                // などは章リンクとして解決させず拒否する（fail-closed）。
+                let scheme = href
+                    .split_once(':')
+                    .map(|(prefix, _)| prefix.to_ascii_lowercase())
+                    .unwrap_or_default();
+                if !matches!(scheme.as_str(), "http" | "https" | "mailto") {
+                    set_status.set("このリンクは開けません。".to_string());
+                    return;
+                }
                 if let Some(window) = web_sys::window() {
                     let _ = window.open_with_url_and_target_and_features(
                         &href,
@@ -4338,6 +4408,89 @@ mod import_size_tests {
         assert!(!message.contains("MiB"));
         assert!(!message.contains('/'));
         assert!(!message.contains("backup.json"));
+    }
+}
+
+#[cfg(test)]
+mod epub_link_safety_tests {
+    use super::{decode_fragment, has_external_scheme};
+
+    #[test]
+    fn scheme_detection_matches_core_rules() {
+        for value in [
+            "https://example.com",
+            "http://example.com",
+            "mailto:test@example.com",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "javascript:alert(1)",
+            "ftp://example.com/x",
+            "a+b-c.d:scheme",
+        ] {
+            assert!(
+                has_external_scheme(value),
+                "scheme を検出できません: {value}"
+            );
+        }
+        for value in [
+            "ch2.xhtml",
+            "ch2.xhtml#part",
+            "1abc:not-a-scheme",
+            ":no-scheme",
+        ] {
+            assert!(
+                !has_external_scheme(value),
+                "相対参照をスキーム付きと誤判定しました: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn fragment_decoding_matches_core_rules() {
+        assert_eq!(decode_fragment("part").as_deref(), Some("part"));
+        assert_eq!(
+            decode_fragment("%E7%AC%AC1%E7%AF%80").as_deref(),
+            Some("第1節")
+        );
+        for value in ["%zz", "%2", "%C3%28"] {
+            assert_eq!(
+                decode_fragment(value),
+                None,
+                "復号失敗を検出できません: {value}"
+            );
+        }
+    }
+
+    /// core の公開ヘルパーと web 側の同等実装が同じ規則であることを検証する。
+    #[test]
+    fn rules_agree_with_core() {
+        for value in [
+            "https://example.com",
+            "http://example.com",
+            "mailto:test@example.com",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "javascript:alert(1)",
+            "ftp://example.com/x",
+            "a+b-c.d:scheme",
+            "ch2.xhtml",
+            "ch2.xhtml#part",
+            "1abc:not-a-scheme",
+            ":no-scheme",
+        ] {
+            assert_eq!(
+                has_external_scheme(value),
+                openrustbooks_core::epub::has_scheme(value),
+                "スキーム判定が core と一致しません: {value}"
+            );
+        }
+        for value in ["part", "%E7%AC%AC1%E7%AF%80", "100%", "%zz", "%2", "%C3%28"] {
+            assert_eq!(
+                decode_fragment(value),
+                openrustbooks_core::epub::percent_decode(value, "cross-check").ok(),
+                "復号結果が core と一致しません: {value}"
+            );
+        }
     }
 }
 

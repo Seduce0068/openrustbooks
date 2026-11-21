@@ -187,7 +187,7 @@ pub(super) fn collect_nav_entries(
                         // フラグメントの分割は `<a>` の開始時に 1 回だけ行う。
                         // パス部が空の `<a>` はエントリにせず読み飛ばす。
                         if let Some(raw) = attribute_value(&element, "href")? {
-                            let (path, fragment) = split_fragment(&raw);
+                            let (path, fragment) = split_fragment(&raw)?;
                             if !path.is_empty() {
                                 anchor = Some(NavAnchor {
                                     title: String::new(),
@@ -456,7 +456,7 @@ fn set_ncx_href(
     if point.href.is_none()
         && let Some(raw) = attribute_value(element, "src")?
     {
-        let (path, fragment) = split_fragment(&raw);
+        let (path, fragment) = split_fragment(&raw)?;
         point.href = Some(path.to_string());
         point.fragment = fragment;
     }
