@@ -1,43 +1,48 @@
 # Goal
 
-設定 DTO の `read_only` / `watch` を現在値から復元し、read-only root の書き込み昇格を防ぐ（R6 レビュー / R3-AU01）。
+実 Tauri WebView 検証を完了し、発見した起動ブロッカーを修正する（R6 dogfood）。
 
 ## Scope
 
 ### 背景
 
-`LocalRootView` は `read_only` / `watch` / 配列順をクライアント writable で公開する。
-`merge_secrets()` は id 一致時に `path` だけを現在値から復元するため、
-IPC を呼べるスクリプトが `read_only=false` を送ると、隠された実パスを持つ root が
-writable へ永続的に昇格する。incoming 側の id 重複も検査されていない。
+Tauri CLI 2.12.5 は導入済みだが、`cargo tauri dev` の実起動で次が判明した:
+
+- `core::init()` の `tracing_subscriber` と `tauri_plugin_log` が競合し、
+  "attempted to set a logger after the logging system was already initialized" で起動失敗。
+- `beforeDevCommand` の `cd ../web` が CLI フックの cwd と合わず失敗。
+- `tauri_plugin_updater` 2.14.1 は `plugins.updater.pubkey` を必須とし、
+  設定が無いと "Error deserializing 'plugins.updater'" で起動失敗。
+  updater は未配線（ADR-0222 / 0277）で、公開鍵 / endpoint / 署名は未決定。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 変更（fail-closed 復元と単体 test）
-- `docs/decisions/0281-config-root-flags-fail-closed.md`: 追加
+- `desktop/src/main.rs`: 変更（core::init 除去、updater plugin 登録除去）
+- `desktop/tauri.conf.json`: 変更（beforeDevCommand/BeforeBuildCommand の cwd 修正）
+- `desktop/Cargo.toml`: updater 依存除去（必要なら Cargo.lock 追従）
+- `scripts/check-updater-honesty.sh`: 変更（plugin init 要求を「未登録」要求へ反転）
+- `docs/decisions/0282-updater-plugin-startup-removal.md`: 追加
+- `docs/decisions/0089` / `0135` / `0222` / `0277` / `0279`: 参照更新
 - `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
-- `GOAL.md`: 更新
 
 ### 必須事項
 
-1. `merge_secrets()` で id 一意一致時に `path` に加えて `read_only` / `watch` も現在値を採用する。
-2. incoming 側の `local_roots[].id` が空／重複の場合は fail-closed で path を空にし、flags も現在値を採用しない。
-3. 単体 test で `read_only=true` の現在 root に incoming の `false` を渡しても `true` が保持されること。
-4. E2E 256 件・check 名・Cargo.* は変更しない。
-5. markdownlint 0 issues、verify.sh 全ゲート成功。
+1. `cargo tauri dev` で WebView ウィンドウが出現すること。
+2. `/settings` が desktop の editable フォームとして表示され、
+   `get_config` / `update_config_patch` が成功すること。
+3. 固定成功文言と `role="status" aria-live="polite"` を確認すること。
+4. config.toml の変更値のみ永続化を確認（revision はメモリ値のため再起動で 0 に戻る）。
+5. updater 公開鍵 / endpoint / 署名は導入しない。ダミー pubkey は残さない。
+6. E2E 256 件・check 名を変更しない。
+7. markdownlint 0 issues、verify.sh 全ゲート成功。
 
 ## Acceptance criteria
 
-- 負向の flags 変更が無視され、全ゲート成功。
+- 実 WebView で設定保存が成功し、起動ブロッカーが解消されている。
+- updater は未配線のまま、静的ゲートが未登録を保証する。
 
 ## Constraints
 
-- DTO 構造・web 画面・E2E スクリプト・Cargo.* は変更しない（flags は DTO 往復のため残す）。
-- 実 Tauri WebView 検証は別タスクとして残す。
+- 外部送信 / 公開ビルド / 署名 secrets / 破壊的 config 操作は行わない。
+- 秘密値は表示・送信しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- merge_secrets が id 一意一致で read_only/watch も現在値へ復元。
-- incoming/current 側 id 重複は fail-closed。R4 指摘の新規 id / 順序・name の回帰 test を追加。
-- cargo test merge_secrets 16 passed / 0 failed、verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
