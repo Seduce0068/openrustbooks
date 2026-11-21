@@ -1,40 +1,32 @@
 # Goal
 
-ユーザー入力のサイズ境界を fail-closed 化する（R6 レビュー / R3-IV01）。
+バックアップ import の表示設定復元条件を明示する（R6 レビュー / R5-DC01）。
 
 ## Scope
 
 ### 背景
 
-desktop `open_document` はファイルを無制限に `read_to_string` し、
-web は `file.size()` 確認前に `array_buffer()` を呼ぶ箇所がある。
-import JSON もサイズ無制限で、巨大入力によりメモリ消費／UI フリーズが起き得る。
+README は「読書位置のエクスポート・インポート（表示設定・履歴を含む）」と記載するが、
+実装は現在の表示設定が localStorage に存在する場合にインポート値を復元しない。
+利用者はバックアップから文字サイズ・行間・ダーク設定を復元できず、理由も分からない。
 
 ### 成果物
 
-- `desktop/src/commands/document.rs`: 変更
-- `web/src/lib.rs`: 変更
-- `docs/decisions/0301-input-size-bounds.md`: 追加
-- `todo.md` / README / 索引 / log: 更新
+- `web/src/lib.rs`: 変更（import 結果のstatus に制約を明示）
+- `README.md`: 変更（制約の明記）
+- `docs/decisions/0302-settings-import-disclosure.md`: 追加
+- `todo.md` / 索引 / log: 更新
 
 ### 必須事項
 
-1. desktop open は `DEFAULT_MAX_READ_BYTES` を超える前に拒否する。
-2. web は `file.array_buffer()` の前に `file.size()` を検査する。
-3. import JSON も共通上限で拒否する。
-4. 既存 EPUB 上限 / 下書き上限を壊さない。
-5. 単体 / WDIO test は既存 256 件・check 名を維持。
-6. verify.sh 全ゲート成功。
+1. 現在値保護で表示設定をスキップした場合、固定文言で status に告知する。
+2. 現在値が無い場合は従来どおり復元する。
+3. 秘密情報 / 設定値本体は status に出さない。
+4. 既存 E2E 256 件・check 名・WDIO を維持する。
+5. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 上限は 256 MiB（core::io::DEFAULT_MAX_READ_BYTES）に合わせる。
-- 秘密値 / 絶対パスをエラーへ出さない。
+- 明示的な「設定を復元」UI は今回追加しない。
+- 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- open / import の前に 256 MiB 上限を検査し、読後にも実バイト長を再検査。
-- core 定数を web / desktop の単一情報源へ統一。
-- core 327 / desktop 126 / web 6 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- 専用 IPC code / EPUB 文言は ADR-0301 の未決定。
