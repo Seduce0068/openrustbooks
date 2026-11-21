@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "wdio",
+  "description": "Default capability including WebdriverIO test permissions in debug builds",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "wdio:default",
+    "wdio-webdriver:default"
+  ]
+}

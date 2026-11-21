@@ -45,6 +45,20 @@ fn with_common_plugins(
     .plugin(tauri_plugin_notification::init())
 }
 
+/// WebdriverIO 用 plugin は debug ビルドにのみ登録する。
+#[cfg(all(debug_assertions, feature = "wdio"))]
+fn with_wdio_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    // tauri_plugin_log の後に登録すること。逆順にすると log の setup が失敗する。
+    builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init())
+}
+
+#[cfg(not(all(debug_assertions, feature = "wdio")))]
+fn with_wdio_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+}
+
 /// Build the Tauri application with platform-specific plugins
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn build_app() -> tauri::Builder<tauri::Wry> {
@@ -67,7 +81,7 @@ pub fn run() -> tauri::Result<()> {
     // "attempted to set a logger after the logging system was already initialized".
     // The core `init()` remains in use on the wasm side; `tauri_plugin_log` is
     // the only logger for this desktop application.
-    build_app()
+    with_wdio_plugins(build_app())
         .setup(|app| {
             // Load configuration
             let config = AppConfig::load().unwrap_or_default();

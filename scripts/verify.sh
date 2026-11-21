@@ -386,6 +386,15 @@ else
 	exit "$rc"
 fi
 
+echo "===== START: wdio ====="
+if bash scripts/ci-wdio-test.sh; then
+	echo "===== END: wdio rc=0 ====="
+else
+	rc=$?
+	echo "===== END: wdio rc=$rc ====="
+	exit "$rc"
+fi
+
 echo "===== 全検証成功 ====="
 
 # --dist 指定時のみ、全ゲート成功（fail=0）を確認してから成果物を保持する。
