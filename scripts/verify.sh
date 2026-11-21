@@ -338,6 +338,18 @@ else
 	exit "$rc"
 fi
 
+# 一時 DIST は E2E 専用で web/dist を更新しないため、ここで現行 frontend を
+# web/dist へ生成し直し、desktop バイナリがそれを埋め込めることを確認する。
+# 先の fail 判定は通過済みなので、失敗は fail-open にせず即時終了する。
+echo "===== START: build-desktop ====="
+if bash scripts/build-desktop.sh; then
+	echo "===== END: build-desktop rc=0 ====="
+else
+	rc=$?
+	echo "===== END: build-desktop rc=$rc ====="
+	exit "$rc"
+fi
+
 echo "===== START: wasm path check ====="
 # glob が非マッチだと grep が rc=2 を返すが if 条件では偽扱いになり
 # fail-open になるため、nullglob で配列に展開して件数を明示的に検査する。
