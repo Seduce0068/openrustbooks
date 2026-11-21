@@ -1,44 +1,37 @@
 # Goal
 
-ホーム画面に Reader / Editor の導線を追加する（R6 レビュー / R2-UX01）。
+desktop ビルド前の frontend 生成を明示化する（R6 レビュー / R1-AR01）。
 
 ## Scope
 
 ### 背景
 
-HomePage の nav は Settings / About のみで、Reader / Editor は URL 直入力が必要。
-New File / Open Folder / Open File は on:click が無いのにクリック可能に見え、
-FileTree は固定ダミー項目を表示する。利用者は主要機能へ到達できず、
-操作可能と誤解する。
+verify.sh は trunk build を一時 DIST へ出すため web/dist を更新しない。
+一方 desktop/tauri.conf.json の frontendDist は ../web/dist を指し、
+cargo build グラフにはその生成依存が無い。
+このままだと古い／存在しない web/dist で desktop バイナリが作られ得る。
 
 ### 成果物
 
-- `web/src/lib.rs`: HomePage の nav / toolbar / FileTree を変更
-- `web/index.html`: 必要なら CSS のみ
-- `docs/decisions/0288-home-navigation.md`: 追加
+- `scripts/build-desktop.sh`: 追加（frontend 生成 → desktop build）
+- `scripts/check-frontend-dist.sh`: 追加（frontendDist 整合の静的ゲート）
+- `scripts/verify.sh`: 変更（ゲート配線）
+- `docs/decisions/0289-desktop-frontend-build-dependency.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. HomePage の nav から Reader / Editor へ遷移できる。
-2. 既存の `/reader/:id` / `/editor/:id` を壊さない。
-3. 未接続ボタンは disabled にし、理由を title / aria で示す。
-4. ダミー FileTree は「未接続」と分かる表示へ変更する。
-5. E2E 256 件・check 名・WDIO ゲートを維持し、verify.sh 全ゲート成功。
+1. desktop build の前に web/dist を `--offline --locked` で生成する。
+2. tauri.conf.json の frontendDist と実際の生成先を静的に照合する。
+3. index.html / wasm / JS グルーが無い場合は fail-closed で拒否する。
+4. beforeBuildCommand の `trunk build --release` と競合しない。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO ゲート維持。
 
 ## Acceptance criteria
 
-- ホーム画面から主要機能へ導線があり、未接続 UI が誤解を与えない。
+- desktop ビルドが常に現行 frontend を参照し、欠落時に失敗する。
 
 ## Constraints
 
-- 新規ファイル作成 / フォルダ選択の実装は行わない。
-- 外部サービス / 秘密情報は扱わない。
+- 外部サービス / 公開ビルド / 課金は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- HomePage に Reader/Editor のサンプル導線を追加。
-- 未接続ボタンを disabled 化し、ダミー FileTree を未接続表示へ変更。
-- R4 指摘により E2E 用 ID を本番 UI から除去。
-- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
