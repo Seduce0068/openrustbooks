@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 286 件）。
+openrustbooks の ADR 一覧（全 287 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -574,3 +574,5 @@ openrustbooks の ADR 一覧（全 286 件）。
   - status: accepted — local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
 - [ADR-0286: storage root の破壊的操作と move 上書きの fail-closed 化](0286-storage-destructive-guard.md)
   - status: accepted — storage root 自身の削除・改名を拒否し、move_item の上書き競合で既存データを保持する決定。
+- [ADR-0287: IPC エラーの redaction 統一](0287-ipc-error-redaction.md)
+  - status: accepted — desktop command の生エラー文字列を廃し、固定 code と固定文言だけを IPC へ返す決定。
