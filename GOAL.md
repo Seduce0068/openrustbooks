@@ -31,3 +31,10 @@ import JSON もサイズ無制限で、巨大入力によりメモリ消費／UI
 - 上限は 256 MiB（core::io::DEFAULT_MAX_READ_BYTES）に合わせる。
 - 秘密値 / 絶対パスをエラーへ出さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- open / import の前に 256 MiB 上限を検査し、読後にも実バイト長を再検査。
+- core 定数を web / desktop の単一情報源へ統一。
+- core 327 / desktop 126 / web 6 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 専用 IPC code / EPUB 文言は ADR-0301 の未決定。

@@ -65,10 +65,6 @@ status: current
 - [ ] 【設定インポートの表示設定復元を明示】現在値があるとバックアップの表示設定が復元されず、
       README の「表示設定を含む」と一致しない。明示オプションまたは制約開示。
       根拠 `web/src/lib.rs:2102-2111` / `README.md:88` / R5-DC01。
-- [ ] 【ユーザー入力のサイズ境界を追加】desktop `open_document` は無制限 `read_to_string`、
-      Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
-      core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
-      `web/src/lib.rs:2974,2988,3682,3691` / R3-IV01 / 重大度 medium。
 - [ ] 【CI ゲートの欠落を解消】no-external-font-refs / trunk build + E2E / 配布パス検査 /
       シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
       billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
@@ -151,6 +147,7 @@ status: current
 
 ## 完了
 
+- [x] 【入力サイズ境界】256 MiB 上限の事前/事後検査を実装、上限を core 定数へ統一（ADR-0301）。
 - [x] 【lost update】設定保存中の入力遮断と editor last_text 同期を実装（ADR-0300）。
 - [x] 【AI service 競合】revision 再確認で古い service の上書きを防止（ADR-0299）。
 - [x] 【文書保存】temp + rename の atomic write へ変更、失敗時は元ファイル保持（ADR-0298）。
