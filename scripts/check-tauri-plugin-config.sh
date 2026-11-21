@@ -2,7 +2,8 @@
 # Tauri config に無効な plugin scope キーが再混入していないことを検査する（fail-closed）。
 # Tauri 2.12.5 の fs / shell plugin config は deny_unknown_fields で未知キーを拒否し、
 # dialog には config 型が無いため、scope / allowedPaths は無効キー（R6 R2 / GOAL.md）。
-# 今回の契約は plugins ブロックの完全削除であり、静的ゲートで再混入を防ぐ。
+# 今回の契約は plugins ブロックの完全削除と未使用 plugin 登録の削除であり、
+# 静的ゲートで再混入を防ぐ。
 # 無効キーは JSON キーとして検出し、正当な文字列との部分一致による誤検知を避ける。
 # 第 1 引数で検査対象の repo root を差し替えられる（負向 test 用）。
 set -euo pipefail
@@ -29,10 +30,24 @@ CONF_REL = "desktop/tauri.conf.json"
 MAIN_REL = "desktop/src/main.rs"
 PLUGIN_NAMES = ("fs", "dialog", "shell")
 INVALID_KEYS = ("scope", "allowedPaths")
+
+# 必須 init は log / dialog のみ。log は Builder パターンで初期化するため
+# `init()` ではなく `Builder::new()` を検査する。
+# wdio は debug + feature ゲートの別経路（E2E / feature build）で担保し、
+# 本ゲートの必須一覧には含めない。
 PLUGIN_INITS = (
-    "tauri_plugin_fs::init()",
+    "tauri_plugin_log::Builder::new()",
     "tauri_plugin_dialog::init()",
-    "tauri_plugin_shell::init()",
+)
+
+# 未使用 plugin の再混入を fail-closed で検出する（負向 test の更新）。
+REMOVED_PLUGIN_PREFIXES = (
+    "tauri_plugin_store::",
+    "tauri_plugin_global_shortcut::",
+    "tauri_plugin_shell::",
+    "tauri_plugin_fs::",
+    "tauri_plugin_opener::",
+    "tauri_plugin_notification::",
 )
 
 # --- desktop/tauri.conf.json: 欠落・不正 JSON は fail-closed ---------------------
@@ -104,6 +119,9 @@ else:
     for init_call in PLUGIN_INITS:
         if init_call not in main_rs:
             errors.append(f"{MAIN_REL} に plugin 初期化がありません: {init_call}")
+    for prefix in REMOVED_PLUGIN_PREFIXES:
+        if prefix in main_rs:
+            errors.append(f"{MAIN_REL} に削除済み plugin が再混入しています: {prefix}")
 
 if errors:
     for error in errors:
@@ -112,6 +130,7 @@ if errors:
 
 print(
     "OK: tauri.conf.json に plugins / scope / allowedPaths はなく、"
-    "3 plugin 初期化は維持されています"
+    "log / dialog の初期化は維持され、未使用 plugin の再混入はありません"
+    "（wdio は別ゲート）"
 )
 PY

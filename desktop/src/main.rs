@@ -13,37 +13,25 @@ mod window;
 use state::AppState;
 use window::setup_window;
 
-/// Apply the plugins shared by desktop and mobile builds.
+/// デスクトップ / モバイル共通の plugin を登録する。
 ///
-/// `platform_plugins` is applied at the boundary between `store` and
-/// `notification`, preserving the original registration position of any
-/// platform-specific plugin. Tauri keeps plugins in a `Vec` and initializes
-/// them in registration order, so this position is intentional.
-fn with_common_plugins(
-    builder: tauri::Builder<tauri::Wry>,
-    platform_plugins: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry>,
-) -> tauri::Builder<tauri::Wry> {
-    platform_plugins(
-        builder
-            .plugin(
-                tauri_plugin_log::Builder::new()
-                    .targets([
-                        Target::new(TargetKind::Stdout),
-                        Target::new(TargetKind::LogDir {
-                            file_name: Some("openrustbooks".to_string()),
-                        }),
-                        Target::new(TargetKind::Webview),
-                    ])
-                    .level(log::LevelFilter::Info)
-                    .build(),
-            )
-            .plugin(tauri_plugin_opener::init())
-            .plugin(tauri_plugin_fs::init())
-            .plugin(tauri_plugin_dialog::init())
-            .plugin(tauri_plugin_shell::init())
-            .plugin(tauri_plugin_store::Builder::new().build()),
-    )
-    .plugin(tauri_plugin_notification::init())
+/// Tauri は登録順に plugin を初期化するため、`tauri_plugin_log` を最初に
+/// 登録する（wdio plugin の setup は log の後に行う必要がある）。
+fn with_common_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("openrustbooks".to_string()),
+                    }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
 }
 
 /// WebdriverIO 用 plugin は debug ビルドにのみ登録する。
@@ -60,18 +48,9 @@ fn with_wdio_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<taur
     builder
 }
 
-/// Build the Tauri application with platform-specific plugins
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+/// Build the Tauri application
 fn build_app() -> tauri::Builder<tauri::Wry> {
-    with_common_plugins(tauri::Builder::default(), |builder| {
-        builder.plugin(tauri_plugin_global_shortcut::Builder::new().build())
-    })
-}
-
-/// Build the Tauri application for mobile platforms (without global shortcut)
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn build_app() -> tauri::Builder<tauri::Wry> {
-    with_common_plugins(tauri::Builder::default(), |builder| builder)
+    with_common_plugins(tauri::Builder::default())
 }
 
 /// 起動時の設定読み込み。
