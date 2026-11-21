@@ -32,12 +32,14 @@ def read_text(rel: str) -> str | None:
         return None
 
 
-# --- desktop/src/main.rs: plugin 初期化はあるが check 呼び出しは無い ---------------
+# --- desktop/src/main.rs: updater plugin は未登録で check 呼び出しも無い -------------
 main_rs = read_text("desktop/src/main.rs")
 if main_rs is not None:
     init = "tauri_plugin_updater::Builder::new().build()"
-    if init not in main_rs:
-        errors.append(f"desktop/src/main.rs に {init} がありません")
+    if init in main_rs:
+        errors.append(
+            f"desktop/src/main.rs に {init} が残っています（updater は未配線のため登録禁止）"
+        )
 
     # 実際の更新チェック呼び出しは禁止。設定フィールド名 check_updates と誤判定しない
     # よう、呼び出し形式（トレイト修飾 / メソッド呼び出し）のみを検出する。

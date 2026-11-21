@@ -1,6 +1,6 @@
 //! openrustbooks-desktop: Tauri desktop application entry point.
 
-use openrustbooks_core::{AppConfig, init};
+use openrustbooks_core::AppConfig;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
@@ -43,7 +43,6 @@ fn with_common_plugins(
             .plugin(tauri_plugin_store::Builder::new().build()),
     )
     .plugin(tauri_plugin_notification::init())
-    .plugin(tauri_plugin_updater::Builder::new().build())
 }
 
 /// Build the Tauri application with platform-specific plugins
@@ -62,8 +61,12 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
 
 /// Application entry point
 pub fn run() -> tauri::Result<()> {
-    init();
-
+    // `openrustbooks_core::init()` is intentionally not called here: on native
+    // targets it installs a global `tracing_subscriber`, which conflicts with
+    // the logger installed by `tauri_plugin_log` and causes
+    // "attempted to set a logger after the logging system was already initialized".
+    // The core `init()` remains in use on the wasm side; `tauri_plugin_log` is
+    // the only logger for this desktop application.
     build_app()
         .setup(|app| {
             // Load configuration

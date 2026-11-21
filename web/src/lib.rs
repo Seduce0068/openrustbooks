@@ -4241,13 +4241,42 @@ async fn invoke_update(command: &str, args: &JsValue) -> Result<JsValue, Command
     })?;
     wasm_bindgen_futures::JsFuture::from(promise)
         .await
-        .map_err(|reason| {
-            let code = js_sys::Reflect::get(&reason, &JsValue::from_str("code"))
-                .ok()
-                .and_then(|value| value.as_string())
-                .unwrap_or_else(|| "CONFIG_INTERNAL".to_string());
-            CommandError { code }
+        .map_err(|reason| CommandError {
+            code: command_error_code(&reason),
         })
+}
+
+/// Tauri の command reject から固定 code を取り出す。
+///
+/// 実 WebView では `CommandError` が JSON 文字列として reject される場合があり、
+/// その際は `Reflect::get(reason, "code")` が失敗する。
+/// 文字列化された JSON も解釈して code を取り出し、既定は
+/// `CONFIG_INTERNAL` とする（生 message は status へ出さない）。
+fn command_error_code(reason: &JsValue) -> String {
+    let direct = js_sys::Reflect::get(reason, &JsValue::from_str("code"))
+        .ok()
+        .and_then(|value| value.as_string());
+    if let Some(code) = direct {
+        return code;
+    }
+    let text = reason.as_string().or_else(|| {
+        js_sys::JSON::stringify(reason)
+            .ok()
+            .and_then(|v| v.as_string())
+    });
+    if let Some(code) = text
+        .as_deref()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+        .and_then(|value| {
+            value
+                .get("code")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+    {
+        return code;
+    }
+    "CONFIG_INTERNAL".to_string()
 }
 
 /// `get_config` を呼び出して DTO に変換する（ブラウザでは Err）。
@@ -4270,9 +4299,20 @@ async fn save_config(view: &SettingsView) -> Result<SettingsView, CommandError> 
             code: "CONFIG_INTERNAL".to_string(),
         });
     }
-    let args = serde_wasm_bindgen::to_value(&patch).map_err(|_| CommandError {
+    // Tauri command の引数名は `patch`。実 WebView では `patch` を flat に渡すと
+    // "invalid args `patch`" で reject される（R6 WebView dogfood）。
+    let args_object = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &args_object,
+        &JsValue::from_str("patch"),
+        &serde_wasm_bindgen::to_value(&patch).map_err(|_| CommandError {
+            code: "CONFIG_INTERNAL".to_string(),
+        })?,
+    )
+    .map_err(|_| CommandError {
         code: "CONFIG_INTERNAL".to_string(),
     })?;
+    let args: JsValue = args_object.into();
     let value = invoke_update("update_config_patch", &args).await?;
     serde_wasm_bindgen::from_value(value).map_err(|_| CommandError {
         code: "CONFIG_INTERNAL".to_string(),
