@@ -36,7 +36,10 @@ pub struct GeneralConfig {
     pub language: String,
     /// Theme (light, dark, system)
     pub theme: String,
-    /// Enable telemetry
+    /// Enable telemetry.
+    ///
+    /// 未配線の死設定（ADR-0304）。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub telemetry: bool,
     /// Check for updates on startup
     pub check_updates: bool,
@@ -78,6 +81,8 @@ pub struct AiConfig {
     pub ollama: OllamaConfig,
     /// Token limits
     pub max_tokens_per_request: usize,
+    /// 未配線の死設定（ADR-0228 / ADR-0304）。config.toml の値は読み書きとも
+    /// 維持するが、ConfigView / ConfigPatch には露出しない。
     pub max_tokens_per_month: Option<u64>,
     /// 再生成の最大リトライ回数（キー欠落時は既定 3）
     #[serde(default = "default_max_retries")]
@@ -88,7 +93,10 @@ pub struct AiConfig {
     pub timeout_secs: u64,
     /// Enable streaming responses
     pub streaming: bool,
-    /// Custom model overrides
+    /// Custom model overrides.
+    ///
+    /// 未配線の死設定（ADR-0304）。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub model_overrides: std::collections::HashMap<String, String>,
 }
 
@@ -170,7 +178,10 @@ pub struct OllamaConfig {
     pub base_url: String,
     /// Default model
     pub model: String,
-    /// Keep model loaded (minutes)
+    /// Keep model loaded (minutes).
+    ///
+    /// 未配線の死設定（ADR-0304）。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub keep_alive_minutes: u32,
     /// Additional options
     pub options: std::collections::HashMap<String, serde_json::Value>,
@@ -192,7 +203,10 @@ impl Default for OllamaConfig {
 pub struct LintConfig {
     /// Enable linting
     pub enabled: bool,
-    /// Configuration file path
+    /// Configuration file path.
+    ///
+    /// `extends` による任意パス読込のリスクから配線しない（ADR-0124 / 0304）。
+    /// config.toml の値は読み書きとも維持するが、DTO にも露出しない。
     pub config_file: Option<PathBuf>,
     /// Rules to enable (empty = all)
     pub enable_rules: Vec<String>,
@@ -223,7 +237,11 @@ impl Default for LintConfig {
 /// Storage configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
-    /// Default storage backend
+    /// Default storage backend.
+    ///
+    /// 未配線の死設定（ADR-0304）。実 backend 選択は `StorageManager` 側で行い、
+    /// この config 値は参照されない。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub default_backend: String,
     /// Local filesystem roots
     pub local_roots: Vec<LocalRootConfig>,
@@ -231,7 +249,11 @@ pub struct StorageConfig {
     pub google_drive: Option<GoogleDriveConfig>,
     /// Recently opened paths
     pub recent_paths: Vec<PathBuf>,
-    /// Max recent paths to remember
+    /// Max recent paths to remember.
+    ///
+    /// 未配線の死設定（ADR-0304）。`recent_paths` の件数制限に使われていない。
+    /// config.toml の値は読み書きとも維持するが、ConfigView / ConfigPatch には
+    /// 露出しない。
     pub max_recent: usize,
 }
 
@@ -254,6 +276,9 @@ pub struct LocalRootConfig {
     pub name: String,
     pub path: PathBuf,
     pub read_only: bool,
+    /// 未配線の死設定（ADR-0178 / ADR-0304）。watch 本体は未実装で、
+    /// `can_watch=false` が宣言済み。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub watch: bool,
 }
 
@@ -309,7 +334,11 @@ pub struct EditorConfig {
     pub word_wrap: bool,
     /// Minimap
     pub minimap: bool,
-    /// Auto-save delay (ms)
+    /// Auto-save delay (ms).
+    ///
+    /// 未配線の死設定（ADR-0179 / 0217 / 0304）。Web 側は固定 800ms を使い、
+    /// この値は参照されない。config.toml の値は読み書きとも維持するが、
+    /// ConfigView / ConfigPatch には露出しない。
     pub auto_save_delay: u32,
     /// Enable vim keybindings
     pub vim_mode: bool,
@@ -401,7 +430,8 @@ fn map_env_key(key: &str) -> String {
         // 従来 split("_") で届いていた単一語フィールド（環境変数名の互換維持）。
         "GENERAL_LANGUAGE" => "general.language".to_string(),
         "GENERAL_THEME" => "general.theme".to_string(),
-        "GENERAL_TELEMETRY" => "general.telemetry".to_string(),
+        // GENERAL_TELEMETRY は死設定のため明示マップから外す（ADR-0304）。
+        // 未知キーとして小文字化され、serde 側で無視される。
         "AI_ENABLED" => "ai.enabled".to_string(),
         "AI_OPENAI_MODEL" => "ai.openai.model".to_string(),
         "AI_OPENAI_ORGANIZATION" => "ai.openai.organization".to_string(),
@@ -726,6 +756,161 @@ mod tests {
         assert_eq!(restored.ai.max_retries, 5);
     }
 
+    /// 既存ユーザーの config.toml に残り得る全 dead キーを非既定値で含む TOML を作る。
+    #[test]
+    fn dead_keys_toml_fixture_is_representative() {
+        let toml_text = config_toml_with_dead_keys();
+        let config: AppConfig = toml::from_str(&toml_text).unwrap();
+
+        assert!(config.general.telemetry);
+        assert_eq!(config.ai.max_tokens_per_month, Some(1234));
+        assert_eq!(config.ai.ollama.keep_alive_minutes, 17);
+        assert_eq!(
+            config.ai.model_overrides.get("custom"),
+            Some(&"alias".to_string())
+        );
+        assert_eq!(
+            config.lint.config_file.as_deref(),
+            Some(std::path::Path::new("/opt/lint.toml"))
+        );
+        assert_eq!(config.storage.default_backend, "custom");
+        assert_eq!(config.storage.max_recent, 42);
+        assert_eq!(config.editor.auto_save_delay, 999);
+        assert!(config.storage.local_roots[0].watch);
+    }
+
+    /// 既存 config.toml の dead キーは読み込めて、保存後も値が残ること
+    /// （ADR-0228 / ADR-0217 の config.toml 値保持契約を維持）。
+    #[test]
+    fn dead_keys_in_toml_survive_load_and_save() {
+        let config: AppConfig = toml::from_str(&config_toml_with_dead_keys()).unwrap();
+        let saved = toml::to_string_pretty(&config).unwrap();
+        let value: toml::Value = toml::from_str(&saved).unwrap();
+
+        assert!(value["general"]["telemetry"].as_bool().unwrap());
+        assert_eq!(value["ai"]["max_tokens_per_month"].as_integer(), Some(1234));
+        assert_eq!(
+            value["ai"]["ollama"]["keep_alive_minutes"].as_integer(),
+            Some(17)
+        );
+        assert_eq!(
+            value["ai"]["model_overrides"]["custom"].as_str(),
+            Some("alias")
+        );
+        assert_eq!(
+            value["lint"]["config_file"].as_str(),
+            Some("/opt/lint.toml")
+        );
+        assert_eq!(value["storage"]["default_backend"].as_str(), Some("custom"));
+        assert_eq!(value["storage"]["max_recent"].as_integer(), Some(42));
+        assert_eq!(value["editor"]["auto_save_delay"].as_integer(), Some(999));
+        assert!(
+            value["storage"]["local_roots"][0]["watch"]
+                .as_bool()
+                .unwrap()
+        );
+    }
+
+    /// 未知キーは serde の既定動作（未知フィールド無視）で読み込めること。
+    /// figment の Toml provider も同じ serde 経路なので死設定キーで失敗しない。
+    #[test]
+    fn unknown_toml_keys_are_tolerated() {
+        let serialized = toml::to_string_pretty(&AppConfig::default()).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+        value
+            .get_mut("general")
+            .and_then(|v| v.as_table_mut())
+            .expect("general table")
+            .insert("future_flag".to_string(), toml::Value::Boolean(true));
+
+        let restored: AppConfig = toml::from_str(&toml::to_string(&value).unwrap()).unwrap();
+        assert_eq!(restored.general.language, "ja");
+    }
+
+    /// `AppConfig::load()` と同じ Figment 経路で dead キーが無視されること。
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn figment_extract_tolerates_dead_keys() {
+        let config: AppConfig = figment_from_env_entries([], Some(&config_toml_with_dead_keys()))
+            .extract()
+            .unwrap();
+        assert!(config.general.telemetry);
+        assert_eq!(config.storage.max_recent, 42);
+    }
+
+    fn config_toml_with_dead_keys() -> String {
+        let serialized = toml::to_string_pretty(&AppConfig::default()).unwrap();
+        let mut value: toml::Value = toml::from_str(&serialized).unwrap();
+
+        value
+            .get_mut("general")
+            .and_then(|v| v.as_table_mut())
+            .expect("general table")
+            .insert("telemetry".to_string(), toml::Value::Boolean(true));
+
+        let ai = value
+            .get_mut("ai")
+            .and_then(|v| v.as_table_mut())
+            .expect("ai table");
+        ai.insert(
+            "max_tokens_per_month".to_string(),
+            toml::Value::Integer(1234),
+        );
+        let mut overrides = toml::map::Map::new();
+        overrides.insert(
+            "custom".to_string(),
+            toml::Value::String("alias".to_string()),
+        );
+        ai.insert("model_overrides".to_string(), toml::Value::Table(overrides));
+
+        value
+            .get_mut("ai")
+            .and_then(|v| v.get_mut("ollama"))
+            .and_then(|v| v.as_table_mut())
+            .expect("ollama table")
+            .insert("keep_alive_minutes".to_string(), toml::Value::Integer(17));
+
+        value
+            .get_mut("lint")
+            .and_then(|v| v.as_table_mut())
+            .expect("lint table")
+            .insert(
+                "config_file".to_string(),
+                toml::Value::String("/opt/lint.toml".to_string()),
+            );
+
+        let storage = value
+            .get_mut("storage")
+            .and_then(|v| v.as_table_mut())
+            .expect("storage table");
+        storage.insert(
+            "default_backend".to_string(),
+            toml::Value::String("custom".to_string()),
+        );
+        storage.insert("max_recent".to_string(), toml::Value::Integer(42));
+        let mut root = toml::map::Map::new();
+        root.insert("id".to_string(), toml::Value::String("root-1".to_string()));
+        root.insert("name".to_string(), toml::Value::String("Local".to_string()));
+        root.insert(
+            "path".to_string(),
+            toml::Value::String("/data/local".to_string()),
+        );
+        root.insert("read_only".to_string(), toml::Value::Boolean(false));
+        root.insert("watch".to_string(), toml::Value::Boolean(true));
+        storage.insert(
+            "local_roots".to_string(),
+            toml::Value::Array(vec![toml::Value::Table(root)]),
+        );
+
+        value
+            .get_mut("editor")
+            .and_then(|v| v.as_table_mut())
+            .expect("editor table")
+            .insert("auto_save_delay".to_string(), toml::Value::Integer(999));
+
+        toml::to_string(&value).unwrap()
+    }
+
     /// 環境変数の (キー, 値) を `map_env_key` / `include_env_key` に通して
     /// Figment を組み立てる。`AppConfig::load()` と同じ変換経路を
     /// プロセス環境を汚さずに再現する（Rust 2024 では set_var が unsafe）。
@@ -796,6 +981,8 @@ mod tests {
         assert_eq!(map_env_key("AI_MAX_RETRIES"), "ai.max_retries");
         // 既存の single-word env を壊さない（ADR-0122 の互換要件）。
         assert_eq!(map_env_key("GENERAL_LANGUAGE"), "general.language");
+        // 死設定の telemetry は明示マップを外され、serde に無視される（ADR-0304）。
+        assert_eq!(map_env_key("GENERAL_TELEMETRY"), "general_telemetry");
         assert_eq!(map_env_key("AI_ENABLED"), "ai.enabled");
         assert_eq!(map_env_key("AI_OPENAI_MODEL"), "ai.openai.model");
         assert_eq!(map_env_key("READER_THEME"), "reader.theme");

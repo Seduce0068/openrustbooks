@@ -4469,7 +4469,6 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         "general": {
             "language": "ja",
             "theme": "auto",
-            "telemetry": False,
             "check_updates": True,
             "log_level": "info",
         },
@@ -4485,10 +4484,8 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "ollama": {
                 "base_url": "http://localhost:11434",
                 "model": "llama3.1:8b",
-                "keep_alive_minutes": 5,
             },
             "max_tokens_per_request": 4096,
-            "max_tokens_per_month": None,
             "prefer_local": False,
             "timeout_secs": 60,
             "streaming": True,
@@ -4501,12 +4498,10 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "warnings_as_errors": False,
         },
         "storage": {
-            "default_backend": "local",
             "local_roots": [
-                {"id": "root-1", "name": "Local", "read_only": False, "watch": True}
+                {"id": "root-1", "name": "Local", "read_only": False}
             ],
             "google_drive": None,
-            "max_recent": 20,
         },
         "editor": {
             "font_family": "monospace",
@@ -4517,7 +4512,6 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
             "line_numbers": True,
             "word_wrap": True,
             "minimap": False,
-            "auto_save_delay": 2000,
             "vim_mode": False,
             "match_brackets": True,
             "auto_close_brackets": True,

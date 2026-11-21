@@ -4125,7 +4125,6 @@ struct SettingsView {
 struct SettingsGeneralView {
     language: String,
     theme: String,
-    telemetry: bool,
     check_updates: bool,
     log_level: String,
 }
@@ -4143,7 +4142,6 @@ struct SettingsOpenAiView {
 struct SettingsOllamaView {
     base_url: String,
     model: String,
-    keep_alive_minutes: u32,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -4153,7 +4151,6 @@ struct SettingsAiView {
     openai: SettingsOpenAiView,
     ollama: SettingsOllamaView,
     max_tokens_per_request: usize,
-    max_tokens_per_month: Option<u64>,
     prefer_local: bool,
     timeout_secs: u64,
     streaming: bool,
@@ -4171,10 +4168,8 @@ struct SettingsLintView {
 /// desktop `StorageConfigView` と同形。path / recent_paths は持たない。
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct StorageConfigView {
-    default_backend: String,
     local_roots: Vec<LocalRootView>,
     google_drive: Option<GoogleDriveConfigView>,
-    max_recent: usize,
 }
 
 /// desktop `LocalRootView` と同形。`path` は持たない。
@@ -4183,7 +4178,6 @@ struct LocalRootView {
     id: String,
     name: String,
     read_only: bool,
-    watch: bool,
 }
 
 /// desktop `GoogleDriveConfigView` と同形。secret 値は持たない。
@@ -4207,7 +4201,6 @@ struct SettingsEditorView {
     line_numbers: bool,
     word_wrap: bool,
     minimap: bool,
-    auto_save_delay: u32,
     vim_mode: bool,
     match_brackets: bool,
     auto_close_brackets: bool,
@@ -4606,19 +4599,9 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-telemetry">"テレメトリ"</label>
-                <input id="settings-telemetry" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
-                    prop:checked=move || config.get().map(|v| v.general.telemetry).unwrap_or(false)
-                    on:change=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(checked) = input_checked(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.general.telemetry = checked; }
-                            });
-                        }
-                    }/>
+                // ADR-0304: telemetry は未配線の死設定。DTO から除外したため
+                // 入力を置かず、固定文言で正直に表示する。
+                <p class="settings-notice">"テレメトリ: 未配線（送信機能は実装されていません）"</p>
                 // ADR-0222 / R6 A05: updater は未実装（plugin 初期化のみ）のため、
                 // check_updates は editable トグルを置かず固定文言で正直に表示する。
                 // 値は DTO 往復のため view に残すが、desktop の merge_secrets() が
@@ -4729,23 +4712,8 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-keep-alive">"Ollama Keep Alive (minutes)"</label>
-                <input id="settings-keep-alive" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.ai.ollama.keep_alive_minutes.to_string()).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
-
-                            config.update(|slot| {
-
-                                if let Some(view) = slot { view.ai.ollama.keep_alive_minutes = parsed; }
-
-                            });
-
-                        }
-                    }/>
+                // ADR-0304: keep_alive_minutes は未配線の死設定。DTO から除外した。
+                <p class="settings-notice">"Ollama Keep Alive: 未配線"</p>
                 <label for="settings-max-tokens">"最大トークン/要求"</label>
                 <input id="settings-max-tokens" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     aria-invalid=move || (!max_tokens_error.get().is_empty()).to_string()
@@ -4768,20 +4736,9 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <p id="settings-max-tokens-error" class="settings-error" role="alert">{move || max_tokens_error.get()}</p>
-                <label for="settings-max-tokens-month">"月間トークン上限"</label>
-                <input id="settings-max-tokens-month" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().and_then(|v| v.ai.max_tokens_per_month.map(|n| n.to_string())).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(value) = input_value(&event) {
-                            let parsed = value.parse::<u64>().ok().filter(|n| *n > 0);
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.ai.max_tokens_per_month = parsed; }
-                            });
-                        }
-                    }/>
+                // ADR-0228 / 0304: 月間上限は未配線。config.toml の値は保持するが
+                // DTO からは除外したため、固定文言で正直に表示する。
+                <p class="settings-notice">"月間上限: 未配線"</p>
                 <label for="settings-timeout">"タイムアウト (秒)"</label>
                 <input id="settings-timeout" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     aria-invalid=move || (!timeout_error.get().is_empty()).to_string()
@@ -4968,23 +4925,9 @@ fn SettingsForm() -> impl IntoView {
 
                         }
                     }/>
-                <label for="settings-editor-auto-save-delay">"Auto Save Delay (ms)"</label>
-                <input id="settings-editor-auto-save-delay" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.editor.auto_save_delay.to_string()).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
-
-                            config.update(|slot| {
-
-                                if let Some(view) = slot { view.editor.auto_save_delay = parsed; }
-
-                            });
-
-                        }
-                    }/>
+                // ADR-0179 / 0217 / 0304: auto_save_delay は未配線（実装は固定 800ms）。
+                // DTO から除外したため固定文言で表示する。
+                <p class="settings-notice">"自動保存間隔: 未配線（固定 800ms）"</p>
                 <label for="settings-editor-line-numbers">"Line Numbers"</label>
                 <input id="settings-editor-line-numbers" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.line_numbers).unwrap_or(false)
@@ -5236,36 +5179,10 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"Storage Settings"</h3>
                 <p class="settings-notice">"保存先設定は config.toml が権威です。path と秘密情報は画面へ表示しません。"</p>
-                <label for="settings-storage-backend">"Default Backend"</label>
-                <input id="settings-storage-backend" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.storage.default_backend).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(value) = input_value(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.storage.default_backend = value; }
-                            });
-                        }
-                    }/>
-                <label for="settings-storage-max-recent">"Max Recent"</label>
-                <input id="settings-storage-max-recent" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.storage.max_recent.to_string()).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<usize>().ok()) {
-
-                            config.update(|slot| {
-
-                                if let Some(view) = slot { view.storage.max_recent = parsed; }
-
-                            });
-
-                        }
-                    }/>
+                // ADR-0304: default_backend / max_recent は未配線の死設定。
+                // DTO から除外したため固定文言で表示する。
+                <p class="settings-notice">"保存先 backend: 未配線（config.toml が権威）"</p>
+                <p class="settings-notice">"最近使用数: 未配線"</p>
             </section>
             <button id="settings-save" type="button" class="btn btn-primary" prop:disabled=move || !editable.get() || saving.get() on:click=on_save>
                 {move || if editable.get() { "設定を保存" } else { "保存はデスクトップ版のみ" }}

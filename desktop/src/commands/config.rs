@@ -64,6 +64,10 @@ fn load_failure_message(state: &AppState) -> Option<String> {
 /// Secret fields are never serialized; only `has_*` presence flags are sent.
 /// パスを含むフィールド（data_dir / cache_dir / config_file / rule_config /
 /// local_roots[].path / recent_paths）も DTO から除外して JS への開示を防ぐ。
+/// さらに未配線の死設定（telemetry / max_tokens_per_month / model_overrides /
+/// keep_alive_minutes / default_backend / max_recent / auto_save_delay /
+/// local_roots[].watch）も DTO から除外する（ADR-0304）。config.toml の値は
+/// `merge_secrets()` が現在値から復元するため、保存で失われない。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigView {
     /// 現在の revision。コミット衝突後に `get_config` で再取得し、
@@ -73,7 +77,7 @@ pub struct ConfigView {
     pub ai: AiConfigView,
     pub lint: LintConfigView,
     pub storage: StorageConfigView,
-    pub editor: EditorConfig,
+    pub editor: EditorConfigView,
     pub reader: ReaderConfig,
 }
 
@@ -86,7 +90,7 @@ impl ConfigView {
             ai: AiConfigView::from(&config.ai),
             lint: LintConfigView::from(&config.lint),
             storage: StorageConfigView::from(&config.storage),
-            editor: config.editor.clone(),
+            editor: EditorConfigView::from(&config.editor),
             reader: config.reader.clone(),
         }
     }
@@ -99,12 +103,12 @@ impl From<&AppConfig> for ConfigView {
     }
 }
 
-/// Allow-list view of [`GeneralConfig`]. `data_dir` / `cache_dir` は除外する。
+/// Allow-list view of [`GeneralConfig`].
+/// `data_dir` / `cache_dir` と死設定の `telemetry` は除外する（ADR-0304）。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GeneralConfigView {
     pub language: String,
     pub theme: String,
-    pub telemetry: bool,
     pub check_updates: bool,
     pub log_level: String,
 }
@@ -114,14 +118,15 @@ impl From<&GeneralConfig> for GeneralConfigView {
         Self {
             language: general.language.clone(),
             theme: general.theme.clone(),
-            telemetry: general.telemetry,
             check_updates: general.check_updates,
             log_level: general.log_level.clone(),
         }
     }
 }
 
-/// Allow-list view of [`AiConfig`]. `model_overrides` と `max_retries` は除外する。
+/// Allow-list view of [`AiConfig`].
+/// 死設定の `model_overrides` / `max_tokens_per_month` と `max_retries` は除外する
+/// （ADR-0228 / 0304）。値は `merge_secrets()` が現在値から復元する。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AiConfigView {
     pub enabled: bool,
@@ -129,7 +134,6 @@ pub struct AiConfigView {
     pub openai: OpenAiConfigView,
     pub ollama: OllamaConfigView,
     pub max_tokens_per_request: usize,
-    pub max_tokens_per_month: Option<u64>,
     pub prefer_local: bool,
     pub timeout_secs: u64,
     pub streaming: bool,
@@ -143,7 +147,6 @@ impl From<&AiConfig> for AiConfigView {
             openai: OpenAiConfigView::from(&ai.openai),
             ollama: OllamaConfigView::from(&ai.ollama),
             max_tokens_per_request: ai.max_tokens_per_request,
-            max_tokens_per_month: ai.max_tokens_per_month,
             prefer_local: ai.prefer_local,
             timeout_secs: ai.timeout_secs,
             streaming: ai.streaming,
@@ -151,12 +154,12 @@ impl From<&AiConfig> for AiConfigView {
     }
 }
 
-/// Allow-list view of [`OllamaConfig`]. `options` は除外する。
+/// Allow-list view of [`OllamaConfig`].
+/// `options` と死設定の `keep_alive_minutes` は除外する（ADR-0304）。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OllamaConfigView {
     pub base_url: String,
     pub model: String,
-    pub keep_alive_minutes: u32,
 }
 
 impl From<&OllamaConfig> for OllamaConfigView {
@@ -164,7 +167,6 @@ impl From<&OllamaConfig> for OllamaConfigView {
         Self {
             base_url: ollama.base_url.clone(),
             model: ollama.model.clone(),
-            keep_alive_minutes: ollama.keep_alive_minutes,
         }
     }
 }
@@ -215,19 +217,17 @@ impl From<&LintConfig> for LintConfigView {
 }
 
 /// Allow-list view of [`StorageConfig`].
-/// `local_roots[].path` と `recent_paths` は JS に開示しない。
+/// `local_roots[].path` / `recent_paths` と死設定の `default_backend` /
+/// `max_recent` は JS に開示しない（ADR-0304）。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StorageConfigView {
-    pub default_backend: String,
     pub local_roots: Vec<LocalRootView>,
     pub google_drive: Option<GoogleDriveConfigView>,
-    pub max_recent: usize,
 }
 
 impl From<&StorageConfig> for StorageConfigView {
     fn from(storage: &StorageConfig) -> Self {
         Self {
-            default_backend: storage.default_backend.clone(),
             local_roots: storage
                 .local_roots
                 .iter()
@@ -237,18 +237,17 @@ impl From<&StorageConfig> for StorageConfigView {
                 .google_drive
                 .as_ref()
                 .map(GoogleDriveConfigView::from),
-            max_recent: storage.max_recent,
         }
     }
 }
 
-/// Allow-list view of [`LocalRootConfig`]. `path` は除外する。
+/// Allow-list view of [`LocalRootConfig`].
+/// `path` と死設定の `watch` は除外する（ADR-0178 / 0304）。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LocalRootView {
     pub id: String,
     pub name: String,
     pub read_only: bool,
-    pub watch: bool,
 }
 
 impl From<&LocalRootConfig> for LocalRootView {
@@ -257,7 +256,64 @@ impl From<&LocalRootConfig> for LocalRootView {
             id: root.id.clone(),
             name: root.name.clone(),
             read_only: root.read_only,
-            watch: root.watch,
+        }
+    }
+}
+
+/// Allow-list view of [`EditorConfig`]. 死設定の `auto_save_delay` は除外する
+/// （ADR-0179 / 0217 / 0304）。config.toml の値は `merge_secrets()` が復元する。
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EditorConfigView {
+    pub font_family: String,
+    pub font_size: f32,
+    pub line_height: f32,
+    pub tab_size: usize,
+    pub insert_spaces: bool,
+    pub line_numbers: bool,
+    pub word_wrap: bool,
+    pub minimap: bool,
+    pub vim_mode: bool,
+    pub match_brackets: bool,
+    pub auto_close_brackets: bool,
+    pub indent_with_tabs: bool,
+}
+
+impl From<&EditorConfig> for EditorConfigView {
+    fn from(editor: &EditorConfig) -> Self {
+        Self {
+            font_family: editor.font_family.clone(),
+            font_size: editor.font_size,
+            line_height: editor.line_height,
+            tab_size: editor.tab_size,
+            insert_spaces: editor.insert_spaces,
+            line_numbers: editor.line_numbers,
+            word_wrap: editor.word_wrap,
+            minimap: editor.minimap,
+            vim_mode: editor.vim_mode,
+            match_brackets: editor.match_brackets,
+            auto_close_brackets: editor.auto_close_brackets,
+            indent_with_tabs: editor.indent_with_tabs,
+        }
+    }
+}
+
+impl EditorConfigView {
+    fn into_config(self) -> EditorConfig {
+        EditorConfig {
+            font_family: self.font_family,
+            font_size: self.font_size,
+            line_height: self.line_height,
+            tab_size: self.tab_size,
+            insert_spaces: self.insert_spaces,
+            line_numbers: self.line_numbers,
+            word_wrap: self.word_wrap,
+            minimap: self.minimap,
+            // DTO 外: プレースホルダを入れ、現在値は merge_secrets() が復元する。
+            auto_save_delay: 0,
+            vim_mode: self.vim_mode,
+            match_brackets: self.match_brackets,
+            auto_close_brackets: self.auto_close_brackets,
+            indent_with_tabs: self.indent_with_tabs,
         }
     }
 }
@@ -302,7 +358,7 @@ pub struct ConfigPatch {
     pub ai: AiConfigView,
     pub lint: LintConfigView,
     pub storage: StorageConfigView,
-    pub editor: EditorConfig,
+    pub editor: EditorConfigView,
     pub reader: ReaderConfig,
 }
 
@@ -332,7 +388,7 @@ impl ConfigPatch {
             ai: self.ai.into_config(),
             lint: self.lint.into_config(),
             storage: self.storage.into_config(),
-            editor: self.editor,
+            editor: self.editor.into_config(),
             reader: self.reader,
         }
     }
@@ -345,7 +401,8 @@ impl GeneralConfigView {
         GeneralConfig {
             language: self.language,
             theme: self.theme,
-            telemetry: self.telemetry,
+            // DTO 外: merge_secrets() が現在値を復元する。
+            telemetry: false,
             check_updates: self.check_updates,
             log_level: self.log_level,
             // DTO 外: merge_secrets() が現在値を復元する。
@@ -363,7 +420,8 @@ impl AiConfigView {
             openai: self.openai.into_config(),
             ollama: self.ollama.into_config(),
             max_tokens_per_request: self.max_tokens_per_request,
-            max_tokens_per_month: self.max_tokens_per_month,
+            // DTO 外: merge_secrets() が現在値を復元する。
+            max_tokens_per_month: None,
             prefer_local: self.prefer_local,
             timeout_secs: self.timeout_secs,
             streaming: self.streaming,
@@ -393,8 +451,8 @@ impl OllamaConfigView {
         OllamaConfig {
             base_url: self.base_url,
             model: self.model,
-            keep_alive_minutes: self.keep_alive_minutes,
             // DTO 外: merge_secrets() が現在値を復元する。
+            keep_alive_minutes: 0,
             options: HashMap::new(),
         }
     }
@@ -418,7 +476,8 @@ impl LintConfigView {
 impl StorageConfigView {
     fn into_config(self) -> StorageConfig {
         StorageConfig {
-            default_backend: self.default_backend,
+            // DTO 外: merge_secrets() が現在値を復元する。
+            default_backend: String::new(),
             local_roots: self
                 .local_roots
                 .into_iter()
@@ -427,7 +486,7 @@ impl StorageConfigView {
             google_drive: self.google_drive.map(GoogleDriveConfigView::into_config),
             // DTO 外: merge_secrets() が現在値を復元する。
             recent_paths: Vec::new(),
-            max_recent: self.max_recent,
+            max_recent: 0,
         }
     }
 }
@@ -441,7 +500,8 @@ impl LocalRootView {
             name: self.name,
             path: PathBuf::new(),
             read_only: self.read_only,
-            watch: self.watch,
+            // DTO 外: merge_secrets() が現在値を復元する。
+            watch: false,
         }
     }
 }
@@ -530,6 +590,16 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     // 変更したが、DTO 往復のためフィールド自体は残る。JS が値を書き換えても現在値を
     // 復元し、config.toml へ誤った値が保存されないようにする（fail-closed）。
     merged.general.check_updates = current.general.check_updates;
+
+    // ADR-0304: 未配線の死設定は DTO から除外したため、JS 往復で消えないよう
+    // 現在値（config.toml から読み込んだ値）を復元する。値は JS に開示されない。
+    // local_roots[].watch は直下の id 一致ロジックで復元する。
+    merged.general.telemetry = current.general.telemetry;
+    merged.ai.max_tokens_per_month = current.ai.max_tokens_per_month;
+    merged.ai.ollama.keep_alive_minutes = current.ai.ollama.keep_alive_minutes;
+    merged.storage.default_backend = current.storage.default_backend.clone();
+    merged.storage.max_recent = current.storage.max_recent;
+    merged.editor.auto_save_delay = current.editor.auto_save_delay;
 
     // local_roots[].path / read_only / watch は id が一意に一致した場合のみ現在値を復元する。
     // id が空／不一致／現在側で重複している場合は空 PathBuf に統一し、flags も現在値を
@@ -1359,24 +1429,96 @@ mod tests {
         for kept in [
             "\"language\"",
             "\"theme\"",
-            "\"telemetry\"",
             "\"check_updates\"",
             "\"log_level\"",
             "\"enable_rules\"",
             "\"disable_rules\"",
             "\"auto_fix\"",
             "\"warnings_as_errors\"",
-            "\"default_backend\"",
-            "\"max_recent\"",
-            "\"keep_alive_minutes\"",
             "\"id\"",
             "\"name\"",
             "\"read_only\"",
-            "\"watch\"",
             "\"model\"",
         ] {
             assert!(json.contains(kept), "missing field: {kept}");
         }
+    }
+
+    /// 未配線の死設定を非既定値で持つ config.toml 相当の設定を作る。
+    fn config_with_dead_values() -> AppConfig {
+        let mut config = config_with_paths();
+        config.general.telemetry = true;
+        config.ai.max_tokens_per_month = Some(1234);
+        config.ai.ollama.keep_alive_minutes = 17;
+        config
+            .ai
+            .model_overrides
+            .insert("custom".to_string(), "alias".to_string());
+        config.lint.config_file = Some(PathBuf::from("/opt/lint.toml"));
+        config.storage.default_backend = "custom".to_string();
+        config.storage.max_recent = 42;
+        config.editor.auto_save_delay = 999;
+        config
+    }
+
+    /// ADR-0304: 死設定 9 件が ConfigView の JSON に一切出ないこと。
+    #[test]
+    fn config_view_json_excludes_dead_fields() {
+        let json = serde_json::to_string(&ConfigView::from(&config_with_dead_values())).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let mut keys = Vec::new();
+        collect_json_keys(&value, &mut keys);
+
+        for forbidden in [
+            "telemetry",
+            "max_tokens_per_month",
+            "keep_alive_minutes",
+            "model_overrides",
+            "config_file",
+            "default_backend",
+            "max_recent",
+            "auto_save_delay",
+            "watch",
+        ] {
+            assert!(
+                !keys.iter().any(|key| key == forbidden),
+                "leaked dead field in ConfigView: {forbidden}"
+            );
+        }
+    }
+
+    /// ADR-0304: DTO 往復で dead 値がプレースホルダ化されても、
+    /// merge_secrets() が config.toml から読んだ現在値を復元し、
+    /// 保存される AppConfig の値が変わらないこと。
+    #[test]
+    fn config_patch_round_trip_preserves_dead_config_values() {
+        let current = config_with_dead_values();
+        let mut json = serde_json::to_value(ConfigView::from(&current)).unwrap();
+        json.as_object_mut()
+            .unwrap()
+            .insert("expected".to_string(), serde_json::json!(0));
+        let patch: ConfigPatch = serde_json::from_value(json).unwrap();
+
+        let applied = patch.apply_to(&current);
+        // apply_to 単体では dead 値がプレースホルダ／既定値になる。
+        assert!(!applied.general.telemetry);
+        assert_eq!(applied.ai.max_tokens_per_month, None);
+        assert_eq!(applied.ai.ollama.keep_alive_minutes, 0);
+        assert!(applied.ai.model_overrides.is_empty());
+        assert!(applied.lint.config_file.is_none());
+        assert!(applied.storage.default_backend.is_empty());
+        assert_eq!(applied.storage.max_recent, 0);
+        assert_eq!(applied.editor.auto_save_delay, 0);
+        for root in &applied.storage.local_roots {
+            assert!(!root.watch);
+        }
+
+        let merged = merge_secrets(&current, &applied);
+        // config.toml へ保存される値（AppConfig の serde 表現）が不変であること。
+        assert_eq!(
+            serde_json::to_value(&merged).unwrap(),
+            serde_json::to_value(&current).unwrap()
+        );
     }
 
     #[test]
@@ -1617,7 +1759,13 @@ mod tests {
         let current = config_with_paths();
         let applied = ConfigPatch::from((&current, 0)).apply_to(&current);
 
-        // DTO 外の 13 項目はすべてプレースホルダ／既定値になる。
+        // DTO 外のフィールドはすべてプレースホルダ／既定値になる。
+        assert!(!applied.general.telemetry);
+        assert_eq!(applied.ai.max_tokens_per_month, None);
+        assert_eq!(applied.ai.ollama.keep_alive_minutes, 0);
+        assert!(applied.storage.default_backend.is_empty());
+        assert_eq!(applied.storage.max_recent, 0);
+        assert_eq!(applied.editor.auto_save_delay, 0);
         assert!(applied.general.data_dir.is_none());
         assert!(applied.general.cache_dir.is_none());
         assert_eq!(applied.ai.max_retries, 0);
@@ -1630,6 +1778,7 @@ mod tests {
         assert!(applied.storage.recent_paths.is_empty());
         for root in &applied.storage.local_roots {
             assert!(root.path.as_os_str().is_empty());
+            assert!(!root.watch);
         }
         let drive = applied.storage.google_drive.as_ref().unwrap();
         assert!(drive.client_secret.is_empty());
@@ -1715,13 +1864,11 @@ mod tests {
             id: "root-new".to_string(),
             name: "New".to_string(),
             read_only: false,
-            watch: false,
         });
         patch.storage.local_roots.push(LocalRootView {
             id: String::new(),
             name: "NoId".to_string(),
             read_only: false,
-            watch: false,
         });
 
         let merged = merge_secrets(&current, &patch.apply_to(&current));
