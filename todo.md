@@ -62,16 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【wasm-pack バージョンを固定】ci-wasm-test.sh は既存 wasm-pack の `--version` を検査せず、
-      0.13.1 以外でも通過する。fail-closed または force install を行う。
-      根拠 `scripts/ci-wasm-test.sh:10-15` / `docs/decisions/0196-ci-wasm-test-gate.md:50-52` / R4-CI01。
-- [ ] 【WDIO ビルドに --locked を付与】scripts/ci-wdio-test.sh:35 だけ `--locked` が無く、
-      Cargo.lock を更新し得る。ゲート中の lock 変更も検知する。根拠 R4-CI01。
-- [ ] 【dependabot に npm エコシステムを追加】.github/dependabot.yml は cargo / actions のみで、
-      WDIO devDependency の更新が自動化されていない。runbook の npm install も npm ci へ統一。
-      根拠 `.github/dependabot.yml:1-36` / R4-CI01。
-- [ ] 【WDIO cleanup を安全化】port 1420 の listener を無差別 kill せず自プロセスのみ停止し、
-      trunk ログは mktemp + 失敗時 cat に変更する。根拠 `scripts/ci-wdio-test.sh:15-21,40` / R4-CI01。
 - [ ] 【E2E 件数ゲートの TODO 結合を解消】check-e2e-count-consistency.sh が未着手の
       CI-H01 行を要求し、TODO を完了へ移すだけで CI が壊れる。単一情報源は Checker のみにする。
       根拠 `scripts/check-e2e-count-consistency.sh:124-149` / R4-CI01。
