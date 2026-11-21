@@ -30,6 +30,11 @@ pub struct AppState {
     documents: RwLock<HashMap<DocumentId, Document>>,
     ai_service: RwLock<Option<Arc<AiMarkdownService>>>,
     unsaved_changes: RwLock<HashMap<DocumentId, bool>>,
+    /// `prepare_ai_service` の完了直後に呼ぶテスト専用フック。
+    /// await を跨いで `commit_config` が入った状況を外部 AI API なしで再現する。
+    /// インスタンスごとに持つため、並列テスト間で干渉しない。
+    #[cfg(test)]
+    test_after_prepare: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl AppState {
@@ -57,6 +62,8 @@ impl AppState {
             documents: RwLock::new(HashMap::new()),
             ai_service: RwLock::new(None),
             unsaved_changes: RwLock::new(HashMap::new()),
+            #[cfg(test)]
+            test_after_prepare: std::sync::Mutex::new(None),
         }
     }
 
@@ -192,15 +199,56 @@ impl AppState {
 
     /// 設定変更後に AI service を同期する（fail-closed）。
     ///
-    /// 先に旧 service を破棄してから、有効なら再生成する。
-    /// 生成に失敗しても None のままなので、古い service は残らない。
+    /// 生成中は旧 service を残し、完了時に開始時点の revision を再確認する。
+    /// await 中に `commit_config` が新しい config / service を確定していた場合は
+    /// 生成結果を捨てて何もしない。生成失敗時も競合が無ければ service をクリアし、
+    /// 「古い service は残らない」という fail-closed の契約を維持する。
     pub async fn refresh_ai_service(&self) -> CoreResult<()> {
-        self.disable_ai_service();
-        let config = self.config();
-        if let Some(service) = self.prepare_ai_service(&config).await? {
-            *self.ai_service.write().unwrap() = Some(service);
+        // 設定と revision を同じロック・同じ時点で読み、比較基準を固定する。
+        let (config, expected) = self.config_with_revision();
+        let prepared = self.prepare_ai_service(&config).await;
+
+        #[cfg(test)]
+        {
+            if let Some(hook) = self.test_after_prepare.lock().unwrap().as_ref() {
+                hook();
+            }
         }
-        Ok(())
+
+        match prepared {
+            Ok(service) => {
+                // read() で確認してから write() を取り直すと、その間に
+                // commit_config が入り得る（TOCTOU）。write guard を保持した
+                // まま revision を比較し、service 置換まで解放しない。
+                // ロック順は commit_config と同じ config -> ai_service。
+                // clippy は revision を読むだけと判定するが、書き込まないこと
+                // 自体が CAS を壊さないための要件（意図的な排他）。
+                #[allow(clippy::readonly_write_lock)]
+                let state = self.config.write().unwrap();
+                if state.revision != expected {
+                    // 古い config から生成した service は捨て、commit 側を守る。
+                    return Ok(());
+                }
+                // state（config の write guard）はこのスコープ末尾まで保持される。
+                match service {
+                    Some(service) => *self.ai_service.write().unwrap() = Some(service),
+                    // 無効設定なら disable と同義。生成前ではなく確認後に呼ぶ。
+                    None => self.disable_ai_service(),
+                }
+                Ok(())
+            }
+            Err(error) => {
+                // 上と同じく、確認から disable までを commit_config と排他する。
+                #[allow(clippy::readonly_write_lock)]
+                let state = self.config.write().unwrap();
+                if state.revision == expected {
+                    // 競合が無ければ旧 service を残さない（fail-closed）。
+                    // 競合していれば commit_config の service を守る。
+                    self.disable_ai_service();
+                }
+                Err(error)
+            }
+        }
     }
 
     /// Add a document
@@ -335,6 +383,35 @@ mod tests {
             ),
             content: DocumentContent::Text("sample".to_string()),
         }
+    }
+
+    impl AppState {
+        /// prepare 完了直後に任意の処理を挟む（テスト専用フック）。
+        fn set_after_prepare_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+            *self.test_after_prepare.lock().unwrap() = Some(Box::new(hook));
+        }
+    }
+
+    /// 有効設定と ollama の service を revision を進めてコミットする。
+    ///
+    /// ollama は初期化時に HTTP 要求を出さないため、外部 AI API を使わない。
+    async fn commit_enabled_service(
+        state: &AppState,
+        theme: &str,
+    ) -> (AppConfig, Arc<AiMarkdownService>) {
+        let (mut config, expected) = state.config_with_revision();
+        config.ai.enabled = true;
+        config.ai.default_provider = "ollama".to_string();
+        config.general.theme = theme.to_string();
+        let service = state
+            .prepare_ai_service(&config)
+            .await
+            .unwrap()
+            .expect("ollama 設定なら service が生成される");
+        state
+            .commit_config(expected, config.clone(), Some(service.clone()))
+            .unwrap();
+        (config, service)
     }
 
     #[test]
@@ -472,6 +549,116 @@ mod tests {
         // 生成失敗は呼び出し側へ伝播し、service は None のまま（fail-closed）。
         assert!(state.refresh_ai_service().await.is_err());
         assert!(state.ai_service().is_none());
+    }
+
+    /// prepare 完了直後に commit_config が入っても、古い service で上書きしない
+    /// こと（R2-BV01 の競合修正）。フックにより外部 AI API なしで再現する。
+    #[tokio::test]
+    async fn refresh_ai_service_discards_stale_service_when_config_is_committed_during_prepare() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = Arc::new(AppState::new(AppConfig::default()));
+
+        let (_, old_service) = commit_enabled_service(&state, "dark").await;
+        assert!(Arc::ptr_eq(&state.ai_service().unwrap(), &old_service));
+
+        // refresh が読むのは revision 1 の config。その prepare 完了直後に
+        // revision 2 をコミットするフックを仕込む（await 中の割込み相当）。
+        let (mut replacement_config, commit_expected) = state.config_with_revision();
+        replacement_config.general.theme = "light".to_string();
+        let replacement_service = state
+            .prepare_ai_service(&replacement_config)
+            .await
+            .unwrap()
+            .expect("置換用 service が生成される");
+        let state_for_hook = state.clone();
+        let config_for_hook = replacement_config.clone();
+        let service_for_hook = replacement_service.clone();
+        state.set_after_prepare_hook(move || {
+            state_for_hook
+                .commit_config(
+                    commit_expected,
+                    config_for_hook.clone(),
+                    Some(service_for_hook.clone()),
+                )
+                .unwrap();
+        });
+
+        // 古い config から生成した service を持っていても、競合を検出して
+        // commit 側の config / service を守る。
+        state.refresh_ai_service().await.unwrap();
+
+        assert_eq!(state.config_with_revision().1, 2);
+        assert_config_eq(&state.config(), &replacement_config);
+        let current = state
+            .ai_service()
+            .expect("競合後も有効設定の service が残る");
+        assert!(Arc::ptr_eq(&current, &replacement_service));
+        assert!(!Arc::ptr_eq(&current, &old_service));
+    }
+
+    /// 生成失敗時も、await 中に commit_config が成功していればその service を
+    /// 守ること（fail-closed 契約と競合安全性の両立）。
+    #[tokio::test]
+    async fn refresh_ai_service_keeps_committed_service_when_prepare_fails_after_commit() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = Arc::new(AppState::new(AppConfig::default()));
+
+        commit_enabled_service(&state, "dark").await;
+
+        // revision 2: 生成失敗する provider をコミット（service は None）。
+        let (mut failing, expected) = state.config_with_revision();
+        failing.ai.default_provider = "unknown".to_string();
+        state.commit_config(expected, failing, None).unwrap();
+        assert!(state.is_ai_enabled());
+        assert!(state.ai_service().is_none());
+
+        // revision 3: prepare 失敗後に別の commit_config が成功した状況を作る。
+        let (mut replacement_config, commit_expected) = state.config_with_revision();
+        replacement_config.ai.default_provider = "ollama".to_string();
+        let replacement_service = state
+            .prepare_ai_service(&replacement_config)
+            .await
+            .unwrap()
+            .expect("置換用 service が生成される");
+        let state_for_hook = state.clone();
+        let config_for_hook = replacement_config.clone();
+        let service_for_hook = replacement_service.clone();
+        state.set_after_prepare_hook(move || {
+            state_for_hook
+                .commit_config(
+                    commit_expected,
+                    config_for_hook.clone(),
+                    Some(service_for_hook.clone()),
+                )
+                .unwrap();
+        });
+
+        // 生成失敗は Err で伝播するが、commit 済み service は破壊しない。
+        assert!(state.refresh_ai_service().await.is_err());
+        assert_eq!(state.config_with_revision().1, 3);
+        assert_config_eq(&state.config(), &replacement_config);
+        let current = state
+            .ai_service()
+            .expect("競合後も commit 済み service が残る");
+        assert!(Arc::ptr_eq(&current, &replacement_service));
+    }
+
+    /// revision が変わらなければ生成した service で置換される（通常系の維持）。
+    #[tokio::test]
+    async fn refresh_ai_service_replaces_service_when_revision_is_unchanged() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new(AppConfig::default());
+
+        let (_, old_service) = commit_enabled_service(&state, "dark").await;
+
+        state.refresh_ai_service().await.unwrap();
+
+        let current = state.ai_service().expect("有効設定なら service がある");
+        assert!(!Arc::ptr_eq(&current, &old_service));
+        assert_eq!(state.config_with_revision().1, 1);
     }
 
     #[tokio::test]
