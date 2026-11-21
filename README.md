@@ -776,6 +776,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
 - [0295-documentation-current-state](docs/decisions/0295-documentation-current-state.md)
 - [0296-wdio-save-roundtrip](docs/decisions/0296-wdio-save-roundtrip.md)
+- [0297-front-matter-byte-preservation](docs/decisions/0297-front-matter-byte-preservation.md)
+  - front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
   - WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。
   - 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
   - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 296 件）。
+openrustbooks の ADR 一覧（全 297 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -594,3 +594,5 @@ openrustbooks の ADR 一覧（全 296 件）。
   - status: accepted — 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
 - [ADR-0296: WDIO 実 WebView 設定保存往復の検証](0296-wdio-save-roundtrip.md)
   - status: accepted — WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。
+- [ADR-0297: Markdown front matter の元バイト保持](0297-front-matter-byte-preservation.md)
+  - status: accepted — front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
