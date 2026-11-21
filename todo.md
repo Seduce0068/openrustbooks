@@ -22,19 +22,7 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
-- [ ] 【storage root 自身の削除・改名を拒否】resolve_path('.') が canonical root を返し、
-      delete_file(path='.', recursive=true) で root 配下を再帰削除できる。
-      root と等しいパスの delete / rename / create_dir を拒否する。
-      根拠 `core/src/io.rs:372-411,605-632` / `desktop/src/commands/fs.rs:96-131` / R3-AU01 / 重大度 high。
-- [ ] 【move_item の overwrite=false を fail-closed 化】POSIX rename が既存宛先を暗黙上書きし、
-      overwrite=true は「削除 → rename」で途中失敗時に両方失う。原子的 replace または事前再確認を行う。
-      根拠 `core/src/io.rs:615-632` / R2-ER01 / 重大度 high。
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
-- [ ] 【IPC エラーの redaction を全コマンドへ統一】legacy config / AI provider / fs path エラーが
-      `CoreError::to_string()` で IPC へ漏れる。全コマンドを `CommandError` / code + 固定文言へ寄せ、
-      host / path / レスポンス本文の非含有 test を追加。根拠 `desktop/src/commands/config.rs:16-19`、
-      `core/src/ai_markdown/client.rs:277,310,343`、`desktop/src/commands/fs.rs:15-17` /
-      R1-ER01 / 重大度 high。
 - [ ] 【ホーム画面へ Reader / Editor の導線を追加】`/` の nav は Settings / About のみで、
       主要機能へ URL 直入力が必要。未接続ボタン / ダミー file tree も disabled 化または実配線。
       根拠 `web/src/lib.rs:56-63,70-95,190-208` / R2-UX01 / 重大度 high。
