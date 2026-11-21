@@ -5,7 +5,8 @@ use crate::{
     config::{AiConfig, OllamaConfig, OpenAiConfig},
 };
 use async_openai::types::chat::{
-    ChatCompletionRequestUserMessageArgs, ChatCompletionResponseStream, CreateChatCompletionRequest,
+    ChatCompletionRequestUserMessageArgs, ChatCompletionResponseStream,
+    CreateChatCompletionRequest, CreateChatCompletionResponse,
 };
 use async_openai::{Client, config::OpenAIConfig};
 use async_trait::async_trait;
@@ -162,6 +163,42 @@ pub async fn create_client(config: &AiConfig) -> CoreResult<Arc<dyn AiClient + S
     }
 }
 
+/// 生成本文が存在しない／空だった場合の固定文言。
+///
+/// host / body / secret を一切含めず、provider の生レスポンスを漏らさない（ADR-0287）。
+/// choices 欠落・content None・response 欠落・空文字を同じ失敗として扱う。
+/// 空文字を「生成成功」として通すと lint_passed=true の空文書が保存されるため、
+/// pipeline の成功契約を守るために fail-closed とする。
+const EMPTY_AI_RESPONSE: &str = "AI provider returned an empty response";
+
+/// OpenAI レスポンスから本文を取り出す。
+///
+/// `choices` が空、`message.content` が None、本文が空文字のいずれも固定文言で拒否する。
+fn openai_response_content(response: &CreateChatCompletionResponse) -> CoreResult<String> {
+    let content = response
+        .choices
+        .first()
+        .and_then(|choice| choice.message.content.as_deref())
+        .ok_or_else(|| CoreError::ai_provider(EMPTY_AI_RESPONSE))?;
+    if content.is_empty() {
+        return Err(CoreError::ai_provider(EMPTY_AI_RESPONSE));
+    }
+    Ok(content.to_string())
+}
+
+/// Ollama レスポンスから本文を取り出す。
+///
+/// `response` キー欠落・非文字列・空文字を固定文言で拒否する。
+fn ollama_response_content(result: &serde_json::Value) -> CoreResult<String> {
+    let content = result["response"]
+        .as_str()
+        .ok_or_else(|| CoreError::ai_provider(EMPTY_AI_RESPONSE))?;
+    if content.is_empty() {
+        return Err(CoreError::ai_provider(EMPTY_AI_RESPONSE));
+    }
+    Ok(content.to_string())
+}
+
 /// OpenAI-compatible client
 pub struct OpenAiClient {
     client: Client<OpenAIConfig>,
@@ -276,12 +313,7 @@ impl AiClient for OpenAiClient {
             .await
             .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
-        let content = response
-            .choices
-            .first()
-            .and_then(|c| c.message.content.as_ref())
-            .cloned()
-            .unwrap_or_default();
+        let content = openai_response_content(&response)?;
 
         let tokens_used = response
             .usage
@@ -448,7 +480,7 @@ impl AiClient for OllamaClient {
             .await
             .map_err(|e| CoreError::ai_provider(e.to_string()))?;
 
-        let content = result["response"].as_str().unwrap_or("").to_string();
+        let content = ollama_response_content(&result)?;
         let tokens_used = self.count_tokens(&content)?;
 
         Ok(AiResponse {
@@ -1133,6 +1165,108 @@ mod tests {
         assert_eq!(
             client.options.get("num_ctx"),
             Some(&serde_json::json!(2048))
+        );
+    }
+
+    // ---- 空レスポンス失敗扱いのテスト（GOAL.md / R2-ER01） ----
+
+    /// 実際の HTTP 通信なしで OpenAI のレスポンスを組み立てる。
+    fn openai_mock_response(choices: serde_json::Value) -> CreateChatCompletionResponse {
+        serde_json::from_value(serde_json::json!({
+            "id": "chatcmpl-mock",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "gpt-4o-mock",
+            "choices": choices,
+        }))
+        .expect("mock response must deserialize")
+    }
+
+    fn openai_choice(content: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "index": 0,
+            "message": { "role": "assistant", "content": content },
+            "finish_reason": "stop",
+        })
+    }
+
+    fn assert_empty_response_error(error: &CoreError) {
+        assert!(
+            matches!(error, CoreError::AiProvider(_)),
+            "AiProvider 以外のエラー: {error:?}"
+        );
+        // 固定文言のみで、host / body / secret が一切含まれないことを確認する。
+        assert_eq!(
+            error.to_string(),
+            format!("AI provider error: {EMPTY_AI_RESPONSE}"),
+            "固定文言以外が含まれる: {error}"
+        );
+    }
+
+    #[test]
+    fn openai_missing_choices_is_rejected() {
+        let response = openai_mock_response(serde_json::json!([]));
+        assert_empty_response_error(&openai_response_content(&response).unwrap_err());
+    }
+
+    #[test]
+    fn openai_null_content_is_rejected_without_leaking_body() {
+        let response = openai_mock_response(serde_json::json!([
+            openai_choice(serde_json::Value::Null),
+            // 先頭 choice の content が None なら、後続に本文があっても失敗扱い。
+            openai_choice(serde_json::json!("SHOULD_NOT_LEAK_BODY")),
+        ]));
+        let error = openai_response_content(&response).unwrap_err();
+        assert_empty_response_error(&error);
+        assert!(!error.to_string().contains("SHOULD_NOT_LEAK"));
+    }
+
+    #[test]
+    fn openai_empty_content_is_rejected() {
+        let response =
+            openai_mock_response(serde_json::json!([openai_choice(serde_json::json!(""))]));
+        assert_empty_response_error(&openai_response_content(&response).unwrap_err());
+    }
+
+    #[test]
+    fn openai_normal_content_is_returned() {
+        let body = "# 見出し\n\n本文テキスト";
+        let response =
+            openai_mock_response(serde_json::json!([openai_choice(serde_json::json!(body))]));
+        assert_eq!(openai_response_content(&response).unwrap(), body);
+    }
+
+    #[test]
+    fn ollama_missing_response_key_is_rejected() {
+        let result = serde_json::json!({ "model": "SHOULD_NOT_LEAK_MODEL" });
+        let error = ollama_response_content(&result).unwrap_err();
+        assert_empty_response_error(&error);
+        assert!(!error.to_string().contains("SHOULD_NOT_LEAK"));
+    }
+
+    #[test]
+    fn ollama_non_string_response_is_rejected_without_leaking_body() {
+        let result = serde_json::json!({
+            "model": "SHOULD_NOT_LEAK_MODEL",
+            "response": { "secret": "SHOULD_NOT_LEAK_BODY" },
+        });
+        let error = ollama_response_content(&result).unwrap_err();
+        assert_empty_response_error(&error);
+        assert!(!error.to_string().contains("SHOULD_NOT_LEAK"));
+    }
+
+    #[test]
+    fn ollama_empty_response_is_rejected() {
+        let result = serde_json::json!({ "response": "" });
+        assert_empty_response_error(&ollama_response_content(&result).unwrap_err());
+    }
+
+    #[test]
+    fn ollama_normal_response_is_returned() {
+        let result = serde_json::json!({ "response": "# 見出し\n\n本文テキスト" });
+        assert_eq!(
+            ollama_response_content(&result).unwrap(),
+            "# 見出し\n\n本文テキスト"
         );
     }
 
