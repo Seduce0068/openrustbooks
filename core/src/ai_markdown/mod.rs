@@ -120,12 +120,15 @@ impl AiMarkdownPipeline {
         Res: PipelineOutput + Send + Sync,
     {
         let mut current_content = request.initial_content().unwrap_or_default();
+        // `PipelineConfig` を直接生成しても呼び出し数が 11 を超えないよう、
+        // pipeline.rs の clamp_max_retries と同じ上限をここでも担保する。
+        let max = self.config.max_retries.min(10);
 
-        for attempt in 0..=self.config.max_retries {
+        for attempt in 0..=max {
             tracing::debug!(
                 "Pipeline attempt {}/{}",
-                attempt + 1,
-                self.config.max_retries + 1
+                attempt.saturating_add(1),
+                max.saturating_add(1)
             );
 
             // 1. Generate/modify content via AI
@@ -136,7 +139,9 @@ impl AiMarkdownPipeline {
                 validate_content(&self.linter, &ai_result.content, self.config.auto_fix).await?;
 
             // 3. Check if lint passes
-            if lint_result.passed || attempt == self.config.max_retries {
+            // lint feedback を prompt に反映できない要求（Table / FrontMatter）は
+            // リトライしても同じ prompt / content になるため、初回不合格時点で打ち切る。
+            if lint_result.passed || attempt == max || !request.supports_lint_feedback() {
                 let original = request.initial_content().unwrap_or_default();
                 let fixed = lint_result.fixed_content.clone();
                 return Ok(Res::from_pipeline_result(PipelineExecutionResult {
@@ -150,7 +155,7 @@ impl AiMarkdownPipeline {
                     } else {
                         None
                     },
-                    attempts: attempt + 1,
+                    attempts: attempt.saturating_add(1),
                     tokens_used: ai_result.tokens_used,
                 }));
             }
@@ -163,7 +168,7 @@ impl AiMarkdownPipeline {
         }
 
         // The `for` loop always returns on the final attempt
-        // (`attempt == max_retries`), so this is unreachable in practice.
+        // (`attempt == max`), so this is unreachable in practice.
         // Keep a safe error instead of panicking to satisfy the type checker.
         Err(CoreError::ai_pipeline(
             "Pipeline failed after max retries".to_string(),
@@ -203,6 +208,15 @@ pub trait PipelineInput {
     fn prompt_variables(&self, current_content: &str, attempt: usize) -> prompt::PromptVariables;
     fn initial_content(&self) -> Option<String>;
     fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]);
+
+    /// `add_lint_feedback` が実際に prompt へ反映されるかどうか。
+    ///
+    /// `false` の要求は lint 不合格後にリトライしても prompt が変わらないため、
+    /// pipeline は初回失敗時点で結果を返し、余分な AI 呼び出しを避ける。
+    /// 既定は `true`（feedback を反映する既存要求を壊さないため）。
+    fn supports_lint_feedback(&self) -> bool {
+        true
+    }
 }
 
 /// Pipeline result trait
@@ -397,6 +411,9 @@ impl PipelineInput for TableRequest {
         None
     }
     fn add_lint_feedback(&mut self, _issues: &[lint::LintIssue]) {}
+    fn supports_lint_feedback(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -449,6 +466,9 @@ impl PipelineInput for FrontMatterRequest {
         Some(self.content.clone())
     }
     fn add_lint_feedback(&mut self, _issues: &[lint::LintIssue]) {}
+    fn supports_lint_feedback(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -502,6 +522,9 @@ impl<Req: PipelineInput> PipelineInput for PipelineRequest<Req> {
     }
     fn add_lint_feedback(&mut self, issues: &[lint::LintIssue]) {
         self.inner.add_lint_feedback(issues)
+    }
+    fn supports_lint_feedback(&self) -> bool {
+        self.inner.supports_lint_feedback()
     }
 }
 
@@ -732,5 +755,201 @@ mod tests {
             result.diff.is_some(),
             "show_diff 既定で差分が保持されること"
         );
+    }
+
+    /// lint 不合格を確実に生じさせるモック生成物（修正不能な HTML）。
+    const UNFIXABLE_HTML: &str = "# Title\n\n<div>html</div>\n";
+
+    /// リトライ余裕を残し、feedback の有無で呼び出し回数が変わることを検証する設定。
+    fn retry_config() -> PipelineConfig {
+        PipelineConfig {
+            max_retries: 2,
+            auto_fix: false,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn lint_feedback_support_by_request_type() {
+        let generate = GenerateRequest {
+            prompt: "p".to_string(),
+            context: None,
+            template: None,
+        };
+        let refine = RefineRequest {
+            content: "# T\n".to_string(),
+            instruction: "i".to_string(),
+            context: None,
+        };
+        let table = TableRequest {
+            data: "a,b\n1,2\n".to_string(),
+            format: TableFormat::Csv,
+            headers: None,
+            alignment: None,
+        };
+        let front_matter = FrontMatterRequest {
+            content: "# T\n".to_string(),
+            schema: None,
+        };
+
+        assert!(generate.supports_lint_feedback());
+        assert!(refine.supports_lint_feedback());
+        assert!(!table.supports_lint_feedback());
+        assert!(!front_matter.supports_lint_feedback());
+    }
+
+    /// no-op 要求（Table）は初回 lint 不合格で打ち切り、AI は 1 回のみ呼ばれる。
+    #[tokio::test]
+    async fn table_request_without_lint_feedback_stops_after_first_attempt() {
+        let mock = Arc::new(CountingAiClient {
+            content: UNFIXABLE_HTML,
+            calls: AtomicUsize::new(0),
+        });
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), retry_config());
+
+        let result = pipeline
+            .convert_to_table(TableRequest {
+                data: "a,b\n1,2\n".to_string(),
+                format: TableFormat::Csv,
+                headers: None,
+                alignment: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(result.attempts, 1, "no-op 要求は初回のみで打ち切ること");
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            1,
+            "complete は 1 回だけ呼ばれること"
+        );
+        assert!(!result.lint_passed, "lint 不合格をそのまま報告すること");
+        assert_eq!(
+            result.content, UNFIXABLE_HTML,
+            "lint のみ経路は本文を変えないこと"
+        );
+    }
+
+    /// no-op 要求（FrontMatter）も同様に 1 回のみ呼ばれる。
+    #[tokio::test]
+    async fn front_matter_request_without_lint_feedback_stops_after_first_attempt() {
+        let mock = Arc::new(CountingAiClient {
+            content: UNFIXABLE_HTML,
+            calls: AtomicUsize::new(0),
+        });
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), retry_config());
+
+        let result = pipeline
+            .generate_front_matter(FrontMatterRequest {
+                content: "# Title\n".to_string(),
+                schema: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(result.attempts, 1, "no-op 要求は初回のみで打ち切ること");
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            1,
+            "complete は 1 回だけ呼ばれること"
+        );
+        assert!(!result.lint_passed, "lint 不合格をそのまま報告すること");
+        assert_eq!(result.content, UNFIXABLE_HTML, "生成物がそのまま返ること");
+    }
+
+    /// feedback 有効要求（Generate）は従来どおり max_retries + 1 回リトライする。
+    #[tokio::test]
+    async fn generate_request_with_lint_feedback_retries_until_max() {
+        let mock = Arc::new(CountingAiClient {
+            content: UNFIXABLE_HTML,
+            calls: AtomicUsize::new(0),
+        });
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), retry_config());
+
+        let result = pipeline
+            .generate(GenerateRequest {
+                prompt: "HTML を含む生成".to_string(),
+                context: None,
+                template: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(
+            result.attempts, 3,
+            "feedback 有効要求は max_retries + 1 回試行すること"
+        );
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            3,
+            "feedback 有効要求は従来どおり retry すること"
+        );
+        assert!(!result.lint_passed, "不合格をそのまま報告すること");
+    }
+
+    /// feedback 有効要求（Refine）も従来どおりリトライする。
+    #[tokio::test]
+    async fn refine_request_with_lint_feedback_retries_until_max() {
+        let mock = Arc::new(CountingAiClient {
+            content: UNFIXABLE_HTML,
+            calls: AtomicUsize::new(0),
+        });
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), retry_config());
+
+        let result = pipeline
+            .refine(RefineRequest {
+                content: "# Title\n".to_string(),
+                instruction: "HTML を追加".to_string(),
+                context: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(
+            result.attempts, 3,
+            "feedback 有効要求は max_retries + 1 回試行すること"
+        );
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            3,
+            "feedback 有効要求は従来どおり retry すること"
+        );
+        assert!(!result.lint_passed, "不合格をそのまま報告すること");
+    }
+
+    /// PipelineConfig を直接生成して max_retries=usize::MAX でも 11 回で打ち切り、
+    /// 実質的な無限ループ / オーバーフローが起きないこと（R4 指摘の回帰テスト）。
+    #[tokio::test]
+    async fn oversized_max_retries_is_clamped_inside_pipeline() {
+        let mock = Arc::new(CountingAiClient {
+            content: UNFIXABLE_HTML,
+            calls: AtomicUsize::new(0),
+        });
+        let config = PipelineConfig {
+            max_retries: usize::MAX,
+            auto_fix: false,
+            ..Default::default()
+        };
+        let pipeline = pipeline_with_mock(mock.clone(), strict_linter(), config);
+
+        let result = pipeline
+            .generate(GenerateRequest {
+                prompt: "HTML を含む生成".to_string(),
+                context: None,
+                template: None,
+            })
+            .await
+            .expect("pipeline should succeed");
+
+        assert_eq!(
+            result.attempts, 11,
+            "max_retries は 10 にクランプされること"
+        );
+        assert_eq!(
+            mock.calls.load(Ordering::SeqCst),
+            11,
+            "complete は最大 11 回に留まること"
+        );
+        assert!(!result.lint_passed, "不合格をそのまま報告すること");
     }
 }
