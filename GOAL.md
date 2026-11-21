@@ -1,28 +1,32 @@
 # Goal
 
-README / 索引 / runbook の現行状態を実装へ追従させる（R6 レビュー / R5-DC01）。
+WDIO 実 WebView E2E に設定保存往復を追加する（R6 レビュー / R5-DC01）。
 
 ## Scope
 
+### 背景
+
+現在の e2e/specs/settings.e2e.ts は get_config 読み取りのみで、
+ADR-0282 で手動 probe 確認した update_config_patch の成功・revision +1・
+config.toml 永続化を回帰検証していない。
+
 ### 成果物
 
-- `README.md`: 実 WebView 検証済み、EPUB/ZIP 実装済み、runbook-webdriver 導線
-- `docs/index.md`: runbook-webdriver 導線
-- `docs/runbook-verified-build.md`: E2E current 256
-- `docs/decisions/0265-cross-browser-e2e.md`: current 255 の履歴表記（必要なら）
-- `docs/decisions/0273-real-webview-verification-deferred.md`: CLI 導入済み／検証済みの追記
-- `todo.md` / `docs/log.md`: 完了移動・追記
+- `e2e/specs/settings.e2e.ts`: 変更
+- `e2e/types.d.ts`: 必要なら変更
+- `docs/decisions/0296-wdio-save-roundtrip.md`: 追加
+- `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. README の「実 WebView は未検証」を ADR-0282 / 0283 の完了へ更新する。
-2. README の「ドキュメント閲覧 (設計段階): EPUB, ZIP...」を実装済みと未実装を分離する。
-3. runbook-verified-build の current E2E を 255 → 256 にする。
-4. docs/index / README に runbook-webdriver への導線を追加する。
-5. markdownlint 0 issues、verify.sh 全ゲート成功。
+1. 実 WebView から update_config_patch を呼び、revision +1 を検証する。
+2. config.toml の非秘密キー（例: log_level）が更新されることを検証する。
+3. テスト後は元の設定値へ復元する（失敗時も finally で復元）。
+4. 既存 Tauri mock E2E 256 件・check 名・WDIO 既存 spec 名を変更しない。
+5. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- コード / E2E check 名・件数 / Cargo.* は変更しない。
-- 外部サービス / 課金 / 公開設定は扱わない。
+- API key / secret / path はログ・test 出力へ出さない。
+- 外部 AI API への送信は行わない。
 - `master` へ push する。force push はしない。
