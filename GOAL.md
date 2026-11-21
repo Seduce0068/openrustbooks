@@ -1,37 +1,30 @@
 # Goal
 
-lint フィードバックが no-op な要求の無駄な AI リトライを停止する（R6 レビュー / R2-ER01）。
+cargo audit の advisory DB 鮮度を担保する（R6 レビュー / R3-AU01）。
 
 ## Scope
 
 ### 背景
 
-TableRequest / FrontMatterRequest の add_lint_feedback は空実装で、
-pipeline は lint 不合格のたびに同一 prompt / current_content で AI を再呼び出しする。
-最大 10+1 回の外部呼び出しが無駄に発生し、課金・レート制限を消費する。
+verify.sh は `cargo audit --no-fetch` を使い、ローカルキャッシュの
+advisory DB に依存する。`--stale` を指定しないため DB が古くても
+脆弱性を見逃せる。
 
 ### 成果物
 
-- `core/src/ai_markdown/mod.rs`: 変更（lint feedback 対応の有無を公開）
-- `core/src/ai_markdown/pipeline.rs`: 変更（no-op 要求は即時 lint_passed=false）
-- `docs/decisions/0293-lint-retry-feedback.md`: 追加
+- `scripts/verify.sh`: 変更（freshness gate）
+- `docs/decisions/0294-audit-db-freshness.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. lint feedback を適用できない要求種別は、初回 lint 失敗時にリトライしない。
-2. 既存の lint feedback を持つ要求のリトライ動作は壊さない。
-3. 単体 test で AI 呼び出し回数が 1 回に留まることを検証する。
+1. advisory DB の最終更新が一定期間以内か検査する（例: 7 日）。
+2. DB が無い / 古い / 検査不能な場合は fail-closed で失敗する。
+3. CI では fetch 有効の audit を使うか、update-db 手順を明示する。
 4. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 外部 AI API への送信は行わない。
-- prompt / 既存成功契約を壊さない。
+- 脆弱性 DB の自動更新を勝手に行わない（更新はオフライン時失敗し得るため）。
+- 共通 workflow は変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- Table/FrontMatter の no-op lint feedback で初回失敗時にリトライ停止。
-- execute_pipeline 内で max_retries を 10 以下へ clamp、usize::MAX も安全。
-- core 318 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
