@@ -20,7 +20,7 @@ declare namespace WebdriverIO {
   interface Browser {
     url(path: string): Promise<void>;
     waitUntil(fn: () => Promise<boolean>, options?: { timeout?: number }): Promise<void>;
-    execute<T>(fn: () => T | Promise<T>): Promise<T>;
+    execute<T, A = undefined>(fn: (arg: A) => T | Promise<T>, arg?: A): Promise<T>;
     getUrl(): Promise<string>;
     getTitle(): Promise<string>;
     getPageSource(): Promise<string>;
