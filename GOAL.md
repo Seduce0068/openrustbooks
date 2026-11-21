@@ -1,37 +1,31 @@
 # Goal
 
-AI provider の空レスポンスを失敗扱いにする（R6 レビュー / R2-ER01）。
+lint フィードバックが no-op な要求の無駄な AI リトライを停止する（R6 レビュー / R2-ER01）。
 
 ## Scope
 
 ### 背景
 
-OpenAI 経路は choices が空 / content が None の場合に `unwrap_or_default()` で空文字を返す。
-Ollama 経路も `result["response"].as_str().unwrap_or("")` で空文字を返す。
-これが lint_passed=true の「生成成功」として扱われ、空文書保存の危険がある。
+TableRequest / FrontMatterRequest の add_lint_feedback は空実装で、
+pipeline は lint 不合格のたびに同一 prompt / current_content で AI を再呼び出しする。
+最大 10+1 回の外部呼び出しが無駄に発生し、課金・レート制限を消費する。
 
 ### 成果物
 
-- `core/src/ai_markdown/client.rs`: 変更
-- `docs/decisions/0292-ai-empty-response.md`: 追加
+- `core/src/ai_markdown/mod.rs`: 変更（lint feedback 対応の有無を公開）
+- `core/src/ai_markdown/pipeline.rs`: 変更（no-op 要求は即時 lint_passed=false）
+- `docs/decisions/0293-lint-retry-feedback.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. choices 欠落 / content None / response キー欠落を CoreError::AiProvider の固定文言で拒否する。
-2. 空文字が正当な応答であり得る場合は root cause を区別して失敗扱いにする。
-3. エラー文言に host / body / secret を出さない（ADR-0287 に整合）。
-4. 単体 test を追加する。
-5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. lint feedback を適用できない要求種別は、初回 lint 失敗時にリトライしない。
+2. 既存の lint feedback を持つ要求のリトライ動作は壊さない。
+3. 単体 test で AI 呼び出し回数が 1 回に留まることを検証する。
+4. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 外部 AI API への送信は行わない（mock / ロジック test のみ）。
-- prompt / pipeline の成功契約を壊さない。
+- 外部 AI API への送信は行わない。
+- prompt / 既存成功契約を壊さない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- OpenAI/Ollama の空レスポンスを固定文言の provider error へ変換。
-- 新規 8 test、core 312 passed、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- stream_complete と空白本文の扱いは ADR-0292 の未決定へ集約。
