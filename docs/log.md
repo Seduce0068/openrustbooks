@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- cargo audit advisory DB の鮮度ゲートを追加（ADR-0294）。
 - lint feedback が no-op な要求の無駄な AI リトライを停止（ADR-0293）。
 - AI provider の空レスポンスを失敗扱いに変更（ADR-0292）。
 - E2E 件数ゲートを Checker(expected) 単一情報源へ変更（ADR-0291）。

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 293 件）。
+openrustbooks の ADR 一覧（全 294 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -588,3 +588,5 @@ openrustbooks の ADR 一覧（全 293 件）。
   - status: accepted — choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
 - [ADR-0293: lint feedback が no-op な要求のリトライ停止](0293-lint-retry-feedback.md)
   - status: accepted — Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
+- [ADR-0294: cargo audit advisory DB の鮮度担保](0294-audit-db-freshness.md)
+  - status: accepted — verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。

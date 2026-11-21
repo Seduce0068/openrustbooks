@@ -769,6 +769,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0291-e2e-count-single-source](docs/decisions/0291-e2e-count-single-source.md)
 - [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
 - [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
+- [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
+  - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
   - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
   - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
   - E2E 期待件数を Checker(expected=N) のみに依存させ、todo.md の CI-H01 行をゲート条件から外す決定。
