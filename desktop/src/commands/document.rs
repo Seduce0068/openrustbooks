@@ -9,6 +9,7 @@ use openrustbooks_core::{
         Document, DocumentContent, DocumentFormat, DocumentId, DocumentMetadata,
         extract_front_matter_preserving,
     },
+    io::DEFAULT_MAX_READ_BYTES,
 };
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -260,6 +261,31 @@ async fn atomic_write(full_path: &Path, data: &[u8]) -> CoreResult<()> {
     Ok(())
 }
 
+/// 読み取りサイズ超過を拒否する際の固定文言。
+///
+/// 生パス・サイズ値・ファイル名は一切出さない（ADR-0103 / R3-IV01）。
+const READ_SIZE_EXCEEDED_MESSAGE: &str = "File exceeds the maximum allowed read size";
+
+/// `size` が `limit` を超えた場合に fail-closed で拒否する。
+fn validate_read_size(size: u64, limit: u64) -> CoreResult<()> {
+    if size > limit {
+        Err(CoreError::validation(READ_SIZE_EXCEEDED_MESSAGE))
+    } else {
+        Ok(())
+    }
+}
+
+/// `read_to_string` の前に `metadata.len()` を検査する。
+///
+/// 内容を 1 バイトも読まずに、上限超過を `CoreError::validation` で拒否する。
+async fn ensure_readable_size(path: &Path, limit: u64) -> CoreResult<()> {
+    let size = tokio::fs::metadata(path)
+        .await
+        .map_err(CoreError::Io)?
+        .len();
+    validate_read_size(size, limit)
+}
+
 /// Open a document from path
 #[command]
 pub async fn open_document(
@@ -273,10 +299,18 @@ pub async fn open_document(
         .map_err(ipc_error)?
         .path;
 
+    // 巨大ファイルを read_to_string する前にサイズを確認して拒否する（fail-closed）。
+    ensure_readable_size(&path_buf, DEFAULT_MAX_READ_BYTES)
+        .await
+        .map_err(ipc_error)?;
+
     // Read file content
     let content = tokio::fs::read_to_string(&path_buf)
         .await
         .map_err(|e| ipc_error(CoreError::Io(e)))?;
+
+    // 読み取り中にサイズが増えた場合も fail-closed で拒否する（TOCTOU 対策）。
+    validate_read_size(content.len() as u64, DEFAULT_MAX_READ_BYTES).map_err(ipc_error)?;
 
     // Detect format
     let format =
@@ -620,6 +654,48 @@ mod tests {
             assert!(!message.contains(&root));
             assert!(!message.contains(&outside_path));
         }
+    }
+
+    /// 上限ちょうどは許可し、1 バイト超だけを固定文言の Validation で拒否する。
+    #[test]
+    fn read_size_limit_accepts_boundary_and_rejects_one_byte_over() {
+        validate_read_size(DEFAULT_MAX_READ_BYTES, DEFAULT_MAX_READ_BYTES)
+            .expect("上限ちょうどは許可される");
+
+        let error = validate_read_size(DEFAULT_MAX_READ_BYTES + 1, DEFAULT_MAX_READ_BYTES)
+            .expect_err("1 バイト超は拒否される");
+        match error {
+            CoreError::Validation(message) => assert_eq!(message, READ_SIZE_EXCEEDED_MESSAGE),
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+
+        let rendered = CoreError::validation(READ_SIZE_EXCEEDED_MESSAGE).to_string();
+        assert!(!rendered.contains("268435456"));
+        assert!(!rendered.contains("256"));
+    }
+
+    /// 実ファイルの `metadata.len()` が上限を超えた場合、内容を読まずに拒否すること。
+    #[tokio::test]
+    async fn ensure_readable_size_rejects_oversized_file_without_path_or_size() {
+        let temp = TempRoot::new();
+        let file_name = "secret-note.md";
+        let path = temp.path.join(file_name);
+        fs::write(&path, b"0123456789").unwrap();
+
+        let error = ensure_readable_size(&path, 4)
+            .await
+            .expect_err("4 バイト超のファイルは拒否される");
+        let rendered = error.to_string();
+        assert!(rendered.contains(READ_SIZE_EXCEEDED_MESSAGE));
+        assert!(!rendered.contains(file_name));
+        assert!(!rendered.contains(temp.path.to_string_lossy().as_ref()));
+        assert!(!rendered.contains("10"));
+        assert!(!rendered.contains('4'));
+
+        // 上限ちょうどは許可される。
+        ensure_readable_size(&path, 10)
+            .await
+            .expect("上限ちょうどは許可される");
     }
 
     /// `open_document` と同じ構築経路、`save_document` と同じ `full_text` で

@@ -1577,6 +1577,22 @@ fn report_position_prune(deleted: usize, remaining: usize, saved: bool) {
     POSITION_PRUNE_NOTICE.set(None);
 }
 
+/// インポート JSON のサイズ上限（core::io::DEFAULT_MAX_READ_BYTES = 256 MiB から導出）。
+/// EPUB 上限・下書き上限とは独立に、巨大な JSON のテキスト読み取りを拒否する。
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_BYTES: f64 = openrustbooks_core::io::DEFAULT_MAX_READ_BYTES as f64;
+
+/// 上限超過のインポートを拒否する際の固定文言。
+/// パス・サイズ値・ファイル名は一切出さない（R3-IV01）。
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_TOO_LARGE_MESSAGE: &str = "ファイルが大きすぎます。";
+
+/// `file.text()` の前に呼ぶ fail-closed なサイズ検査。
+#[cfg(any(target_arch = "wasm32", test))]
+fn import_json_exceeds_limit(size: f64) -> bool {
+    size > IMPORT_JSON_MAX_BYTES
+}
+
 /// 下書きの最大サイズ（UTF-8 バイト数）。これを超える本文は保存しない。
 const EDITOR_DRAFT_MAX_BYTES: usize = 1_048_576;
 
@@ -2363,9 +2379,10 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
     use wasm_bindgen_futures::{JsFuture, spawn_local};
     use web_sys::{Event, HtmlInputElement};
 
-    /// 読み込む EPUB のサイズ上限（core の `ArchiveLimits::max_total_size` と同じ）。
-    const MAX_EPUB_FILE_MIB: u64 = 256;
-    const MAX_EPUB_FILE_BYTES: f64 = MAX_EPUB_FILE_MIB as f64 * 1024.0 * 1024.0;
+    /// 読み込む EPUB のサイズ上限（core の `DEFAULT_MAX_READ_BYTES` から導出）。
+    /// 表示用の MiB 値も同じ単一情報源から計算する（256 MiB は不変）。
+    const MAX_EPUB_FILE_BYTES: f64 = openrustbooks_core::io::DEFAULT_MAX_READ_BYTES as f64;
+    const MAX_EPUB_FILE_MIB: u64 = openrustbooks_core::io::DEFAULT_MAX_READ_BYTES / (1024 * 1024);
     /// 移動履歴の上限。
     const HISTORY_LIMIT: usize = 50;
 
@@ -2992,6 +3009,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 if load_gen != load_generation.get() {
                     return;
                 }
+                // array_buffer() の前に on_file_change で file.size() を
+                // MAX_EPUB_FILE_BYTES（256 MiB）と比較済み。上限超は既に return
+                // しているため、ここでは巨大ファイルを読み込まない。
                 let buffer = match JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => buffer,
                     Err(_) => {
@@ -3007,6 +3027,15 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     return;
                 }
                 let bytes = Uint8Array::new(&buffer).to_vec();
+                // 読み取り中にサイズが増えた場合も拒否する（TOCTOU 対策）。
+                if bytes.len() as f64 > MAX_EPUB_FILE_BYTES {
+                    if load_gen == load_generation.get() {
+                        set_status.set(format!(
+                            "この EPUB が大きすぎます（上限: {MAX_EPUB_FILE_MIB} MiB）。"
+                        ));
+                    }
+                    return;
+                }
                 let opened = match WasmEpubBook::new(bytes) {
                     Ok(opened) => opened,
                     Err(_) => {
@@ -3684,6 +3713,14 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let Some(file) = input.files().and_then(|files| files.item(0)) else {
             return;
         };
+        // 選択後は常にクリアし、同じファイルを再選択できるようにする。
+        input.set_value("");
+        // 巨大 JSON を text() で読む前にサイズを検査する（fail-closed）。
+        // 上限超は confirm を出さず、固定文言だけを status に出す。
+        if import_json_exceeds_limit(file.size()) {
+            set_status.set(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
+            return;
+        }
         // confirm が使える環境ではキャンセルを尊重する。window が無い / confirm が
         // 例外を投げる環境では None となり、既存どおり取り込む（fail-safe）。
         let confirmed = (|| {
@@ -3693,8 +3730,6 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 )
                 .ok()
         })();
-        // 結果にかかわらずクリアし、同じファイルを再選択できるようにする。
-        input.set_value("");
         if confirmed == Some(false) {
             return;
         }
@@ -3708,6 +3743,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 set_status.set("インポートファイルを読み込めませんでした。".to_string());
                 return;
             };
+            // 読み取り中にサイズが増えた場合も拒否する（TOCTOU 対策）。
+            if raw.len() as f64 > IMPORT_JSON_MAX_BYTES {
+                set_status.set(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
+                return;
+            }
             let mut save_failed = false;
             let result = import_positions(&raw, &mut save_failed);
             if save_failed {
@@ -4260,6 +4300,28 @@ mod command_error_tests {
 
         assert_eq!(message, "設定を保存できませんでした。");
         assert!(!message.contains(secret_code));
+    }
+}
+
+#[cfg(test)]
+mod import_size_tests {
+    use super::{IMPORT_JSON_MAX_BYTES, IMPORT_JSON_TOO_LARGE_MESSAGE, import_json_exceeds_limit};
+
+    #[test]
+    fn import_size_limit_accepts_boundary_and_rejects_one_byte_over() {
+        assert!(!import_json_exceeds_limit(IMPORT_JSON_MAX_BYTES));
+        assert!(import_json_exceeds_limit(IMPORT_JSON_MAX_BYTES + 1.0));
+        assert!(!import_json_exceeds_limit(0.0));
+    }
+
+    #[test]
+    fn import_size_error_is_fixed_without_path_size_or_file_name() {
+        let message = IMPORT_JSON_TOO_LARGE_MESSAGE;
+        assert_eq!(message, "ファイルが大きすぎます。");
+        assert!(!message.contains("256"));
+        assert!(!message.contains("MiB"));
+        assert!(!message.contains('/'));
+        assert!(!message.contains("backup.json"));
     }
 }
 
