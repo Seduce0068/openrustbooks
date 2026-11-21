@@ -34,3 +34,10 @@ read_only フラグを参照しない。save_document だけが read_only を検
 - 公開鍵 / endpoint / 外部サービスは扱わない。
 - 秘密値をログへ出力しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- fs コマンドで read_only root を fail-closed に拒否。
+- 最長一致 root、canonical target、symlink 経由の迂回を塞ぎ、command レベル test を追加。
+- desktop 103 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 相対パス一意性、read_directory マルチ root、symlink 自身操作は ADR-0285 の未決定へ集約。

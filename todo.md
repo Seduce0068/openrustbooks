@@ -217,6 +217,7 @@ status: current
 
 ## 完了
 
+- [x] 【fs read_only 強制】create/delete/rename の迂回を塞ぎ、入れ子/symlink も fail-closed 化（ADR-0285）。
 - [x] 【config 読み込み失敗】読み込み失敗時に退避と保存拒否を実装、退避先 0600（ADR-0284）。
 - [x] 【WebdriverIO 導入】実 Tauri WebView の settings を WebdriverIO で検証、独立ゲート化（ADR-0283）。
 - [x] 【実 WebView 検証】Tauri CLI 起動・設定保存・config.toml 永続化を確認し、起動/保存ブロッカーを修正（ADR-0282）。
