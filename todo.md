@@ -62,9 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【front matter 往復のバイト保全を検証】CRLF / 末尾改行 / YAML 書式が開いて保存するだけで
-      変わり得る。元テキスト保持または変更無し時の元バイト返却を確認する。
-      根拠 `core/src/document.rs:209-220,246-256` / R2-ER01。
 - [ ] 【設定インポートの表示設定復元を明示】現在値があるとバックアップの表示設定が復元されず、
       README の「表示設定を含む」と一致しない。明示オプションまたは制約開示。
       根拠 `web/src/lib.rs:2102-2111` / `README.md:88` / R5-DC01。
@@ -165,6 +162,7 @@ status: current
 
 ## 完了
 
+- [x] 【front matter 保全】元テキスト保持で無編集 open→save のバイト列を保全（ADR-0297）。
 - [x] 【WDIO 保存往復】update_config_patch の revision +1 と config.toml 永続化を検証（ADR-0296）。
 - [x] 【README / 索引 / runbook の現行状態を実装へ追従】README の「実 WebView 未検証」を
       ADR-0282 / 0283 の完了へ更新し、ドキュメント閲覧を EPUB / ZIP / Markdown 実装済みと
