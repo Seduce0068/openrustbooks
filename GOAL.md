@@ -1,55 +1,44 @@
 # Goal
 
-実 Tauri WebView 検証を完了し、発見した起動ブロッカーを修正する（R6 dogfood）。
+openrustbooks に WebdriverIO + @wdio/tauri-service を導入し、実 Tauri WebView を自動操作する最小 E2E を追加する（R6 調査の解消策）。
 
 ## Scope
 
 ### 背景
 
-Tauri CLI 2.12.5 は導入済みだが、`cargo tauri dev` の実起動で次が判明した:
-
-- `core::init()` の `tracing_subscriber` と `tauri_plugin_log` が競合し、
-  "attempted to set a logger after the logging system was already initialized" で起動失敗。
-- `beforeDevCommand` の `cd ../web` が CLI フックの cwd と合わず失敗。
-- `tauri_plugin_updater` 2.14.1 は `plugins.updater.pubkey` を必須とし、
-  設定が無いと "Error deserializing 'plugins.updater'" で起動失敗。
-  updater は未配線（ADR-0222 / 0277）で、公開鍵 / endpoint / 署名は未決定。
+Wayland/Xwayland の `xdotool` 入力が不安定なため、Tauri 公式が推奨する
+WebDriver ベースの自動化を導入する。既存の CDP/mock E2E 256 件は維持し、
+WDIO は別ゲート・別名前空間で追加する。
 
 ### 成果物
 
-- `desktop/src/main.rs`: 変更（core::init 除去、updater plugin 登録除去）
-- `desktop/tauri.conf.json`: 変更（beforeDevCommand/BeforeBuildCommand の cwd 修正）
-- `desktop/Cargo.toml`: updater 依存除去（必要なら Cargo.lock 追従）
-- `scripts/check-updater-honesty.sh`: 変更（plugin init 要求を「未登録」要求へ反転）
-- `docs/decisions/0282-updater-plugin-startup-removal.md`: 追加
-- `docs/decisions/0089` / `0135` / `0222` / `0277` / `0279`: 参照更新
-- `todo.md` / `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md`: 更新
+- `package.json` / `package-lock.json`: 追加
+- `tsconfig.json`: 追加
+- `e2e/wdio.conf.ts` / `e2e/settings.e2e.ts`: 追加
+- `desktop/Cargo.toml` / `desktop/src/main.rs` / `Cargo.lock`: 変更（debug 限定 plugin）
+- `desktop/capabilities/default.json`: 追加（debug capability）
+- `desktop/tauri.conf.json`: `app.security.capabilities` 追加
+- `scripts/verify.sh`: 変更（独立ゲートとして WDIO を追加）
+- `docs/decisions/0283-webdriverio-adoption.md`: 追加
+- `docs/runbook-webdriver.md`: 追加
+- `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md` / `todo.md`: 更新
 
 ### 必須事項
 
-1. `cargo tauri dev` で WebView ウィンドウが出現すること。
-2. `/settings` が desktop の editable フォームとして表示され、
-   `get_config` / `update_config_patch` が成功すること。
-3. 固定成功文言と `role="status" aria-live="polite"` を確認すること。
-4. config.toml の変更値のみ永続化を確認（revision はメモリ値のため再起動で 0 に戻る）。
-5. updater 公開鍵 / endpoint / 署名は導入しない。ダミー pubkey は残さない。
-6. E2E 256 件・check 名を変更しない。
-7. markdownlint 0 issues、verify.sh 全ゲート成功。
+1. `@wdio/tauri-service` 1.5.1 と WebdriverIO 9.31 系で導入する。
+2. Rust plugin は debug ビルド限定で登録し、release には混入しない。
+3. 実 WebView で `/settings` を開き、editable と固定 updater 文言を検証する。
+4. `browser.tauri.execute` で `get_config` を呼び、revision を取得する。
+5. 既存 E2E 256 件・check 名・`check-e2e-count-consistency.sh` は変更しない。
+6. `verify.sh` 全ゲート成功、markdownlint 0 issues。
 
 ## Acceptance criteria
 
-- 実 WebView で設定保存が成功し、起動ブロッカーが解消されている。
-- updater は未配線のまま、静的ゲートが未登録を保証する。
+- `npm run test:wdio` が成功し、実 Tauri WebView の settings を検証できる。
+- 既存 256 件と WDIO が共存する。
 
 ## Constraints
 
-- 外部送信 / 公開ビルド / 署名 secrets / 破壊的 config 操作は行わない。
-- 秘密値は表示・送信しない。
+- 外部 service / 課金 / 公開ビルドは行わない。
+- 既存 CDP E2E と mock の 256 件は変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 実 WebView で Tauri CLI 起動、settings editable、`get_config` / `update_config_patch` 成功を確認。
-- 起動ブロッカー（logger 競合 / hook cwd / updater pubkey 必須）と保存ブロッカー（`{patch:...}` 引数）を修正。
-- updater plugin 登録と依存を削除し、公開鍵 / endpoint / 署名は未導入。
-- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。
