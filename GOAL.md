@@ -29,3 +29,9 @@ Ollama 経路も `result["response"].as_str().unwrap_or("")` で空文字を返�
 - 外部 AI API への送信は行わない（mock / ロジック test のみ）。
 - prompt / pipeline の成功契約を壊さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- OpenAI/Ollama の空レスポンスを固定文言の provider error へ変換。
+- 新規 8 test、core 312 passed、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- stream_complete と空白本文の扱いは ADR-0292 の未決定へ集約。
