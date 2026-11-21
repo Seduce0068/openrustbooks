@@ -4,8 +4,8 @@ use crate::state::AppState;
 use openrustbooks_core::{
     CoreError, CoreResult,
     io::{
-        FileEntry, ListOptions, READ_ONLY_ROOT_MESSAGE, StorageBackend, WriteOptions,
-        local::LocalStorage,
+        FileEntry, ListOptions, READ_ONLY_ROOT_MESSAGE, STORAGE_ROOT_OPERATION_MESSAGE,
+        StorageBackend, WriteOptions, local::LocalStorage,
     },
 };
 use std::path::{Component, Path, PathBuf};
@@ -114,6 +114,23 @@ fn resolve_target_storage<'a>(
         return Err(CoreError::validation(
             "Parent directory traversal is not allowed",
         ));
+    }
+
+    // canonical target が storage root 自身なら専用の固定文言で拒否する（R2-ER01）。
+    // root 自身は親ディレクトリが root 外になるため、下の候補探索では
+    // "Path escapes storage root" に陥る。候補探索の前に判定する。
+    for (root, _storage) in &canonical_roots {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            root.join(path)
+        };
+        if candidate
+            .canonicalize()
+            .is_ok_and(|canonical| canonical == *root)
+        {
+            return Err(CoreError::validation(STORAGE_ROOT_OPERATION_MESSAGE));
+        }
     }
 
     let mut candidates: Vec<ResolvedTarget<'a>> = Vec::new();
@@ -340,7 +357,9 @@ pub async fn rename_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openrustbooks_core::{AppConfig, config::LocalRootConfig};
+    use openrustbooks_core::{
+        AppConfig, config::LocalRootConfig, io::MOVE_DESTINATION_EXISTS_MESSAGE,
+    };
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tauri::{Listener, test::MockRuntime, test::mock_app};
@@ -511,6 +530,29 @@ mod tests {
             resolve_target_storage(&storages, &absolute_outside).is_err(),
             "root 外の絶対パスは拒否されること"
         );
+    }
+
+    /// root 自身は汎用の "Path escapes storage root" ではなく専用固定文言で拒否されること（R4 指摘）。
+    #[tokio::test]
+    async fn resolve_target_storage_rejects_root_with_dedicated_message() {
+        let root = TempRoot::new();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let storages = create_storage(&state).await.unwrap();
+        let canonical = root.path.canonicalize().unwrap();
+
+        for target in [PathBuf::from("."), canonical] {
+            let error =
+                resolve_target_storage(&storages, &target).expect_err("root 自身は拒否される");
+            let rendered = error.to_string();
+            assert_eq!(
+                rendered,
+                format!("Validation error: {STORAGE_ROOT_OPERATION_MESSAGE}")
+            );
+            assert!(
+                !rendered.contains("escapes"),
+                "汎用の脱出文言を使わないこと"
+            );
+        }
     }
 
     /// command 本体（`*_impl`）を実際の AppHandle / MockRuntime で呼ぶ harness。
@@ -823,6 +865,121 @@ mod tests {
         assert_eq!(snapshot(&parent.path), before_rename);
         assert_eq!(harness.created.load(Ordering::SeqCst), 0);
         assert_eq!(harness.deleted.load(Ordering::SeqCst), 0);
+        assert_eq!(harness.renamed.load(Ordering::SeqCst), 0);
+    }
+
+    /// root 拒否が Core の固定文言をそのまま Tauri 文字列へ変換することを検証する。
+    fn assert_root_operation_error(result: Result<impl std::fmt::Debug, String>) {
+        let error = result.expect_err("root 自身への操作は拒否されること");
+        assert_eq!(
+            error,
+            format!("Validation error: {STORAGE_ROOT_OPERATION_MESSAGE}")
+        );
+    }
+
+    /// root 自身の削除が固定文言で拒否され、emit も副作用も起きないこと（R2-ER01）。
+    #[tokio::test]
+    async fn command_delete_file_rejects_storage_root_without_emit() {
+        let root = TempRoot::new();
+        fs::write(root.path.join("keep.txt"), b"keep").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let harness = CommandHarness::new(state);
+        let before = snapshot(&root.path);
+
+        let canonical = root.path.canonicalize().unwrap();
+        for target in [PathBuf::from("."), canonical] {
+            assert_root_operation_error(
+                delete_file_impl(
+                    harness.state(),
+                    &harness.handle(),
+                    target.to_string_lossy().into_owned(),
+                    Some(true),
+                )
+                .await,
+            );
+        }
+
+        assert!(root.path.exists(), "root 自身が消えていないこと");
+        assert_eq!(snapshot(&root.path), before);
+        assert_eq!(harness.deleted.load(Ordering::SeqCst), 0);
+    }
+
+    /// root 自身を移動元・移動先にした rename が拒否され、emit も副作用も起きないこと。
+    #[tokio::test]
+    async fn command_rename_file_rejects_storage_root_without_emit() {
+        let root = TempRoot::new();
+        fs::write(root.path.join("keep.txt"), b"keep").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let harness = CommandHarness::new(state);
+        let before = snapshot(&root.path);
+        let root_string = root
+            .path
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+
+        assert_root_operation_error(
+            rename_file_impl(
+                harness.state(),
+                &harness.handle(),
+                root_string.clone(),
+                "moved.txt".to_string(),
+                None,
+            )
+            .await,
+        );
+        assert_root_operation_error(
+            rename_file_impl(
+                harness.state(),
+                &harness.handle(),
+                "keep.txt".to_string(),
+                root_string,
+                None,
+            )
+            .await,
+        );
+        assert_root_operation_error(
+            rename_file_impl(
+                harness.state(),
+                &harness.handle(),
+                ".".to_string(),
+                "moved.txt".to_string(),
+                None,
+            )
+            .await,
+        );
+
+        assert!(root.path.exists(), "root 自身が消えていないこと");
+        assert_eq!(snapshot(&root.path), before);
+        assert_eq!(harness.renamed.load(Ordering::SeqCst), 0);
+    }
+
+    /// overwrite=false の rename が既存宛先を保持し、emit しないこと。
+    #[tokio::test]
+    async fn command_rename_without_overwrite_preserves_destination_without_emit() {
+        let root = TempRoot::new();
+        fs::write(root.path.join("source.txt"), b"source").unwrap();
+        fs::write(root.path.join("existing.txt"), b"original").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let harness = CommandHarness::new(state);
+        let before = snapshot(&root.path);
+
+        let error = rename_file_impl(
+            harness.state(),
+            &harness.handle(),
+            "source.txt".to_string(),
+            "existing.txt".to_string(),
+            Some(false),
+        )
+        .await
+        .expect_err("overwrite=false は既存宛先を拒否する");
+        assert_eq!(
+            error,
+            format!("Validation error: {MOVE_DESTINATION_EXISTS_MESSAGE}")
+        );
+
+        assert_eq!(snapshot(&root.path), before);
         assert_eq!(harness.renamed.load(Ordering::SeqCst), 0);
     }
 }

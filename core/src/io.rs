@@ -17,6 +17,23 @@ pub const DEFAULT_MAX_READ_BYTES: u64 = 256 * 1024 * 1024;
 /// fs コマンド経由でも意味論を揃える（R3-AU01）。設定値・パスは含めない。
 pub const READ_ONLY_ROOT_MESSAGE: &str = "Storage root is read-only";
 
+/// storage root 自身を delete / move_item / create_dir の対象にしたときの固定文言。
+///
+/// `resolve_path(".")` は canonical root を返すため、root 配下全体が消える経路を
+/// 塞ぐ必要がある（R6 レビュー / R2-ER01）。設定値やパスは含めない。
+pub const STORAGE_ROOT_OPERATION_MESSAGE: &str = "Refusing to modify the storage root itself";
+
+/// `move_item(overwrite=false)` で既存宛先を見つけたときの固定文言。
+///
+/// POSIX `rename` は既存宛先を暗黙上書きするため、チェック後も rename 直前に
+/// 再確認して同じ文言で拒否する。呼び出し元の生パスは含めない。
+pub const MOVE_DESTINATION_EXISTS_MESSAGE: &str = "Destination already exists";
+
+/// 上書き移動の復元にも失敗したときの固定文言。
+///
+/// 元と宛先の所在が不確実になったことを fail-closed で伝える。
+pub const MOVE_ROLLBACK_FAILED_MESSAGE: &str = "Move failed and destination could not be restored";
+
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageCapabilities {
@@ -329,6 +346,57 @@ pub mod local {
         Ok(())
     }
 
+    /// 上書き移動の退避先を既存と衝突しない名前で予約する。
+    ///
+    /// 元がディレクトリならディレクトリとして、ファイル / symlink ならファイルとして
+    /// 予約する。種別を揃えないと Unix で `rename` が ENOTDIR / EISDIR になる。
+    async fn reserve_move_backup(full_path: &Path) -> CoreResult<PathBuf> {
+        const MAX_BACKUP_ATTEMPTS: usize = 128;
+        // symlink はリンク先ではなくリンク自体が退避対象なので、リンク先が
+        // ディレクトリでもファイルとして予約する（dir 予約へ rename すると失敗する）。
+        let is_dir = tokio_fs::symlink_metadata(full_path)
+            .await?
+            .file_type()
+            .is_dir();
+
+        for _ in 0..MAX_BACKUP_ATTEMPTS {
+            let candidate = atomic_temp_path(full_path);
+            let reserved = if is_dir {
+                tokio_fs::create_dir(&candidate).await
+            } else {
+                tokio_fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&candidate)
+                    .await
+                    .map(|_| ())
+            };
+            match reserved {
+                Ok(()) => return Ok(candidate),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        Err(CoreError::storage(format!(
+            "Unable to create a unique backup path after {MAX_BACKUP_ATTEMPTS} attempts"
+        )))
+    }
+
+    /// ファイル・ディレクトリ・symlink を種別に応じて削除する。
+    ///
+    /// 退避先の後始末に使う。`symlink_metadata` でリンク先を辿らず、
+    /// symlink 自体を確実に削除する。
+    async fn remove_path(path: &Path) -> CoreResult<()> {
+        let metadata = tokio_fs::symlink_metadata(path).await?;
+        if metadata.is_dir() {
+            tokio_fs::remove_dir_all(path).await?;
+        } else {
+            tokio_fs::remove_file(path).await?;
+        }
+        Ok(())
+    }
+
     #[derive(Debug)]
     pub struct LocalStorage {
         root: PathBuf,
@@ -406,6 +474,26 @@ pub mod local {
         fn ensure_writable(&self) -> CoreResult<()> {
             if self.read_only {
                 Err(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+            } else {
+                Ok(())
+            }
+        }
+
+        /// 解決済みの対象が storage root 自身なら破壊的操作を拒否する（R2-ER01）。
+        ///
+        /// `resolve_path(".")` や root の絶対パスは canonical root を返すため、
+        /// 比較は canonicalize 済みの値同士で行う。root を canonicalize できない
+        /// 場合は containment を保証できないので storage エラーで拒否する。
+        fn ensure_root_not_target(&self, full_path: &Path) -> CoreResult<()> {
+            let root = self.root.canonicalize().map_err(|error| {
+                CoreError::storage(format!(
+                    "Unable to canonicalize storage root {}: {}",
+                    self.root.display(),
+                    error
+                ))
+            })?;
+            if full_path == root {
+                Err(CoreError::validation(STORAGE_ROOT_OPERATION_MESSAGE))
             } else {
                 Ok(())
             }
@@ -645,6 +733,10 @@ pub mod local {
         async fn create_dir(&self, path: &Path, recursive: bool) -> CoreResult<()> {
             self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
+            // root 自身は拒否しない。create_file が親ディレクトリ作成で
+            // `create_dir(root, recursive=true)` を呼ぶため、ここで拒否すると
+            // root 直下への新規作成が壊れる（R4 指摘）。既存 root に対する
+            // create_dir_all は idempotent なのでそのまま通す。
             if recursive {
                 tokio_fs::create_dir_all(&full_path).await?;
             } else {
@@ -656,6 +748,7 @@ pub mod local {
         async fn delete(&self, path: &Path, recursive: bool) -> CoreResult<()> {
             self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
+            self.ensure_root_not_target(&full_path)?;
             if recursive {
                 tokio_fs::remove_dir_all(&full_path).await?;
             } else {
@@ -668,20 +761,63 @@ pub mod local {
             self.ensure_writable()?;
             let full_from = self.resolve_path(from)?;
             let full_to = self.resolve_path(to)?;
+            // 元・宛先のどちらが root 自身でも破壊的な移動を許さない。
+            self.ensure_root_not_target(&full_from)?;
+            self.ensure_root_not_target(&full_to)?;
 
-            if overwrite && full_to.exists() {
-                if full_to.is_dir() {
-                    tokio_fs::remove_dir_all(&full_to).await?;
-                } else {
-                    tokio_fs::remove_file(&full_to).await?;
-                }
+            // symlink 等で同じ実体を指す場合は移動の必要がない。
+            if full_from == full_to {
+                return Ok(());
             }
 
             if let Some(parent) = full_to.parent() {
                 tokio_fs::create_dir_all(parent).await?;
             }
 
-            tokio_fs::rename(&full_from, &full_to).await?;
+            if !overwrite {
+                // 第1回チェック：既存宛先は早期に拒否する。
+                if full_to.exists() {
+                    return Err(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE));
+                }
+                // 第2回チェック：POSIX rename は既存宛先を暗黙上書きするため、
+                // rename 直前にもう一度確認して TOCTOU の窓を狭める。
+                // std には RENAME_NOREPLACE 相当の原子的 API が無く、unsafe FFI は
+                // プロジェクト規約で禁止されているため、この再確認が上限となる。
+                if full_to.exists() {
+                    return Err(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE));
+                }
+                tokio_fs::rename(&full_from, &full_to).await?;
+                return Ok(());
+            }
+
+            // 宛先が無い場合は退避不要で、単純な rename で元を失わない。
+            if !full_to.exists() {
+                tokio_fs::rename(&full_from, &full_to).await?;
+                return Ok(());
+            }
+
+            // overwrite=true: 旧実装の「宛先削除 → rename」は途中失敗で
+            // 元と宛先の両方を失うため、先に宛先を一意な退避先へ退避する。
+            // create_new / create_dir で元と同じ種別の名前を予約してから rename で
+            // 上書きすることで、退避先の名前衝突を避ける。
+            let backup_path = reserve_move_backup(&full_to).await?;
+
+            if let Err(error) = tokio_fs::rename(&full_to, &backup_path).await {
+                let _ = tokio_fs::remove_file(&backup_path).await;
+                return Err(error.into());
+            }
+
+            if let Err(rename_error) = tokio_fs::rename(&full_from, &full_to).await {
+                // rename が失敗しても退避先に元があるので復元を試みる。
+                if let Err(_restore_error) = tokio_fs::rename(&backup_path, &full_to).await {
+                    // 復元も失敗した場合は所在が不確実なため固定文言で fail-closed に伝える。
+                    return Err(CoreError::storage(MOVE_ROLLBACK_FAILED_MESSAGE));
+                }
+                return Err(rename_error.into());
+            }
+
+            // 成功時は退避先を削除する（後始末の失敗で操作自体は取り消さない）。
+            let _ = remove_path(&backup_path).await;
             Ok(())
         }
 
@@ -1441,6 +1577,191 @@ pub mod local {
 
             assert!(!temp.path.join("new.txt").exists());
             assert!(temp.path.join("nested").is_dir());
+        }
+
+        /// 一時ファイル・退避ファイルが残っていないことを検証する。
+        fn assert_no_temp_leftovers(temp: &TempRoot) {
+            let leftovers: Vec<PathBuf> = fs::read_dir(&temp.path)
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.ends_with(".tmp"))
+                })
+                .collect();
+            assert!(
+                leftovers.is_empty(),
+                "一時ファイルが残っていないこと: {leftovers:?}"
+            );
+        }
+
+        /// エラーが root 拒否の固定文言（Validation）であることを検証する。
+        fn assert_root_operation_error(error: CoreError) {
+            match error {
+                CoreError::Validation(message) => {
+                    assert_eq!(message, STORAGE_ROOT_OPERATION_MESSAGE);
+                    assert!(!message.contains('/'), "エラー文言にパスを含めない");
+                }
+                other => panic!("expected Validation error, got {other:?}"),
+            }
+        }
+
+        /// root 自身に対する delete / move_item を固定文言で拒否すること（R2-ER01）。
+        /// 相対 "." と root の絶対パスの両方で、canonical 比較により拒否される。
+        /// create_dir は root 直下への新規作成を壊さないため対象外（R4 指摘）。
+        #[tokio::test]
+        async fn mutating_operations_reject_storage_root_itself() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            fs::write(temp.path.join("keep.txt"), b"keep").unwrap();
+            let root_abs = temp.path.canonicalize().unwrap();
+
+            for target in [Path::new("."), root_abs.as_path()] {
+                assert_root_operation_error(
+                    storage
+                        .delete(target, true)
+                        .await
+                        .expect_err("root 自身の delete は拒否される"),
+                );
+                assert_root_operation_error(
+                    storage
+                        .move_item(target, Path::new("moved"), false)
+                        .await
+                        .expect_err("root 自身を移動元にする move_item は拒否される"),
+                );
+                assert_root_operation_error(
+                    storage
+                        .move_item(Path::new("keep.txt"), target, true)
+                        .await
+                        .expect_err("root 自身を移動先にする move_item は拒否される"),
+                );
+            }
+
+            assert_eq!(
+                fs::read(temp.path.join("keep.txt")).unwrap(),
+                b"keep".to_vec()
+            );
+            assert!(!temp.path.join("moved").exists());
+        }
+
+        /// root 自身への create_dir は idempotent に成功し、root 直下の新規作成が壊れないこと（R4 指摘）。
+        #[tokio::test]
+        async fn create_dir_on_root_keeps_direct_child_creation_working() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+
+            storage
+                .create_dir(Path::new("."), true)
+                .await
+                .expect("root 自身の create_dir_all は既存 root に対して成功する");
+            storage
+                .write(Path::new("new.txt"), b"data", WriteOptions::default())
+                .await
+                .expect("root 直下への新規作成は成功する");
+
+            assert_eq!(
+                fs::read(temp.path.join("new.txt")).unwrap(),
+                b"data".to_vec()
+            );
+        }
+
+        /// overwrite=false が rename 直前に既存宛先を再確認し、両方を保持すること。
+        #[tokio::test]
+        async fn move_without_overwrite_preserves_existing_destination() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let from = temp.path.join("source.txt");
+            let to = temp.path.join("existing.txt");
+            fs::write(&from, b"source").unwrap();
+            fs::write(&to, b"original").unwrap();
+
+            let error = storage
+                .move_item(Path::new("source.txt"), Path::new("existing.txt"), false)
+                .await
+                .expect_err("overwrite=false は既存宛先を拒否する");
+            match error {
+                CoreError::Validation(message) => {
+                    assert_eq!(message, MOVE_DESTINATION_EXISTS_MESSAGE);
+                    assert!(!message.contains("existing.txt"), "パスを含めない");
+                }
+                other => panic!("expected Validation error, got {other:?}"),
+            }
+
+            assert_eq!(fs::read(&from).unwrap(), b"source".to_vec());
+            assert_eq!(fs::read(&to).unwrap(), b"original".to_vec());
+            assert_no_temp_leftovers(&temp);
+        }
+
+        /// overwrite=true が退避経由で既存宛先を置き換えること。
+        #[tokio::test]
+        async fn move_with_overwrite_replaces_existing_destination() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let from = temp.path.join("source.txt");
+            let to = temp.path.join("existing.txt");
+            fs::write(&from, b"source").unwrap();
+            fs::write(&to, b"original").unwrap();
+
+            storage
+                .move_item(Path::new("source.txt"), Path::new("existing.txt"), true)
+                .await
+                .expect("overwrite=true の上書き移動は成功する");
+
+            assert_eq!(fs::read(&to).unwrap(), b"source".to_vec());
+            assert!(!from.exists(), "移動元は消える");
+            assert_no_temp_leftovers(&temp);
+        }
+
+        /// ディレクトリの上書き移動でも退避先が残らないこと。
+        #[tokio::test]
+        async fn move_with_overwrite_replaces_existing_directory() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            fs::create_dir(temp.path.join("source_dir")).unwrap();
+            fs::write(temp.path.join("source_dir/new.txt"), b"new").unwrap();
+            fs::create_dir(temp.path.join("target_dir")).unwrap();
+            fs::write(temp.path.join("target_dir/old.txt"), b"old").unwrap();
+
+            storage
+                .move_item(Path::new("source_dir"), Path::new("target_dir"), true)
+                .await
+                .expect("ディレクトリの上書き移動も成功する");
+
+            assert_eq!(
+                fs::read(temp.path.join("target_dir/new.txt")).unwrap(),
+                b"new".to_vec()
+            );
+            assert!(!temp.path.join("target_dir/old.txt").exists());
+            assert!(!temp.path.join("source_dir").exists());
+            assert_no_temp_leftovers(&temp);
+        }
+
+        /// 退避後に rename が失敗しても宛先を復元すること（元データを失わない）。
+        #[tokio::test]
+        async fn move_with_overwrite_restores_destination_when_rename_fails() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let to = temp.path.join("existing.txt");
+            fs::write(&to, b"original").unwrap();
+
+            // 移動元が存在しないため、宛先の退避後 rename が失敗する。
+            let error = storage
+                .move_item(Path::new("missing.txt"), Path::new("existing.txt"), true)
+                .await
+                .expect_err("存在しない元からの移動は失敗する");
+            assert!(
+                matches!(error, CoreError::Io(_)),
+                "rename 失敗は Io エラーとして伝播する: {error:?}"
+            );
+
+            assert_eq!(
+                fs::read(&to).unwrap(),
+                b"original".to_vec(),
+                "失敗時に宛先が復元される"
+            );
+            assert_no_temp_leftovers(&temp);
         }
     }
 }
