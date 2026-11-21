@@ -8,6 +8,11 @@ use openrustbooks_core::{
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+/// 起動時の config.toml 読み込み失敗時に保存を拒否する固定文言。
+///
+/// 設定値・パス・生エラー文字列は一切含めない（R2-ER01 / fail-closed）。
+pub const CONFIG_LOAD_FAILED_MESSAGE: &str = "Configuration load failed; saving is disabled";
+
 /// 設定とその revision を同じロックで保持する（CAS の比較単位）。
 struct ConfigState {
     config: AppConfig,
@@ -15,6 +20,8 @@ struct ConfigState {
     /// 保存中のコミットがあるか。write guard を保存の外で解放するため、
     /// 同一 expected の二重通過を防ぐ予約フラグとして使う。
     pending: bool,
+    /// 起動時に config.toml を読み込めなかったか。true の間は保存を拒否する。
+    config_load_failed: bool,
 }
 
 /// Application state shared across commands
@@ -26,18 +33,36 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Create new application state
+    /// Create new application state（正常起動用）
     pub fn new(config: AppConfig) -> Self {
+        Self::with_config_load_failed(config, false)
+    }
+
+    /// 設定読み込み失敗状態で状態を生成する。
+    ///
+    /// 既定値をメモリ上に保持するが、読み込み失敗状態が続く限り
+    /// `commit_config` は fail-closed で保存を拒否する（R2-ER01）。
+    pub fn new_with_load_failure(config: AppConfig) -> Self {
+        Self::with_config_load_failed(config, true)
+    }
+
+    fn with_config_load_failed(config: AppConfig, config_load_failed: bool) -> Self {
         Self {
             config: RwLock::new(ConfigState {
                 config,
                 revision: 0,
                 pending: false,
+                config_load_failed,
             }),
             documents: RwLock::new(HashMap::new()),
             ai_service: RwLock::new(None),
             unsaved_changes: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// 起動時に config.toml の読み込みに失敗したか。
+    pub fn config_load_failed(&self) -> bool {
+        self.config.read().unwrap().config_load_failed
     }
 
     /// Get current configuration
@@ -90,21 +115,26 @@ impl AppState {
         config: AppConfig,
         service: Option<Arc<AiMarkdownService>>,
     ) -> CoreResult<()> {
-        // overflow は保存前に失敗させる（ADR 未決定のため fail-closed）。
-        let next_revision = expected
-            .checked_add(1)
-            .ok_or_else(|| CoreError::internal("configuration revision overflow"))?;
-
-        // --- 短い write クリティカルセクション: 比較と予約のみ ---
-        {
+        // --- 短い write クリティカルセクション: 失敗状態確認・比較・予約のみ ---
+        let next_revision = {
             let mut state = self.config.write().unwrap();
+            // 起動時に config.toml を読み込めていない場合は、既定値での上書きを
+            // 防ぐため一切保存しない（固定文言のみ返し、設定値は出さない）。
+            if state.config_load_failed {
+                return Err(CoreError::storage(CONFIG_LOAD_FAILED_MESSAGE));
+            }
+            // overflow は保存前に失敗させる（ADR 未決定のため fail-closed）。
+            let next = expected
+                .checked_add(1)
+                .ok_or_else(|| CoreError::internal("configuration revision overflow"))?;
             if state.revision != expected || state.pending {
                 return Err(CoreError::Conflict(
                     "Configuration changed since it was read".to_string(),
                 ));
             }
             state.pending = true;
-        }
+            next
+        };
 
         // --- ロックを解放してから保存（await も guard 保持もしない） ---
         if let Err(save_error) = config.save() {
@@ -481,6 +511,45 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        assert!(state.ai_service().is_none());
+    }
+
+    #[test]
+    fn normal_state_is_not_in_load_failure_mode() {
+        let state = AppState::new(AppConfig::default());
+        assert!(!state.config_load_failed());
+    }
+
+    /// 読み込み失敗状態では `commit_config` が保存前に拒否され、
+    /// メモリ・ディスク・revision のいずれも変化しないこと（R2-ER01）。
+    #[tokio::test]
+    async fn commit_config_rejected_when_config_load_failed() {
+        let _test_lock = CONFIG_FILE_TEST_LOCK.lock().await;
+        let _guard = ConfigFileGuard::new();
+        let state = AppState::new_with_load_failure(AppConfig::default());
+        assert!(state.config_load_failed());
+
+        let (_, expected) = state.config_with_revision();
+        let disk_before = saved_config_toml();
+        let mut candidate = AppConfig::default();
+        candidate.general.theme = "dark".to_string();
+
+        let error = state
+            .commit_config(expected, candidate, None)
+            .expect_err("読み込み失敗状態では保存が拒否されること");
+        match &error {
+            CoreError::Storage(message) => {
+                assert_eq!(message, CONFIG_LOAD_FAILED_MESSAGE);
+            }
+            other => panic!("expected Storage, got {other:?}"),
+        }
+        // 固定文言のみで、設定値やパスを含めないこと。
+        assert!(!error.to_string().contains("config.toml"));
+        assert!(!error.to_string().contains("dark"));
+
+        assert_config_eq(&state.config(), &AppConfig::default());
+        assert_eq!(state.config_with_revision().1, 0);
+        assert_eq!(saved_config_toml(), disk_before, "ディスクは不変");
         assert!(state.ai_service().is_none());
     }
 

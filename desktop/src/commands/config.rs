@@ -1,6 +1,6 @@
 //! Configuration commands.
 
-use crate::state::AppState;
+use crate::state::{AppState, CONFIG_LOAD_FAILED_MESSAGE};
 use openrustbooks_core::ai_markdown::client::{ProviderKind, validate_base_url};
 use openrustbooks_core::config::{
     AiConfig, AppConfig, EditorConfig, GeneralConfig, GoogleDriveConfig, LintConfig,
@@ -34,6 +34,7 @@ impl CommandError {
             "CONFIG_CONFLICT" => "Configuration conflict",
             "CONFIG_VALIDATION" => "Configuration validation failed",
             "CONFIG_STORAGE" => "Configuration storage failed",
+            "CONFIG_LOAD_FAILED" => CONFIG_LOAD_FAILED_MESSAGE,
             _ => "Internal configuration error",
         };
         Self {
@@ -47,6 +48,25 @@ impl From<CoreError> for CommandError {
     fn from(err: CoreError) -> Self {
         Self::from_code(err.code())
     }
+}
+
+/// 起動時の読み込み失敗状態では、保存コマンドを固定文言で拒否する。
+///
+/// 値・パス・生エラーは返さない。`String` を返す既存コマンド向けの
+/// [`load_failure_message`] と同じ文言を使う。
+fn load_failed_command_error(state: &AppState) -> Result<(), CommandError> {
+    if state.config_load_failed() {
+        Err(CommandError::from_code("CONFIG_LOAD_FAILED"))
+    } else {
+        Ok(())
+    }
+}
+
+/// `Result<_, String>` を返す保存コマンド向けの読み込み失敗チェック。
+fn load_failure_message(state: &AppState) -> Option<String> {
+    state
+        .config_load_failed()
+        .then(|| CONFIG_LOAD_FAILED_MESSAGE.to_string())
 }
 
 /// Allow-list view of [`AppConfig`] returned to the JS side.
@@ -652,6 +672,9 @@ pub async fn update_config(
     state: State<'_, Arc<AppState>>,
     config: AppConfig,
 ) -> Result<(), String> {
+    if let Some(message) = load_failure_message(state.inner()) {
+        return Err(message);
+    }
     let (current, expected) = state.config_with_revision();
     // 生 AppConfig の DTO 外フィールドは JS の注入を許さない。境界まで落としてから
     // merge_secrets() に渡し、現在値の復元は従来どおり merge_secrets() に任せる。
@@ -679,6 +702,8 @@ async fn update_config_patch_inner(
     state: &AppState,
     patch: ConfigPatch,
 ) -> Result<ConfigView, CommandError> {
+    // 読み込み失敗状態では既定値の上書きを防ぐため、保存前に拒否する。
+    load_failed_command_error(state)?;
     // UI が get_config で読んだ revision をそのまま CAS の expected に使う。
     // 内部で再取得した revision で上書きしてはならない（ADR-0253 実装前提 3）。
     let expected = patch.expected;
@@ -702,6 +727,9 @@ pub async fn update_ai_config(
     state: State<'_, Arc<AppState>>,
     ai_config: AiConfig,
 ) -> Result<(), String> {
+    if let Some(message) = load_failure_message(state.inner()) {
+        return Err(message);
+    }
     let (current, expected) = state.config_with_revision();
     let mut incoming = current.clone();
     // extra_headers は DTO 外。JS の注入を許さず空にし、merge_secrets() の
@@ -724,6 +752,9 @@ pub async fn update_lint_config(
     state: State<'_, Arc<AppState>>,
     lint_config: LintConfig,
 ) -> Result<(), String> {
+    if let Some(message) = load_failure_message(state.inner()) {
+        return Err(message);
+    }
     let (current, expected) = state.config_with_revision();
     let mut incoming = current.clone();
     incoming.lint = lint_config;
@@ -739,6 +770,9 @@ pub async fn update_lint_config(
 /// Reset configuration to defaults (secrets redacted)
 #[command]
 pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
+    if let Some(message) = load_failure_message(state.inner()) {
+        return Err(message);
+    }
     // current 自体は不要だが、読み取った revision を expected として渡す。
     let (_, expected) = state.config_with_revision();
     let config = AppConfig::default();
@@ -792,6 +826,9 @@ pub async fn clear_secrets(
     state: State<'_, Arc<AppState>>,
     targets: SecretTargets,
 ) -> Result<ConfigView, String> {
+    if let Some(message) = load_failure_message(state.inner()) {
+        return Err(message);
+    }
     let (mut config, expected) = state.config_with_revision();
     let cleared = clear_targeted_secrets(&mut config, targets);
     if cleared.is_empty() {
@@ -2072,6 +2109,48 @@ mod tests {
             state.config_with_revision().1,
             0,
             "Conflict で revision は不変"
+        );
+    }
+
+    /// 読み込み失敗状態では `update_config_patch` が固定文言の CommandError で
+    /// 拒否され、revision も設定も進まないこと（R2-ER01）。
+    #[tokio::test]
+    async fn update_config_patch_load_failed_rejects_with_fixed_message() {
+        let state = AppState::new_with_load_failure(AppConfig::default());
+        let (current, expected) = state.config_with_revision();
+        let mut patch = ConfigPatch::from((&current, expected));
+        patch.general.theme = "dark".to_string();
+
+        let error = match update_config_patch_inner(&state, patch).await {
+            Ok(_) => panic!("読み込み失敗状態では保存が拒否されること"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code, "CONFIG_LOAD_FAILED");
+        assert_eq!(error.message, CONFIG_LOAD_FAILED_MESSAGE);
+        // 固定文言のみで、設定値やパスが漏れないこと。
+        assert!(!error.message.contains("config.toml"));
+        assert!(!error.message.contains("dark"));
+        assert_eq!(state.config_with_revision().1, 0);
+        assert_config_eq_for_commands(&state.config(), &AppConfig::default());
+    }
+
+    /// `String` を返す保存コマンドが使う拒否文言も、値・パスを含まない固定文言であること。
+    #[test]
+    fn load_failure_message_returns_fixed_text_without_values() {
+        let state = AppState::new_with_load_failure(AppConfig::default());
+        let message = load_failure_message(&state).expect("拒否文言が返ること");
+        assert_eq!(message, CONFIG_LOAD_FAILED_MESSAGE);
+        assert!(!message.contains("config.toml"));
+
+        let healthy = AppState::new(AppConfig::default());
+        assert!(load_failure_message(&healthy).is_none());
+    }
+
+    fn assert_config_eq_for_commands(actual: &AppConfig, expected: &AppConfig) {
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
         );
     }
 

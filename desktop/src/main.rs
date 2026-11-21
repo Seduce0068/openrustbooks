@@ -1,6 +1,7 @@
 //! openrustbooks-desktop: Tauri desktop application entry point.
 
 use openrustbooks_core::AppConfig;
+use openrustbooks_core::config::{backup_failed_config, config_file_path};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
@@ -73,6 +74,43 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
     with_common_plugins(tauri::Builder::default(), |builder| builder)
 }
 
+/// 起動時の設定読み込み。
+///
+/// 失敗時は生エラー文字列と絶対パスを出さない（figment のエラーにはパース対象
+/// TOML の内容＝シークレットが含まれ得る）。エラー種別（固定コード）と固定文言
+/// のみを報告し、元 config.toml を退避して既定値を返す。第 2 戻り値は保存拒否に
+/// 使う読み込み失敗状態（R2-ER01 / R4 high）。
+fn load_config_on_startup() -> (AppConfig, bool) {
+    match AppConfig::load() {
+        Ok(config) => (config, false),
+        Err(error) => {
+            let report = format!(
+                "設定ファイルを読み込めませんでした (error kind: {}); 既定値を使用し、保存は無効です",
+                error.code()
+            );
+            log::error!("{report}");
+            eprintln!("{report}");
+
+            // パスは退避処理にだけ使い、ログには出さない。
+            if let Some(path) = config_file_path() {
+                match backup_failed_config(&path) {
+                    Ok(Some(_)) => {
+                        log::error!("退避ファイルを設定ディレクトリに作成しました");
+                    }
+                    Ok(None) => {
+                        log::error!("退避する既存の設定ファイルがありませんでした");
+                    }
+                    Err(backup_error) => log::error!(
+                        "設定ファイルの退避に失敗しました (error kind: {})",
+                        backup_error.code()
+                    ),
+                }
+            }
+            (AppConfig::default(), true)
+        }
+    }
+}
+
 /// Application entry point
 pub fn run() -> tauri::Result<()> {
     // `openrustbooks_core::init()` is intentionally not called here: on native
@@ -83,11 +121,15 @@ pub fn run() -> tauri::Result<()> {
     // the only logger for this desktop application.
     with_wdio_plugins(build_app())
         .setup(|app| {
-            // Load configuration
-            let config = AppConfig::load().unwrap_or_default();
+            // Load configuration（読み込み失敗は報告・退避し、保存を拒否する）
+            let (config, config_load_failed) = load_config_on_startup();
 
             // Initialize application state
-            let state = AppState::new(config);
+            let state = if config_load_failed {
+                AppState::new_with_load_failure(config)
+            } else {
+                AppState::new(config)
+            };
             app.manage(Arc::new(state));
 
             // Setup main window

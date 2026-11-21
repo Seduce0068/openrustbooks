@@ -452,6 +452,65 @@ fn apply_env_max_retries(config: &mut AppConfig, raw: Option<String>) {
     }
 }
 
+/// 設定ディレクトリのパス（native のみ）。
+///
+/// `load()` / `save()` / バックアップ退避で同じ場所を参照するための単一情報源。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn config_dir_path() -> Option<PathBuf> {
+    directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+        .map(|dirs| dirs.config_dir().to_path_buf())
+}
+
+/// 設定ファイルのパス（native のみ）。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn config_file_path() -> Option<PathBuf> {
+    config_dir_path().map(|dir| dir.join("config.toml"))
+}
+
+/// バックアップファイル名の衝突を避けるプロセス内カウンタ。
+#[cfg(not(target_arch = "wasm32"))]
+static BACKUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// 読み込めない `config.toml` を `config.toml.failed-<timestamp>` へ退避する。
+///
+/// `rename` で元ファイルを移動するため、内容はそのまま保持され、既定値で
+/// 上書きされない。元ファイルが無い場合は `Ok(None)`（退避不要）。
+/// パス・エラー種別は呼び出し側でログに出せるよう、戻り値と `CoreError` に
+/// 設定値（シークレット）を含めない。退避先は元のシークレットを含む可能性が
+/// あるため、Unix では owner-only (0600) に制限する。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn backup_failed_config(config_file: &std::path::Path) -> crate::CoreResult<Option<PathBuf>> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    if !config_file.exists() {
+        return Ok(None);
+    }
+    let parent = config_file
+        .parent()
+        .ok_or_else(|| crate::CoreError::storage("configuration file has no parent directory"))?;
+    let file_name = config_file
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let counter = BACKUP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let backup = parent.join(format!("{file_name}.failed-{millis}-{counter}"));
+    std::fs::rename(config_file, &backup)?;
+    // 退避先にシークレットが含まれ得るため、実行者のみ読めるようにする。
+    // 権限設定に失敗した場合は fail-closed で Err を返す（呼び出し側は
+    // 退避失敗として扱い、既定値での上書きは行わない）。
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&backup, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(Some(backup))
+}
+
 impl AppConfig {
     /// Load configuration from default locations.
     ///
@@ -459,7 +518,6 @@ impl AppConfig {
     /// Browser persistence is planned to go through `localStorage` instead.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load() -> crate::CoreResult<Self> {
-        use directories::ProjectDirs;
         use figment::{
             Figment,
             providers::{Format, Serialized, Toml},
@@ -468,12 +526,10 @@ impl AppConfig {
         let mut figment = Figment::new().merge(Serialized::defaults(Self::default()));
 
         // Load from project directory
-        if let Some(proj_dirs) = ProjectDirs::from("com", "onoderakeita", "openrustbooks") {
-            let config_dir = proj_dirs.config_dir();
-            let config_file = config_dir.join("config.toml");
-            if config_file.exists() {
-                figment = figment.merge(Toml::file(&config_file));
-            }
+        if let Some(config_file) = config_file_path()
+            && config_file.exists()
+        {
+            figment = figment.merge(Toml::file(&config_file));
         }
 
         // Load from environment variables (OPENRUSTBOOKS_*).
@@ -495,10 +551,8 @@ impl AppConfig {
     /// Native only; see [`AppConfig::load`].
     #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self) -> crate::CoreResult<()> {
-        use directories::ProjectDirs;
-
-        if let Some(proj_dirs) = ProjectDirs::from("com", "onoderakeita", "openrustbooks") {
-            self.save_to_dir(proj_dirs.config_dir())?;
+        if let Some(config_dir) = config_dir_path() {
+            self.save_to_dir(&config_dir)?;
         }
         Ok(())
     }
@@ -1097,6 +1151,134 @@ mod tests {
                 "途中状態が混ざらないこと"
             );
             assert!(dir.tmp_files().is_empty());
+        }
+    }
+
+    /// 不良 config.toml の退避ヘルパ（R2-ER01）。
+    #[cfg(not(target_arch = "wasm32"))]
+    mod backup_tests {
+        use super::*;
+        use std::fs;
+
+        struct TempDir {
+            path: PathBuf,
+        }
+
+        impl TempDir {
+            fn new(label: &str) -> Self {
+                let path = std::env::temp_dir().join(format!(
+                    "openrustbooks-backup-test-{}-{label}",
+                    std::process::id()
+                ));
+                // 前回の失敗実行が残していても衝突しないよう、まず消してから作る。
+                let _ = fs::remove_dir_all(&path);
+                fs::create_dir_all(&path).unwrap();
+                Self { path }
+            }
+        }
+
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+
+        #[test]
+        fn backup_moves_original_and_uses_failed_suffix() {
+            let dir = TempDir::new("moves-original");
+            let config_file = dir.path.join("config.toml");
+            // シークレットを含む想定の不良ファイル。退避後も内容が保たれること。
+            let original = b"[ai.openai]\napi_key = \"sk-do-not-log\"\n";
+            fs::write(&config_file, original).unwrap();
+
+            let backup = backup_failed_config(&config_file)
+                .unwrap()
+                .expect("元ファイルがあるので退避先が返ること");
+
+            assert!(!config_file.exists(), "元ファイルは残らないこと");
+            assert!(backup.exists(), "退避先が存在すること");
+            assert_eq!(fs::read(&backup).unwrap(), original, "内容が保持されること");
+            let name = backup.file_name().unwrap().to_string_lossy();
+            assert!(name.starts_with("config.toml.failed-"), "{name}");
+            assert_eq!(backup.parent(), Some(dir.path.as_path()));
+        }
+
+        #[test]
+        fn backup_is_noop_when_original_is_absent() {
+            let dir = TempDir::new("absent");
+            let config_file = dir.path.join("config.toml");
+
+            assert!(backup_failed_config(&config_file).unwrap().is_none());
+            assert_eq!(
+                fs::read_dir(&dir.path).unwrap().count(),
+                0,
+                "退避先も作られないこと"
+            );
+        }
+
+        #[test]
+        fn backup_names_do_not_collide() {
+            let dir = TempDir::new("collision");
+            let first = dir.path.join("config.toml");
+            let second = dir.path.join("config.toml");
+            fs::write(&first, b"one").unwrap();
+
+            let first_backup = backup_failed_config(&first).unwrap().unwrap();
+            fs::write(&second, b"two").unwrap();
+            let second_backup = backup_failed_config(&second).unwrap().unwrap();
+
+            assert_ne!(
+                first_backup, second_backup,
+                "連続呼び出しでも別名になること"
+            );
+            assert_eq!(fs::read(&first_backup).unwrap(), b"one");
+            assert_eq!(fs::read(&second_backup).unwrap(), b"two");
+        }
+
+        #[test]
+        fn config_path_helpers_point_to_same_file() {
+            let dir = config_dir_path().expect("native では config ディレクトリが解決できる");
+            let file = config_file_path().expect("native では config ファイルが解決できる");
+            assert_eq!(file, dir.join("config.toml"));
+        }
+
+        /// 退避先は元ファイルが 0644 でも 0600 に締められること（R4 high）。
+        #[cfg(unix)]
+        #[test]
+        fn backup_restricts_permissions_to_owner_only() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = TempDir::new("permissions");
+            let config_file = dir.path.join("config.toml");
+            fs::write(&config_file, b"[general]\nlanguage = \"ja\"\n").unwrap();
+            fs::set_permissions(&config_file, fs::Permissions::from_mode(0o644)).unwrap();
+
+            let backup = backup_failed_config(&config_file).unwrap().unwrap();
+            let mode = fs::metadata(&backup).unwrap().permissions().mode() & 0o777;
+
+            assert_eq!(mode, 0o600, "退避先は owner-only であること");
+            assert!(!config_file.exists());
+        }
+
+        /// `AppConfig::load()` と同じ Figment 経路で、不正 TOML がエラーになることを固定。
+        /// これが退避・保存拒否のトリガー（受け入れ条件）の根拠。
+        #[test]
+        fn invalid_toml_file_fails_the_load_path() {
+            use figment::{
+                Figment,
+                providers::{Format, Serialized, Toml},
+            };
+
+            let dir = TempDir::new("invalid-toml");
+            let config_file = dir.path.join("config.toml");
+            fs::write(&config_file, b"[ai\nthis is not valid toml =").unwrap();
+
+            let result = Figment::new()
+                .merge(Serialized::defaults(AppConfig::default()))
+                .merge(Toml::file(&config_file))
+                .extract::<AppConfig>();
+
+            assert!(result.is_err(), "不正 TOML は load 経路でエラーになること");
         }
     }
 }
