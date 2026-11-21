@@ -72,11 +72,6 @@ status: current
       今回の docfix で反映済みのため重複しない。
       根拠 `README.md:733,754-763` / `docs/runbook-release.md` /
       `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
-- [ ] 【dead config を配線または明示】Ollama `keep_alive_minutes`、`LocalRootConfig.watch`、
-      `default_backend`、`auto_save_delay`、`model_overrides`、`config_file`、`telemetry`、
-      `max_recent`、`max_tokens_per_month` を DTO から除外するか未配線表示へ変更する。
-      根拠 `core/src/config.rs:40,92,174,196,227,233,257,313`、
-      `core/src/ai_markdown/client.rs:402-422` / R1-ST01 + R3-AU01 / 重大度 medium。
 - [ ] 【EPUB / ZIP の解釈差を解消】BOM 入り mimetype、percent-encoded fragment、
       重複 manifest id、%XX 復号失敗の Validation 飲み込み、外部スキーム判定を core / web で統一。
       根拠 `core/src/archive.rs:193-226`、`core/src/epub/opf.rs:395`、
@@ -140,6 +135,7 @@ status: current
 
 ## 完了
 
+- [x] 【dead config】9 件を DTO 除外し、config.toml 値保持と未配線表示を実装（ADR-0304）。
 - [x] 【未使用 plugin / 依存】6 plugin と 7 crate を削除、必須 init を log + dialog 化（ADR-0303）。
 - [x] 【設定インポート】現在値保護時の固定文言告知と README 制約を明記（ADR-0302）。
 - [x] 【入力サイズ境界】256 MiB 上限の事前/事後検査を実装、上限を core 定数へ統一（ADR-0301）。

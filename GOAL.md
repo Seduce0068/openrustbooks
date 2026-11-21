@@ -31,3 +31,11 @@ max_tokens_per_month。保存・復元はされるが動作に反映されない
 - 新機能の実装（watch / telemetry 等）は今回の範囲外。
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 9 件の dead config を DTO から除外、config.toml 値は merge_secrets で保持。
+- env telemetry を無効化、web form を未配線固定表示へ置換。
+- R4 high を反映（skip_serializing 撤回）、core 331 / desktop 128 / web 6 tests。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- watch の id 非依存復元は ADR-0304 の未決定。
