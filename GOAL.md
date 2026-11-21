@@ -1,45 +1,37 @@
 # Goal
 
-IPC エラーの redaction を全 command へ統一する（R6 レビュー / R1-ER01）。
+ホーム画面に Reader / Editor の導線を追加する（R6 レビュー / R2-UX01）。
 
 ## Scope
 
 ### 背景
 
-legacy config / AI / fs command は `map_err(e.to_string())` で
-CoreError の Display 文字列をそのまま Tauri IPC へ返す。
-CoreError は host / path / provider レスポンス本文を保持し得るため、
-生文字列の露出経路が残っている。
+HomePage の nav は Settings / About のみで、Reader / Editor は URL 直入力が必要。
+New File / Open Folder / Open File は on:click が無いのにクリック可能に見え、
+FileTree は固定ダミー項目を表示する。利用者は主要機能へ到達できず、
+操作可能と誤解する。
 
 ### 成果物
 
-- `core/src/error.rs`: 必要なら固定 code / 文言の追加
-- `desktop/src/commands/*.rs`: 変更（生文字列 map_err の廃止）
-- `web/src/lib.rs`: 必要なら code 解釈の追加
-- `docs/decisions/0287-ipc-error-redaction.md`: 追加
+- `web/src/lib.rs`: HomePage の nav / toolbar / FileTree を変更
+- `web/index.html`: 必要なら CSS のみ
+- `docs/decisions/0288-home-navigation.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. desktop command の Result<T, String> から CoreError::to_string() を返す箇所を廃止する。
-2. AI provider エラーは固定 code + 固定文言へ変換し、host / body / API key を出さない。
-3. fs / legacy config エラーは code 由来の固定文言へ変換する。
-4. web 側 status が code を解釈できる場合、未知 code は安全な既定文言へ落とす。
-5. 単体 test・全ゲート検証・E2E 256 件・WDIO ゲート維持。
+1. HomePage の nav から Reader / Editor へ遷移できる。
+2. 既存の `/reader/:id` / `/editor/:id` を壊さない。
+3. 未接続ボタンは disabled にし、理由を title / aria で示す。
+4. ダミー FileTree は「未接続」と分かる表示へ変更する。
+5. E2E 256 件・check 名・WDIO ゲートを維持し、verify.sh 全ゲート成功。
 
 ## Acceptance criteria
 
-- 生エラー文字列・host・path・response body が IPC 応答に現れない。
+- ホーム画面から主要機能へ導線があり、未接続 UI が誤解を与えない。
 
 ## Constraints
 
-- 外部送信 / 課金 / 署名 / 公開設定は扱わない。
-- E2E check 名・件数を変更しない。
+- 新規ファイル作成 / フォルダ選択の実装は行わない。
+- 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 全 desktop command の error を共通マッパーへ統一し、生文字列 IPC 露出を廃止。
-- AI_PROVIDER / WINDOW_INTERNAL code と web status 文言を追加。
-- secret/path/host/body 非漏洩 test を追加。
-- 420 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
