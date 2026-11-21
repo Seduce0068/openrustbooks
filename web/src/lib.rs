@@ -276,6 +276,7 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     {
         let timer = std::rc::Rc::clone(&autosave_timer);
         let generation = std::rc::Rc::clone(&autosave_generation);
+        let last_text = std::rc::Rc::clone(&autosave_last_text);
         Effect::new(move |_| {
             let _ = doc_id.get(); // doc_id 変更を購読するためだけに読む
             if let Some(window) = web_sys::window()
@@ -284,6 +285,9 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                 window.clear_timeout_with_handle(handle);
             }
             generation.set(generation.get() + 1);
+            // 別文書へ切り替えたら直前の自動保存本文も破棄する。残っていると
+            // 同じ本文を入力したときに自動保存がスキップされる（lost update）。
+            *last_text.borrow_mut() = None;
         });
     }
 
@@ -303,6 +307,7 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
 
     // view! 内の各ハンドラへ個別に clone を渡し、move による所有権競合を避ける。
     let save_click_timer = std::rc::Rc::clone(&autosave_timer);
+    let save_click_last_text = std::rc::Rc::clone(&autosave_last_text);
     let input_timer = std::rc::Rc::clone(&autosave_timer);
     let input_generation = std::rc::Rc::clone(&autosave_generation);
     let input_last_text = std::rc::Rc::clone(&autosave_last_text);
@@ -351,6 +356,9 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                         let id = doc_id.get();
                         let text = content.get();
                         if save_editor_draft(&id, &text) {
+                            // 手動保存した本文を自動保存の比較基準へ同期する。
+                            // 保存済みのため、同一本文の自動保存はスキップされる。
+                            *save_click_last_text.borrow_mut() = Some(text.clone());
                             set_status.set("下書きを保存しました".to_string());
                         } else if text.len() > EDITOR_DRAFT_MAX_BYTES {
                             // 本文・サイズ値は status へ出さず、理由は固定文言だけで伝える。
@@ -4410,6 +4418,9 @@ fn SettingsForm() -> impl IntoView {
     let status = RwSignal::new(String::new());
     let config = RwSignal::new(Option::<SettingsView>::None);
     let editable = RwSignal::new(false);
+    // 保存 in-flight 中の編集を防ぎ、成功レスポンスでローカル編集が
+    // 上書きされる lost update を回避する（R6 レビュー / R2-BV01）。
+    let saving = RwSignal::new(false);
     let revision = RwSignal::new(0u64);
     let max_tokens_error = RwSignal::new(String::new());
     let timeout_error = RwSignal::new(String::new());
@@ -4432,8 +4443,14 @@ fn SettingsForm() -> impl IntoView {
     });
 
     let on_save = move |_event: web_sys::MouseEvent| {
+        // prop:disabled が反映される前の連続クリックもここで弾く。
+        if saving.get() {
+            return;
+        }
+        saving.set(true);
         let Some(view) = config.get() else {
             status.set("デスクトップ版のみ利用可能".to_string());
+            saving.set(false);
             return;
         };
         wasm_bindgen_futures::spawn_local(async move {
@@ -4445,6 +4462,8 @@ fn SettingsForm() -> impl IntoView {
                 }
                 Err(error) => status.set(error.status_message().to_string()),
             }
+            // Rust に finally は無いため、成功・失敗の両方をここで解除する。
+            saving.set(false);
         });
     };
 
@@ -4464,9 +4483,12 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"General Settings"</h3>
                 <label for="settings-language">"言語"</label>
-                <input id="settings-language" type="text" readonly=move || !editable.get()
+                <input id="settings-language" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.general.language).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.general.language = value; }
@@ -4474,9 +4496,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-theme">"テーマ"</label>
-                <input id="settings-theme" type="text" readonly=move || !editable.get()
+                <input id="settings-theme" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.general.theme).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.general.theme = value; }
@@ -4484,9 +4509,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-log-level">"ログレベル"</label>
-                <input id="settings-log-level" type="text" readonly=move || !editable.get()
+                <input id="settings-log-level" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.general.log_level).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.general.log_level = value; }
@@ -4494,9 +4522,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-telemetry">"テレメトリ"</label>
-                <input id="settings-telemetry" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-telemetry" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.general.telemetry).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.general.telemetry = checked; }
@@ -4512,9 +4543,12 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"AI Settings"</h3>
                 <label for="settings-ai-enabled">"Enable AI Features"</label>
-                <input id="settings-ai-enabled" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-ai-enabled" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.ai.enabled).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.enabled = checked; }
@@ -4522,9 +4556,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-provider">"Provider"</label>
-                <select id="settings-provider" prop:disabled=move || !editable.get()
+                <select id="settings-provider" prop:disabled=move || !editable.get() || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.default_provider).unwrap_or_default()
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = select_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.default_provider = value; }
@@ -4535,9 +4572,12 @@ fn SettingsForm() -> impl IntoView {
                     <option value="ollama">"Ollama (Local)"</option>
                 </select>
                 <label for="settings-openai-base-url">"OpenAI Base URL"</label>
-                <input id="settings-openai-base-url" type="text" readonly=move || !editable.get()
+                <input id="settings-openai-base-url" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.openai.base_url).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.openai.base_url = value; }
@@ -4545,9 +4585,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-openai-model">"OpenAI Model"</label>
-                <input id="settings-openai-model" type="text" readonly=move || !editable.get()
+                <input id="settings-openai-model" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.openai.model).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.openai.model = value; }
@@ -4561,9 +4604,12 @@ fn SettingsForm() -> impl IntoView {
                     {move || if config.get().map(|v| v.ai.openai.has_api_key).unwrap_or(false) { "設定済み" } else { "未設定" }}
                 </span>
                 <label for="settings-organization">"Organization"</label>
-                <input id="settings-organization" type="text" readonly=move || !editable.get()
+                <input id="settings-organization" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().and_then(|v| v.ai.openai.organization).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot {
@@ -4573,9 +4619,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-ollama-base-url">"Ollama Base URL"</label>
-                <input id="settings-ollama-base-url" type="text" readonly=move || !editable.get()
+                <input id="settings-ollama-base-url" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.ollama.base_url).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.ollama.base_url = value; }
@@ -4583,9 +4632,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-ollama-model">"Ollama Model"</label>
-                <input id="settings-ollama-model" type="text" readonly=move || !editable.get()
+                <input id="settings-ollama-model" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.ollama.model).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.ollama.model = value; }
@@ -4593,9 +4645,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-keep-alive">"Ollama Keep Alive (minutes)"</label>
-                <input id="settings-keep-alive" type="number" min="0" readonly=move || !editable.get()
+                <input id="settings-keep-alive" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.ollama.keep_alive_minutes.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
 
                             config.update(|slot| {
@@ -4607,11 +4662,14 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-max-tokens">"最大トークン/要求"</label>
-                <input id="settings-max-tokens" type="number" min="1" readonly=move || !editable.get()
+                <input id="settings-max-tokens" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     aria-invalid=move || (!max_tokens_error.get().is_empty()).to_string()
                     aria-describedby="settings-max-tokens-error"
                     prop:value=move || config.get().map(|v| v.ai.max_tokens_per_request.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             match value.parse::<usize>() {
                                 Ok(parsed) if parsed > 0 => {
@@ -4626,9 +4684,12 @@ fn SettingsForm() -> impl IntoView {
                     }/>
                 <p id="settings-max-tokens-error" class="settings-error" role="alert">{move || max_tokens_error.get()}</p>
                 <label for="settings-max-tokens-month">"月間トークン上限"</label>
-                <input id="settings-max-tokens-month" type="number" min="1" readonly=move || !editable.get()
+                <input id="settings-max-tokens-month" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().and_then(|v| v.ai.max_tokens_per_month.map(|n| n.to_string())).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             let parsed = value.parse::<u64>().ok().filter(|n| *n > 0);
                             config.update(|slot| {
@@ -4637,11 +4698,14 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-timeout">"タイムアウト (秒)"</label>
-                <input id="settings-timeout" type="number" min="1" readonly=move || !editable.get()
+                <input id="settings-timeout" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     aria-invalid=move || (!timeout_error.get().is_empty()).to_string()
                     aria-describedby="settings-timeout-error"
                     prop:value=move || config.get().map(|v| v.ai.timeout_secs.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             match value.parse::<u64>() {
                                 Ok(parsed) if parsed > 0 => {
@@ -4656,9 +4720,12 @@ fn SettingsForm() -> impl IntoView {
                     }/>
                 <p id="settings-timeout-error" class="settings-error" role="alert">{move || timeout_error.get()}</p>
                 <label for="settings-prefer-local">"ローカル優先"</label>
-                <input id="settings-prefer-local" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-prefer-local" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.ai.prefer_local).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.prefer_local = checked; }
@@ -4666,9 +4733,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-streaming">"ストリーミング"</label>
-                <input id="settings-streaming" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-streaming" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.ai.streaming).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.ai.streaming = checked; }
@@ -4679,9 +4749,12 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"Lint Settings"</h3>
                 <label for="settings-lint-enabled">"Enable Linting"</label>
-                <input id="settings-lint-enabled" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-lint-enabled" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.lint.enabled).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.lint.enabled = checked; }
@@ -4689,9 +4762,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-lint-enable-rules">"有効なルール (カンマ区切り)"</label>
-                <input id="settings-lint-enable-rules" type="text" readonly=move || !editable.get()
+                <input id="settings-lint-enable-rules" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.lint.enable_rules.join(", ")).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             let rules = split_rules(&value);
                             config.update(|slot| {
@@ -4700,9 +4776,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-lint-disable-rules">"無効なルール (カンマ区切り)"</label>
-                <input id="settings-lint-disable-rules" type="text" readonly=move || !editable.get()
+                <input id="settings-lint-disable-rules" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.lint.disable_rules.join(", ")).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             let rules = split_rules(&value);
                             config.update(|slot| {
@@ -4711,9 +4790,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-auto-fix">"Auto-fix on Save"</label>
-                <input id="settings-auto-fix" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-auto-fix" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.lint.auto_fix).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.lint.auto_fix = checked; }
@@ -4721,9 +4803,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-warnings-as-errors">"警告をエラーとして扱う"</label>
-                <input id="settings-warnings-as-errors" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-warnings-as-errors" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.lint.warnings_as_errors).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.lint.warnings_as_errors = checked; }
@@ -4735,9 +4820,12 @@ fn SettingsForm() -> impl IntoView {
                 <h3>"Editor Settings"</h3>
                 <p class="settings-notice">"エディタ設定: config.toml の設定値です。エディタの動作には未接続です。"</p>
                 <label for="settings-editor-font-family">"Font Family"</label>
-                <input id="settings-editor-font-family" type="text" readonly=move || !editable.get()
+                <input id="settings-editor-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.font_family).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.font_family = value; }
@@ -4745,9 +4833,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-font-size">"Font Size"</label>
-                <input id="settings-editor-font-size" type="number" min="10" max="24" readonly=move || !editable.get()
+                <input id="settings-editor-font-size" type="number" min="10" max="24" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.font_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
 
                             config.update(|slot| {
@@ -4759,9 +4850,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-line-height">"Line Height"</label>
-                <input id="settings-editor-line-height" type="number" step="0.1" readonly=move || !editable.get()
+                <input id="settings-editor-line-height" type="number" step="0.1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.line_height.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
 
                             config.update(|slot| {
@@ -4773,9 +4867,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-tab-size">"Tab Size"</label>
-                <input id="settings-editor-tab-size" type="number" min="1" readonly=move || !editable.get()
+                <input id="settings-editor-tab-size" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.tab_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<usize>().ok()) {
 
                             config.update(|slot| {
@@ -4787,9 +4884,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-auto-save-delay">"Auto Save Delay (ms)"</label>
-                <input id="settings-editor-auto-save-delay" type="number" min="0" readonly=move || !editable.get()
+                <input id="settings-editor-auto-save-delay" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.auto_save_delay.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<u32>().ok()) {
 
                             config.update(|slot| {
@@ -4801,9 +4901,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-line-numbers">"Line Numbers"</label>
-                <input id="settings-editor-line-numbers" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-line-numbers" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.line_numbers).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.line_numbers = checked; }
@@ -4811,9 +4914,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-word-wrap">"Word Wrap"</label>
-                <input id="settings-editor-word-wrap" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-word-wrap" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.word_wrap).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.word_wrap = checked; }
@@ -4821,9 +4927,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-minimap">"Minimap"</label>
-                <input id="settings-editor-minimap" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-minimap" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.minimap).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.minimap = checked; }
@@ -4831,9 +4940,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-insert-spaces">"Insert Spaces"</label>
-                <input id="settings-editor-insert-spaces" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-insert-spaces" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.insert_spaces).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.insert_spaces = checked; }
@@ -4841,9 +4953,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-vim-mode">"Vim Mode"</label>
-                <input id="settings-editor-vim-mode" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-vim-mode" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.vim_mode).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.vim_mode = checked; }
@@ -4851,9 +4966,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-match-brackets">"Match Brackets"</label>
-                <input id="settings-editor-match-brackets" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-match-brackets" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.match_brackets).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.match_brackets = checked; }
@@ -4861,9 +4979,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-auto-close-brackets">"Auto Close Brackets"</label>
-                <input id="settings-editor-auto-close-brackets" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-auto-close-brackets" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.auto_close_brackets).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.auto_close_brackets = checked; }
@@ -4871,9 +4992,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-editor-indent-with-tabs">"Indent With Tabs"</label>
-                <input id="settings-editor-indent-with-tabs" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-editor-indent-with-tabs" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.indent_with_tabs).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.editor.indent_with_tabs = checked; }
@@ -4885,9 +5009,12 @@ fn SettingsForm() -> impl IntoView {
                 <h3>"Reader Settings"</h3>
                 <p class="settings-notice">"リーダー設定: config.toml の設定値です。実際の表示はブラウザに保存された表示設定が権威です（ADR-0211）。"</p>
                 <label for="settings-reader-font-family">"Font Family"</label>
-                <input id="settings-reader-font-family" type="text" readonly=move || !editable.get()
+                <input id="settings-reader-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.font_family).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.font_family = value; }
@@ -4895,9 +5022,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-font-size">"Font Size"</label>
-                <input id="settings-reader-font-size" type="number" min="10" max="48" readonly=move || !editable.get()
+                <input id="settings-reader-font-size" type="number" min="10" max="48" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.font_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
 
                             config.update(|slot| {
@@ -4909,9 +5039,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-line-height">"Line Height"</label>
-                <input id="settings-reader-line-height" type="number" step="0.1" readonly=move || !editable.get()
+                <input id="settings-reader-line-height" type="number" step="0.1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.line_height.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<f32>().ok()) {
 
                             config.update(|slot| {
@@ -4923,9 +5056,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-theme">"Theme"</label>
-                <input id="settings-reader-theme" type="text" readonly=move || !editable.get()
+                <input id="settings-reader-theme" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.theme).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.theme = value; }
@@ -4933,9 +5069,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-column-width">"Column Width"</label>
-                <input id="settings-reader-column-width" type="number" min="1" readonly=move || !editable.get()
+                <input id="settings-reader-column-width" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().and_then(|v| v.reader.column_width.map(|n| n.to_string())).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             let parsed = value.parse::<u32>().ok();
                             config.update(|slot| {
@@ -4944,9 +5083,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-scroll-mode">"Scroll Mode"</label>
-                <input id="settings-reader-scroll-mode" type="text" readonly=move || !editable.get()
+                <input id="settings-reader-scroll-mode" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.scroll_mode).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.scroll_mode = value; }
@@ -4954,9 +5096,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-hyphenation">"Hyphenation"</label>
-                <input id="settings-reader-hyphenation" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-reader-hyphenation" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.hyphenation).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.hyphenation = checked; }
@@ -4964,9 +5109,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-vertical-writing">"Vertical Writing"</label>
-                <input id="settings-reader-vertical-writing" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-reader-vertical-writing" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.vertical_writing).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.vertical_writing = checked; }
@@ -4974,9 +5122,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-page-numbers">"Show Page Numbers"</label>
-                <input id="settings-reader-page-numbers" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-reader-page-numbers" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.show_page_numbers).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.show_page_numbers = checked; }
@@ -4984,9 +5135,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-reader-remember-position">"Remember Position"</label>
-                <input id="settings-reader-remember-position" type="checkbox" prop:disabled=move || !editable.get()
+                <input id="settings-reader-remember-position" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.remember_position).unwrap_or(false)
                     on:change=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(checked) = input_checked(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.reader.remember_position = checked; }
@@ -4998,9 +5152,12 @@ fn SettingsForm() -> impl IntoView {
                 <h3>"Storage Settings"</h3>
                 <p class="settings-notice">"保存先設定は config.toml が権威です。path と秘密情報は画面へ表示しません。"</p>
                 <label for="settings-storage-backend">"Default Backend"</label>
-                <input id="settings-storage-backend" type="text" readonly=move || !editable.get()
+                <input id="settings-storage-backend" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.storage.default_backend).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(value) = input_value(&event) {
                             config.update(|slot| {
                                 if let Some(view) = slot { view.storage.default_backend = value; }
@@ -5008,9 +5165,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <label for="settings-storage-max-recent">"Max Recent"</label>
-                <input id="settings-storage-max-recent" type="number" min="0" readonly=move || !editable.get()
+                <input id="settings-storage-max-recent" type="number" min="0" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.storage.max_recent.to_string()).unwrap_or_default()
                     on:input=move |event| {
+                        if saving.get() {
+                            return;
+                        }
                         if let Some(parsed) = input_value(&event).and_then(|value| value.parse::<usize>().ok()) {
 
                             config.update(|slot| {
@@ -5022,7 +5182,7 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
             </section>
-            <button id="settings-save" type="button" class="btn btn-primary" prop:disabled=move || !editable.get() on:click=on_save>
+            <button id="settings-save" type="button" class="btn btn-primary" prop:disabled=move || !editable.get() || saving.get() on:click=on_save>
                 {move || if editable.get() { "設定を保存" } else { "保存はデスクトップ版のみ" }}
             </button>
         </form>
