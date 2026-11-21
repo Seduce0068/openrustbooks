@@ -763,6 +763,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0285-fs-read-only-enforcement](docs/decisions/0285-fs-read-only-enforcement.md)
 - [0286-storage-destructive-guard](docs/decisions/0286-storage-destructive-guard.md)
 - [0287-ipc-error-redaction](docs/decisions/0287-ipc-error-redaction.md)
+- [0288-home-navigation](docs/decisions/0288-home-navigation.md)
+  - Reader / Editor への導線を追加し、未接続ボタンとダミー FileTree を誤解のない表示へ変更する決定。
   - desktop command の生エラー文字列を廃し、固定 code と固定文言だけを IPC へ返す決定。
   - storage root 自身の削除・改名を拒否し、move_item の上書き競合で既存データを保持する決定。
   - local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
