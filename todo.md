@@ -71,9 +71,6 @@ status: current
 - [ ] 【front matter 往復のバイト保全を検証】CRLF / 末尾改行 / YAML 書式が開いて保存するだけで
       変わり得る。元テキスト保持または変更無し時の元バイト返却を確認する。
       根拠 `core/src/document.rs:209-220,246-256` / R2-ER01。
-- [ ] 【lint フィードバック no-op のリトライを停止】Table/FrontMatter の add_lint_feedback が空で、
-      同一プロンプトを最大 11 回呼ぶ。フィードバック反映または即時 lint_passed=false。
-      根拠 `core/src/ai_markdown/mod.rs:399,451` / `core/src/ai_markdown/pipeline.rs:124-163` / R2-ER01。
 - [ ] 【cargo audit の鮮度を担保】verify.sh の `--no-fetch` はローカルキャッシュ依存で、
       新規 advisory を検出しない。CI では fetch 有効化または update-db スケジュールを追加。
       根拠 `scripts/verify.sh:295-312` / R3-AU01。
@@ -178,6 +175,7 @@ status: current
 
 ## 完了
 
+- [x] 【lint リトライ】no-op feedback 要求の無駄な再呼び出しを停止、max_retries も内部 clamp（ADR-0293）。
 - [x] 【AI 空レスポンス】choices/content/response 欠落を固定文言の provider error 化（ADR-0292）。
 - [x] 【E2E 件数ゲート】CI-H01 行への依存を削除し、Checker(expected) を単一情報源化（ADR-0291）。
 - [x] 【CI 再現性】wasm-pack 固定・lock 不変・WDIO cleanup 安全化・dependabot npm（ADR-0290）。

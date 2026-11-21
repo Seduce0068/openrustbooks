@@ -29,3 +29,9 @@ pipeline は lint 不合格のたびに同一 prompt / current_content で AI �
 - 外部 AI API への送信は行わない。
 - prompt / 既存成功契約を壊さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- Table/FrontMatter の no-op lint feedback で初回失敗時にリトライ停止。
+- execute_pipeline 内で max_retries を 10 以下へ clamp、usize::MAX も安全。
+- core 318 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
