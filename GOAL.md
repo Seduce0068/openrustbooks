@@ -29,3 +29,9 @@ await 中に commit_config が新 config / revision / service を確定すると
 - 外部 AI API への送信は行わない。
 - 既存 enable/disable/ai_service 契約を壊さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- refresh_ai_service が開始/終了で revision を確認し、競合時に古い service を破棄。
+- config write guard で確認〜置換を不可分化。
+- 競合再現 test 3 件、desktop 124 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。

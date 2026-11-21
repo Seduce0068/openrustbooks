@@ -69,9 +69,6 @@ status: current
       Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
       core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
       `web/src/lib.rs:2974,2988,3682,3691` / R3-IV01 / 重大度 medium。
-- [ ] 【設定 service の生成競合を修正】`refresh_ai_service` は await 後に revision を再確認せず、
-      commit_config の新 service を古い生成結果で上書きし得る。根拠 `desktop/src/state/mod.rs:167-174` /
-      R2-BV01 / 重大度 medium。
 - [ ] 【autosave / 保存の lost update を修正】保存 in-flight 中のローカル編集が成功レスポンスで失われる。
       手動 Save 後の last_text 未更新、doc_id 変更時のクリア漏れも修正。
       根拠 `web/src/lib.rs:261,266-274,330-348,424-428,4337-4351` /
@@ -158,6 +155,7 @@ status: current
 
 ## 完了
 
+- [x] 【AI service 競合】revision 再確認で古い service の上書きを防止（ADR-0299）。
 - [x] 【文書保存】temp + rename の atomic write へ変更、失敗時は元ファイル保持（ADR-0298）。
 - [x] 【front matter 保全】元テキスト保持で無編集 open→save のバイト列を保全（ADR-0297）。
 - [x] 【WDIO 保存往復】update_config_patch の revision +1 と config.toml 永続化を検証（ADR-0296）。
