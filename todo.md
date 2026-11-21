@@ -69,10 +69,6 @@ status: current
       Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
       core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
       `web/src/lib.rs:2974,2988,3682,3691` / R3-IV01 / 重大度 medium。
-- [ ] 【autosave / 保存の lost update を修正】保存 in-flight 中のローカル編集が成功レスポンスで失われる。
-      手動 Save 後の last_text 未更新、doc_id 変更時のクリア漏れも修正。
-      根拠 `web/src/lib.rs:261,266-274,330-348,424-428,4337-4351` /
-      R1-ER01 + R2-BV01 / 重大度 medium。
 - [ ] 【CI ゲートの欠落を解消】no-external-font-refs / trunk build + E2E / 配布パス検査 /
       シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
       billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
@@ -155,6 +151,7 @@ status: current
 
 ## 完了
 
+- [x] 【lost update】設定保存中の入力遮断と editor last_text 同期を実装（ADR-0300）。
 - [x] 【AI service 競合】revision 再確認で古い service の上書きを防止（ADR-0299）。
 - [x] 【文書保存】temp + rename の atomic write へ変更、失敗時は元ファイル保持（ADR-0298）。
 - [x] 【front matter 保全】元テキスト保持で無編集 open→save のバイト列を保全（ADR-0297）。

@@ -30,3 +30,10 @@ web の設定保存と autosave の lost update を修正する（R6 レビュ�
 - 外部 AI API / 秘密情報は扱わない。
 - Leptos の既存 signal 契約を大きく変えない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- settings 保存中は全入力/ハンドラを遮断し、全経路で saving=false へ復帰。
+- editor last_text を doc_id 変更/手動保存時に同期。
+- R4 high を反映、WDIO 1 passing、verify.sh 全ゲート成功（E2E 256）。
+- saving 専用回帰テスト / dirty フラグ UX は ADR-0300 の未決定。
