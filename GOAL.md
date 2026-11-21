@@ -33,3 +33,10 @@ fail-closed 契約と EPUB の拡張機能動作を統一する。
 - 新規 ZIP / EPUB 機能は追加しない。
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- mimetype BOM / fragment 復号 / manifest id 重複 / %XX 失敗 / 外部スキームを core+web 統一。
+- ADR-0007 の fragment 生保持は ADR-0305 が supersede。
+- core 341 / web 9 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 外部リンク allowlist / 全 URI 属性厳格検証は ADR-0305 の未決定。

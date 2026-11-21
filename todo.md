@@ -72,10 +72,6 @@ status: current
       今回の docfix で反映済みのため重複しない。
       根拠 `README.md:733,754-763` / `docs/runbook-release.md` /
       `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
-- [ ] 【EPUB / ZIP の解釈差を解消】BOM 入り mimetype、percent-encoded fragment、
-      重複 manifest id、%XX 復号失敗の Validation 飲み込み、外部スキーム判定を core / web で統一。
-      根拠 `core/src/archive.rs:193-226`、`core/src/epub/opf.rs:395`、
-      `core/src/epub/xmlutil.rs:13-24,85-97` / R3-IV01 / 重大度 medium。
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
@@ -135,6 +131,7 @@ status: current
 
 ## 完了
 
+- [x] 【EPUB/ZIP 解釈】BOM/fragment/重複 id/外部スキームを core+web 統一（ADR-0305）。
 - [x] 【dead config】9 件を DTO 除外し、config.toml 値保持と未配線表示を実装（ADR-0304）。
 - [x] 【未使用 plugin / 依存】6 plugin と 7 crate を削除、必須 init を log + dialog 化（ADR-0303）。
 - [x] 【設定インポート】現在値保護時の固定文言告知と README 制約を明記（ADR-0302）。
