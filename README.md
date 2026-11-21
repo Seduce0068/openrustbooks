@@ -768,6 +768,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0290-ci-reproducibility](docs/decisions/0290-ci-reproducibility.md)
 - [0291-e2e-count-single-source](docs/decisions/0291-e2e-count-single-source.md)
 - [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
+- [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
+  - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
   - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
   - E2E 期待件数を Checker(expected=N) のみに依存させ、todo.md の CI-H01 行をゲート条件から外す決定。
   - wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
