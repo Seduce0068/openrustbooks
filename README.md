@@ -780,6 +780,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0298-atomic-document-save](docs/decisions/0298-atomic-document-save.md)
 - [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
 - [0300-lost-update-guard](docs/decisions/0300-lost-update-guard.md)
+- [0301-input-size-bounds](docs/decisions/0301-input-size-bounds.md)
+  - open / import 前に 256 MiB 上限を検査し、読み取り後にも実バイト長を再確認する決定。
   - settings 保存中の入力を遮断し、editor の last_text を doc_id 変更・手動保存時に同期する決定。
   - AI service 生成中に config が更新されても古い service で上書きしない決定。
   - save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。

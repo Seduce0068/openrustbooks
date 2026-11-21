@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- ユーザー入力サイズの fail-closed 境界を追加（ADR-0301）。
 - 設定保存と autosave の lost update を防止（ADR-0300）。
 - AI service 生成中の設定競合を fail-closed 化（ADR-0299）。
 - 文書保存を atomic write へ変更（ADR-0298）。
