@@ -7,7 +7,7 @@ use openrustbooks_core::{
     config::LocalRootConfig,
     document::{
         Document, DocumentContent, DocumentFormat, DocumentId, DocumentMetadata,
-        extract_front_matter,
+        extract_front_matter_preserving,
     },
 };
 use std::path::{Component, Path, PathBuf};
@@ -129,6 +129,47 @@ fn resolve_within_roots(roots: &[LocalRootConfig], path: &Path) -> CoreResult<Re
     Err(CoreError::validation("Path escapes storage root"))
 }
 
+/// 読み込んだテキストから Document を構築する。
+///
+/// `open_document` と往復テストで同じ経路を使うため純粋関数に切り出している。
+/// Markdown は front matter の元テキストも保持し、保存時の再シリアライズを避ける。
+fn document_from_loaded_text(
+    id: DocumentId,
+    format: DocumentFormat,
+    content: String,
+    path: Option<PathBuf>,
+    title: Option<String>,
+) -> Document {
+    let size_bytes = content.len() as u64;
+    let content = match format {
+        DocumentFormat::Markdown => {
+            let (front_matter, body, front_matter_raw) = extract_front_matter_preserving(&content);
+            DocumentContent::Markdown {
+                content: body,
+                front_matter,
+                front_matter_raw,
+            }
+        }
+        _ => DocumentContent::Text(content),
+    };
+    Document {
+        metadata: DocumentMetadata {
+            id,
+            format,
+            title,
+            author: None,
+            created_at: None,
+            modified_at: None,
+            size_bytes,
+            path,
+            url: None,
+            checksum: None,
+            extra: Default::default(),
+        },
+        content,
+    }
+}
+
 /// Open a document from path
 #[command]
 pub async fn open_document(
@@ -154,36 +195,16 @@ pub async fn open_document(
 
     // Create document
     let id = DocumentId::from_string(path.clone());
-    let metadata = DocumentMetadata {
-        id: id.clone(),
+    let document = document_from_loaded_text(
+        id.clone(),
         format,
-        title: path_buf
+        content,
+        Some(path_buf.clone()),
+        path_buf
             .file_stem()
             .and_then(|s| s.to_str())
             .map(String::from),
-        author: None,
-        created_at: None,
-        modified_at: None,
-        size_bytes: content.len() as u64,
-        path: Some(path_buf.clone()),
-        url: None,
-        checksum: None,
-        extra: Default::default(),
-    };
-
-    let document = Document {
-        metadata,
-        content: match format {
-            DocumentFormat::Markdown => {
-                let (fm, body) = extract_front_matter(&content);
-                DocumentContent::Markdown {
-                    content: body,
-                    front_matter: fm,
-                }
-            }
-            _ => DocumentContent::Text(content),
-        },
-    };
+    );
 
     state.add_document(document.clone());
     state.mark_saved(&id);
@@ -495,5 +516,45 @@ mod tests {
             assert!(!message.contains(&root));
             assert!(!message.contains(&outside_path));
         }
+    }
+
+    /// `open_document` と同じ構築経路、`save_document` と同じ `full_text` で
+    /// 編集なしの open→save が元バイト列を保持することを固定する。
+    fn assert_open_save_round_trip(original: &str) {
+        let temp = TempRoot::new();
+        let path = temp.path.join("note.md");
+        fs::write(&path, original.as_bytes()).unwrap();
+
+        // open: ファイルを読み、本番と同じヘルパーで Document を構築する。
+        let loaded = fs::read_to_string(&path).unwrap();
+        let document = document_from_loaded_text(
+            DocumentId::from_string("note.md".to_string()),
+            DocumentFormat::Markdown,
+            loaded,
+            Some(path.clone()),
+            Some("note".to_string()),
+        );
+
+        // save: 編集せず full_text を書き出し、バイト単位で一致を確認する。
+        let saved = document.full_text().unwrap();
+        fs::write(&path, saved.as_bytes()).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+    }
+
+    #[test]
+    fn open_save_round_trip_preserves_crlf_and_trailing_newline() {
+        assert_open_save_round_trip("---\r\ntitle: Test\r\n---\r\n\r\n# Hello\r\n");
+    }
+
+    #[test]
+    fn open_save_round_trip_preserves_yaml_comments_and_key_order() {
+        assert_open_save_round_trip(
+            "---\n# 元のコメント\nzzz: \"double\"\naaa: 'single'\nn: 001\n---\nbody\n",
+        );
+    }
+
+    #[test]
+    fn open_save_round_trip_preserves_missing_trailing_newline() {
+        assert_open_save_round_trip("---\ntitle: Test\n---\n# Hello");
     }
 }
