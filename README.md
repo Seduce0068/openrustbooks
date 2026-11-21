@@ -778,6 +778,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0296-wdio-save-roundtrip](docs/decisions/0296-wdio-save-roundtrip.md)
 - [0297-front-matter-byte-preservation](docs/decisions/0297-front-matter-byte-preservation.md)
 - [0298-atomic-document-save](docs/decisions/0298-atomic-document-save.md)
+- [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
+  - AI service 生成中に config が更新されても古い service で上書きしない決定。
   - save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。
   - front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
   - WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。

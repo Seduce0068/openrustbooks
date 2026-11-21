@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 298 件）。
+openrustbooks の ADR 一覧（全 299 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -598,3 +598,5 @@ openrustbooks の ADR 一覧（全 298 件）。
   - status: accepted — front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
 - [ADR-0298: 文書保存の atomic 化](0298-atomic-document-save.md)
   - status: accepted — save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。
+- [ADR-0299: refresh_ai_service の revision 再確認](0299-ai-service-refresh-race.md)
+  - status: accepted — AI service 生成中に config が更新されても古い service で上書きしない決定。
