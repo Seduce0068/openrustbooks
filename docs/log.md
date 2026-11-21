@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- CI / WDIO の再現性と安全性を改善（ADR-0290）。
 - desktop ビルド前の frontend dist 生成と検証を明示化（ADR-0289）。
 - ホーム画面に Reader/Editor 導線を追加し、未接続 UI を明示（ADR-0288）。
 - IPC エラーを固定 code/文言へ統一し、生文字列の露出を防止（ADR-0287）。

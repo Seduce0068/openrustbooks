@@ -765,6 +765,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0287-ipc-error-redaction](docs/decisions/0287-ipc-error-redaction.md)
 - [0288-home-navigation](docs/decisions/0288-home-navigation.md)
 - [0289-desktop-frontend-build-dependency](docs/decisions/0289-desktop-frontend-build-dependency.md)
+- [0290-ci-reproducibility](docs/decisions/0290-ci-reproducibility.md)
+  - wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
   - tauri.conf.json の frontendDist 依存を明示化し、生成済み web/dist の存在と安全性を fail-closed で検証する決定。
   - Reader / Editor への導線を追加し、未接続ボタンとダミー FileTree を誤解のない表示へ変更する決定。
   - desktop command の生エラー文字列を廃し、固定 code と固定文言だけを IPC へ返す決定。

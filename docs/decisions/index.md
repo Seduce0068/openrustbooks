@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 289 件）。
+openrustbooks の ADR 一覧（全 290 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -580,3 +580,5 @@ openrustbooks の ADR 一覧（全 289 件）。
   - status: accepted — Reader / Editor への導線を追加し、未接続ボタンとダミー FileTree を誤解のない表示へ変更する決定。
 - [ADR-0289: desktop ビルド前の frontend dist 生成と検証](0289-desktop-frontend-build-dependency.md)
   - status: accepted — tauri.conf.json の frontendDist 依存を明示化し、生成済み web/dist の存在と安全性を fail-closed で検証する決定。
+- [ADR-0290: CI / WDIO の再現性と安全性の改善](0290-ci-reproducibility.md)
+  - status: accepted — wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
