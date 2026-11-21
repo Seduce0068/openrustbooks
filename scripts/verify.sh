@@ -17,8 +17,84 @@ Options:
                 <dir>/<short-sha>-<UTC>/ へ保持し manifest.txt を生成する。
                 一時 dist は常に trap で削除され、--dist 指定時のみ別途コピーが残る。
   -h, --help    このヘルプを表示して終了する。
+  --check-audit-db-freshness [<dir>]
+                advisory DB の鮮度ゲートのみを実行する（テスト／保守用）。
+                <dir> 省略時は CARGO_HOME/advisory-db を検査する。
 EOF
 }
+
+# advisory DB の鮮度を fail-closed で検査する。
+# - DB 場所: 第1引数 > AUDIT_DB_DIR > $CARGO_HOME/advisory-db
+#   （CARGO_HOME 未設定なら $HOME/.cargo/advisory-db）
+# - 許容日数: AUDIT_MAX_AGE_DAYS（未設定時 7、正の整数のみ、最大 90）
+# - 欠落 / .git 欠落 / 時刻取得不能 / 未来 / 超過はすべて失敗（rc=1）。
+check_audit_db_freshness() {
+	local db_dir="${1:-${AUDIT_DB_DIR:-}}"
+	# ${VAR-7} とし、未設定のみ既定化する。空文字は不正値として fail-closed にする。
+	local max_days="${AUDIT_MAX_AGE_DAYS-7}"
+	local cargo_home db_git now commit_ts age max_age_seconds
+
+	if [[ -z "$db_dir" ]]; then
+		if [[ -n "${CARGO_HOME:-}" ]]; then
+			cargo_home="${CARGO_HOME%/}"
+		else
+			cargo_home="${HOME%/}/.cargo"
+		fi
+		db_dir="$cargo_home/advisory-db"
+	fi
+	# 解決済みパスを呼び出し側へ渡し、鮮度検査と cargo audit が同一 DB を指すようにする。
+	AUDIT_DB_PATH="$db_dir"
+
+	# 不正な上限は「判定不能」として fail-closed（空文字も既定へ置換しない）。
+	if [[ ! "$max_days" =~ ^[1-9][0-9]*$ ]] || ((max_days > 90)); then
+		echo "ERROR: AUDIT_MAX_AGE_DAYS が不正です（1〜90 の整数が必要）: ${max_days:-<empty>}" >&2
+		return 1
+	fi
+
+	if [[ ! -d "$db_dir" ]]; then
+		echo "ERROR: advisory DB が見つかりません: $db_dir" >&2
+		return 1
+	fi
+	db_git="$db_dir/.git"
+	if [[ ! -e "$db_git" ]]; then
+		echo "ERROR: advisory DB の .git が見つかりません: $db_git" >&2
+		return 1
+	fi
+
+	now="$(date +%s)" || {
+		echo "ERROR: 現在時刻 (date +%s) を取得できません" >&2
+		return 1
+	}
+	# git log の失敗・空出力は || true で吸収し、値検証で fail-closed にする。
+	commit_ts="$(git -C "$db_dir" log -1 --format=%ct 2>/dev/null || true)"
+	if [[ ! "$commit_ts" =~ ^[0-9]+$ ]]; then
+		echo "ERROR: advisory DB の最終コミット時刻を取得できません: $db_dir" >&2
+		return 1
+	fi
+
+	age=$((now - commit_ts))
+	# 未来のタイムスタンプはクロック不整合の可能性があり判定不能として拒否する。
+	if ((age < 0)); then
+		echo "ERROR: advisory DB の最終コミット時刻が未来です: $db_dir (commit_ts=$commit_ts, now=$now)" >&2
+		return 1
+	fi
+	max_age_seconds=$((max_days * 86400))
+	if ((age > max_age_seconds)); then
+		echo "ERROR: advisory DB が古すぎます: $db_dir (age=${age}s > limit=${max_age_seconds}s / ${max_days}日)" >&2
+		echo "       cargo audit update-db または fetch 有効な CI での更新が必要です" >&2
+		return 1
+	fi
+	echo "advisory DB freshness OK: $db_dir (age=${age}s / limit=${max_age_seconds}s / ${max_days}日)"
+	return 0
+}
+
+# 鮮度ゲート単独の実行（負向テスト／運用確認用）。通常の全検証より先に処理する。
+if [[ "${1:-}" == "--check-audit-db-freshness" ]]; then
+	if check_audit_db_freshness "${2:-}"; then
+		exit 0
+	fi
+	exit 1
+fi
 
 # 一時 dist は常に trap で削除する。--dist 指定時のみ、成功時に別途コピーを保持する。
 RETAIN_DIST=0
@@ -292,23 +368,47 @@ run wasm-web cargo check -p openrustbooks-web --target wasm32-unknown-unknown --
 # wasm-pack の導入とテスト実行は共通スクリプトに集約し、CI と単一情報源にする。
 run wasm-test bash scripts/ci-wasm-test.sh
 
-# 脆弱性ゲート: advisory DB をフェッチせずローカルキャッシュだけで監査する。
-# -n/--no-fetch がオフライン／キャッシュ優先のオプション（git fetch を実行しない）。
-# --deny warnings は意図的に使わない（unmaintained 等 10 件は既知 baseline の警告）。
-# 脆弱性が 1 件でもあれば cargo audit は rc!=0 を返し、run ヘルパーがゲートを失敗させる。
-# advisory DB が無い場合も cargo audit が rc!=0 を返してゲート失敗（fail-closed）。
-# --no-fetch は stale 判定を無効化するため、鮮度は定期的な `cargo audit update-db` の
-# 運用責任とし、--stale は指定しない（ADR-0125 / ADR-0086）。
-# cargo-audit 未インストール時もスキップせず、ERROR を出してゲートを失敗させる
-# （未インストールを理由に fail-open にしない）。
-if command -v cargo-audit >/dev/null 2>&1; then
-	run audit cargo audit --no-fetch
+# advisory DB の鮮度ゲート（cargo audit より先に実行する）。
+# --no-fetch は stale 判定を無効化するため、鮮度は自前で検査する（ADR-0125 / ADR-0086）。
+# 鮮度不合格時は cargo audit を実行せず、ゲート失敗を確定させる（fail-closed）。
+# audit_freshness_ok は前段ゲートの fail 状態に影響されない専用の成否フラグ。
+AUDIT_DB_PATH=""
+audit_freshness_ok=0
+echo "===== START: audit-db-freshness ====="
+if check_audit_db_freshness; then
+	echo "===== END: audit-db-freshness rc=0 ====="
+	audit_freshness_ok=1
 else
-	# run ヘルパーと同じ START/END 形式で失敗を記録し、fail を立てる。
-	echo "===== START: audit ====="
-	echo "ERROR: cargo-audit is required; install with: cargo install cargo-audit --locked"
-	echo "===== END: audit rc=127 ====="
+	audit_freshness_rc=$?
+	echo "===== END: audit-db-freshness rc=$audit_freshness_rc ====="
+	audit_freshness_ok=0
 	fail=1
+fi
+if ((audit_freshness_ok == 1)); then
+	# 脆弱性ゲート: advisory DB をフェッチせずローカルキャッシュだけで監査する。
+	# -n/--no-fetch がオフライン／キャッシュ優先のオプション（git fetch を実行しない）。
+	# --deny warnings は意図的に使わない（unmaintained 等 10 件は既知 baseline の警告）。
+	# 脆弱性が 1 件でもあれば cargo audit は rc!=0 を返し、run ヘルパーがゲートを失敗させる。
+	# advisory DB が無い場合も cargo audit が rc!=0 を返してゲート失敗（fail-closed）。
+	# --stale は指定しない（鮮度は上のゲートで担保するため）。
+	# CI 向け: 新鮮な advisory DB を得る目的では fetch 有効の `cargo audit`（または
+	# `cargo audit update-db`）の利用を推奨する。ただし verify.sh はオフライン再現性を
+	# 優先して --no-fetch を維持し、鮮度ゲートでキャッシュの古さを検出する。
+	# 共通 workflow（Seduce0068/workflows）は変更しない。
+	# cargo-audit 未インストール時もスキップせず、ERROR を出してゲートを失敗させる
+	# （未インストールを理由に fail-open にしない）。
+	if command -v cargo-audit >/dev/null 2>&1; then
+		# 鮮度検査で解決した DB を明示渡しし、検査対象と監査対象を一致させる。
+		run audit cargo audit --no-fetch --db "$AUDIT_DB_PATH"
+	else
+		# run ヘルパーと同じ START/END 形式で失敗を記録し、fail を立てる。
+		echo "===== START: audit ====="
+		echo "ERROR: cargo-audit is required; install with: cargo install cargo-audit --locked"
+		echo "===== END: audit rc=127 ====="
+		fail=1
+	fi
+else
+	echo "ERROR: advisory DB の鮮度が不合格のため cargo audit をスキップします (db=$AUDIT_DB_PATH)" >&2
 fi
 
 if [[ $fail -ne 0 ]]; then
