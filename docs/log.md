@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- WDIO に実 WebView の設定保存往復を追加（ADR-0296）。
 - 入口文書を現行状態へ追従、ADR-0295 を追加。
 - README / 索引 / runbook を実装へ追従。実 WebView 未検証を ADR-0282 / 0283 の完了へ、
   ドキュメント閲覧を EPUB / ZIP / Markdown 実装済みと PDF / TXT 設計段階へ分離。

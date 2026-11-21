@@ -775,6 +775,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
 - [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
 - [0295-documentation-current-state](docs/decisions/0295-documentation-current-state.md)
+- [0296-wdio-save-roundtrip](docs/decisions/0296-wdio-save-roundtrip.md)
+  - WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。
   - 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
   - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
   - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
