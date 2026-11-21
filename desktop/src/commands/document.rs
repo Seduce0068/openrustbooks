@@ -1,5 +1,6 @@
 //! Document management commands.
 
+use crate::commands::ipc_error;
 use crate::state::AppState;
 use openrustbooks_core::{
     CoreError, CoreResult,
@@ -138,13 +139,13 @@ pub async fn open_document(
     let config = state.config();
     // 設定済み root 配下のみ読み取りを許可する
     let path_buf = resolve_within_roots(&config.storage.local_roots, &PathBuf::from(&path))
-        .map_err(|e| e.to_string())?
+        .map_err(ipc_error)?
         .path;
 
     // Read file content
     let content = tokio::fs::read_to_string(&path_buf)
         .await
-        .map_err(|e| CoreError::Io(e).to_string())?;
+        .map_err(|e| ipc_error(CoreError::Io(e)))?;
 
     // Detect format
     let format =
@@ -204,7 +205,7 @@ pub async fn save_document(
     let doc_id = DocumentId::from_string(id);
     let mut document = state
         .get_document(&doc_id)
-        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
 
     // Update content if provided
     if let Some(new_content) = content
@@ -218,17 +219,19 @@ pub async fn save_document(
         let config = state.config();
         // 設定済み root 配下のみ書き込みを許可する
         let resolved =
-            resolve_within_roots(&config.storage.local_roots, path).map_err(|e| e.to_string())?;
+            resolve_within_roots(&config.storage.local_roots, path).map_err(ipc_error)?;
         if resolved.read_only {
-            return Err(CoreError::validation("Storage root is read-only").to_string());
+            return Err(ipc_error(CoreError::validation(
+                "Storage root is read-only",
+            )));
         }
         let text = document
             .full_text()
-            .ok_or_else(|| CoreError::validation("Document is not text-editable").to_string())?;
+            .ok_or_else(|| ipc_error(CoreError::validation("Document is not text-editable")))?;
 
         tokio::fs::write(&resolved.path, &text)
             .await
-            .map_err(|e| CoreError::Io(e).to_string())?;
+            .map_err(|e| ipc_error(CoreError::Io(e)))?;
 
         // Update metadata
         document.metadata.size_bytes = text.len() as u64;
@@ -255,7 +258,9 @@ pub async fn close_document(
 
     // Check for unsaved changes
     if !force.unwrap_or(false) && state.is_unsaved(&doc_id) {
-        return Err(CoreError::validation("Document has unsaved changes").to_string());
+        return Err(ipc_error(CoreError::validation(
+            "Document has unsaved changes",
+        )));
     }
 
     let document = state.remove_document(&doc_id);
@@ -278,12 +283,12 @@ pub fn get_document_content(state: State<'_, Arc<AppState>>, id: String) -> Resu
     let doc_id = DocumentId::from_string(id);
     let document = state
         .get_document(&doc_id)
-        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
 
     document
         .as_text()
         .map(String::from)
-        .ok_or_else(|| CoreError::validation("Document is not text-editable").to_string())
+        .ok_or_else(|| ipc_error(CoreError::validation("Document is not text-editable")))
 }
 
 /// Set document content
@@ -297,7 +302,7 @@ pub fn set_document_content(
     let doc_id = DocumentId::from_string(id);
     let mut document = state
         .get_document(&doc_id)
-        .ok_or_else(|| CoreError::DocumentNotFound(doc_id.0.to_string()).to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
 
     if let Some(text) = document.as_text_mut() {
         *text = content;
@@ -306,7 +311,9 @@ pub fn set_document_content(
         let _ = app.emit("document-changed", &document);
         Ok(())
     } else {
-        Err(CoreError::validation("Document is not text-editable").to_string())
+        Err(ipc_error(CoreError::validation(
+            "Document is not text-editable",
+        )))
     }
 }
 
@@ -447,6 +454,17 @@ mod tests {
         roots[0].read_only = true;
         let resolved = resolve_within_roots(&roots, &abs).unwrap();
         assert!(resolved.read_only);
+    }
+
+    /// DocumentNotFound の id（path 由来）が IPC 文字列へ漏れないこと。
+    #[test]
+    fn document_ipc_error_string_never_contains_id_or_path() {
+        let secret_id = "/home/koppe/secret/private.epub";
+        let rendered = ipc_error(CoreError::DocumentNotFound(secret_id.to_string()));
+
+        assert_eq!(rendered, "Internal configuration error");
+        assert!(!rendered.contains(secret_id));
+        assert!(!rendered.contains("private.epub"));
     }
 
     #[test]

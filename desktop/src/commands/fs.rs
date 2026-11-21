@@ -1,5 +1,6 @@
 //! File system commands.
 
+use crate::commands::ipc_error;
 use crate::state::AppState;
 use openrustbooks_core::{
     CoreError, CoreResult,
@@ -12,11 +13,6 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State, command};
 
-/// Convert CoreError to String for Tauri commands
-fn map_err(e: CoreError) -> String {
-    e.to_string()
-}
-
 /// 設定された local root ごとに storage を生成し、`path` と `read_only` を対応付けて保持する。
 ///
 /// 各 `LocalStorage` が `read_only` を保持するため、以降のコマンドは対象パスから
@@ -27,7 +23,7 @@ async fn create_storage(config: &AppState) -> Result<Vec<LocalStorage>, String> 
 
     for root in &app_config.storage.local_roots {
         let mut local = LocalStorage::new_with_read_only(root.path.clone(), root.read_only);
-        local.initialize().await.map_err(map_err)?;
+        local.initialize().await.map_err(ipc_error)?;
         storages.push(local);
     }
 
@@ -213,13 +209,13 @@ pub async fn read_directory(
     let storages = create_storage(&state).await?;
     let storage = storages
         .first()
-        .ok_or_else(|| CoreError::storage("No storage backend available").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::storage("No storage backend available")))?;
 
     let path_buf = PathBuf::from(path);
     storage
         .list(&path_buf, options.unwrap_or_default())
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// command 本体。generic の `AppHandle<R>` を使い、test からも同じ経路で呼べるようにする。
@@ -232,7 +228,7 @@ async fn create_file_impl<R: tauri::Runtime>(
     let path_buf = PathBuf::from(&path);
     let storages = create_storage(state).await?;
     // 対象 root が read-only なら、親ディレクトリ作成の前に拒否する。
-    let resolved = resolve_target_storage(&storages, &path_buf).map_err(map_err)?;
+    let resolved = resolve_target_storage(&storages, &path_buf).map_err(ipc_error)?;
 
     // Create parent directories（解決済みの絶対パスを使う）
     if let Some(parent) = resolved.path.parent() {
@@ -240,7 +236,7 @@ async fn create_file_impl<R: tauri::Runtime>(
             .storage
             .create_dir(parent, true)
             .await
-            .map_err(map_err)?;
+            .map_err(ipc_error)?;
     }
 
     // Write file
@@ -249,7 +245,7 @@ async fn create_file_impl<R: tauri::Runtime>(
         .storage
         .write_text(&resolved.path, &content, WriteOptions::default())
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
 
     let _ = app.emit("file-created", &path);
 
@@ -257,7 +253,7 @@ async fn create_file_impl<R: tauri::Runtime>(
         .storage
         .metadata(&resolved.path)
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// Create a new file
@@ -279,13 +275,13 @@ async fn delete_file_impl<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     let storages = create_storage(state).await?;
-    let resolved = resolve_target_storage(&storages, &path_buf).map_err(map_err)?;
+    let resolved = resolve_target_storage(&storages, &path_buf).map_err(ipc_error)?;
 
     resolved
         .storage
         .delete(&resolved.path, recursive.unwrap_or(false))
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
 
     let _ = app.emit("file-deleted", &path);
 
@@ -314,10 +310,12 @@ async fn rename_file_impl<R: tauri::Runtime>(
     let to_buf = PathBuf::from(&to);
     let storages = create_storage(state).await?;
     // 移動元・移動先の両方が writable root に属することを確認する。
-    let from_resolved = resolve_target_storage(&storages, &from_buf).map_err(map_err)?;
-    let to_resolved = resolve_target_storage(&storages, &to_buf).map_err(map_err)?;
+    let from_resolved = resolve_target_storage(&storages, &from_buf).map_err(ipc_error)?;
+    let to_resolved = resolve_target_storage(&storages, &to_buf).map_err(ipc_error)?;
     if !std::ptr::eq(from_resolved.storage, to_resolved.storage) {
-        return Err(CoreError::storage("Cross-root moves are not supported").to_string());
+        return Err(ipc_error(CoreError::storage(
+            "Cross-root moves are not supported",
+        )));
     }
 
     from_resolved
@@ -328,7 +326,7 @@ async fn rename_file_impl<R: tauri::Runtime>(
             overwrite.unwrap_or(false),
         )
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
 
     let _ = app.emit(
         "file-renamed",
@@ -339,7 +337,7 @@ async fn rename_file_impl<R: tauri::Runtime>(
         .storage
         .metadata(&to_resolved.path)
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// Rename/move a file
@@ -641,7 +639,11 @@ mod tests {
 
     fn assert_read_only_error(result: Result<impl std::fmt::Debug, String>) {
         let error = result.expect_err("read-only root への操作は拒否されること");
-        assert_eq!(error, format!("Validation error: {READ_ONLY_ROOT_MESSAGE}"));
+        // 内部向け Display ではなく、IPC 固定文言へ変換されていること。
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+        );
     }
 
     /// writable root では command が成功し、イベントが発火すること（emit 検証の基準）。
@@ -868,12 +870,24 @@ mod tests {
         assert_eq!(harness.renamed.load(Ordering::SeqCst), 0);
     }
 
-    /// root 拒否が Core の固定文言をそのまま Tauri 文字列へ変換することを検証する。
+    /// fs コマンドが返す String に、host 上の絶対パスやファイル名が現れないこと。
+    #[test]
+    fn fs_ipc_error_string_never_contains_host_path() {
+        let host_path = "/home/koppe/secret/private.epub";
+        let raw = CoreError::from(std::io::Error::other(format!("failed to read {host_path}")));
+        let rendered = ipc_error(raw);
+
+        assert_eq!(rendered, "Configuration storage failed");
+        assert!(!rendered.contains(host_path));
+        assert!(!rendered.contains("private.epub"));
+    }
+
+    /// root 拒否が IPC 固定文言へ変換されることを検証する。
     fn assert_root_operation_error(result: Result<impl std::fmt::Debug, String>) {
         let error = result.expect_err("root 自身への操作は拒否されること");
         assert_eq!(
             error,
-            format!("Validation error: {STORAGE_ROOT_OPERATION_MESSAGE}")
+            ipc_error(CoreError::validation(STORAGE_ROOT_OPERATION_MESSAGE))
         );
     }
 
@@ -976,7 +990,7 @@ mod tests {
         .expect_err("overwrite=false は既存宛先を拒否する");
         assert_eq!(
             error,
-            format!("Validation error: {MOVE_DESTINATION_EXISTS_MESSAGE}")
+            ipc_error(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE))
         );
 
         assert_eq!(snapshot(&root.path), before);

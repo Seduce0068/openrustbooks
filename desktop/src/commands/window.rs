@@ -1,17 +1,23 @@
 //! Window management commands.
 
+use crate::commands::ipc_message;
 use tauri::{WebviewWindow, command};
 
 /// Close window
 #[command]
 pub fn close_window(window: WebviewWindow) -> Result<(), String> {
-    window.close().map_err(|e| e.to_string())
+    // tauri::Error の Display は内部情報を含み得るため IPC へ出さない。
+    window
+        .close()
+        .map_err(|_| ipc_message("WINDOW_INTERNAL").to_string())
 }
 
 /// Set window title
 #[command]
 pub fn set_title(window: WebviewWindow, title: String) -> Result<(), String> {
-    window.set_title(&title).map_err(|e| e.to_string())
+    window
+        .set_title(&title)
+        .map_err(|_| ipc_message("WINDOW_INTERNAL").to_string())
 }
 
 /// Get window state

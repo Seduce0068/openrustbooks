@@ -1,5 +1,6 @@
 //! Configuration commands.
 
+use crate::commands::{ipc_error, ipc_message};
 use crate::state::{AppState, CONFIG_LOAD_FAILED_MESSAGE};
 use openrustbooks_core::ai_markdown::client::{ProviderKind, validate_base_url};
 use openrustbooks_core::config::{
@@ -13,11 +14,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{State, command};
 
-/// Convert CoreError to String for Tauri commands
-fn map_err(e: CoreError) -> String {
-    e.to_string()
-}
-
 /// 設定保存コマンド専用の構造化エラー。
 ///
 /// `code` は [`CoreError::code()`] 由来の固定値、`message` は code ごとの固定文言のみ。
@@ -30,16 +26,10 @@ pub struct CommandError {
 
 impl CommandError {
     fn from_code(code: &'static str) -> Self {
-        let message = match code {
-            "CONFIG_CONFLICT" => "Configuration conflict",
-            "CONFIG_VALIDATION" => "Configuration validation failed",
-            "CONFIG_STORAGE" => "Configuration storage failed",
-            "CONFIG_LOAD_FAILED" => CONFIG_LOAD_FAILED_MESSAGE,
-            _ => "Internal configuration error",
-        };
+        // 文言は共通マッパーに一本化する。code / message の JSON 契約は維持。
         Self {
             code,
-            message: message.to_string(),
+            message: ipc_message(code).to_string(),
         }
     }
 }
@@ -619,8 +609,8 @@ fn normalize_ai_from_js(mut ai: AiConfig) -> AiConfig {
 /// 保存・再初期化前に両プロバイダの base_url を検証する。
 /// JS は AppConfig 全体を渡せるため、ホストの許可リストは core 側にハードコードする。
 fn validate_ai_base_urls(ai: &AiConfig) -> Result<(), String> {
-    validate_base_url(&ai.openai.base_url, ProviderKind::OpenAi).map_err(map_err)?;
-    validate_base_url(&ai.ollama.base_url, ProviderKind::Ollama).map_err(map_err)?;
+    validate_base_url(&ai.openai.base_url, ProviderKind::OpenAi).map_err(ipc_error)?;
+    validate_base_url(&ai.ollama.base_url, ProviderKind::Ollama).map_err(ipc_error)?;
     Ok(())
 }
 
@@ -684,7 +674,7 @@ pub async fn update_config(
     let changed = ai_or_lint_changed(&current, &merged);
     commit_validated_config(state.inner(), expected, merged, changed)
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
     Ok(())
 }
 
@@ -742,7 +732,7 @@ pub async fn update_ai_config(
     // 差分がある時だけ再準備。失敗時はコミットしないため状態は不変。
     commit_validated_config(state.inner(), expected, config, changed)
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
     Ok(())
 }
 
@@ -763,7 +753,7 @@ pub async fn update_lint_config(
     let changed = ai_or_lint_changed(&current, &config);
     commit_validated_config(state.inner(), expected, config, changed)
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
     Ok(())
 }
 
@@ -779,7 +769,7 @@ pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView,
     // 既定は AI 無効。prepare は None を返し、保存後に service もクリアされる。
     commit_validated_config(state.inner(), expected, config, true)
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
     let (current, revision) = state.config_with_revision();
     Ok(ConfigView::from_state(&current, revision))
 }
@@ -840,7 +830,7 @@ pub async fn clear_secrets(
     // 共有コミット経路にも merge は入れていないため、消した値は復元されない。
     commit_validated_config(state.inner(), expected, config, true)
         .await
-        .map_err(map_err)?;
+        .map_err(ipc_error)?;
     // 保存成功後にのみ記録する。対象名だけを出力し、値やパスは出さない。
     log::info!("cleared secrets: {}", cleared.join(", "));
     let (current, revision) = state.config_with_revision();

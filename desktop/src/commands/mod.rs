@@ -5,3 +5,87 @@ pub mod config;
 pub mod document;
 pub mod fs;
 pub mod window;
+
+use openrustbooks_core::CoreError;
+
+/// IPC 境界で使う固定 code → 固定文言のマッパー。
+///
+/// `CoreError` の `Display` は内部向けで、ファイルパス / provider host /
+/// レスポンス本文 / API key を含み得る。IPC へは `CoreError::code()` が返す
+/// 固定 code を通し、ここで定義した固定文言だけを返す（ADR-0287 / R1-ER01）。
+pub(crate) fn ipc_message(code: &str) -> &'static str {
+    match code {
+        "CONFIG_CONFLICT" => "Configuration conflict",
+        "CONFIG_VALIDATION" => "Configuration validation failed",
+        "CONFIG_STORAGE" => "Configuration storage failed",
+        "CONFIG_LOAD_FAILED" => crate::state::CONFIG_LOAD_FAILED_MESSAGE,
+        "AI_PROVIDER" => "AI provider request failed",
+        "WINDOW_INTERNAL" => "Window operation failed",
+        // 未知 code も固定文言へ落とす（code 文字列自体も返さない）。
+        _ => "Internal configuration error",
+    }
+}
+
+/// `CoreError` を IPC 用の固定文言文字列へ変換する。
+///
+/// `e.to_string()` を IPC へ返す既存経路をすべてこれに置き換える。
+/// 内部ログを残す場合も `Display` ではなく `code()` だけを記録すること。
+pub(crate) fn ipc_error(error: CoreError) -> String {
+    ipc_message(error.code()).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ipc_message_returns_fixed_text_and_masks_unknown_codes() {
+        assert_eq!(ipc_message("CONFIG_CONFLICT"), "Configuration conflict");
+        assert_eq!(
+            ipc_message("CONFIG_VALIDATION"),
+            "Configuration validation failed"
+        );
+        assert_eq!(
+            ipc_message("CONFIG_STORAGE"),
+            "Configuration storage failed"
+        );
+        assert_eq!(
+            ipc_message("CONFIG_LOAD_FAILED"),
+            crate::state::CONFIG_LOAD_FAILED_MESSAGE
+        );
+        assert_eq!(ipc_message("AI_PROVIDER"), "AI provider request failed");
+        // 未知 code は code 文字列自体を出さず既定文言へ落とす。
+        assert_eq!(
+            ipc_message("sk-unknown-code"),
+            "Internal configuration error"
+        );
+    }
+
+    /// CoreError::to_string() に含まれる secret / path / host / body が
+    /// IPC 結果文字列へ一切漏れないこと（R1-ER01 の受け入れ条件）。
+    #[test]
+    fn ipc_error_never_leaks_secret_path_host_or_body() {
+        let secret = "sk-ipc-leak-do-not-expose";
+        let path = "/home/koppe/secret/book.epub";
+        let host = "https://api.secret.internal";
+        let body = "response-body-with-token";
+
+        let errors = [
+            CoreError::ai_provider(format!("key={secret} host={host} body={body}")),
+            CoreError::from(std::io::Error::other(format!("failed to read {path}"))),
+            CoreError::storage(format!("{path} is unreachable with {secret}")),
+            CoreError::validation(format!("bad {path} body={body}")),
+            CoreError::internal(format!("bug at {host} with {secret}")),
+        ];
+
+        for error in errors {
+            let rendered = ipc_error(error);
+            for needle in [secret, path, host, body] {
+                assert!(
+                    !rendered.contains(needle),
+                    "IPC 結果へ {needle} が漏れています: {rendered}"
+                );
+            }
+        }
+    }
+}

@@ -106,6 +106,11 @@ impl CoreError {
             }
             #[cfg(not(target_arch = "wasm32"))]
             Self::Config(_) => "CONFIG_STORAGE",
+            // provider の生レスポンス（host / body / API key）は Display に残るため、
+            // IPC 側へはこの code 経由で固定文言だけを渡す（ADR-0287）。
+            Self::AiProvider(_) => "AI_PROVIDER",
+            #[cfg(not(target_arch = "wasm32"))]
+            Self::OpenAiError(_) => "AI_PROVIDER",
             _ => "CONFIG_INTERNAL",
         }
     }
@@ -173,6 +178,36 @@ mod tests {
             CoreError::DocumentNotFound("x".into()).code(),
             "CONFIG_INTERNAL"
         );
+    }
+
+    /// Display は内部向けに生値を保持しても、IPC 契約の code には一切含めない。
+    #[test]
+    fn code_maps_ai_provider_errors_without_embedding_raw_values() {
+        let secret = "sk-do-not-leak";
+        let host = "https://api.secret.internal";
+        let body = "response body with token";
+        let err = CoreError::ai_provider(format!("{secret}@{host}: {body}"));
+
+        assert!(err.to_string().contains(secret));
+        assert!(err.to_string().contains(host));
+        assert!(err.to_string().contains(body));
+        assert_eq!(err.code(), "AI_PROVIDER");
+        assert!(!err.code().contains(secret));
+        assert!(!err.code().contains(host));
+        assert!(!err.code().contains(body));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn code_maps_openai_error_without_embedding_raw_values() {
+        let raw = "sk-openai-leak at https://api.secret.internal body:{secret}";
+        let err = CoreError::from(async_openai::error::OpenAIError::InvalidArgument(
+            raw.into(),
+        ));
+
+        assert!(err.to_string().contains("sk-openai-leak"));
+        assert_eq!(err.code(), "AI_PROVIDER");
+        assert!(!err.code().contains("sk-openai-leak"));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! AI Markdown pipeline commands.
 
+use crate::commands::ipc_error;
 use crate::state::AppState;
 use openrustbooks_core::{
     CoreError,
@@ -12,11 +13,6 @@ use std::sync::Arc;
 use tauri::{AppHandle, State, command};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tokio::sync::oneshot;
-
-/// Convert CoreError to String for Tauri commands
-fn map_err(e: CoreError) -> String {
-    e.to_string()
-}
 
 /// ダイアログに出す要約のプレビュー文字数。
 const PREVIEW_CHARS: usize = 80;
@@ -77,7 +73,7 @@ pub async fn generate_markdown(
 ) -> Result<GenerateResult, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
     confirm_send(
         &app,
@@ -98,7 +94,7 @@ pub async fn generate_markdown(
             template,
         })
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// Refine existing Markdown with instructions
@@ -112,7 +108,7 @@ pub async fn refine_markdown(
 ) -> Result<RefineResult, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
     confirm_send(
         &app,
@@ -133,7 +129,7 @@ pub async fn refine_markdown(
             context,
         })
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// format 文字列を TableFormat に解釈する（大小文字無視）。
@@ -142,7 +138,9 @@ fn parse_table_format(format: &str) -> Result<TableFormat, String> {
         "csv" => Ok(TableFormat::Csv),
         "json" => Ok(TableFormat::Json),
         "tsv" => Ok(TableFormat::Tsv),
-        _ => Err(CoreError::validation("Invalid format. Use csv, json, or tsv").to_string()),
+        _ => Err(ipc_error(CoreError::validation(
+            "Invalid format. Use csv, json, or tsv",
+        ))),
     }
 }
 
@@ -172,7 +170,7 @@ pub async fn convert_to_table(
 ) -> Result<TableResult, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
     let table_format = parse_table_format(&format)?;
 
@@ -205,7 +203,7 @@ pub async fn convert_to_table(
             alignment: table_alignment,
         })
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// Generate front matter for a document
@@ -218,7 +216,7 @@ pub async fn generate_front_matter(
 ) -> Result<FrontMatterResult, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
     confirm_send(
         &app,
@@ -237,7 +235,7 @@ pub async fn generate_front_matter(
         .pipeline()
         .generate_front_matter(FrontMatterRequest { content, schema })
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 /// Lint Markdown content
@@ -248,9 +246,13 @@ pub async fn lint_markdown(
 ) -> Result<Vec<openrustbooks_core::ai_markdown::lint::LintIssue>, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
-    service.pipeline().linter().lint(&content).map_err(map_err)
+    service
+        .pipeline()
+        .linter()
+        .lint(&content)
+        .map_err(ipc_error)
 }
 
 /// Lint and auto-fix Markdown content
@@ -261,14 +263,14 @@ pub async fn lint_and_fix_markdown(
 ) -> Result<openrustbooks_core::ai_markdown::lint::LintResultWrapper, String> {
     let service = state
         .ai_service()
-        .ok_or_else(|| CoreError::ai_pipeline("AI service not initialized").to_string())?;
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
 
     service
         .pipeline()
         .linter()
         .lint_and_fix(&content)
         .await
-        .map_err(map_err)
+        .map_err(ipc_error)
 }
 
 #[cfg(test)]
@@ -357,11 +359,32 @@ mod tests {
         assert!(matches!(parse_table_format("TsV"), Ok(TableFormat::Tsv)));
     }
 
+    /// AI provider の生レスポンス（secret / host / body）は IPC へ出さず、
+    /// code 由来の固定文言だけを返す。内部ログにも生値は書かない。
+    #[test]
+    fn ai_provider_error_is_redacted_for_ipc() {
+        let secret = "sk-ai-leak-do-not-expose";
+        let host = "https://api.secret.internal";
+        let body = "response-body-with-token";
+        let raw = CoreError::ai_provider(format!("key={secret} host={host} body={body}"));
+        let rendered = ipc_error(raw);
+
+        assert_eq!(rendered, "AI provider request failed");
+        for needle in [secret, host, body] {
+            assert!(
+                !rendered.contains(needle),
+                "IPC 結果へ {needle} が漏れています: {rendered}"
+            );
+        }
+    }
+
     #[test]
     fn table_format_invalid_returns_error() {
         assert_eq!(
             parse_table_format("xml").unwrap_err(),
-            CoreError::validation("Invalid format. Use csv, json, or tsv").to_string()
+            ipc_error(CoreError::validation(
+                "Invalid format. Use csv, json, or tsv"
+            ))
         );
     }
 
