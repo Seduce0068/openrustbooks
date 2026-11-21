@@ -179,6 +179,7 @@ status: current
 
 ## 完了
 
+- [x] 【WebdriverIO 導入】実 Tauri WebView の settings を WebdriverIO で検証、独立ゲート化（ADR-0283）。
 - [x] 【実 WebView 検証】Tauri CLI 起動・設定保存・config.toml 永続化を確認し、起動/保存ブロッカーを修正（ADR-0282）。
 - [x] 【設定 DTO flags】read_only / watch を server-authoritative 化し、権限昇格を fail-closed 化（ADR-0281）。
 - [x] 【Tauri plugin config】tauri.conf.json の無効 plugin scope を削除し、再混入を静的ゲート化（ADR-0280）。
