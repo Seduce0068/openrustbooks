@@ -23,10 +23,6 @@ status: current
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
-- [ ] 【Tauri / desktop の実ビルド依存を検証】verify.sh は trunk build を一時 DIST へ出すため
-      `web/dist` を更新せず、desktop の `frontendDist=../web/dist` 依存が cargo build グラフに無い。
-      配布前に frontend 生成を明示する。根拠 `desktop/tauri.conf.json:6-9` /
-      `scripts/verify.sh:331-333` / R1-AR01 / 重大度 medium-high。
 
 <!-- R6-2026-11-19: swarm-project-review + swarm-todo-discovery 統合 -->
 <!-- 2026-11-19: ADR 実績との照合で解消済みを完了へ移動（ADR-0224）。 -->
