@@ -71,9 +71,6 @@ status: current
 - [ ] 【front matter 往復のバイト保全を検証】CRLF / 末尾改行 / YAML 書式が開いて保存するだけで
       変わり得る。元テキスト保持または変更無し時の元バイト返却を確認する。
       根拠 `core/src/document.rs:209-220,246-256` / R2-ER01。
-- [ ] 【cargo audit の鮮度を担保】verify.sh の `--no-fetch` はローカルキャッシュ依存で、
-      新規 advisory を検出しない。CI では fetch 有効化または update-db スケジュールを追加。
-      根拠 `scripts/verify.sh:295-312` / R3-AU01。
 - [ ] 【設定インポートの表示設定復元を明示】現在値があるとバックアップの表示設定が復元されず、
       README の「表示設定を含む」と一致しない。明示オプションまたは制約開示。
       根拠 `web/src/lib.rs:2102-2111` / `README.md:88` / R5-DC01。
@@ -175,6 +172,7 @@ status: current
 
 ## 完了
 
+- [x] 【audit 鮮度】advisory DB の鮮度と監査対象 DB を一致、負向 test 14 件（ADR-0294）。
 - [x] 【lint リトライ】no-op feedback 要求の無駄な再呼び出しを停止、max_retries も内部 clamp（ADR-0293）。
 - [x] 【AI 空レスポンス】choices/content/response 欠落を固定文言の provider error 化（ADR-0292）。
 - [x] 【E2E 件数ゲート】CI-H01 行への依存を削除し、Checker(expected) を単一情報源化（ADR-0291）。

@@ -28,3 +28,9 @@ advisory DB に依存する。`--stale` を指定しないため DB が古くて
 - 脆弱性 DB の自動更新を勝手に行わない（更新はオフライン時失敗し得るため）。
 - 共通 workflow は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- advisory DB 鮮度ゲートを追加（既定7日、上限90日、欠落/未来/不正値は fail-closed）。
+- 鮮度検査と cargo audit を同一 DB に固定（`--db $AUDIT_DB_PATH`）。
+- 負向 test 14 件 PASS、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
