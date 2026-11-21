@@ -37,3 +37,9 @@ desktop/src/main.rs は `AppConfig::load().unwrap_or_default()` でエラーを�
 - E2E 256 件・check 名・UPDATER 契約は変更しない。
 - 秘密値をログへ出力しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- config.toml 読み込み失敗時に退避 + 保存拒否を実装。
+- 退避先を Unix 0600 に制限し、ログから絶対パスと生エラーを除去。
+- R4 high 2 件を反映。core 293 / desktop 92 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。

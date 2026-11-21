@@ -21,17 +21,23 @@ status: current
 
 ### 優先度: 高
 
+<!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
+- [ ] 【config.toml 読み込み失敗の握り潰しを解消】desktop/src/main.rs の `AppConfig::load().unwrap_or_default()`
+      が不正 TOML / 権限エラーを捨て、その後の commit_config が既定値で上書きし得る。
+      エラー報告と元ファイル退避、読み取り専用起動または保存拒否を実装する。
+      根拠 `desktop/src/main.rs:87` / `core/src/config.rs:485,510-517` / R2-ER01 / 重大度 high。
+- [ ] 【fs コマンドで read_only root を強制】create_file / delete_file / rename_file が
+      local_roots[].read_only を参照せず、save_document のガードを迂回できる。
+      create_storage で root と flags を対応付け、書き込み前に fail-closed で拒否する。
+      根拠 `desktop/src/commands/fs.rs:20-31,53-141` / R3-AU01 / 重大度 high。
+- [ ] 【storage root 自身の削除・改名を拒否】resolve_path('.') が canonical root を返し、
+      delete_file(path='.', recursive=true) で root 配下を再帰削除できる。
+      root と等しいパスの delete / rename / create_dir を拒否する。
+      根拠 `core/src/io.rs:372-411,605-632` / `desktop/src/commands/fs.rs:96-131` / R3-AU01 / 重大度 high。
+- [ ] 【move_item の overwrite=false を fail-closed 化】POSIX rename が既存宛先を暗黙上書きし、
+      overwrite=true は「削除 → rename」で途中失敗時に両方失う。原子的 replace または事前再確認を行う。
+      根拠 `core/src/io.rs:615-632` / R2-ER01 / 重大度 high。
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
-- [ ] 【実 WebView 検証を実行】Tauri CLI 2.12.5 は導入済み（2026-11-21 Runtime Proof）だが、
-      ADR-0273 の手順（起動 / settings / get_config / 保存 / config.toml 永続化 / a11y）は未実施。
-      ADR-0273 / README / docs/index.md / runbook-release / GOAL の「未導入」表記も更新する。
-      根拠 `docs/decisions/0273-real-webview-verification-deferred.md:41,88` /
-      R1-FG01 / 重大度 high。
-- [ ] 【設定 DTO の read_only / watch を fail-closed 化】`LocalRootView` の
-      `read_only` / `watch` / 順序がクライアント writable で、
-      `merge_secrets()` は path しか現在値復元しない。隠し path を持つ root を writable へ昇格できる。
-      incoming 側 id 重複も拒否する。根拠 `desktop/src/commands/config.rs:236-242,425-436,524-546` /
-      R3-AU01 / 重大度 high。
 - [ ] 【IPC エラーの redaction を全コマンドへ統一】legacy config / AI provider / fs path エラーが
       `CoreError::to_string()` で IPC へ漏れる。全コマンドを `CommandError` / code + 固定文言へ寄せ、
       host / path / レスポンス本文の非含有 test を追加。根拠 `desktop/src/commands/config.rs:16-19`、
@@ -59,10 +65,9 @@ status: current
   完全な `ConfigPatch` DTO 往復と Tauri mock E2E 256/0 による UI 接続は ADR-0272 で完了。
   storage allow-list / a11y / `CommandError.code` → 日本語 status 変換 /
   Tauri mock E2E 成功経路も完了（ADR-0272）。browser は読み取り専用 fail-closed を維持する。
-  残る実装前提 6（実 Tauri WebView 検証）は Tauri CLI 未導入
-  （`cargo tauri --version` が `no such command: tauri`、終了コード 101）で実行不可。
-  DISPLAY=:1 / xdotool / wmctrl は存在するが `cargo tauri dev` を起動できず、
-  CDP / Tauri mock は代替ではないため未実施のまま pass としない（ADR-0273）。
+  実装前提 6（実 Tauri WebView 検証）は ADR-0282 で完了済み。
+  Tauri CLI 2.12.5 導入後、実 WebView で settings / get_config / update_config_patch /
+  config.toml 永続化を確認し、ADR-0283 で WDIO 独立ゲートを追加済み。
   AI / Lint / format の 4 操作は ADR-0232 の初版外で対象外。
   ADR-0127 / ADR-0223 の段階 2、ADR-0128 / ADR-0193（desktop 側を ADR-0253 が
   supersede、browser 側は維持）、IPC 経路と CSP の未決定は ADR-0264 を追跡先とする。
@@ -77,12 +82,49 @@ status: current
   前提 3 UI 起点 CAS + 構造化エラーは完了（ADR-0269）、
   前提 4 a11y は実装完了・実 WebView 検証未実施（ADR-0272 / 0273）、
   前提 5 Tauri mock E2E +1 は完了（256/0、ADR-0272）、
-  前提 6 実 WebView は環境ブロッカー（ADR-0273）。
-  未達: A05 全体は完了としない。JS / IPC 契約レベル（mock E2E 256/0 を含む）は達成だが、
-  実 WebView 検証と capability の実ビルド完了証跡は残す。E2E 256 件・check 名・コードは変更しない。
+  前提 6 実 WebView は検証済み（ADR-0282 / 0283）。
+  未達: capability の実ビルド完了証跡は残す。JS / IPC 契約レベル（mock E2E 256/0）と
+  実 WebView 検証（ADR-0282 / 0283）は達成済み。E2E 256 件・check 名・コードは変更しない。
 
 ### 優先度: 中
 
+<!-- 2026-11-22 R6 中優先度 -->
+- [ ] 【wasm-pack バージョンを固定】ci-wasm-test.sh は既存 wasm-pack の `--version` を検査せず、
+      0.13.1 以外でも通過する。fail-closed または force install を行う。
+      根拠 `scripts/ci-wasm-test.sh:10-15` / `docs/decisions/0196-ci-wasm-test-gate.md:50-52` / R4-CI01。
+- [ ] 【WDIO ビルドに --locked を付与】scripts/ci-wdio-test.sh:35 だけ `--locked` が無く、
+      Cargo.lock を更新し得る。ゲート中の lock 変更も検知する。根拠 R4-CI01。
+- [ ] 【dependabot に npm エコシステムを追加】.github/dependabot.yml は cargo / actions のみで、
+      WDIO devDependency の更新が自動化されていない。runbook の npm install も npm ci へ統一。
+      根拠 `.github/dependabot.yml:1-36` / R4-CI01。
+- [ ] 【WDIO cleanup を安全化】port 1420 の listener を無差別 kill せず自プロセスのみ停止し、
+      trunk ログは mktemp + 失敗時 cat に変更する。根拠 `scripts/ci-wdio-test.sh:15-21,40` / R4-CI01。
+- [ ] 【E2E 件数ゲートの TODO 結合を解消】check-e2e-count-consistency.sh が未着手の
+      CI-H01 行を要求し、TODO を完了へ移すだけで CI が壊れる。単一情報源は Checker のみにする。
+      根拠 `scripts/check-e2e-count-consistency.sh:124-149` / R4-CI01。
+- [ ] 【README / 索引の現行状態を更新】README が実 WebView 未検証と誤報し、
+      runbook-webdriver.md が docs/index.md と README の導線から欠落。
+      根拠 `README.md:96-98,197-203` / `docs/index.md:5-11` / R5-DC01。
+- [ ] 【WDIO に保存往復を追加】settings.e2e.ts は get_config 読み取りのみで、
+      update_config_patch の revision +1 と再読み込み後の値維持を検証していない。
+      根拠 `e2e/specs/settings.e2e.ts:4-27` / R5-DC01。
+- [ ] 【front matter 往復のバイト保全を検証】CRLF / 末尾改行 / YAML 書式が開いて保存するだけで
+      変わり得る。元テキスト保持または変更無し時の元バイト返却を確認する。
+      根拠 `core/src/document.rs:209-220,246-256` / R2-ER01。
+- [ ] 【AI 空レスポンスを失敗扱いに】choices 欠落 / response キー欠落が空文字成功になり、
+      空文書保存の危険がある。CoreError 化または status 警告を追加。
+      根拠 `core/src/ai_markdown/client.rs:279-284,451` / R2-ER01。
+- [ ] 【lint フィードバック no-op のリトライを停止】Table/FrontMatter の add_lint_feedback が空で、
+      同一プロンプトを最大 11 回呼ぶ。フィードバック反映または即時 lint_passed=false。
+      根拠 `core/src/ai_markdown/mod.rs:399,451` / `core/src/ai_markdown/pipeline.rs:124-163` / R2-ER01。
+- [ ] 【cargo audit の鮮度を担保】verify.sh の `--no-fetch` はローカルキャッシュ依存で、
+      新規 advisory を検出しない。CI では fetch 有効化または update-db スケジュールを追加。
+      根拠 `scripts/verify.sh:295-312` / R3-AU01。
+- [ ] 【設定インポートの表示設定復元を明示】現在値があるとバックアップの表示設定が復元されず、
+      README の「表示設定を含む」と一致しない。明示オプションまたは制約開示。
+      根拠 `web/src/lib.rs:2102-2111` / `README.md:88` / R5-DC01。
+- [ ] 【README の EPUB/ZIP を実装済みへ修正】README:94 の「設計段階」に実装済みの
+      EPUB / ZIP が含まれる。根拠 `README.md:35,81-94` / R5-DC01。
 - [ ] 【ユーザー入力のサイズ境界を追加】desktop `open_document` は無制限 `read_to_string`、
       Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
       core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
@@ -179,6 +221,7 @@ status: current
 
 ## 完了
 
+- [x] 【config 読み込み失敗】読み込み失敗時に退避と保存拒否を実装、退避先 0600（ADR-0284）。
 - [x] 【WebdriverIO 導入】実 Tauri WebView の settings を WebdriverIO で検証、独立ゲート化（ADR-0283）。
 - [x] 【実 WebView 検証】Tauri CLI 起動・設定保存・config.toml 永続化を確認し、起動/保存ブロッカーを修正（ADR-0282）。
 - [x] 【設定 DTO flags】read_only / watch を server-authoritative 化し、権限昇格を fail-closed 化（ADR-0281）。
