@@ -36,3 +36,10 @@ CoreError は host / path / provider レスポンス本文を保持し得るた�
 - 外部送信 / 課金 / 署名 / 公開設定は扱わない。
 - E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 全 desktop command の error を共通マッパーへ統一し、生文字列 IPC 露出を廃止。
+- AI_PROVIDER / WINDOW_INTERNAL code と web status 文言を追加。
+- secret/path/host/body 非漏洩 test を追加。
+- 420 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。

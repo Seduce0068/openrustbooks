@@ -213,6 +213,7 @@ status: current
 
 ## 完了
 
+- [x] 【IPC redaction】全 command を固定 code/文言へ統一、secret/path/host/body の露出を防止（ADR-0287）。
 - [x] 【storage 破壊操作】root 自身の delete/rename を拒否し、move 上書きを退避方式へ変更（ADR-0286）。
 - [x] 【fs read_only 強制】create/delete/rename の迂回を塞ぎ、入れ子/symlink も fail-closed 化（ADR-0285）。
 - [x] 【config 読み込み失敗】読み込み失敗時に退避と保存拒否を実装、退避先 0600（ADR-0284）。
