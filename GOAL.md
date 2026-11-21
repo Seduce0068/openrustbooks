@@ -27,3 +27,9 @@ CI / WDIO の再現性と安全性を改善する（R6 レビュー / R4-CI01）
 - 共通 workflow 自体は変更しない。
 - 外部サービス / 課金 / 公開設定は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- wasm-pack 0.13.1 固定、Cargo.lock/package-lock の HEAD 差分検査、dependabot npm、WDIO cleanup 安全化を実装。
+- runbook を npm ci / npm ls 前提へ更新。
+- R4 medium 4 件を反映。verify.sh 全ゲート成功（E2E 256、WDIO 1）。
