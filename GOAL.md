@@ -1,39 +1,33 @@
 # Goal
 
-web の設定保存と autosave の lost update を修正する（R6 レビュー / R2-BV01）。
+ユーザー入力のサイズ境界を fail-closed 化する（R6 レビュー / R3-IV01）。
 
 ## Scope
 
 ### 背景
 
-- SettingsForm は保存開始時の view をスナップショットし、成功時に config signal 全体を
-  updated で置換するため、保存 in-flight 中の編集が失われる。
-- editor の autosave_last_text は手動保存時に更新されず、doc_id 変更時にも
-  クリアされないため、別文書 / 手動保存後の本文が自動保存でスキップされる。
+desktop `open_document` はファイルを無制限に `read_to_string` し、
+web は `file.size()` 確認前に `array_buffer()` を呼ぶ箇所がある。
+import JSON もサイズ無制限で、巨大入力によりメモリ消費／UI フリーズが起き得る。
 
 ### 成果物
 
+- `desktop/src/commands/document.rs`: 変更
 - `web/src/lib.rs`: 変更
-- `docs/decisions/0300-lost-update-guard.md`: 追加
+- `docs/decisions/0301-input-size-bounds.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. settings 保存中に編集された場合、成功レスポンスでローカル編集を上書きしない。
-2. 保存中は入力を無効化するか、dirty フラグで再保存を促す。
-3. editor の last_text を doc_id 変更時と手動保存時に同期する。
-4. 既存 E2E 256 件・check 名・WDIO ゲートを維持する。
-5. verify.sh 全ゲート成功。
+1. desktop open は `DEFAULT_MAX_READ_BYTES` を超える前に拒否する。
+2. web は `file.array_buffer()` の前に `file.size()` を検査する。
+3. import JSON も共通上限で拒否する。
+4. 既存 EPUB 上限 / 下書き上限を壊さない。
+5. 単体 / WDIO test は既存 256 件・check 名を維持。
+6. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 外部 AI API / 秘密情報は扱わない。
-- Leptos の既存 signal 契約を大きく変えない。
+- 上限は 256 MiB（core::io::DEFAULT_MAX_READ_BYTES）に合わせる。
+- 秘密値 / 絶対パスをエラーへ出さない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- settings 保存中は全入力/ハンドラを遮断し、全経路で saving=false へ復帰。
-- editor last_text を doc_id 変更/手動保存時に同期。
-- R4 high を反映、WDIO 1 passing、verify.sh 全ゲート成功（E2E 256）。
-- saving 専用回帰テスト / dirty フラグ UX は ADR-0300 の未決定。
