@@ -2,6 +2,7 @@
 
 ## 2026-11-21
 
+- WebdriverIO を導入し、実 WebView の settings E2E を独立ゲート化（ADR-0283）。
 - 実 WebView で起動・設定保存を検証し、logger / updater / IPC 引数のブロッカーを修正（ADR-0282）。
 - local root flags を server-authoritative 化、権限昇格を fail-closed 化（ADR-0281）。
 - Tauri config の無効 plugin scope を削除し、静的ゲートを追加（ADR-0280）。

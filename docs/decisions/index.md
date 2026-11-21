@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 282 件）。
+openrustbooks の ADR 一覧（全 283 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -566,3 +566,5 @@ openrustbooks の ADR 一覧（全 282 件）。
   - status: accepted — 設定 DTO で read_only / watch が writable でも、マージ時に現在値を復元して権限昇格を防ぐ決定を記録する。
 - [ADR-0282: 実 WebView 起動と設定保存の Runtime Proof](0282-real-webview-runtime-proof.md)
   - status: accepted — Tauri CLI 導入後に実 WebView で起動ブロッカーと保存ブロッカーを修正し、設定保存を検証した決定を記録する。
+- [ADR-0283: WebdriverIO による実 WebView E2E の導入](0283-webdriverio-adoption.md)
+  - status: accepted — Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。

@@ -758,6 +758,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0280-tauri-plugin-config-cleanup](docs/decisions/0280-tauri-plugin-config-cleanup.md)
 - [0281-local-root-flags-server-authoritative](docs/decisions/0281-local-root-flags-server-authoritative.md)
 - [0282-real-webview-runtime-proof](docs/decisions/0282-real-webview-runtime-proof.md)
+- [0283-webdriverio-adoption](docs/decisions/0283-webdriverio-adoption.md)
+  - Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。
   - Tauri CLI 導入後に実 WebView で起動ブロッカーと保存ブロッカーを修正し、設定保存を検証した決定を記録する。
   - 設定 DTO で read_only / watch が writable でも、マージ時に現在値を復元して権限昇格を防ぐ決定を記録する。
   - tauri.conf.json の plugins.*.scope.allowedPaths が無効キーであるため、plugins ブロックを削除し再混入を静的ゲートで防ぐ決定を記録する。
