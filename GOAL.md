@@ -35,3 +35,10 @@ FileTree は固定ダミー項目を表示する。利用者は主要機能へ�
 - 新規ファイル作成 / フォルダ選択の実装は行わない。
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- HomePage に Reader/Editor のサンプル導線を追加。
+- 未接続ボタンを disabled 化し、ダミー FileTree を未接続表示へ変更。
+- R4 指摘により E2E 用 ID を本番 UI から除去。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
