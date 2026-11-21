@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- 未使用 Tauri plugin / 依存を削除（ADR-0303）。
 - 設定インポートの表示設定保持を fixed 文言で告知（ADR-0302）。
 - ユーザー入力サイズの fail-closed 境界を追加（ADR-0301）。
 - 設定保存と autosave の lost update を防止（ADR-0300）。
