@@ -1,52 +1,39 @@
 # Goal
 
-openrustbooks に WebdriverIO + @wdio/tauri-service を導入し、実 Tauri WebView を自動操作する最小 E2E を追加する（R6 調査の解消策）。
+config.toml 読み込み失敗時に既定値で上書きする経路を fail-closed 化する（R6 レビュー / R2-ER01）。
 
 ## Scope
 
 ### 背景
 
-Wayland/Xwayland の `xdotool` 入力が不安定なため、Tauri 公式が推奨する
-WebDriver ベースの自動化を導入する。既存の CDP/mock E2E 256 件は維持し、
-WDIO は別ゲート・別名前空間で追加する。
+desktop/src/main.rs は `AppConfig::load().unwrap_or_default()` でエラーを捨てる。
+その後の commit_config が `config.save()` を呼ぶため、不正 TOML や権限エラーで
+読み込めなかった既存 config.toml が既定値で上書きされ、シークレットと local_roots が失われる。
 
 ### 成果物
 
-- `package.json` / `package-lock.json`: 追加
-- `tsconfig.json`: 追加
-- `e2e/wdio.conf.ts` / `e2e/settings.e2e.ts`: 追加
-- `desktop/Cargo.toml` / `desktop/src/main.rs` / `Cargo.lock`: 変更（debug 限定 plugin）
-- `desktop/capabilities/default.json`: 追加（debug capability）
-- `desktop/tauri.conf.json`: `app.security.capabilities` 追加
-- `scripts/verify.sh`: 変更（独立ゲートとして WDIO を追加）
-- `docs/decisions/0283-webdriverio-adoption.md`: 追加
-- `docs/runbook-webdriver.md`: 追加
-- `README.md` / `docs/index.md` / `docs/decisions/index.md` / `docs/log.md` / `todo.md`: 更新
+- `core/src/config.rs`: 必要なら読み込みエラー詳細 API / 退避ヘルパ追加
+- `desktop/src/main.rs`: 変更（エラー報告・退避・保存拒否）
+- `desktop/src/state/mod.rs`: 変更（読み込み失敗状態の保持）
+- `desktop/src/commands/config.rs`: 変更（失敗時 save 拒否）
+- `docs/decisions/0284-config-load-fail-closed.md`: 追加
+- `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. `@wdio/tauri-service` 1.5.1 と WebdriverIO 9.31 系で導入する。
-2. Rust plugin は debug ビルド限定で登録し、release には混入しない。
-3. 実 WebView で `/settings` を開き、editable と固定 updater 文言を検証する。
-4. `browser.tauri.execute` で `get_config` を呼び、revision を取得する。
-5. 既存 E2E 256 件・check 名・`check-e2e-count-consistency.sh` は変更しない。
-6. `verify.sh` 全ゲート成功、markdownlint 0 issues。
+1. `AppConfig::load()` の Err を握り潰さず、ログまたは起動時 status で報告する。
+2. 読み込み失敗時は元 config.toml を退避し、既定値で上書きしない。
+3. 読み込み失敗状態では config 保存 command を fail-closed で拒否する。
+4. 既存の正常起動・保存 E2E を壊さない。
+5. markdownlint 0 issues、verify.sh 全ゲート成功。
 
 ## Acceptance criteria
 
-- `npm run test:wdio` が成功し、実 Tauri WebView の settings を検証できる。
-- 既存 256 件と WDIO が共存する。
+- 不正 config.toml を置いた状態で起動しても元ファイルが退避され、保存が拒否される。
+- 正常系 config.toml は従来どおり保存できる。
 
 ## Constraints
 
-- 外部 service / 課金 / 公開ビルドは行わない。
-- 既存 CDP E2E と mock の 256 件は変更しない。
+- E2E 256 件・check 名・UPDATER 契約は変更しない。
+- 秘密値をログへ出力しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- WebdriverIO 9.31 系と @wdio/tauri-service 1.5.1 を導入。
-- Rust plugin は wdio feature + debugビルド時のみ登録し、capabilityも feature 時のみ読み込む。
-- 実 WebView の settings editable・updater 固定文言・get_config IPC を WDIO で検証（1 passing）。
-- 既存 E2E 256件・check名は不変。verify.sh 全ゲート成功、wdio gate rc=0。
-- CI extra_gates への組み込みとバンドル済み debug バイナリでの実行は未決定。
