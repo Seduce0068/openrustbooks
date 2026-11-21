@@ -757,6 +757,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0279-updater-check-pattern](docs/decisions/0279-updater-check-pattern.md)
 - [0280-tauri-plugin-config-cleanup](docs/decisions/0280-tauri-plugin-config-cleanup.md)
 - [0281-local-root-flags-server-authoritative](docs/decisions/0281-local-root-flags-server-authoritative.md)
+- [0282-real-webview-runtime-proof](docs/decisions/0282-real-webview-runtime-proof.md)
+  - Tauri CLI 導入後に実 WebView で起動ブロッカーと保存ブロッカーを修正し、設定保存を検証した決定を記録する。
   - 設定 DTO で read_only / watch が writable でも、マージ時に現在値を復元して権限昇格を防ぐ決定を記録する。
   - tauri.conf.json の plugins.*.scope.allowedPaths が無効キーであるため、plugins ブロックを削除し再混入を静的ゲートで防ぐ決定を記録する。
   - 静的ゲートが Tauri v2 の実呼び出し `.check()` を見逃す fail-open を修正する決定を記録する。
