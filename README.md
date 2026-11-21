@@ -784,6 +784,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0301-input-size-bounds](docs/decisions/0301-input-size-bounds.md)
 - [0302-settings-import-disclosure](docs/decisions/0302-settings-import-disclosure.md)
 - [0303-unused-tauri-plugins](docs/decisions/0303-unused-tauri-plugins.md)
+- [0304-dead-config-cleanup](docs/decisions/0304-dead-config-cleanup.md)
+  - 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
   - store / global-shortcut / shell / fs / opener / notification と未使用 crate を削除し、静的ゲートを log + dialog へ絞る決定。
   - 現在値保護でバックアップの表示設定を復元しない場合に固定文言で告知する決定。
   - open / import 前に 256 MiB 上限を検査し、読み取り後にも実バイト長を再確認する決定。

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 303 件）。
+openrustbooks の ADR 一覧（全 304 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -475,8 +475,8 @@ openrustbooks の ADR 一覧（全 303 件）。
 - [ADR-0236: prefers-contrast: more の枠線・補助文字コントラスト強化](0236-prefers-contrast.md)
   - status: accepted — prefers-contrast: more で枠線と補助文字を強化し、forced-colors の既存契約を後方で維持する決定。
 - [ADR-0237: CI / ローカルゲートの整合と trunk build への --locked 付与](0237-ci-gate-consistency.md)
-  - status: accepted — wasm_targets と extra_gates の役割分担を確認し、verify.sh の
-    trunk build に --locked を付けて Cargo.lock の不変を保証する決定。
+  - status: accepted — wasm_targets と extra_gates の役割分担を確認し、verify.sh の trunk build に --locked を付けて Cargo.lock
+    の不変を保証する決定。
 - [ADR-0238: 圧縮率依存テストの決定的化](0238-deterministic-compression-tests.md)
   - status: accepted — ZIP エントリの方式とメタデータを直接検証し、deflate の圧縮率に依存するテストを排除する決定を記録する。
 - [ADR-0239: Cargo をバージョンの単一情報源とする](0239-version-single-source.md)
@@ -608,5 +608,7 @@ openrustbooks の ADR 一覧（全 303 件）。
 - [ADR-0302: バックアップ import の表示設定保持を告知する](0302-settings-import-disclosure.md)
   - status: accepted — 現在値保護でバックアップの表示設定を復元しない場合に固定文言で告知する決定。
 - [ADR-0303: 未使用 Tauri plugin / 依存の削除](0303-unused-tauri-plugins.md)
-  - status: accepted — store / global-shortcut / shell / fs / opener /
-    notification と未使用 crate を削除し、静的ゲートを log + dialog へ絞る決定。
+  - status: accepted — store / global-shortcut / shell / fs / opener / notification と未使用 crate を削除し、静的ゲートを log + dialog
+    へ絞る決定。
+- [ADR-0304: 未配線設定の DTO 除外と値保持](0304-dead-config-cleanup.md)
+  - status: accepted — 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
