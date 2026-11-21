@@ -779,6 +779,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0297-front-matter-byte-preservation](docs/decisions/0297-front-matter-byte-preservation.md)
 - [0298-atomic-document-save](docs/decisions/0298-atomic-document-save.md)
 - [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
+- [0300-lost-update-guard](docs/decisions/0300-lost-update-guard.md)
+  - settings 保存中の入力を遮断し、editor の last_text を doc_id 変更・手動保存時に同期する決定。
   - AI service 生成中に config が更新されても古い service で上書きしない決定。
   - save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。
   - front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。

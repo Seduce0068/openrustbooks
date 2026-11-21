@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- 設定保存と autosave の lost update を防止（ADR-0300）。
 - AI service 生成中の設定競合を fail-closed 化（ADR-0299）。
 - 文書保存を atomic write へ変更（ADR-0298）。
 - front matter の元バイト保持を実装（ADR-0297）。
