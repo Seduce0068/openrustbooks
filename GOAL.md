@@ -35,3 +35,11 @@ storage root 自身の破壊的操作と move_item の上書き競合を fail-cl
 - 外部サービス / 秘密情報 / 公開設定は扱わない。
 - E2E 256 件・check 名・WDIO ゲートを維持する。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- storage root 自身の delete/move を固定文言で拒否。
+- overwrite=false は既存宛先を保持、overwrite=true は退避→rename→削除/復元へ変更。
+- create_dir(root) は root 直下作成を壊さないため idempotent 成功（R4 反映）。
+- core 302 / desktop 107 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 原子的 no-replace rename と既存 io error のパス除去は ADR-0286 の未決定へ集約。
