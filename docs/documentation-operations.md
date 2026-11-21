@@ -114,7 +114,11 @@ OKF `type: Decision` と `##` 見出しで記述する。追加時は次をす�
   [ADR-0262](decisions/0262-e2e-count-documentation-refresh.md) に記録する。
   履歴の 255 件（check 238 + equal 17、
   [ADR-0245](decisions/0245-position-prune-notification.md)）は変更履歴として保持する。
-- current 表記のズレは `scripts/check-e2e-count-consistency.sh` が verify.sh / CI extra_gates で fail-closed に自動検出する。
+- current 値の単一情報源はコード（`Checker(expected=...)` と `checker.check` / `checker.equal`
+  の実数）であり、文書側の current 表記は頻出 drift を防ぐ補助検査に留める。
+  current 表記とコード出典が drift した場合はコード出典が正とし、文書側を更新する。
+  ズレは `scripts/check-e2e-count-consistency.sh` が verify.sh / CI extra_gates で
+  fail-closed に自動検出する。
 
 ## markdownlint
 

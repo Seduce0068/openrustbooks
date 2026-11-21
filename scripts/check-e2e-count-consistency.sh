@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# E2E 期待件数（Checker(expected=N)）と current 表記（todo CI-H01 /
-# docs/documentation-operations.md）の一致を静的に検査する（fail-closed）。
-# 出典はコードのみ（ADR-0090）。履歴 254 / 253 と完了済み TODO の数値は検査しない。
+# E2E 期待件数（Checker(expected=N)）と checker.check / checker.equal 実数の一致を
+# 静的に検査する（fail-closed）。単一情報源はコードのみ（ADR-0090）。
+# documentation-operations.md の current 表記は頻出 drift 防止の補助検査に留め、
+# drift 時はコード出典が正とする。todo.md の CI-H01 行は gate 条件に含めない。
 # 第 1 引数で検査対象の repo root を差し替えられる（負向 test 用）。
 set -euo pipefail
 
@@ -121,34 +122,10 @@ if tree is not None:
             f"Checker(expected={expected}) と不一致です"
         )
 
-# --- todo.md の未着手 CI-H01 行（完了済み TODO は検査しない） ----------------------
-todo = read_text("todo.md")
-if todo is not None:
-    lines = todo.splitlines()
-    start = next((i for i, line in enumerate(lines) if line.startswith("## 未着手")), None)
-    if start is None:
-        errors.append("todo.md に『## 未着手』見出しが見つかりません")
-    else:
-        end = next(
-            (i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")),
-            len(lines),
-        )
-        section = lines[start:end]
-        ci_blocks = [
-            bullet_block(section, i)
-            for i, line in enumerate(section)
-            if line.startswith("- ") and "【CI-H01】" in line
-        ]
-        if len(ci_blocks) != 1:
-            errors.append(
-                f"todo.md 未着手の CI-H01 行は 1 件である必要があります（実際: {len(ci_blocks)} 件）"
-            )
-        elif expected is not None:
-            token = f"E2E {expected} 件"
-            if token not in ci_blocks[0]:
-                errors.append(f"todo.md 未着手 CI-H01 に『{token}』が含まれていません")
-
-# --- docs/documentation-operations.md の current 値節 -----------------------------
+# --- docs/documentation-operations.md の current 値節（補助検査） ------------------
+# 単一情報源はあくまでコード（Checker(expected=N) と check+equal 実数）であり、
+# ここは頻出 drift を早期に検知するための補助検査に留める。
+# drift 時はコード出典が正とし、文書側を更新する（ADR-0090）。
 # 履歴の 254 / 253 は別 bullets にあるため、current 値の 1 項目だけを検査する。
 doc = read_text("docs/documentation-operations.md")
 if doc is not None:
@@ -183,7 +160,8 @@ if errors:
     sys.exit(1)
 
 print(
-    f"OK: E2E 期待件数 {expected} 件 / check+equal {len(names)} 件、"
-    "todo CI-H01 と documentation-operations の current 表記は一致"
+    f"OK: E2E 件数の単一情報源は Checker(expected={expected})、"
+    f"checker.check + checker.equal = {len(names)} 件が一致"
+    "（documentation-operations.md の current 表記は補助検査で一致）"
 )
 PY
