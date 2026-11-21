@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- fs コマンドで read_only root を fail-closed に強制（ADR-0285）。
 - config.toml 読み込み失敗時の退避と保存拒否を実装（ADR-0284）。
 
 ## 2026-11-21

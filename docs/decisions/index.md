@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 284 件）。
+openrustbooks の ADR 一覧（全 285 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -570,3 +570,5 @@ openrustbooks の ADR 一覧（全 284 件）。
   - status: accepted — Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。
 - [ADR-0284: config.toml 読み込み失敗時の fail-closed 化](0284-config-load-fail-closed.md)
   - status: accepted — 設定読み込みエラーを握り潰して既定値で上書きする経路を廃し、退避と保存拒否を義務付ける決定。
+- [ADR-0285: desktop fs コマンドの read_only 強制](0285-fs-read-only-enforcement.md)
+  - status: accepted — local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
