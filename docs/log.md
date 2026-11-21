@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+- 入口文書を現行状態へ追従、ADR-0295 を追加。
+- README / 索引 / runbook を実装へ追従。実 WebView 未検証を ADR-0282 / 0283 の完了へ、
+  ドキュメント閲覧を EPUB / ZIP / Markdown 実装済みと PDF / TXT 設計段階へ分離。
+  README と docs/index.md に runbook-webdriver.md の導線を追加し、
+  runbook-verified-build の E2E 期待値を 256（check 239 + equal 17）へ更新。
+  ADR-0273 に Tauri CLI 導入・実 WebView 検証済みの追記を反映。
+  ADR-0265 の 255 は履歴値として既に明記済みであることを確認。
+  todo.md の重複未着手 3 項目を完了へ移動（範囲外の細部は未着手へ残置）。
+  E2E 件数・check 名・コード・Cargo.* は未変更。markdownlint 0 issues / R5-DC01。
 - cargo audit advisory DB の鮮度ゲートを追加（ADR-0294）。
 - lint feedback が no-op な要求の無駄な AI リトライを停止（ADR-0293）。
 - AI provider の空レスポンスを失敗扱いに変更（ADR-0292）。

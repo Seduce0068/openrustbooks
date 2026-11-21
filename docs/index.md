@@ -6,9 +6,10 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [e2e-traceability.md](e2e-traceability.md) — 検証条件（VC）・REQ / 主要 ADR・E2E check 名（256 件）の対応表。
 - [architecture.md](architecture.md) — 初期提案の構成案。現状は ADR と README を参照。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
+- [runbook-webdriver.md](runbook-webdriver.md) — WebdriverIO による実 Tauri WebView E2E の手順と制約。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 294 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 295 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -65,9 +66,10 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [ADR-0272: Tauri 設定保存 UI の接続](decisions/0272-settings-save-ui.md)
   — 完全な ConfigView DTO 往復と Tauri mock E2E 256/0 で、desktop のみ設定保存 UI を接続。
 - [ADR-0273: 実 WebView 検証の環境ブロッカーとしての記録](decisions/0273-real-webview-verification-deferred.md)
-  — Tauri CLI 未導入で実 WebView 検証は実行不可。未実施のまま pass とせず、導入後の手順を残す。
+  — Tauri CLI 未導入で実行不可とした当時の記録。その後 ADR-0282 / 0283 で CLI 導入、
+  実 WebView 検証、WDIO 独立ゲート化が完了（本 ADR は履歴）。
 - [ADR-0274: A05 前提別状態のトレーサビリティ整合](decisions/0274-a05-traceability-reconciliation.md)
-  — 前提 1〜6 を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を分けて記録。A05 は残のまま。
+  — 前提 1〜6 を再分類した当時の記録。実 WebView は ADR-0282 / 0283 で検証済み（本 ADR は履歴）。
 - [ADR-0276: 一時調査成果物のスナップショットとしての扱い](decisions/0276-investigation-artifacts-status.md)
   — `docs/investigation/` を未追跡の当時スナップショットとして導線に明示し、生ファイルは変更しない決定。
 - [investigation/](investigation/) — 別セッションの一時調査スナップショット（未追跡・ADR-0083 で変更/コミットしないと決定）。

@@ -62,9 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【README / 索引の現行状態を更新】README が実 WebView 未検証と誤報し、
-      runbook-webdriver.md が docs/index.md と README の導線から欠落。
-      根拠 `README.md:96-98,197-203` / `docs/index.md:5-11` / R5-DC01。
 - [ ] 【WDIO に保存往復を追加】settings.e2e.ts は get_config 読み取りのみで、
       update_config_patch の revision +1 と再読み込み後の値維持を検証していない。
       根拠 `e2e/specs/settings.e2e.ts:4-27` / R5-DC01。
@@ -74,8 +71,6 @@ status: current
 - [ ] 【設定インポートの表示設定復元を明示】現在値があるとバックアップの表示設定が復元されず、
       README の「表示設定を含む」と一致しない。明示オプションまたは制約開示。
       根拠 `web/src/lib.rs:2102-2111` / `README.md:88` / R5-DC01。
-- [ ] 【README の EPUB/ZIP を実装済みへ修正】README:94 の「設計段階」に実装済みの
-      EPUB / ZIP が含まれる。根拠 `README.md:35,81-94` / R5-DC01。
 - [ ] 【ユーザー入力のサイズ境界を追加】desktop `open_document` は無制限 `read_to_string`、
       Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
       core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
@@ -95,10 +90,11 @@ status: current
       シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
       billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
       `scripts/verify.sh:250-269,331-387` / R4-CI01 / 重大度 medium-high。
-- [ ] 【runbook / README / ADR の現行値を修正】runbook-verified-build の E2E 255 → 256、
-      ADR-0273 の Tauri CLI 未導入表記、README ADR 要約の誤配置、ADR-0265 の「現行 255」、
-      runbook-release の updater 文言、README build.rs 配置、`--locked` 未決定表記を更新し、
-      ゲート対象を拡張。根拠 `docs/runbook-verified-build.md:60-61,130` / `README.md:733,754-763` /
+- [ ] 【runbook-release / README 細部の現行値を更新（今回範囲外）】runbook-release の
+      updater 文言、README の build.rs 配置、`--locked` 未決定表記、ゲート対象の拡張、
+      README ADR 要約の誤配置を更新する。runbook-verified-build / ADR-0273 / ADR-0265 は
+      今回の docfix で反映済みのため重複しない。
+      根拠 `README.md:733,754-763` / `docs/runbook-release.md` /
       `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
 - [ ] 【未使用 Tauri plugin / 依存を削除】store / global-shortcut / shell / fs / opener / notification は登録のみ。
       desktop の anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc も未使用。
@@ -172,6 +168,15 @@ status: current
 
 ## 完了
 
+- [x] 【README / 索引 / runbook の現行状態を実装へ追従】README の「実 WebView 未検証」を
+      ADR-0282 / 0283 の完了へ更新し、ドキュメント閲覧を EPUB / ZIP / Markdown 実装済みと
+      PDF / TXT 設計段階へ分離。README と docs/index.md に runbook-webdriver.md の導線を追加。
+      runbook-verified-build の E2E 期待値を 256（check 239 + equal 17）へ、
+      ADR-0273 に Tauri CLI 導入済み・実 WebView 検証済みの追記を反映。
+      ADR-0265 の 255 は履歴値として既に明記済み（変更なし）。
+      E2E 件数・check 名・コード・Cargo.* は未変更。markdownlint 0 issues / R5-DC01。
+      範囲外（runbook-release の updater 文言、README の build.rs 配置・`--locked` 表記・
+      ゲート対象拡張、ADR 要約の誤配置）は未着手へ残す。
 - [x] 【audit 鮮度】advisory DB の鮮度と監査対象 DB を一致、負向 test 14 件（ADR-0294）。
 - [x] 【lint リトライ】no-op feedback 要求の無駄な再呼び出しを停止、max_retries も内部 clamp（ADR-0293）。
 - [x] 【AI 空レスポンス】choices/content/response 欠落を固定文言の provider error 化（ADR-0292）。

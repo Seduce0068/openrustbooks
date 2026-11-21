@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: "ADR-0273: 実 WebView 検証の環境ブロッカーとしての記録"
-description: "Tauri CLI 未導入により実 WebView 検証を実行できないため、未実施のまま pass とせず、導入後の手順を残す決定。"
+description: "Tauri CLI 未導入を環境ブロッカーとして記録した決定（その後 ADR-0282 / 0283 で解消）。"
 tags:
   - ADR
   - tauri
@@ -95,3 +95,18 @@ $ command -v wmctrl
 - `cargo tauri --version`: 終了コード 101、`no such command: tauri`。
 - `DISPLAY=:1`、`xdotool` は `/usr/bin/xdotool`、`wmctrl` は `/usr/bin/wmctrl`。
 - コード・E2E・check 名は未変更。E2E 256 件の既存結果を維持。
+
+## 追記（2026-11-22: 環境ブロッカーの解消）
+
+上の Runtime Proof は決定時点（2026-11-20）の記録であり、現行状態ではない。
+Tauri CLI 2.12.5 が導入され、環境ブロッカーは解消した。
+
+- `cargo tauri --version`: `tauri-cli 2.12.5`、rc=0（ADR-0282）。
+- 実 Tauri WebView で起動、settings 表示、`get_config` / `update_config_patch`、
+  `config.toml` の永続化を確認（ADR-0282）。
+- WebdriverIO による独立 E2E ゲートを追加し、運用手順を
+  [runbook-webdriver.md](../runbook-webdriver.md) に記録（ADR-0283）。
+
+「未決定」節のうち Tauri CLI の導入と GTK / WebKitGTK 依存は実起動で解消した。
+実 WebView の CSP 挙動と `__TAURI__` 形状の更新追従は ADR-0282 / ADR-0283 を追跡先とする。
+現行状態は ADR-0282 / ADR-0283 を正とし、本 ADR は履歴として残す。

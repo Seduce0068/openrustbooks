@@ -91,11 +91,14 @@ openrustbooks/
   OS のカラースキーム追従、本文言語の反映（スクリーンリーダー対応）、
   移動履歴の永続化、タッチ操作（スワイプ、横・縦の閾値設定可能）、
   章タイトルの検索フィルター、巨大画像の警告とオプトインの縮小（JPEG 品質設定付き）
-- **ドキュメント閲覧 (設計段階)**: EPUB, ZIP, PDF, TXT, Markdown
+- **ドキュメント閲覧 (実装済み)**: EPUB, ZIP, Markdown
+- **ドキュメント閲覧 (設計段階)**: PDF, TXT
 - **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）、format 選択と Lint は desktop 向け。
 - **desktop 設定保存 (Tauri)**: browser は読み取り専用 fail-closed、desktop は UI 起点 CAS と
-  構造化エラーで mock 経路まで接続済み（Tauri mock E2E 256/0）。実 WebView は未検証
-  （ADR-0272 / ADR-0273 / ADR-0274）。
+  構造化エラーで接続済み（Tauri mock E2E 256/0）。実 WebView でも settings / get_config /
+  update_config_patch / config.toml 永続化を検証済み（Tauri CLI 2.12.5、ADR-0282）。
+  WebdriverIO による独立 E2E ゲートも運用中（ADR-0283、
+  [WebdriverIO 実 WebView E2E](docs/runbook-webdriver.md)）。
 - **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +
   `rumdl`品質保証
 - **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
@@ -199,6 +202,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
+- [WebdriverIO 実 WebView E2E](docs/runbook-webdriver.md) - 実 Tauri WebView の settings 検証手順と制約
 - [リリース運用](docs/runbook-release.md) - 導入・更新・ロールバック・既知問題と公開作業の未決定
 - [ドキュメント運用規約](docs/documentation-operations.md) - OKF・索引・log・ADR・lint の運用
 - [0001-use-system-webview](docs/decisions/0001-use-system-webview.md)
@@ -770,6 +774,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
 - [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
 - [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
+- [0295-documentation-current-state](docs/decisions/0295-documentation-current-state.md)
+  - 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
   - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
   - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
   - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。

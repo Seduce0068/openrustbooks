@@ -57,8 +57,8 @@ echo "=== verify.sh --dist ==="
 e2e expected / e2e result、browser executable / path / version、static port / cdp port、
 source dist、および dist 内ファイルの SHA256（現状 5 行）が記録される（ADR-0266）。
 歴史的な実測例では `e2e expected : 253`、`e2e result   : passed: 253, failed: 0` だった。
-現行の期待値は **255**（check 238 + equal 17）で、最新の実測は
-`./scripts/verify.sh` の Runtime Proof を参照する。
+現行の期待値は **256**（check 239 + equal 17、ADR-0272 の Tauri mock +1）で、
+最新の実測は `./scripts/verify.sh` の Runtime Proof を参照する。
 
 ```bash
 # Kubuntu: 保持先で実行（<short-sha>-<UTC> は実値へ置換）
