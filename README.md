@@ -767,6 +767,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0289-desktop-frontend-build-dependency](docs/decisions/0289-desktop-frontend-build-dependency.md)
 - [0290-ci-reproducibility](docs/decisions/0290-ci-reproducibility.md)
 - [0291-e2e-count-single-source](docs/decisions/0291-e2e-count-single-source.md)
+- [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
+  - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
   - E2E 期待件数を Checker(expected=N) のみに依存させ、todo.md の CI-H01 行をゲート条件から外す決定。
   - wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
   - tauri.conf.json の frontendDist 依存を明示化し、生成済み web/dist の存在と安全性を fail-closed で検証する決定。
