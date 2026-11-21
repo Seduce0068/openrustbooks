@@ -72,10 +72,6 @@ status: current
       今回の docfix で反映済みのため重複しない。
       根拠 `README.md:733,754-763` / `docs/runbook-release.md` /
       `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
-- [ ] 【未使用 Tauri plugin / 依存を削除】store / global-shortcut / shell / fs / opener / notification は登録のみ。
-      desktop の anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc も未使用。
-      ゲートの必須 init 一覧も見直す。根拠 `desktop/src/main.rs:27-53` / `desktop/Cargo.toml:16-21,28-45` /
-      R1-AR01 + R2-DP01 / 重大度 medium。
 - [ ] 【dead config を配線または明示】Ollama `keep_alive_minutes`、`LocalRootConfig.watch`、
       `default_backend`、`auto_save_delay`、`model_overrides`、`config_file`、`telemetry`、
       `max_recent`、`max_tokens_per_month` を DTO から除外するか未配線表示へ変更する。
@@ -144,6 +140,7 @@ status: current
 
 ## 完了
 
+- [x] 【未使用 plugin / 依存】6 plugin と 7 crate を削除、必須 init を log + dialog 化（ADR-0303）。
 - [x] 【設定インポート】現在値保護時の固定文言告知と README 制約を明記（ADR-0302）。
 - [x] 【入力サイズ境界】256 MiB 上限の事前/事後検査を実装、上限を core 定数へ統一（ADR-0301）。
 - [x] 【lost update】設定保存中の入力遮断と editor last_text 同期を実装（ADR-0300）。

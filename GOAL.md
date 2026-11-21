@@ -32,3 +32,10 @@ anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc な
 - 外部サービス / 公開設定 / 課金は扱わない。
 - E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 未使用 6 plugin / 7 crate を削除し、必須 init を log + dialog へ更新。
+- capability に削除 plugin 権限なし。wdio feature は維持。
+- 初回 verify.sh は未コミット Cargo.lock 差分で WDIO gate が失敗したが、コミット後に全ゲート成功（E2E 256）。
+- window/mod.rs の stale コメント / Cargo.toml 再混入検出 / workspace warning は ADR-0303 の未決定。
