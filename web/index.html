@@ -218,29 +218,15 @@
             flex-wrap: wrap;
         }
 
-        /* File tree */
+        /* File tree: 初版は未接続なので、クリック可能な項目や
+           cursor: pointer / hover 変形は定義しない。 */
         .file-tree {
             font-family: var(--font-mono);
             font-size: 0.875rem;
         }
 
-        .file-tree ul {
-            list-style: none;
-            padding-left: var(--spacing-md);
-        }
-
-        .file-tree li {
-            padding: var(--spacing-xs) 0;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-
-        .file-tree li:hover {
-            color: var(--color-primary);
-        }
-
-        .file-tree .folder-name {
-            font-weight: 500;
+        .file-tree-placeholder {
+            color: var(--color-muted);
         }
 
         /* Editor */
