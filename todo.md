@@ -62,9 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【WDIO に保存往復を追加】settings.e2e.ts は get_config 読み取りのみで、
-      update_config_patch の revision +1 と再読み込み後の値維持を検証していない。
-      根拠 `e2e/specs/settings.e2e.ts:4-27` / R5-DC01。
 - [ ] 【front matter 往復のバイト保全を検証】CRLF / 末尾改行 / YAML 書式が開いて保存するだけで
       変わり得る。元テキスト保持または変更無し時の元バイト返却を確認する。
       根拠 `core/src/document.rs:209-220,246-256` / R2-ER01。
@@ -168,6 +165,7 @@ status: current
 
 ## 完了
 
+- [x] 【WDIO 保存往復】update_config_patch の revision +1 と config.toml 永続化を検証（ADR-0296）。
 - [x] 【README / 索引 / runbook の現行状態を実装へ追従】README の「実 WebView 未検証」を
       ADR-0282 / 0283 の完了へ更新し、ドキュメント閲覧を EPUB / ZIP / Markdown 実装済みと
       PDF / TXT 設計段階へ分離。README と docs/index.md に runbook-webdriver.md の導線を追加。

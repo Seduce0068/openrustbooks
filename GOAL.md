@@ -30,3 +30,9 @@ config.toml 永続化を回帰検証していない。
 - API key / secret / path はログ・test 出力へ出さない。
 - 外部 AI API への送信は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- WDIO settings spec に update_config_patch の revision +1 と config.toml 永続化を追加。
+- R4 high を反映（セクション抽出、復元の堅牢化、パス非露出）。
+- npm run test:wdio 1 passing、verify.sh 全ゲート成功（E2E 256）。
