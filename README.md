@@ -85,7 +85,8 @@ openrustbooks/
   移動履歴（戻る・進む）、表示設定（文字サイズ・行間・ダーク表示、一括リセット）、
   保存データの削除と保持期間・件数上限による自動掃除、
   画像読み込み後の位置ずれ補正、画像の非同期デコード、キーボード操作と ARIA 属性（本文領域の章タイトルラベル含む）、強制カラーモード対応、
-  読書位置のエクスポート・インポート（表示設定・履歴を含む・マージ・形式バージョン）、
+  読書位置のエクスポート・インポート（表示設定・履歴を含む・マージ・形式バージョン、
+  表示設定は現在の設定が無い場合のみ復元され、現在値がある場合はバックアップの表示設定を復元しない）、
   アプリ全体のダークテーマ、
   landmarks の移動 UI、page-list によるページ移動、履歴一覧からのジャンプと日時表示、履歴のクリアと個別削除（確認ダイアログ付き）、
   OS のカラースキーム追従、本文言語の反映（スクリーンリーダー対応）、
@@ -781,6 +782,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
 - [0300-lost-update-guard](docs/decisions/0300-lost-update-guard.md)
 - [0301-input-size-bounds](docs/decisions/0301-input-size-bounds.md)
+- [0302-settings-import-disclosure](docs/decisions/0302-settings-import-disclosure.md)
+  - 現在値保護でバックアップの表示設定を復元しない場合に固定文言で告知する決定。
   - open / import 前に 256 MiB 上限を検査し、読み取り後にも実バイト長を再確認する決定。
   - settings 保存中の入力を遮断し、editor の last_text を doc_id 変更・手動保存時に同期する決定。
   - AI service 生成中に config が更新されても古い service で上書きしない決定。

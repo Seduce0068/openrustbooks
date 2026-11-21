@@ -1500,6 +1500,11 @@ const CHAPTER_RENDER_FAILED_MESSAGE: &str = "章を表示できませんでし�
 /// リンク解決の失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
 const LINK_RESOLUTION_FAILED_MESSAGE: &str = "リンクを解決できませんでした。";
+/// 現在値保護でバックアップの表示設定を復元しなかった場合の status 固定文言。
+/// 設定値・キー・パスは載せない。
+#[cfg(target_arch = "wasm32")]
+const SETTINGS_PRESERVED_MESSAGE: &str =
+    "表示設定は現在の値を保持しました。バックアップの表示設定は復元されていません。";
 
 /// localStorage の保存失敗をコンソールと status に通知する。
 ///
@@ -2069,9 +2074,15 @@ fn export_positions() -> usize {
 /// 下書きは復元するが、上記の件数には含めない。
 /// 位置／履歴／下書きの set_item が 1 件でも失敗した場合は `save_failed` に
 /// true を書き、呼び出し側が成功文言で失敗通知を上書きしないようにする。
+/// バックアップに表示設定があるのに現在値保護で復元しなかった場合は
+/// `settings_preserved` に true を書き、呼び出し側が固定文言で告知する。
 /// 通知自体はこの関数が 1 回だけ発行する。
 #[cfg(target_arch = "wasm32")]
-fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize), String> {
+fn import_positions(
+    raw: &str,
+    save_failed: &mut bool,
+    settings_preserved: &mut bool,
+) -> Result<(usize, usize), String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Err("JSON の解析に失敗しました".to_string());
     };
@@ -2143,50 +2154,55 @@ fn import_positions(raw: &str, save_failed: &mut bool) -> Result<(usize, usize),
     // 現在の設定が無い初回起動・クリア後のみインポート値で復元する。
     // 設定の明示的な復元オプションは今回は UI を用意しないため未配線。
     let settings_obj = settings.clone();
-    if let Some(serde_json::Value::Object(settings)) = settings_obj
-        && storage.get_item(SETTINGS_KEY).ok().flatten().is_none()
-    {
-        let merged = ReaderSettings {
-            font_scale: settings
-                .get("fontScale")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or_else(|| load_settings().font_scale),
-            line_height: settings
-                .get("lineHeight")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or_else(|| load_settings().line_height),
-            dark: settings
-                .get("dark")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            follow_system: settings
-                .get("followSystem")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            swipe_threshold: settings
-                .get("swipeThreshold")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or_else(|| load_settings().swipe_threshold),
-            vertical_scroll_threshold: settings
-                .get("verticalScrollThreshold")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or_else(|| load_settings().vertical_scroll_threshold),
-            downscale_images: settings
-                .get("downscaleImages")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            jpeg_quality: settings
-                .get("jpegQuality")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or_else(|| load_settings().jpeg_quality),
+    let current_settings_exist = storage.get_item(SETTINGS_KEY).ok().flatten().is_some();
+    if let Some(serde_json::Value::Object(settings)) = settings_obj {
+        if current_settings_exist {
+            // 現在値を守るため復元しない。設定値は status に出さず、
+            // 呼び出し側が固定文言で理由を告知する。
+            *settings_preserved = true;
+        } else {
+            let merged = ReaderSettings {
+                font_scale: settings
+                    .get("fontScale")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or_else(|| load_settings().font_scale),
+                line_height: settings
+                    .get("lineHeight")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or_else(|| load_settings().line_height),
+                dark: settings
+                    .get("dark")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                follow_system: settings
+                    .get("followSystem")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                swipe_threshold: settings
+                    .get("swipeThreshold")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or_else(|| load_settings().swipe_threshold),
+                vertical_scroll_threshold: settings
+                    .get("verticalScrollThreshold")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or_else(|| load_settings().vertical_scroll_threshold),
+                downscale_images: settings
+                    .get("downscaleImages")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                jpeg_quality: settings
+                    .get("jpegQuality")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or_else(|| load_settings().jpeg_quality),
+            }
+            .normalized();
+            save_settings(&merged);
         }
-        .normalized();
-        save_settings(&merged);
     }
 
     // 移動履歴の取り込み。値が SavedHistory として読めるものだけ書き込む。
@@ -3749,16 +3765,23 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             }
             let mut save_failed = false;
-            let result = import_positions(&raw, &mut save_failed);
+            let mut settings_preserved = false;
+            let result = import_positions(&raw, &mut save_failed, &mut settings_preserved);
             if save_failed {
                 // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
                 return;
             }
             match result {
                 Ok((count, history_count)) => {
-                    set_status.set(format!(
+                    let mut message = format!(
                         "読書位置を {count} 件、履歴を {history_count} 件インポートしました。"
-                    ));
+                    );
+                    if settings_preserved {
+                        // 現在値保護で設定を復元しなかった理由を固定文言で告知する。
+                        message.push(' ');
+                        message.push_str(SETTINGS_PRESERVED_MESSAGE);
+                    }
+                    set_status.set(message);
                 }
                 Err(error) => set_status.set(error),
             }
