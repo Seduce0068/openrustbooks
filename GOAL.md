@@ -1,42 +1,33 @@
 # Goal
 
-Markdown front matter の往復で元バイト列を保全する（R6 レビュー / R2-ER01）。
+save_document を atomic write に変更する（R6 レビュー / R1-ER01）。
 
 ## Scope
 
 ### 背景
 
-extract_front_matter は lines()/join("\n") で CRLF を LF に変換し、
-full_text は serde_norway で YAML を再シリアライズするため、
-コメント・クォート・キー順・数値表記・末尾改行が変更され得る。
-編集していない Markdown を開いて保存するだけで差分ノイズが発生する。
+desktop/src/commands/document.rs の save_document は
+`tokio::fs::write` で既存ファイルを truncate してから書き込む。
+書き込み途中エラーで元ファイルが空／部分内容のまま残る。
+core::io には `write_atomic` が既に存在する。
 
 ### 成果物
 
-- `core/src/document.rs`: 変更（元 front matter テキスト保持と再利用）
-- `desktop/src/commands/document.rs`: 変更（本番 open 経路を preserving 版へ接続）
-- `docs/decisions/0297-front-matter-byte-preservation.md`: 追加
+- `desktop/src/commands/document.rs`: 変更
+- `docs/decisions/0298-atomic-document-save.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. front matter を構造化値に加えて元テキストも保持する。
-2. full_text は body が未変更なら元の front matter 区切り・改行スタイル・
-   末尾改行をそのまま返す。
-3. body が変更されても front matter は元テキストを保持する。
-4. 既存 API 互換を壊さない（必要なら内部フィールドのみ変更）。
-5. 単体 test: CRLF / 末尾改行 / YAML コメント・キー順を保持。
-6. verify.sh 全ゲート成功。
+1. save_document は atomic temp + rename で保存する。
+2. 失敗時は元ファイルを保持し、metadata / mark_saved / emit を行わない。
+3. 成功時のみ metadata / mark_saved / emit を更新する。
+4. 単体 test で書き込み失敗時に元内容が残ることを検証する。
+5. front matter 保全、read_only、containment を壊さない。
+6. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
 - 外部サービス / 秘密情報は扱わない。
 - E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- front matter を raw 文本で保持し、無編集 open→save のバイト列を保全。
-- desktop 本番 open 経路を preserving 版へ接続、往復 test を追加。
-- core 327 / desktop 115 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- 構造化値更新 / 旧データ移行 / save_document body 契約は ADR-0297 の未決定。
