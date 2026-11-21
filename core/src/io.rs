@@ -11,6 +11,12 @@ use std::path::{Path, PathBuf};
 /// `None` のときに適用する。EPUB 側の 256 MiB 上限と揃える（R6 PR-M04）。
 pub const DEFAULT_MAX_READ_BYTES: u64 = 256 * 1024 * 1024;
 
+/// read-only root への書き込みを拒否する際の固定文言。
+///
+/// `desktop/src/commands/document.rs` の `save_document` と同じ文言を使い、
+/// fs コマンド経由でも意味論を揃える（R3-AU01）。設定値・パスは含めない。
+pub const READ_ONLY_ROOT_MESSAGE: &str = "Storage root is read-only";
+
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageCapabilities {
@@ -323,9 +329,13 @@ pub mod local {
         Ok(())
     }
 
+    #[derive(Debug)]
     pub struct LocalStorage {
         root: PathBuf,
         capabilities: StorageCapabilities,
+        /// `storage.local_roots[].read_only` に対応するフラグ。
+        /// true のときは write / create_dir / delete / move_item を拒否する。
+        read_only: bool,
     }
 
     /// 既存の最も深い祖先を正規化し、残りの要素を連結して返す。
@@ -358,13 +368,47 @@ pub mod local {
 
     impl LocalStorage {
         pub fn new(root: PathBuf) -> Self {
-            let capabilities = StorageCapabilities {
+            Self::new_with_read_only(root, false)
+        }
+
+        /// read_only フラグを明示して生成する（desktop の local_roots 設定から使う）。
+        pub fn new_with_read_only(root: PathBuf, read_only: bool) -> Self {
+            let mut capabilities = StorageCapabilities {
                 is_local: true,
                 // `watch()` は未実装のため、利用可能と報告しない（R6 TD-H04）。
                 can_watch: false,
                 ..Default::default()
             };
-            Self { root, capabilities }
+            if read_only {
+                capabilities.can_write = false;
+                capabilities.can_create_dir = false;
+                capabilities.can_delete = false;
+                capabilities.can_move = false;
+            }
+            Self {
+                root,
+                capabilities,
+                read_only,
+            }
+        }
+
+        /// 設定された root パス（desktop 側の root 判定で使う）。
+        pub fn root(&self) -> &Path {
+            &self.root
+        }
+
+        /// この root が read-only か。
+        pub fn is_read_only(&self) -> bool {
+            self.read_only
+        }
+
+        /// 書き込み系操作の前に呼ぶ fail-closed ガード。
+        fn ensure_writable(&self) -> CoreResult<()> {
+            if self.read_only {
+                Err(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+            } else {
+                Ok(())
+            }
         }
 
         /// root 外への脱出を拒否する fail-closed なパス解決。
@@ -447,6 +491,11 @@ pub mod local {
         }
 
         async fn initialize(&mut self) -> CoreResult<()> {
+            // read-only root は存在しないディレクトリを「作って書き込み可能にする」
+            // ことがないよう、初期化でも生成しない（R4 指摘）。
+            if self.read_only {
+                return Ok(());
+            }
             tokio_fs::create_dir_all(&self.root).await?;
             Ok(())
         }
@@ -551,6 +600,7 @@ pub mod local {
         }
 
         async fn write(&self, path: &Path, data: &[u8], options: WriteOptions) -> CoreResult<()> {
+            self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
 
             // overwrite=false のときは既存ファイルへの書き込みを拒否する。
@@ -593,6 +643,7 @@ pub mod local {
         }
 
         async fn create_dir(&self, path: &Path, recursive: bool) -> CoreResult<()> {
+            self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
             if recursive {
                 tokio_fs::create_dir_all(&full_path).await?;
@@ -603,6 +654,7 @@ pub mod local {
         }
 
         async fn delete(&self, path: &Path, recursive: bool) -> CoreResult<()> {
+            self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
             if recursive {
                 tokio_fs::remove_dir_all(&full_path).await?;
@@ -613,6 +665,7 @@ pub mod local {
         }
 
         async fn move_item(&self, from: &Path, to: &Path, overwrite: bool) -> CoreResult<()> {
+            self.ensure_writable()?;
             let full_from = self.resolve_path(from)?;
             let full_to = self.resolve_path(to)?;
 
@@ -1199,6 +1252,7 @@ pub mod local {
                     max_file_size: Some(4),
                     ..Default::default()
                 },
+                read_only: false,
             };
 
             // 要求 limit > cap → 部分読みせず Validation エラー。
@@ -1252,6 +1306,7 @@ pub mod local {
                     max_file_size: Some(4),
                     ..Default::default()
                 },
+                read_only: false,
             };
 
             // limit=None は「ファイル全体を読む」要求なので、切り詰めるならエラーにする。
@@ -1289,6 +1344,103 @@ pub mod local {
                 .unwrap();
 
             assert!(bytes.is_empty(), "末尾超えの offset では空 Vec: {bytes:?}");
+        }
+
+        /// read-only root の initialize() はディレクトリを作成しないこと（R4 指摘）。
+        #[tokio::test]
+        async fn read_only_initialize_does_not_create_root_directory() {
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            let missing = std::env::temp_dir().join(format!(
+                "openrustbooks-io-readonly-missing-{}-{}",
+                std::process::id(),
+                id
+            ));
+            let _ = fs::remove_dir_all(&missing);
+            let mut storage = LocalStorage::new_with_read_only(missing.clone(), true);
+
+            storage.initialize().await.unwrap();
+
+            assert!(!missing.exists(), "read-only root は初期化で作らない");
+        }
+
+        /// read-only root では全ての書き込み系操作が固定文言で拒否されること（R3-AU01）。
+        #[tokio::test]
+        async fn read_only_storage_rejects_mutating_operations() {
+            let temp = TempRoot::new();
+            let storage = LocalStorage::new_with_read_only(temp.path.clone(), true);
+            let existing = seed_existing_file(&temp);
+
+            assert!(storage.is_read_only());
+            assert_eq!(storage.root(), temp.path.as_path());
+            let capabilities = StorageBackend::capabilities(&storage);
+            assert!(!capabilities.can_write);
+            assert!(!capabilities.can_create_dir);
+            assert!(!capabilities.can_delete);
+            assert!(!capabilities.can_move);
+
+            let write_error = storage
+                .write(Path::new("new.txt"), b"data", WriteOptions::default())
+                .await
+                .expect_err("read-only root への write は拒否される");
+            assert_eq!(
+                write_error.to_string(),
+                format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+            );
+
+            let create_dir_error = storage
+                .create_dir(Path::new("nested"), true)
+                .await
+                .expect_err("read-only root への create_dir は拒否される");
+            assert_eq!(
+                create_dir_error.to_string(),
+                format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+            );
+
+            let delete_error = storage
+                .delete(Path::new("existing.txt"), false)
+                .await
+                .expect_err("read-only root の delete は拒否される");
+            assert_eq!(
+                delete_error.to_string(),
+                format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+            );
+
+            let move_error = storage
+                .move_item(Path::new("existing.txt"), Path::new("moved.txt"), false)
+                .await
+                .expect_err("read-only root の move_item は拒否される");
+            assert_eq!(
+                move_error.to_string(),
+                format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+            );
+
+            // 拒否されただけでなく、ディスク上の内容も変化していないこと。
+            assert_eq!(fs::read(&existing).unwrap(), b"original".to_vec());
+            assert!(!temp.path.join("new.txt").exists());
+            assert!(!temp.path.join("nested").exists());
+            assert!(!temp.path.join("moved.txt").exists());
+        }
+
+        /// read_only=false では既存どおり書き込めること（既存動作の回帰確認）。
+        #[tokio::test]
+        async fn writable_storage_allows_mutating_operations() {
+            let temp = TempRoot::new();
+            let storage = LocalStorage::new_with_read_only(temp.path.clone(), false);
+
+            assert!(!storage.is_read_only());
+            storage
+                .write(Path::new("new.txt"), b"data", WriteOptions::default())
+                .await
+                .unwrap();
+            storage.create_dir(Path::new("nested"), true).await.unwrap();
+            storage
+                .move_item(Path::new("new.txt"), Path::new("moved.txt"), false)
+                .await
+                .unwrap();
+            storage.delete(Path::new("moved.txt"), false).await.unwrap();
+
+            assert!(!temp.path.join("new.txt").exists());
+            assert!(temp.path.join("nested").is_dir());
         }
     }
 }

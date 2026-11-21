@@ -56,5 +56,7 @@ tauri-build = { version = "2.0", features = [] }
 wdio = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 
 [dev-dependencies]
+# command レベル test で tauri::test::mock_app() を使う（emit の検証に必要）。
+tauri = { version = "2.0", features = ["test"] }
 pretty_assertions = { workspace = true }
 tokio-test = { workspace = true }
