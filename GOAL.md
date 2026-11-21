@@ -46,3 +46,10 @@ Tauri CLI 2.12.5 は導入済みだが、`cargo tauri dev` の実起動で次が
 - 外部送信 / 公開ビルド / 署名 secrets / 破壊的 config 操作は行わない。
 - 秘密値は表示・送信しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 実 WebView で Tauri CLI 起動、settings editable、`get_config` / `update_config_patch` 成功を確認。
+- 起動ブロッカー（logger 競合 / hook cwd / updater pubkey 必須）と保存ブロッカー（`{patch:...}` 引数）を修正。
+- updater plugin 登録と依存を削除し、公開鍵 / endpoint / 署名は未導入。
+- verify.sh 全ゲート成功、E2E 256 passed / 0 failed。

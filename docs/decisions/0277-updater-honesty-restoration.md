@@ -68,6 +68,8 @@ updater は plugin 初期化のみで、
 
 ## 未決定
 
+- ADR-0282 で updater plugin 登録そのものを削除済み。`check-updater-honesty.sh` は登録なしを要求する。
+
 - ADR-0222 / 0271 / 0272 / runbook の優先順位と、
   「DTO 不変・E2E 253 維持」という履歴条項の扱い。
 - 実 Tauri WebView で固定表示が描画されるか（ADR-0273 の環境ブロッカー）。

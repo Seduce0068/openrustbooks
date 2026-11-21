@@ -124,6 +124,12 @@ ADR-0218（AI カスタムエンドポイント）と同型の判断である。
 - 文書のみの変更のため compile / test は省略。設定表示の変更は別途ゲート検証する。
 - markdownlint-cli2（`/tmp/mdlint.jsonc`）: 全対象 0 issues。
 
+## ADR-0282 によるUpdater plugin登録削除（2026-11-21 追記）
+
+- 実 WebView 起動で `tauri_plugin_updater` が `plugins.updater.pubkey` を必須とし、未設定だと起動失敗することが判明した。
+- ADR-0282 で plugin 登録と依存を削除した。更新チェックは引き続き未配線。
+- 本 ADR の「初期化のみ」という決定は、ADR-0282 で「登録なし」へ改訂された。
+
 ## SettingsForm editable 化後の再確認（2026-11-20 追記）
 
 - ADR-0272 の editable 化で固定表示が一時的に失われたが、ADR-0277 で復元済み。

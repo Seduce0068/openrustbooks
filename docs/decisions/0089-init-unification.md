@@ -25,7 +25,8 @@ wasm32 では `pub use wasm::*` により名前が衝突し得るが、Rust 側
 - `core::init()`（Rust 側）と wasm-bindgen の `init()`（JS 側）は
   どちらも `init_core()` を呼ぶ。
 - `console_log!` は wasm-bindgen 版に残す（JS 側の初期化通知）。
-- native の `tracing_subscriber` 初期化は現状維持。
+- native の `tracing_subscriber` 初期化は ADR-0282 で desktop から削除済み。
+  wasm 側の `init_core()` は従来どおり。
 
 ## 選択肢と根拠
 

@@ -674,7 +674,6 @@ SOFTWARE.
 | tauri-plugin-opener | 2.7.2 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-plugin-opener> |
 | tauri-plugin-shell | 2.6.0 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-plugin-shell> |
 | tauri-plugin-store | 2.5.0 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-plugin-store> |
-| tauri-plugin-updater | 2.14.1 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-plugin-updater> |
 | tauri-runtime | 2.12.2 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-runtime> |
 | tauri-runtime-wry | 2.12.3 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-runtime-wry> |
 | tauri-utils | 2.10.2 | Apache-2.0 OR MIT | <https://crates.io/crates/tauri-utils> |
