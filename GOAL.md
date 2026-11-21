@@ -1,36 +1,28 @@
 # Goal
 
-cargo audit の advisory DB 鮮度を担保する（R6 レビュー / R3-AU01）。
+README / 索引 / runbook の現行状態を実装へ追従させる（R6 レビュー / R5-DC01）。
 
 ## Scope
 
-### 背景
-
-verify.sh は `cargo audit --no-fetch` を使い、ローカルキャッシュの
-advisory DB に依存する。`--stale` を指定しないため DB が古くても
-脆弱性を見逃せる。
-
 ### 成果物
 
-- `scripts/verify.sh`: 変更（freshness gate）
-- `docs/decisions/0294-audit-db-freshness.md`: 追加
-- `todo.md` / README / 索引 / log: 更新
+- `README.md`: 実 WebView 検証済み、EPUB/ZIP 実装済み、runbook-webdriver 導線
+- `docs/index.md`: runbook-webdriver 導線
+- `docs/runbook-verified-build.md`: E2E current 256
+- `docs/decisions/0265-cross-browser-e2e.md`: current 255 の履歴表記（必要なら）
+- `docs/decisions/0273-real-webview-verification-deferred.md`: CLI 導入済み／検証済みの追記
+- `todo.md` / `docs/log.md`: 完了移動・追記
 
 ### 必須事項
 
-1. advisory DB の最終更新が一定期間以内か検査する（例: 7 日）。
-2. DB が無い / 古い / 検査不能な場合は fail-closed で失敗する。
-3. CI では fetch 有効の audit を使うか、update-db 手順を明示する。
-4. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. README の「実 WebView は未検証」を ADR-0282 / 0283 の完了へ更新する。
+2. README の「ドキュメント閲覧 (設計段階): EPUB, ZIP...」を実装済みと未実装を分離する。
+3. runbook-verified-build の current E2E を 255 → 256 にする。
+4. docs/index / README に runbook-webdriver への導線を追加する。
+5. markdownlint 0 issues、verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 脆弱性 DB の自動更新を勝手に行わない（更新はオフライン時失敗し得るため）。
-- 共通 workflow は変更しない。
+- コード / E2E check 名・件数 / Cargo.* は変更しない。
+- 外部サービス / 課金 / 公開設定は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- advisory DB 鮮度ゲートを追加（既定7日、上限90日、欠落/未来/不正値は fail-closed）。
-- 鮮度検査と cargo audit を同一 DB に固定（`--db $AUDIT_DB_PATH`）。
-- 負向 test 14 件 PASS、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
