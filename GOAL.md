@@ -30,3 +30,9 @@ CI-H01 を完了セクションへ移すだけで CI が壊れる。
 - check 名・件数・tools/verify-web-reader.py は変更しない。
 - 共通 workflow は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- CI-H01 行を gate 条件から削除し、Checker(expected=256) を単一情報源化。
+- 負向 test: CI-H01 削除 rc=0、Checker 改変 rc=1。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。

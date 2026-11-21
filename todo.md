@@ -62,9 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【E2E 件数ゲートの TODO 結合を解消】check-e2e-count-consistency.sh が未着手の
-      CI-H01 行を要求し、TODO を完了へ移すだけで CI が壊れる。単一情報源は Checker のみにする。
-      根拠 `scripts/check-e2e-count-consistency.sh:124-149` / R4-CI01。
 - [ ] 【README / 索引の現行状態を更新】README が実 WebView 未検証と誤報し、
       runbook-webdriver.md が docs/index.md と README の導線から欠落。
       根拠 `README.md:96-98,197-203` / `docs/index.md:5-11` / R5-DC01。
@@ -184,6 +181,7 @@ status: current
 
 ## 完了
 
+- [x] 【E2E 件数ゲート】CI-H01 行への依存を削除し、Checker(expected) を単一情報源化（ADR-0291）。
 - [x] 【CI 再現性】wasm-pack 固定・lock 不変・WDIO cleanup 安全化・dependabot npm（ADR-0290）。
 - [x] 【desktop frontend 依存】build-desktop / check-frontend-dist を追加し、配布生成を明示化（ADR-0289）。
 - [x] 【ホーム導線】Reader/Editor のサンプル導線を追加し、未接続 UI を明示（ADR-0288）。
