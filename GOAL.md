@@ -35,3 +35,10 @@ cargo build グラフにはその生成依存が無い。
 
 - 外部サービス / 公開ビルド / 課金は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- build-desktop.sh と check-frontend-dist.sh を追加し、desktop build 前に web/dist を生成・検証。
+- frontendDist 整合、生成物存在、開発ホストパス混入を fail-closed で検査。
+- verify.sh に build-desktop ゲートを追加。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。

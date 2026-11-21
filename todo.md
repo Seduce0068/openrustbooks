@@ -198,6 +198,7 @@ status: current
 
 ## 完了
 
+- [x] 【desktop frontend 依存】build-desktop / check-frontend-dist を追加し、配布生成を明示化（ADR-0289）。
 - [x] 【ホーム導線】Reader/Editor のサンプル導線を追加し、未接続 UI を明示（ADR-0288）。
 - [x] 【IPC redaction】全 command を固定 code/文言へ統一、secret/path/host/body の露出を防止（ADR-0287）。
 - [x] 【storage 破壊操作】root 自身の delete/rename を拒否し、move 上書きを退避方式へ変更（ADR-0286）。
