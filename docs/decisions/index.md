@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 294 件）。
+openrustbooks の ADR 一覧（全 295 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -547,7 +547,7 @@ openrustbooks の ADR 一覧（全 294 件）。
 - [ADR-0272: Tauri 設定保存 UI の接続](0272-settings-save-ui.md)
   - status: accepted — 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
 - [ADR-0273: 実 WebView 検証の環境ブロッカーとしての記録](0273-real-webview-verification-deferred.md)
-  - status: accepted — Tauri CLI 未導入により実 WebView 検証を実行できないため、未実施のまま pass とせず、導入後の手順を残す決定。
+  - status: accepted — Tauri CLI 未導入を環境ブロッカーとして記録した決定（その後 ADR-0282 / 0283 で解消）。
 - [ADR-0274: A05 前提別状態のトレーサビリティ整合](0274-a05-traceability-reconciliation.md)
   - status: accepted — R6 A05 監査で判明した前提 1〜6 の達成度を再分類し、JS / IPC 契約レベルと実 WebView 未達を切り分ける。
 - [ADR-0275: ブラウザ専用設定通知の表示範囲](0275-settings-notice-visibility.md)
@@ -590,3 +590,5 @@ openrustbooks の ADR 一覧（全 294 件）。
   - status: accepted — Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
 - [ADR-0294: cargo audit advisory DB の鮮度担保](0294-audit-db-freshness.md)
   - status: accepted — verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
+- [ADR-0295: README / runbook / 索引の現行状態追従](0295-documentation-current-state.md)
+  - status: accepted — 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
