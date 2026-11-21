@@ -31,3 +31,10 @@ core::io には `write_atomic` が既に存在する。
 - 外部サービス / 秘密情報は扱わない。
 - E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- save_document を temp + rename の atomic write へ変更。
+- 失敗時は元ファイル / metadata / mark_saved / emit を不変化。
+- desktop 121 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 親ディレクトリ fsync / temp 掃除 / 往復テスト統合は ADR-0298 の未決定。

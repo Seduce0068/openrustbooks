@@ -69,10 +69,6 @@ status: current
       Web は `file.size()` 確認前に `array_buffer()`、import JSON も無制限。
       core と共通の上限で fail-closed にする。根拠 `desktop/src/commands/document.rs:145-147` /
       `web/src/lib.rs:2974,2988,3682,3691` / R3-IV01 / 重大度 medium。
-- [ ] 【文書保存を atomic 化】`save_document` は既存ファイルを truncate して書き込み、
-      失敗時に元データを失う。`tokenize::io::write_atomic` 経由へ変更し、
-      成功後のみ mark_saved / emit する。根拠 `desktop/src/commands/document.rs:216-243` /
-      R1-ER01 / 重大度 medium。
 - [ ] 【設定 service の生成競合を修正】`refresh_ai_service` は await 後に revision を再確認せず、
       commit_config の新 service を古い生成結果で上書きし得る。根拠 `desktop/src/state/mod.rs:167-174` /
       R2-BV01 / 重大度 medium。
@@ -162,6 +158,7 @@ status: current
 
 ## 完了
 
+- [x] 【文書保存】temp + rename の atomic write へ変更、失敗時は元ファイル保持（ADR-0298）。
 - [x] 【front matter 保全】元テキスト保持で無編集 open→save のバイト列を保全（ADR-0297）。
 - [x] 【WDIO 保存往復】update_config_patch の revision +1 と config.toml 永続化を検証（ADR-0296）。
 - [x] 【README / 索引 / runbook の現行状態を実装へ追従】README の「実 WebView 未検証」を
