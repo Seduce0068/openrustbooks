@@ -1,5 +1,9 @@
 # log
 
+## 2026-11-22
+
+- config.toml 読み込み失敗時の退避と保存拒否を実装（ADR-0284）。
+
 ## 2026-11-21
 
 - WebdriverIO を導入し、実 WebView の settings E2E を独立ゲート化（ADR-0283）。
