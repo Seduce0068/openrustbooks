@@ -22,10 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
-- [ ] 【config.toml 読み込み失敗の握り潰しを解消】desktop/src/main.rs の `AppConfig::load().unwrap_or_default()`
-      が不正 TOML / 権限エラーを捨て、その後の commit_config が既定値で上書きし得る。
-      エラー報告と元ファイル退避、読み取り専用起動または保存拒否を実装する。
-      根拠 `desktop/src/main.rs:87` / `core/src/config.rs:485,510-517` / R2-ER01 / 重大度 high。
 - [ ] 【fs コマンドで read_only root を強制】create_file / delete_file / rename_file が
       local_roots[].read_only を参照せず、save_document のガードを迂回できる。
       create_storage で root と flags を対応付け、書き込み前に fail-closed で拒否する。
