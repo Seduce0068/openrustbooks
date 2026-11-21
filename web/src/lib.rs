@@ -73,6 +73,8 @@ fn HomePage() -> impl IntoView {
             <header class="app-header">
                 <h1>"openrustbooks"</h1>
                 <nav>
+                    <a href="/reader/sample" title="サンプル文書を開く">"Reader（サンプル）"</a>
+                    <a href="/editor/sample" title="サンプル文書を編集" aria-label="Editor（サンプル文書を編集）">"Editor（サンプル）"</a>
                     <a href="/settings">"Settings"</a>
                     <a href="/about">"About"</a>
                 </nav>
@@ -81,9 +83,30 @@ fn HomePage() -> impl IntoView {
                 <section class="document-browser">
                     <h2>"Documents"</h2>
                     <div class="toolbar">
-                        <button class="btn btn-primary">"New File"</button>
-                        <button class="btn btn-secondary">"Open Folder"</button>
-                        <button class="btn btn-secondary">"Open File"</button>
+                        <button
+                            class="btn btn-primary"
+                            disabled=true
+                            title="New File (この初版では利用できません)"
+                            aria-label="New File (この初版では利用できません)"
+                        >
+                            "New File"
+                        </button>
+                        <button
+                            class="btn btn-secondary"
+                            disabled=true
+                            title="Open Folder (この初版では利用できません)"
+                            aria-label="Open Folder (この初版では利用できません)"
+                        >
+                            "Open Folder"
+                        </button>
+                        <button
+                            class="btn btn-secondary"
+                            disabled=true
+                            title="Open File (この初版では利用できません)"
+                            aria-label="Open File (この初版では利用できません)"
+                        >
+                            "Open File"
+                        </button>
                     </div>
                     <div class="file-tree">
                         <FileTree/>
@@ -186,24 +209,14 @@ fn AboutPage() -> impl IntoView {
 }
 
 /// File tree component
+///
+/// 初版ではファイル一覧を接続していない。以前の固定ダミー項目は
+/// クリック可能な誤解を与えるため削除し、状態を説明する固定文言だけを
+/// 表示する（ADR-0127 の未配線方針に合わせる）。
 #[component]
 fn FileTree() -> impl IntoView {
     view! {
-        <ul class="file-tree">
-            <li class="folder">
-                <span class="folder-name">"📁 Documents"</span>
-                <ul>
-                    <li class="file">"📄 README.md"</li>
-                    <li class="file">"📄 notes.txt"</li>
-                    <li class="folder">
-                        <span class="folder-name">"📁 Projects"</span>
-                        <ul>
-                            <li class="file">"📄 project1.md"</li>
-                        </ul>
-                    </li>
-                </ul>
-            </li>
-        </ul>
+        <p class="file-tree-placeholder">"ファイル一覧は未接続です"</p>
     }
 }
 
