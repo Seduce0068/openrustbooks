@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- storage root の破壊的操作と move 上書きを fail-closed 化（ADR-0286）。
 - fs コマンドで read_only root を fail-closed に強制（ADR-0285）。
 - config.toml 読み込み失敗時の退避と保存拒否を実装（ADR-0284）。
 

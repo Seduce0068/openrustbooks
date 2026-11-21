@@ -761,6 +761,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0283-webdriverio-adoption](docs/decisions/0283-webdriverio-adoption.md)
 - [0284-config-load-fail-closed](docs/decisions/0284-config-load-fail-closed.md)
 - [0285-fs-read-only-enforcement](docs/decisions/0285-fs-read-only-enforcement.md)
+- [0286-storage-destructive-guard](docs/decisions/0286-storage-destructive-guard.md)
+  - storage root 自身の削除・改名を拒否し、move_item の上書き競合で既存データを保持する決定。
   - local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
   - 設定読み込みエラーを握り潰して既定値で上書きする経路を廃し、退避と保存拒否を義務付ける決定。
   - Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。
