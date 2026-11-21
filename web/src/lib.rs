@@ -4193,8 +4193,52 @@ impl CommandError {
             "CONFIG_STORAGE" => {
                 "設定の保存に失敗しました。しばらくしてからもう一度お試しください。"
             }
+            "AI_PROVIDER" => {
+                "AI 機能の処理に失敗しました。しばらくしてからもう一度お試しください。"
+            }
+            // 未知 code は code 文字列自体を出さず、安全な既定文言へ落とす（現状維持）。
             _ => "設定を保存できませんでした。",
         }
+    }
+}
+
+#[cfg(test)]
+mod command_error_tests {
+    use super::CommandError;
+
+    fn error(code: &str) -> CommandError {
+        CommandError {
+            code: code.to_string(),
+        }
+    }
+
+    #[test]
+    fn status_message_uses_fixed_text_for_known_codes() {
+        assert_eq!(
+            error("CONFIG_CONFLICT").status_message(),
+            "設定が他の更新と競合しました。再読み込みしてからもう一度お試しください。"
+        );
+        assert_eq!(
+            error("CONFIG_VALIDATION").status_message(),
+            "設定値が正しくありません。入力内容を確認してください。"
+        );
+        assert_eq!(
+            error("CONFIG_STORAGE").status_message(),
+            "設定の保存に失敗しました。しばらくしてからもう一度お試しください。"
+        );
+        assert_eq!(
+            error("AI_PROVIDER").status_message(),
+            "AI 機能の処理に失敗しました。しばらくしてからもう一度お試しください。"
+        );
+    }
+
+    #[test]
+    fn unknown_code_falls_back_to_safe_message_without_echoing_code() {
+        let secret_code = "sk-leak-host-body";
+        let message = error(secret_code).status_message();
+
+        assert_eq!(message, "設定を保存できませんでした。");
+        assert!(!message.contains(secret_code));
     }
 }
 
