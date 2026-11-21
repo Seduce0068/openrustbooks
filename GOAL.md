@@ -1,41 +1,33 @@
 # Goal
 
-未使用 Tauri plugin / 依存を削除する（R6 レビュー / R1-AR01 + R2-DP01）。
+dead config を配線または明示する（R6 レビュー / R1-ST01 + R3-AU01）。
 
 ## Scope
 
 ### 背景
 
-desktop は store / global-shortcut / shell / fs / opener / notification を登録のみで利用していない。
-anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc なども未使用。
-静的ゲートの必須 init 一覧もこれに合わせて見直す必要がある。
+設定 DTO には未配線フィールドが残る:
+Ollama keep_alive_minutes / LocalRootConfig.watch / default_backend /
+auto_save_delay / model_overrides / config_file / telemetry / max_recent /
+max_tokens_per_month。保存・復元はされるが動作に反映されない。
 
 ### 成果物
 
-- `desktop/src/main.rs`: 変更（未使用 plugin 登録削除）
-- `desktop/Cargo.toml`: 変更（未使用依存削除）
-- `scripts/check-tauri-plugin-config.sh`: 変更（必須 init 一覧の見直し）
-- `Cargo.lock`: 追従
-- `docs/decisions/0303-unused-tauri-plugins.md`: 追加
+- `core/src/config.rs`: 変更（未配線フィールドの扱いを明確化）
+- `desktop/src/commands/config.rs`: 必要なら変更
+- `docs/decisions/0304-dead-config-cleanup.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. 実利用のない plugin 登録と依存を削除する。
-2. dialog / log / wdio は維持する（設定確認ダイアログ / logger / E2E）。
-3. 静的ゲートを新しい必須 init 一覧へ更新する。
-4. capability に削除 plugin の権限が残っていないことを確認する。
-5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. 各未配線フィールドを「配線」または「DTO から除外」のどちらかに 결정する。
+2. 除外する場合、既存 config.toml の互換読み込みは壊さない（serde default 等）。
+3. JS DTO に未配線フィールドを露出しない。
+4. 既存 E2E 256 件・check 名・WDIO を維持。
+5. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 外部サービス / 公開設定 / 課金は扱わない。
-- E2E check 名・件数を変更しない。
+- 新機能の実装（watch / telemetry 等）は今回の範囲外。
+- 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 未使用 6 plugin / 7 crate を削除し、必須 init を log + dialog へ更新。
-- capability に削除 plugin 権限なし。wdio feature は維持。
-- 初回 verify.sh は未コミット Cargo.lock 差分で WDIO gate が失敗したが、コミット後に全ゲート成功（E2E 256）。
-- window/mod.rs の stale コメント / Cargo.toml 再混入検出 / workspace warning は ADR-0303 の未決定。
