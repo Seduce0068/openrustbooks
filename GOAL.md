@@ -1,43 +1,37 @@
 # Goal
 
-desktop fs コマンドで local_roots[].read_only を強制する（R6 レビュー / R3-AU01）。
+storage root 自身の破壊的操作と move_item の上書き競合を fail-closed 化する（R6 レビュー / R2-ER01 + R3-AU01）。
 
 ## Scope
 
 ### 背景
 
-create_file / delete_file / rename_file は create_storage() で local root を生成するが、
-read_only フラグを参照しない。save_document だけが read_only を検査するため、
-描画側の JS から fs コマンドを直接 invoke すると read-only root を書き換えられる。
+- `resolve_path('.')` は canonical root を返すため、
+  `delete_file(path='.', recursive=true)` が root 配下全体を削除できる。
+- `move_item` は overwrite=false でも POSIX `rename` が既存宛先を暗黙上書きし、
+  overwrite=true は「宛先削除 → rename」で途中失敗時に元と宛先の両方を失う。
 
 ### 成果物
 
-- `desktop/src/commands/fs.rs`: 変更（read_only 判定と拒否）
-- `desktop/src/state/mod.rs` または `core/src/io.rs`: 必要なら root 情報保持 API
-- `docs/decisions/0285-fs-read-only-enforcement.md`: 追加
+- `core/src/io.rs`: 変更（root 操作拒否、atomic replace / 事前再確認）
+- `desktop/src/commands/fs.rs`: 必要ならエラー形状の確認
+- `docs/decisions/0286-storage-destructive-guard.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. create_file / delete_file / rename_file が対象 root の read_only を検査する。
-2. read_only root への書き込み・削除・改名は固定文言で拒否する。
-3. read_only=false の既存動作を壊さない。
-4. 単体 test を追加する。
-5. E2E 256 件・check 名・WDIO ゲートを維持し、verify.sh 全ゲート成功。
+1. canonical target が storage root 自身なら delete / move_item / create_dir を拒否する。
+2. move_item の overwrite=false は宛先が存在する場合に固定文言で拒否する。
+3. overwrite=true は途中失敗でも元データを失わない方式にする。
+4. read_only / containment / emit の既存動作を壊さない。
+5. 単体 test を追加し、verify.sh 全ゲート成功。
 
 ## Acceptance criteria
 
-- read_only root への fs 書き込みが拒否され、通常 root は従来どおり動作する。
+- root 自身の削除・改名が拒否され、overwrite=false が既存宛先を保持する。
 
 ## Constraints
 
-- 公開鍵 / endpoint / 外部サービスは扱わない。
-- 秘密値をログへ出力しない。
+- 外部サービス / 秘密情報 / 公開設定は扱わない。
+- E2E 256 件・check 名・WDIO ゲートを維持する。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- fs コマンドで read_only root を fail-closed に拒否。
-- 最長一致 root、canonical target、symlink 経由の迂回を塞ぎ、command レベル test を追加。
-- desktop 103 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- 相対パス一意性、read_directory マルチ root、symlink 自身操作は ADR-0285 の未決定へ集約。
