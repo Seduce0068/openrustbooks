@@ -1,39 +1,34 @@
 # Goal
 
-バックアップ import の表示設定復元条件を明示する（R6 レビュー / R5-DC01）。
+未使用 Tauri plugin / 依存を削除する（R6 レビュー / R1-AR01 + R2-DP01）。
 
 ## Scope
 
 ### 背景
 
-README は「読書位置のエクスポート・インポート（表示設定・履歴を含む）」と記載するが、
-実装は現在の表示設定が localStorage に存在する場合にインポート値を復元しない。
-利用者はバックアップから文字サイズ・行間・ダーク設定を復元できず、理由も分からない。
+desktop は store / global-shortcut / shell / fs / opener / notification を登録のみで利用していない。
+anyhow / tracing / tracing-subscriber / figment / thiserror / futures / objc なども未使用。
+静的ゲートの必須 init 一覧もこれに合わせて見直す必要がある。
 
 ### 成果物
 
-- `web/src/lib.rs`: 変更（import 結果のstatus に制約を明示）
-- `README.md`: 変更（制約の明記）
-- `docs/decisions/0302-settings-import-disclosure.md`: 追加
-- `todo.md` / 索引 / log: 更新
+- `desktop/src/main.rs`: 変更（未使用 plugin 登録削除）
+- `desktop/Cargo.toml`: 変更（未使用依存削除）
+- `scripts/check-tauri-plugin-config.sh`: 変更（必須 init 一覧の見直し）
+- `Cargo.lock`: 追従
+- `docs/decisions/0303-unused-tauri-plugins.md`: 追加
+- `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. 現在値保護で表示設定をスキップした場合、固定文言で status に告知する。
-2. 現在値が無い場合は従来どおり復元する。
-3. 秘密情報 / 設定値本体は status に出さない。
-4. 既存 E2E 256 件・check 名・WDIO を維持する。
-5. verify.sh 全ゲート成功。
+1. 実利用のない plugin 登録と依存を削除する。
+2. dialog / log / wdio は維持する（設定確認ダイアログ / logger / E2E）。
+3. 静的ゲートを新しい必須 init 一覧へ更新する。
+4. capability に削除 plugin の権限が残っていないことを確認する。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 明示的な「設定を復元」UI は今回追加しない。
-- 外部サービス / 秘密情報は扱わない。
+- 外部サービス / 公開設定 / 課金は扱わない。
+- E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 現在値保護で表示設定をスキップした場合に固定文言で告知。
-- README に復元条件の制約を明記。
-- verify.sh 全ゲート成功（E2E 256、WDIO 1、初回 WDIO 一時失敗は再実行で解消）。
-- 併発告知 / 専用 test / 明示復元 UI は ADR-0302 の未決定。
