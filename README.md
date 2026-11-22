@@ -909,6 +909,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0347-shared-dialog-style](docs/decisions/0347-shared-dialog-style.md)
 - [0348-capability-json-gate](docs/decisions/0348-capability-json-gate.md)
 - [0349-audit-advisory-allowlist](docs/decisions/0349-audit-advisory-allowlist.md)
+- [0350-document-fs-ipc-dto](docs/decisions/0350-document-fs-ipc-dto.md)
+  - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
   - wdio permission がテスト用 capability JSON に閉じ、tauri.conf.json へ混入しないことを検査する決定。
   - 削除確認とヘルプの dialog に共通スタイルと backdrop / forced-colors 対応を適用する決定。
