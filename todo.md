@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
-- [ ] 【lint コマンドを AI service 依存から分離】lint / auto-fix はローカル処理なのに
-      ai_service() を必須とし、既定（AI 無効）で常に失敗する。LintConfig から直接構築。
-      根拠 `desktop/src/commands/ai.rs:329-361` / R1-DS01 / 重大度 high。
 - [ ] 【API キー空入力で設定済みキーを消さない】start_api_key_save が空入力を送信し、
       set_openai_api_key が空文字を None 化する。no-op または明示削除へ変更。
       根拠 `web/src/lib.rs:5512-5545` / R5-UX01 / 重大度 high。
@@ -151,6 +148,7 @@ status: current
 
 ## 完了
 
+- [x] 【lint 分離】LintConfig 直接構築で既定 AI 無効でも lint 動作（ADR-0335）。
 - [x] 【set_document_content】本文更新/世代/unsaved を原子化（ADR-0334）。
 - [x] 【配布保持】Checker(expected) を AST 抽出し、--dist 保持を復旧（ADR-0333）。
 - [x] 【権限表面】capability ゲートの source 検査範囲と実 WebView 到達性を明記（ADR-0332）。

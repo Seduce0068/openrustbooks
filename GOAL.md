@@ -101,3 +101,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - close 競合 test / last-write-wins を明記。
 - desktop 176 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 本文マージは ADR-0334 の未決定。
+
+## 完了記録（第3cycle-3）
+
+- lint / auto-fix を LintConfig 直接構築へ変更、既定 AI 無効で動作。
+- 新規 4 test、desktop 180 passed。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 未使用 AppHandle の扱いは ADR-0335 の未決定。
