@@ -700,17 +700,19 @@ fn validate_ai_base_urls(ai: &AiConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// ai / lint 設定が変わったかを JSON 表現の差分で判定する。
-/// これらの設定型は PartialEq 未 derive のため serde_json の値を比較する。
-pub(crate) fn ai_or_lint_changed(current: &AppConfig, merged: &AppConfig) -> bool {
-    fn json_differs<T: Serialize>(before: &T, after: &T) -> bool {
-        match (serde_json::to_value(before), serde_json::to_value(after)) {
-            (Ok(before), Ok(after)) => before != after,
-            // シリアライズ失敗時は安全側に倒して「変更あり」とみなす。
-            _ => true,
-        }
+/// 設定型の差分を JSON 表現で判定する（PartialEq 未 derive のため）。
+fn json_differs<T: Serialize>(before: &T, after: &T) -> bool {
+    match (serde_json::to_value(before), serde_json::to_value(after)) {
+        (Ok(before), Ok(after)) => before != after,
+        // シリアライズ失敗時は安全側に倒して「変更あり」とみなす。
+        _ => true,
     }
-    json_differs(&current.ai, &merged.ai) || json_differs(&current.lint, &merged.lint)
+}
+
+/// AI service の再準備が必要なのは ai 設定が変わった時だけ。
+/// lint のみの変更では現在 service を維持し、生成失敗に邪魔されない。
+pub(crate) fn ai_changed(current: &AppConfig, merged: &AppConfig) -> bool {
+    json_differs(&current.ai, &merged.ai)
 }
 
 /// 検証済みの候補設定をコミットする共通経路。
@@ -723,9 +725,9 @@ async fn commit_validated_config(
     state: &AppState,
     expected: u64,
     merged: AppConfig,
-    changed: bool,
+    ai_changed: bool,
 ) -> CoreResult<()> {
-    let service = if changed {
+    let service = if ai_changed {
         state.prepare_ai_service(&merged).await?
     } else {
         // 差分なし: 現在の service を維持する（無効設定なら None）。
@@ -757,7 +759,7 @@ pub async fn update_config(
     let normalized = normalize_to_dto_boundary(&config, &current);
     let merged = merge_secrets(&current, &normalized);
     validate_ai_base_urls(&merged.ai)?;
-    let changed = ai_or_lint_changed(&current, &merged);
+    let changed = ai_changed(&current, &merged);
     commit_validated_config(state.inner(), expected, merged, changed)
         .await
         .map_err(ipc_error)?;
@@ -789,7 +791,7 @@ async fn update_config_patch_inner(
     let merged = merge_secrets(&current, &applied);
     // 検証エラーの生メッセージは返さず、code ごとの固定文言へ変換する。
     validate_ai_base_urls(&merged.ai).map_err(|_| CommandError::from_code("CONFIG_VALIDATION"))?;
-    let changed = ai_or_lint_changed(&current, &merged);
+    let changed = ai_changed(&current, &merged);
     commit_validated_config(state, expected, merged, changed)
         .await
         .map_err(CommandError::from)?;
@@ -813,9 +815,9 @@ pub async fn update_ai_config(
     incoming.ai = normalize_ai_from_js(ai_config);
     let config = merge_secrets(&current, &incoming);
     validate_ai_base_urls(&config.ai)?;
-    let changed = ai_or_lint_changed(&current, &config);
+    let changed = ai_changed(&current, &config);
 
-    // 差分がある時だけ再準備。失敗時はコミットしないため状態は不変。
+    // AI 設定が変わった時だけ再準備。失敗時はコミットしないため状態は不変。
     commit_validated_config(state.inner(), expected, config, changed)
         .await
         .map_err(ipc_error)?;
@@ -847,7 +849,7 @@ async fn set_openai_api_key_inner(
     let config = config_with_api_key(&current, api_key);
     // 生メッセージは返さず code ごとの固定文言へ変換する。
     validate_ai_base_urls(&config.ai).map_err(|_| CommandError::from_code("CONFIG_VALIDATION"))?;
-    let changed = ai_or_lint_changed(&current, &config);
+    let changed = ai_changed(&current, &config);
     commit_validated_config(state, expected, config, changed)
         .await
         .map_err(CommandError::from)?;
@@ -869,7 +871,7 @@ pub async fn update_lint_config(
     incoming.lint = lint_config;
     // DTO から除外した config_file / rule_config を消さないようマージを通す。
     let config = merge_secrets(&current, &incoming);
-    let changed = ai_or_lint_changed(&current, &config);
+    let changed = ai_changed(&current, &config);
     commit_validated_config(state.inner(), expected, config, changed)
         .await
         .map_err(ipc_error)?;
@@ -1151,6 +1153,24 @@ mod tests {
         let mut provider = current.clone();
         provider.ai.default_provider = "ollama".to_string();
         assert!(ai_or_lint_changed(&current, &provider));
+    }
+
+    #[cfg(test)]
+    fn ai_or_lint_changed(current: &AppConfig, merged: &AppConfig) -> bool {
+        json_differs(&current.ai, &merged.ai) || json_differs(&current.lint, &merged.lint)
+    }
+
+    #[test]
+    fn ai_changed_ignores_lint_only_updates() {
+        let current = AppConfig::default();
+        let mut lint_only = current.clone();
+        lint_only.lint.warnings_as_errors = !current.lint.warnings_as_errors;
+        assert!(!ai_changed(&current, &lint_only));
+        assert!(ai_or_lint_changed(&current, &lint_only));
+
+        let mut ai_updated = current.clone();
+        ai_updated.ai.enabled = !current.ai.enabled;
+        assert!(ai_changed(&current, &ai_updated));
     }
 
     #[test]
