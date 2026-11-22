@@ -21,6 +21,22 @@ status: current
 
 ### 優先度: 高
 
+<!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
+- [ ] 【save_document の root 選択を read_only fail-closed 化】resolve_within_roots は
+      最初に一致した root を返すため、writable 親 + read-only 子の入れ子で子 root を迂回できる。
+      fs.rs の全候補検査・最深一致方式へ unified し、両順の回帰 test を追加。
+      根拠 `desktop/src/commands/document.rs:92-129,365-383` / `desktop/src/commands/fs.rs:132-200` / R2-RC01 / 重大度 high。
+- [ ] 【close_document の unsaved チェックと削除を atomic 化】`is_unsaved()` と `remove_document()` が別ロックで、
+      待ち中に mark_unsaved された編集が黙って失われる。AppState に CAS 系 close を追加。
+      根拠 `desktop/src/commands/document.rs:423,429` / `desktop/src/state/mod.rs:269-272` / R2-RC01 / 重大度 high。
+- [ ] 【CI extra_gates の gitleaks 常時 fail を修正】`exit 1` が extra_gates 途中にあるため、
+      後続11ゲート（rumdl / dependency / version / e2e-count / csp / plugin / updater / capability / wasm×2 / wasm-test）が到達不能。
+      gitleaks 導入を先頭へ移すか、後続ゲートを別ステップへ分割する。
+      根拠 `.github/workflows/ci.yml:57-62` / `docs/decisions/0126-ci-audit-gate.md:24-26` / R4-OP01 / 重大度 high。
+- [ ] 【desktop で API キー／秘密を UI から設定・削除可能にする】API Key 欄は常に readonly で
+      update_ai_config / clear_secrets が web から呼ばれていない。既有 command を接続し、
+      値を DTO/status へ出さず has_* フラグと固定文言のみを維持。
+      根拠 `web/src/lib.rs:4872-4877` / `docs/decisions/0253:168` / R5-DC01 / 重大度 high。
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
 
@@ -61,6 +77,53 @@ status: current
 
 ### 優先度: 中
 
+<!-- 2026-11-22 R6 第2cycle 中優先度 -->
+- [ ] 【EPUB 構造要素の数上限を追加】OPF manifest / spine / captures、NCX navPoint が無制限で、
+      64 MiB の 1 エントリから数百万要素を確保できる。蓄積時点で fail-closed に拒否。
+      根拠 `core/src/epub/opf.rs:224-240,379-409` / `core/src/epub/navigation.rs:311-339,425` / R3-SE01。
+- [ ] 【import JSON の実用上限を追加】256 MiB の JSON を serde_json::Value へ一括展開するため、
+      Value ツリーでヒープ枯渇し得る。パース前の実用上限 + 深さ/件数制限を追加。
+      根拠 `web/src/lib.rs:1665-1679,2161-2196` / R3-SE01。
+- [ ] 【save_document の並行編集 lost update を修正】await 中の snapshot が保存後に state へ書き戻され、
+      最新本文が失われる。doc_id 単位の世代 / 保存ロックで CAS。
+      根拠 `desktop/src/commands/document.rs:353,381,390-391` / R2-RC01。
+- [ ] 【confirm 待ち後の AI service 陳腐化を防止】confirm_send().await 中に config 更新されても古い service で送信する。
+      確認後に ai_service() を再取得し revision 照合。
+      根拠 `desktop/src/commands/ai.rs:74-97,109-132,171-206,217-238` / R2-RC01。
+- [ ] 【backup_failed_config の権限失敗をロールバック】rename 成功後に set_permissions 失敗だと
+      0644 の機微ファイルが退避先へ残る。権限付与を先にするか rename を戻す。
+      根拠 `core/src/config.rs:526-541` / `desktop/src/main.rs:75-86` / R2-RC01。
+- [ ] 【read_directory を全 root 対応にする】先頭 storage 固定で 2 番目以降の root を一覧できない。
+      read 専用 root 解決を追加し最深一致。根拠 `desktop/src/commands/fs.rs:204-219` / R1-DS01。
+- [ ] 【ConfigView DTO を共通化 or 契約 test】desktop / web で手書き重複し、deserialize 失敗が実行時まで見えない。
+      共通 DTO へ昇格または JSON 往復 test を CI 化。
+      根拠 `desktop/src/commands/config.rs:71-363` / `web/src/lib.rs:4229-4343` / R1-DS01。
+- [ ] 【Wasm JS 境界の CoreError 生文字列を redaction】js_error / wasm/epub.rs が to_string() を返し、
+      href / 内部型名が JS へ露出。desktop と同じ code→固定文言を共有。
+      根拠 `core/src/wasm.rs:73-80` / `core/src/wasm/epub.rs:46-72` / R1-DS01。
+- [ ] 【TableAlignment の未知値を fail-closed 化】format は拒否するのに alignment は Left へ黙ってフォールバック。
+      両方同じ検証方針へ。根拠 `desktop/src/commands/ai.rs:136-159` / R1-DS01。
+- [ ] 【web の CONFIG_LOAD_FAILED 文言を追加】desktop が code を返すのに web は既定文言へ落とす。
+      固定日本語文言と code 網羅 test。根拠 `web/src/lib.rs:4383-4400` / R1-DS01。
+- [ ] 【README の verify.sh 前提を補完】gitleaks / wasm-pack / Node+npm / Chrome / DISPLAY / Python3 が無い。
+      一括検証の再現性を修復。根拠 `README.md:126-134,175-187` / R4-OP01。
+- [ ] 【runbook-verified-build の --locked 未決定表記を修正】実装は --offline --locked 済み。
+      未決定なのは本番プロファイルのみ。根拠 `docs/runbook-verified-build.md:153` / R4-OP01。
+- [ ] 【wasm-bindgen CLI バージョンを fail-closed 検証】固定パスのみで Cargo.lock との一致検査が無い。
+      ロックから導出またはバージョン検証。根拠 `scripts/verify.sh:416-417` / `scripts/build-desktop.sh:25-27` / R4-OP01。
+- [ ] 【WDIO trunk serve に --locked / lock 再検査】serve は lock を固定せず、readiness 後の不変確認も無い。
+      根拠 `scripts/ci-wdio-test.sh:130-134` / R4-OP01。
+- [ ] 【設定画面 editor/reader の権威を一本化】config.toml 設定が描画へ反映されず localStorage が権威。
+      最小サブセットを配線するか未配線表示へ。根拠 `web/src/lib.rs:4315-4343,5067-5382` / ADR-0217 / R5-DC01。
+- [ ] 【EPUB2 NCX の Web E2E を追加】NCX サンプルが無く、Web 側回帰を検出できない。
+      256 件・トレーサビリティ表を同時更新。根拠 `tools/verify-web-reader.py:100-151` / R5-DC01。
+- [ ] 【prefers-contrast: more の E2E を追加】CSS はあるが動的検証が無い。
+      CDP Emulation で light/dark の computed style を検査。根拠 `web/index.html:72-95` / R5-DC01。
+- [ ] 【desktop get_config 失敗の status を区別】「デスクトップ版のみ利用可能」と誤案内。
+      IPC 失敗用の固定文言と回復案内、WDIO reject test。根拠 `web/src/lib.rs:4345-4374,4629-4636` / R5-DC01。
+- [ ] 【withGlobalTauri の実効権限表面を可視化】静的 2 command ゲートは source 検査のみで、
+      実 Webview は全 command へ到達可能。success 文言を明示し実効権限を別ゲートで検証。
+      根拠 `scripts/check-capability-scope.sh:1-5` / `desktop/src/main.rs:133-166` / R3-SE01。
 <!-- 2026-11-22 R6 中優先度 -->
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
