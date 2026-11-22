@@ -883,6 +883,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0323-wasm-error-redaction](docs/decisions/0323-wasm-error-redaction.md)
 - [0324-table-alignment-validation](docs/decisions/0324-table-alignment-validation.md)
 - [0325-config-load-failed-status](docs/decisions/0325-config-load-failed-status.md)
+- [0326-wasm-bindgen-version-gate](docs/decisions/0326-wasm-bindgen-version-gate.md)
+  - Cargo.lock を単一情報源として wasm-bindgen CLI と test runner の版を照合し、不一致を fail-closed で拒否する決定。
   - desktop が返す CONFIG_LOAD_FAILED code を web の status で専用文言へ表示する決定。
   - 未知の alignment を Left へ黙ってフォールバックせず、TableFormat と同じ validation で拒否する決定。
   - CoreError を共通 fixed_message(code) 経由で JS へ返し、生文字列の漏洩を防ぐ決定。
