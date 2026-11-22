@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 328 件）。
+openrustbooks の ADR 一覧（全 329 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -660,3 +660,5 @@ openrustbooks の ADR 一覧（全 328 件）。
   - status: accepted — WDIO の trunk serve に --locked --offline を付け、readiness 後 / cleanup 前にも lock 不変を検査する決定。
 - [ADR-0328: reader 表示設定の初期値と権威](0328-reader-settings-authority.md)
   - status: accepted — config.toml の reader 設定は初回のみ localStorage の初期値として使い、以後はブラウザ設定を権威とする決定。
+- [ADR-0329: EPUB2 NCX の Web E2E 追加](0329-epub2-ncx-e2e.md)
+  - status: accepted — EPUB3 nav だけでなく EPUB2 NCX の目次読み込みと章移動を Web E2E で検証する決定。
