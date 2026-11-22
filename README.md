@@ -903,6 +903,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0341-settings-reload-button](docs/decisions/0341-settings-reload-button.md)
 - [0342-prefer-local-dead-config](docs/decisions/0342-prefer-local-dead-config.md)
 - [0343-ai-preview-tail](docs/decisions/0343-ai-preview-tail.md)
+- [0344-legacy-config-commands-removed](docs/decisions/0344-legacy-config-commands-removed.md)
+  - UI 起点 CAS を満たさない 4 つの config command を invoke_handler から外し、 patch / API キー / clear 経路へ集約する決定。
   - 送信確認ダイアログで先頭だけでなく末尾も抜粋し、省略量と全文確認を明示する決定。
   - 未配線の ai.prefer_local を DTO / UI から除外し、config.toml の値だけを保持する決定。
   - 設定画面に get_config 再実行ボタンを追加し、競合時に view / revision を復帰可能にする決定。

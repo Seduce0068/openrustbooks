@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 343 件）。
+openrustbooks の ADR 一覧（全 344 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -690,3 +690,5 @@ openrustbooks の ADR 一覧（全 343 件）。
   - status: accepted — 未配線の ai.prefer_local を DTO / UI から除外し、config.toml の値だけを保持する決定。
 - [ADR-0343: AI 送信確認プレビューの末尾表示](0343-ai-preview-tail.md)
   - status: accepted — 送信確認ダイアログで先頭だけでなく末尾も抜粋し、省略量と全文確認を明示する決定。
+- [ADR-0344: レガシー config command の登録解除](0344-legacy-config-commands-removed.md)
+  - status: accepted — UI 起点 CAS を満たさない 4 つの config command を invoke_handler から外し、 patch / API キー / clear 経路へ集約する決定。
