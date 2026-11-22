@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- 文書保存の root 選択を全候補 fail-closed 化（ADR-0312）。
 - CI に font/dist/secrets ゲートを追加（ADR-0311）。
 - runbook-release / README を現行状態へ追従（ADR-0310）。
 - 依存ゲートに cargo tree 実測と期限付き例外を追加（ADR-0309）。

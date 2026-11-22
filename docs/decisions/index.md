@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 311 件）。
+openrustbooks の ADR 一覧（全 312 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -626,3 +626,5 @@ openrustbooks の ADR 一覧（全 311 件）。
   - status: accepted — updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。
 - [ADR-0311: CI ゲートの静的検査とシークレットスキャン](0311-ci-gate-coverage.md)
   - status: accepted — no-external-font-refs / 配布パス / gitleaks を verify.sh と CI extra_gates の両方へ配線する決定。
+- [ADR-0312: save_document の root 選択を read_only fail-closed 化](0312-document-root-selection.md)
+  - status: accepted — 全候補 root を検査し、入れ子の read-only root を save_document から書き換えられないようにする決定。
