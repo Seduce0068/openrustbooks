@@ -501,15 +501,19 @@ pub fn config_file_path() -> Option<PathBuf> {
 #[cfg(not(target_arch = "wasm32"))]
 static BACKUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// 読み込めない `config.toml` を `config.toml.failed-<timestamp>` へ退避する。
-///
-/// `rename` で元ファイルを移動するため、内容はそのまま保持され、既定値で
-/// 上書きされない。元ファイルが無い場合は `Ok(None)`（退避不要）。
-/// パス・エラー種別は呼び出し側でログに出せるよう、戻り値と `CoreError` に
-/// 設定値（シークレット）を含めない。退避先は元のシークレットを含む可能性が
-/// あるため、Unix では owner-only (0600) に制限する。
+/// 退避処理の本体。権限制限とロールバックを差し替え可能にすることで、
+/// Unix の `set_permissions` 失敗を環境に依存せず再現できる（単体テスト用）。
+/// 公開 API の [`backup_failed_config`] からは常に実処理が渡される。
 #[cfg(not(target_arch = "wasm32"))]
-pub fn backup_failed_config(config_file: &std::path::Path) -> crate::CoreResult<Option<PathBuf>> {
+fn backup_failed_config_with<F, R>(
+    config_file: &std::path::Path,
+    restrict: F,
+    rollback: R,
+) -> crate::CoreResult<Option<PathBuf>>
+where
+    F: Fn(&std::path::Path) -> std::io::Result<()>,
+    R: FnOnce(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+{
     use std::time::{SystemTime, UNIX_EPOCH};
 
     if !config_file.exists() {
@@ -530,15 +534,54 @@ pub fn backup_failed_config(config_file: &std::path::Path) -> crate::CoreResult<
     let counter = BACKUP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let backup = parent.join(format!("{file_name}.failed-{millis}-{counter}"));
     std::fs::rename(config_file, &backup)?;
-    // 退避先にシークレットが含まれ得るため、実行者のみ読めるようにする。
-    // 権限設定に失敗した場合は fail-closed で Err を返す（呼び出し側は
-    // 退避失敗として扱い、既定値での上書きは行わない）。
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&backup, std::fs::Permissions::from_mode(0o600))?;
+
+    // rename は成功済み。退避先にシークレットが含まれ得るため権限を締める。
+    // 失敗した場合は元の場所へ戻して fail-closed で Err を返す。
+    if restrict(&backup).is_err() {
+        if rollback(&backup, config_file).is_ok() {
+            // 元へ戻せたので、元ファイルにも owner-only を適用する。
+            // ここで失敗しても元ファイルは保持し、固定文言で報告する。
+            let _ = restrict(config_file);
+        }
+        // ロールバック失敗時は退避先を残す（core::io の既存パターンに合わせ、
+        // 退避済みデータを削除しない）。パス・設定値を含まない固定文言で
+        // fail-closed を維持する。
+        return Err(crate::CoreError::storage(
+            "failed to secure the configuration backup",
+        ));
     }
     Ok(Some(backup))
+}
+
+/// 読み込めない `config.toml` を `config.toml.failed-<timestamp>` へ退避する。
+///
+/// `rename` で元ファイルを移動するため、内容はそのまま保持され、既定値で
+/// 上書きされない。元ファイルが無い場合は `Ok(None)`（退避不要）。
+/// パス・エラー種別は呼び出し側でログに出せるよう、戻り値と `CoreError` に
+/// 設定値（シークレット）を含めない。退避先は元のシークレットを含む可能性が
+/// あるため、Unix では owner-only (0600) に制限し、失敗時は元へ戻して元ファイル
+/// にも 0600 の適用を試みる。ロールバック失敗時は退避先を残したまま報告する。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn backup_failed_config(config_file: &std::path::Path) -> crate::CoreResult<Option<PathBuf>> {
+    #[cfg(unix)]
+    {
+        backup_failed_config_with(
+            config_file,
+            |path| {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            },
+            |backup, original| std::fs::rename(backup, original),
+        )
+    }
+    #[cfg(not(unix))]
+    {
+        backup_failed_config_with(
+            config_file,
+            |_| Ok(()),
+            |backup, original| std::fs::rename(backup, original),
+        )
+    }
 }
 
 impl AppConfig {
@@ -1445,6 +1488,156 @@ mod tests {
 
             assert_eq!(mode, 0o600, "退避先は owner-only であること");
             assert!(!config_file.exists());
+        }
+
+        /// `set_permissions` が失敗した場合に、元ファイルが元の場所へ戻り、
+        /// 元ファイルへ 0600 が適用され、退避先が残らないこと（第2cycle R2-RC01 / R6）。
+        ///
+        /// 実環境で chmod を失敗させるには他人所有ファイルや特権が必要で CI では
+        /// 再現しにくいため、注入口から失敗を模す（unsafe / 新規依存なし）。
+        #[cfg(unix)]
+        #[test]
+        fn backup_rolls_back_when_permission_setup_fails() {
+            use std::cell::Cell;
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = TempDir::new("rollback");
+            let config_file = dir.path.join("config.toml");
+            let original = b"[ai.openai]\napi_key = \"sk-do-not-log\"\n";
+            fs::write(&config_file, original).unwrap();
+            let calls = Cell::new(0);
+
+            let result = backup_failed_config_with(
+                &config_file,
+                |path| {
+                    calls.set(calls.get() + 1);
+                    if path == config_file {
+                        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+                    } else {
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            "simulated set_permissions failure",
+                        ))
+                    }
+                },
+                |backup, original| fs::rename(backup, original),
+            );
+
+            let error = result.expect_err("権限設定失敗は fail-closed で Err になること");
+            let message = error.to_string();
+            assert_eq!(
+                error.code(),
+                "CONFIG_STORAGE",
+                "固定の storage エラーであること"
+            );
+            assert!(
+                !message.contains("config.toml"),
+                "パスを出さないこと: {message}"
+            );
+            assert!(
+                !message.contains("sk-do-not-log"),
+                "設定値を出さないこと: {message}"
+            );
+            assert_eq!(calls.get(), 2, "退避先と元ファイルの両方へ適用を試みること");
+            assert_eq!(
+                fs::read(&config_file).unwrap(),
+                original,
+                "元ファイルが元の場所へ戻ること"
+            );
+            let mode = fs::metadata(&config_file).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "元ファイルにも owner-only が適用されること");
+            assert_eq!(
+                fs::read_dir(&dir.path).unwrap().count(),
+                1,
+                "退避先が残らないこと"
+            );
+        }
+
+        /// ロールバックも失敗した場合、退避先を残したまま固定文言の storage
+        /// エラーを返すこと（core::io の既存パターンに合わせ退避データを削除しない）。
+        #[cfg(unix)]
+        #[test]
+        fn backup_returns_fixed_error_when_rollback_fails() {
+            let dir = TempDir::new("rollback-fails");
+            let config_file = dir.path.join("config.toml");
+            let original = b"secret contents";
+            fs::write(&config_file, original).unwrap();
+
+            let result = backup_failed_config_with(
+                &config_file,
+                |_| {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "simulated set_permissions failure",
+                    ))
+                },
+                |_, _| {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "simulated rollback failure",
+                    ))
+                },
+            );
+
+            let error = result.expect_err("ロールバック失敗も fail-closed で Err になること");
+            let message = error.to_string();
+            assert_eq!(error.code(), "CONFIG_STORAGE");
+            assert!(!message.contains("config.toml"));
+            assert!(!message.contains("secret contents"));
+            assert_eq!(
+                fs::read_dir(&dir.path).unwrap().count(),
+                1,
+                "退避先は残ること"
+            );
+            let backup = fs::read_dir(&dir.path)
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            assert_eq!(
+                fs::read(&backup).unwrap(),
+                original,
+                "退避内容が保持されること"
+            );
+        }
+
+        /// 元ファイルへの 0600 適用も失敗した場合、元ファイルは保持され、
+        /// 固定文言で報告されること。
+        #[cfg(unix)]
+        #[test]
+        fn backup_keeps_original_when_restoring_permissions_fails() {
+            let dir = TempDir::new("reperm-fails");
+            let config_file = dir.path.join("config.toml");
+            let original = b"[ai.openai]\napi_key = \"sk-do-not-log\"\n";
+            fs::write(&config_file, original).unwrap();
+
+            let result = backup_failed_config_with(
+                &config_file,
+                |_| {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "simulated set_permissions failure",
+                    ))
+                },
+                |backup, original| fs::rename(backup, original),
+            );
+
+            let error = result.expect_err("権限設定失敗は fail-closed で Err になること");
+            let message = error.to_string();
+            assert_eq!(error.code(), "CONFIG_STORAGE");
+            assert!(!message.contains("config.toml"));
+            assert!(!message.contains("sk-do-not-log"));
+            assert_eq!(
+                fs::read(&config_file).unwrap(),
+                original,
+                "元ファイルが保持されること"
+            );
+            assert_eq!(
+                fs::read_dir(&dir.path).unwrap().count(),
+                1,
+                "退避先が残らないこと"
+            );
         }
 
         /// `AppConfig::load()` と同じ Figment 経路で、不正 TOML がエラーになることを固定。
