@@ -127,3 +127,8 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - AI 初期化エラーのログを code() 由来へ変更。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - UI status 伝播は ADR-0338 の未決定。
+
+## 完了記録（第3cycle-7）
+
+- delete 直前の resolve 再確認を追加、ADR-0286 方針を適用。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
