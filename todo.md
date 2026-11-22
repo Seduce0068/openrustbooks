@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【EPUB 構造要素の数上限を追加】OPF manifest / spine / captures、NCX navPoint が無制限で、
-      64 MiB の 1 エントリから数百万要素を確保できる。蓄積時点で fail-closed に拒否。
-      根拠 `core/src/epub/opf.rs:224-240,379-409` / `core/src/epub/navigation.rs:311-339,425` / R3-SE01。
 - [ ] 【import JSON の実用上限を追加】256 MiB の JSON を serde_json::Value へ一括展開するため、
       Value ツリーでヒープ枯渇し得る。パース前の実用上限 + 深さ/件数制限を追加。
       根拠 `web/src/lib.rs:1665-1679,2161-2196` / R3-SE01。
@@ -150,6 +147,7 @@ status: current
 
 ## 完了
 
+- [x] 【EPUB 上限】構造要素数を 10,000 件で統一、超過を fail-closed 化（ADR-0316）。
 - [x] 【秘密設定 UI】desktop で API キー設定/削除を接続、値を DTO/status へ出さない（ADR-0315）。
 - [x] 【CI gitleaks】最終ゲート化して 13 ゲートの到達性を確保（ADR-0314）。
 - [x] 【文書 close】unsaved 検査と削除を単一ロック化、並行編集の喪失を防止（ADR-0313）。
