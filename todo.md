@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【web の CONFIG_LOAD_FAILED 文言を追加】desktop が code を返すのに web は既定文言へ落とす。
-      固定日本語文言と code 網羅 test。根拠 `web/src/lib.rs:4383-4400` / R1-DS01。
 - [ ] 【README の verify.sh 前提を補完】gitleaks / wasm-pack / Node+npm / Chrome / DISPLAY / Python3 が無い。
       一括検証の再現性を修復。根拠 `README.md:126-134,175-187` / R4-OP01。
 - [ ] 【runbook-verified-build の --locked 未決定表記を修正】実装は --offline --locked 済み。
@@ -125,6 +123,7 @@ status: current
 
 ## 完了
 
+- [x] 【web エラー文言】CONFIG_LOAD_FAILED に固定日本語文言を追加（ADR-0325）。
 - [x] 【TableAlignment】未知値を固定 validation で拒否、confirm 前に検証（ADR-0324）。
 - [x] 【Wasm redaction】共通 mapper で desktop/wasm 両境界の固定文言を統一（ADR-0323）。
 - [x] 【Config DTO】12 ペアのフィールド契約を静的ゲート化（ADR-0322）。
