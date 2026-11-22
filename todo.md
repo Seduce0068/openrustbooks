@@ -22,10 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
-- [ ] 【配布保持ゲートの E2E 期待値を単一情報源化】check-distribution-path.sh が
-      256 をハードコードし、Checker(expected=263) の現行値と不一致。
-      verify.sh --dist が常に失敗する。期待値をコードから抽出し、fixture / runbook も追従。
-      根拠 `scripts/check-distribution-path.sh:79,115-118` / R4-OP01 / 重大度 high。
 - [ ] 【set_document_content を atomic 化】get_document → add_document → mark_unsaved が別ロックで、
       close の unsaved チェックをすり抜ける。documents/generations/unsaved を単一保持。
       根拠 `desktop/src/commands/document.rs:552-559` / R2-RC01 / 重大度 high。
@@ -158,6 +154,7 @@ status: current
 
 ## 完了
 
+- [x] 【配布保持】Checker(expected) を AST 抽出し、--dist 保持を復旧（ADR-0333）。
 - [x] 【権限表面】capability ゲートの source 検査範囲と実 WebView 到達性を明記（ADR-0332）。
 - [x] 【get_config 失敗】desktop only と IPC 失敗を固定文言で区別（ADR-0331）。
 - [x] 【prefers-contrast E2E】CDP emulation + WCAG 比で 5 check を追加（ADR-0330）。

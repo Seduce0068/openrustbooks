@@ -87,3 +87,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - capability ゲートの source 検査範囲と実 WebView 到達性を明示。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - ACL / withGlobalTauri の見直しは ADR-0332 の未決定。
+
+## 完了記録（第3cycle-1）
+
+- 配布保持ゲートを Checker(expected) AST 抽出へ接続。
+- self_test ログを stderr 化し --dist 保持フローを修正。
+- verify.sh --dist 実実行で保持成功、E2E 263 / WDIO gate rc=0。
+- verify.sh 側 grep 抽出の共通化は ADR-0333 の未決定。
