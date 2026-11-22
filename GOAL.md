@@ -24,3 +24,10 @@
 - 外部サービス / 秘密情報は扱わない。
 - 新たな E2E check は追加しない（256 件維持）。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- emit 失敗を警告ログ化、import 失敗件数と nav parse 失敗を status 化。
+- E2E 必須の成功文言 / settings / updater / a11y 文言を維持。
+- 478 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- UI status への emit 失敗伝播 / parse 文言粒度は ADR-0307 の未決定。

@@ -92,10 +92,6 @@ status: current
       move_item、canonicalize と open の競合を解消。未実装 watch は実装するか trait から分離。
       根拠 `core/src/io.rs:112-165,363-364,399-410,560,577-581,619-631,688-690` /
       R1-AR01 + R2-BV01 + R1-ST01 / 重大度 medium-low。
-- [ ] 【イベント発行失敗とインポート混在状態を可視化】`let _ = app.emit(...)` を警告ログ化し、
-      import の成功 / 失敗件数を固定文言で返す。目次 / landmark / page list の解析失敗も status 化。
-      根拠 `desktop/src/commands/fs.rs:83,108,135-138` /
-      `web/src/lib.rs:2071-2099,3027-3031` / R1-ER01 / 重大度 low。
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
@@ -126,6 +122,7 @@ status: current
 
 ## 完了
 
+- [x] 【emit/import 可視化】失敗ログ・失敗件数・nav parse status を追加（ADR-0307）。
 - [x] 【a11y】日本語化・リンク下線・focus 可視化・危険告知を実装（ADR-0306）。
 - [x] 【EPUB/ZIP 解釈】BOM/fragment/重複 id/外部スキームを core+web 統一（ADR-0305）。
 - [x] 【dead config】9 件を DTO 除外し、config.toml 値保持と未配線表示を実装（ADR-0304）。
