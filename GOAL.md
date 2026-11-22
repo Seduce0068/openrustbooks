@@ -31,3 +31,10 @@ state.add_document へ書き戻し mark_saved するため最新本文が失わ�
 - 外部サービス / 秘密情報は扱わない。
 - 既存 E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- save_document に世代 CAS を導入し、並行編集/force close の競合を Detection。
+- 競合時に古い snapshot / mark_saved / emit を防止。
+- desktop 157 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- ディスク復元 / Conflict UI 文言は ADR-0318 の未決定。

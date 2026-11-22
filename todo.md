@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【save_document の並行編集 lost update を修正】await 中の snapshot が保存後に state へ書き戻され、
-      最新本文が失われる。doc_id 単位の世代 / 保存ロックで CAS。
-      根拠 `desktop/src/commands/document.rs:353,381,390-391` / R2-RC01。
 - [ ] 【confirm 待ち後の AI service 陳腐化を防止】confirm_send().await 中に config 更新されても古い service で送信する。
       確認後に ai_service() を再取得し revision 照合。
       根拠 `desktop/src/commands/ai.rs:74-97,109-132,171-206,217-238` / R2-RC01。
@@ -144,6 +141,7 @@ status: current
 
 ## 完了
 
+- [x] 【save_document CAS】並行編集/force close の競合を検出、古い snapshot の書き戻しを防止（ADR-0318）。
 - [x] 【import JSON】8 MiB + parse 前構造走査を追加、ヒープ枯渇を防止（ADR-0317）。
 - [x] 【EPUB 上限】構造要素数を 10,000 件で統一、超過を fail-closed 化（ADR-0316）。
 - [x] 【秘密設定 UI】desktop で API キー設定/削除を接続、値を DTO/status へ出さない（ADR-0315）。
