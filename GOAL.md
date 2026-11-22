@@ -157,3 +157,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - AI 送信確認に先頭/末尾プレビューと省略量、全文確認文言を追加。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 全文スクロール表示は ADR-0343 の未決定。
+
+## 完了記録（第3cycle-12）
+
+- レガシー config command 4 種と専用 helper / test を削除。
+- clear_secrets の内部 revision 例外を ADR-0344 に記録。
+- desktop 185 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- clear_secrets の expected 必須化は ADR-0344 の未決定。
