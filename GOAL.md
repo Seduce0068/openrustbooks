@@ -60,3 +60,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 既存設定を守り、権威 / 未配線 / 失敗時の固定文言を統一。
 - web 26 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
 - editor 配線 / 即時 signal 更新は ADR-0328 の未決定。
+
+## 完了記録（続き4）
+
+- EPUB2 NCX サンプルと 2 check を追加、Checker(expected)=258。
+- e2e-traceability / documentation-operations も 258 へ更新。
+- verify.sh 全ゲート成功（E2E 258、WDIO 1）。
+- VC 行の分割は ADR-0329 の未決定。

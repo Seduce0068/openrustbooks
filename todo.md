@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【EPUB2 NCX の Web E2E を追加】NCX サンプルが無く、Web 側回帰を検出できない。
-      256 件・トレーサビリティ表を同時更新。根拠 `tools/verify-web-reader.py:100-151` / R5-DC01。
 - [ ] 【prefers-contrast: more の E2E を追加】CSS はあるが動的検証が無い。
       CDP Emulation で light/dark の computed style を検査。根拠 `web/index.html:72-95` / R5-DC01。
 - [ ] 【desktop get_config 失敗の status を区別】「デスクトップ版のみ利用可能」と誤案内。
@@ -113,6 +111,7 @@ status: current
 
 ## 完了
 
+- [x] 【EPUB2 NCX E2E】NCX サンプルと 2 check を追加、期待 258 件（ADR-0329）。
 - [x] 【reader 設定】初回のみ config を初期値化し、既存 localStorage を保護（ADR-0328）。
 - [x] 【WDIO lock】trunk serve を --locked --offline 化、4 時点で不変検査（ADR-0327）。
 - [x] 【wasm-bindgen 版】Cargo.lock 由来で CLI/runner を照合、不一致を fail-closed（ADR-0326）。
