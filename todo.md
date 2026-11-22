@@ -63,10 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【README の verify.sh 前提を補完】gitleaks / wasm-pack / Node+npm / Chrome / DISPLAY / Python3 が無い。
-      一括検証の再現性を修復。根拠 `README.md:126-134,175-187` / R4-OP01。
-- [ ] 【WDIO trunk serve に --locked / lock 再検査】serve は lock を固定せず、readiness 後の不変確認も無い。
-      根拠 `scripts/ci-wdio-test.sh:130-134` / R4-OP01。
 - [ ] 【設定画面 editor/reader の権威を一本化】config.toml 設定が描画へ反映されず localStorage が権威。
       最小サブセットを配線するか未配線表示へ。根拠 `web/src/lib.rs:4315-4343,5067-5382` / ADR-0217 / R5-DC01。
 - [ ] 【EPUB2 NCX の Web E2E を追加】NCX サンプルが無く、Web 側回帰を検出できない。
@@ -119,6 +115,7 @@ status: current
 
 ## 完了
 
+- [x] 【WDIO lock】trunk serve を --locked --offline 化、4 時点で不変検査（ADR-0327）。
 - [x] 【wasm-bindgen 版】Cargo.lock 由来で CLI/runner を照合、不一致を fail-closed（ADR-0326）。
 - [x] 【runbook】`trunk build --locked` は決定済みと明記（ADR-0237 / 0289）。
 - [x] 【web エラー文言】CONFIG_LOAD_FAILED に固定日本語文言を追加（ADR-0325）。

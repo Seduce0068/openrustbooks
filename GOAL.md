@@ -47,3 +47,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - wasm-bindgen CLI / test runner を Cargo.lock 由来で版照合、負向 27 ケース detecting。
 - verify.sh 全ゲート成功（E2E 256、WDIO 1）。
 - 抽出関数の共通ファイル化は ADR-0326 の未決定。
+
+## 完了記録（続き2）
+
+- WDIO trunk serve に --locked --offline を追加、lock 不変を 4 時点で検査。
+- runbook-webdriver を同期、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 失敗経路の lock 可視化は ADR-0327 の未決定。
