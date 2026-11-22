@@ -32,3 +32,10 @@ Wasm JS 境界の CoreError を redaction する（第2cycle R6 / R1-DS01）。
 - 既存の公開 API 名・シグネチャは変更しない。
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- core::error::fixed_message を共有化し desktop / wasm 両境界が参照。
+- wasm epub/lint の生エラーと serde エラーを固定文言化。
+- href / lint redaction test を追加、542 tests / verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- wasm runner / 既定文言の分離は ADR-0323 の未決定。

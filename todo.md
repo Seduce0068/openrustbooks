@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【Wasm JS 境界の CoreError 生文字列を redaction】js_error / wasm/epub.rs が to_string() を返し、
-      href / 内部型名が JS へ露出。desktop と同じ code→固定文言を共有。
-      根拠 `core/src/wasm.rs:73-80` / `core/src/wasm/epub.rs:46-72` / R1-DS01。
 - [ ] 【TableAlignment の未知値を fail-closed 化】format は拒否するのに alignment は Left へ黙ってフォールバック。
       両方同じ検証方針へ。根拠 `desktop/src/commands/ai.rs:136-159` / R1-DS01。
 - [ ] 【web の CONFIG_LOAD_FAILED 文言を追加】desktop が code を返すのに web は既定文言へ落とす。
@@ -130,6 +127,7 @@ status: current
 
 ## 完了
 
+- [x] 【Wasm redaction】共通 mapper で desktop/wasm 両境界の固定文言を統一（ADR-0323）。
 - [x] 【Config DTO】12 ペアのフィールド契約を静的ゲート化（ADR-0322）。
 - [x] 【read_directory】read 専用 resolver で全 root を一覧可能化（ADR-0321）。
 - [x] 【config 退避】権限失敗時にロールバックし原文保持を優先（ADR-0320）。
