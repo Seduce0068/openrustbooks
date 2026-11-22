@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import io
 import json
 import os
 import queue
@@ -36,6 +37,7 @@ from pathlib import Path
 DEFAULT_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 DIST = DEFAULT_DIST
 SAMPLE = Path(tempfile.gettempdir()) / "openrustbooks-e2e" / "sample.epub"
+SAMPLE2 = Path(tempfile.gettempdir()) / "openrustbooks-e2e" / "sample2.epub"
 PORT = 8099
 DEBUG_PORT = 9222
 
@@ -97,6 +99,32 @@ CH2 = f"""<?xml version="1.0" encoding="utf-8"?>
 </html>
 """
 
+# EPUB2 サンプル用の本文。EPUB3 サンプルと文言を分け、NCX 由来の目次と
+# フラグメントが反映されたことを E2E で判定できるようにする。
+CH1_EPUB2 = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>NCX Chapter One</title></head>
+<body>
+<h1 id="top">NCX Chapter One</h1>
+<p>Hello from EPUB2 chapter one.</p>
+</body>
+</html>
+"""
+
+CH2_EPUB2 = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>NCX Chapter Two</title></head>
+<body>
+<h1 id="start">NCX Chapter Two</h1>
+<p>Second EPUB2 chapter text.</p>
+<h2 id="part">Part Two in EPUB2</h2>
+<p>Part two text in EPUB2.</p>
+</body>
+</html>
+"""
+
 NAV = """<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
@@ -139,6 +167,44 @@ OPF = """<?xml version="1.0" encoding="UTF-8"?>
     <item id="tall" href="images/tall.png" media-type="image/png"/>
   </manifest>
   <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>
+"""
+
+# EPUB2 の目次情報源。nav を持たない OPF 2.0 に対して NCX の navMap が
+# 2 件の目次を与え、2 件目は ch2.xhtml#part を指す。
+NCX = """<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<head><meta name="dtb:uid" content="urn:uuid:00000000-0000-0000-0000-000000000002"/></head>
+<docTitle><text>Sample Book EPUB2</text></docTitle>
+<navMap>
+  <navPoint id="ncx-ch1" playOrder="1">
+    <navLabel><text>NCX Chapter One</text></navLabel>
+    <content src="ch1.xhtml"/>
+  </navPoint>
+  <navPoint id="ncx-ch2" playOrder="2">
+    <navLabel><text>NCX Chapter Two</text></navLabel>
+    <content src="ch2.xhtml#part"/>
+  </navPoint>
+</navMap>
+</ncx>
+"""
+
+OPF2 = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Sample Book EPUB2</dc:title>
+    <dc:language>ja</dc:language>
+    <dc:identifier id="pub-id">urn:uuid:00000000-0000-0000-0000-000000000002</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine toc="ncx">
     <itemref idref="ch1"/>
     <itemref idref="ch2"/>
   </spine>
@@ -209,6 +275,28 @@ def build_sample() -> None:
             "OEBPS/images/tall.png", tall_png(), compress_type=zipfile.ZIP_DEFLATED
         )
         z.writestr("OEBPS/images/evil.svg", EVIL_SVG, compress_type=zipfile.ZIP_DEFLATED)
+
+
+def build_sample_epub2() -> bytes:
+    """EPUB2（OPF 2.0 + NCX）サンプルの ZIP bytes を組み立てる。
+
+    container.xml は EPUB3 サンプルと共通（OEBPS/content.opf を指す）だが、
+    nav.xhtml は入れず、manifest の NCX item と spine の toc 属性だけを
+    目次情報源として与える（core の EPUB2 NCX 経路を E2E で通す）。
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr(
+            zipfile.ZipInfo("mimetype"),
+            "application/epub+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        z.writestr("META-INF/container.xml", CONTAINER, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", OPF2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/toc.ncx", NCX, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch1.xhtml", CH1_EPUB2, compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/ch2.xhtml", CH2_EPUB2, compress_type=zipfile.ZIP_DEFLATED)
+    return buffer.getvalue()
 
 
 class SpaHandler(SimpleHTTPRequestHandler):
@@ -634,15 +722,19 @@ def scroll_delta_expr(marker: str, container: str = READER_CONTENT) -> str:
     )
 
 
-async def open_sample(cdp: Cdp) -> bool:
-    """サンプル EPUB をファイル入力にセットして change を発火する。"""
+async def open_sample(cdp: Cdp, path: Path = SAMPLE) -> bool:
+    """EPUB をファイル入力にセットして change を発火する（既定は EPUB3 サンプル）。
+
+    EPUB2 サンプルも同じファイル入力から開くことで、既存の EPUB オープン手順と
+    同じ経路を通す。
+    """
     document = await cdp.send("DOM.getDocument", {"depth": -1})
     root_id = document["result"]["root"]["nodeId"]
     node = await cdp.send("DOM.querySelector", {"nodeId": root_id, "selector": "#epub-file"})
     node_id = node["result"]["nodeId"]
     if node_id == 0:
         return False
-    await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(SAMPLE)]})
+    await cdp.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": [str(path)]})
     await cdp.evaluate(
         "document.querySelector('#epub-file').dispatchEvent(new Event('change', {bubbles: true}))"
     )
@@ -851,7 +943,9 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 239 + checker.equal 17 = 256。
+    # 期待 check 総数: checker.check 241 + checker.equal 17 = 258。
+    # EPUB2（OPF 2.0 + NCX）サンプルをファイル入力から開き、NCX の目次 2 件と
+    # 2 件目の選択による第 2 章移動を確認する check を +2（VC-004）。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
     # About 画面のライセンス・対応形式表示の検証 +1（Cargo.toml:12 / README.md:81 が根拠）、
     # localStorage 保存失敗時の status / console 通知の検証 +1、
@@ -886,7 +980,7 @@ async def run_checks(cdp: Cdp) -> int:
     # 残件数だけが出てキー名・生エラーが出ず現在の本の位置が残ること +1（ADR-0245）。
     # Tauri mock の get_config / update_config_patch 成功経路で、保存ボタン押下後に
     # 固定成功文言・revision +1・JS エラー 0 を 1 check で検証する +1（ADR-0271 / 0272）。
-    checker = Checker(expected=256)
+    checker = Checker(expected=258)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -916,7 +1010,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 256 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 258 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -5050,6 +5144,41 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f" leak={leak.group(0) if leak else None!r}, restored={sample_restored})",
     )
 
+    # EPUB2（OPF 2.0 + NCX）サンプルをファイル入力から開く。
+    # nav の無い EPUB では NCX が目次情報源になり、navPoint の text が章タイトル、
+    # content の #part がフラグメントとして章ドロップダウンへ反映される。
+    await cdp.evaluate("localStorage.clear()")
+    opened_epub2 = await open_sample(cdp, SAMPLE2)
+    epub2_ready = opened_epub2 and await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Hello from EPUB2 chapter one.')",
+        timeout=10,
+    )
+    ncx_labels = await cdp.evaluate(
+        "Array.from(document.querySelectorAll('#reader-chapter-select option'))"
+        ".map((option) => option.textContent)"
+    )
+    checker.check(
+        "EPUB2 NCX の目次が 2 件読み込まれる",
+        epub2_ready and ncx_labels == ["NCX Chapter One", "NCX Chapter Two"],
+        f"(opened={opened_epub2}, labels={ncx_labels!r})",
+    )
+
+    # NCX の 2 件目（ch2.xhtml#part）を選択すると第 2 章へ移動する。
+    await select_chapter(cdp, 1)
+    ncx_moved = await wait_until(
+        cdp,
+        "document.querySelector('.reader-html')?.textContent.includes('Second EPUB2 chapter text.')",
+        timeout=5,
+    )
+    ncx_index = await cdp.evaluate("document.querySelector('#reader-chapter-select')?.value")
+    ncx_title = await cdp.evaluate("document.querySelector('.reader-chapter-title')?.textContent")
+    checker.check(
+        "NCX の項目選択で第 2 章へ移動する",
+        ncx_moved and ncx_index == "1" and ncx_title == "NCX Chapter Two",
+        f"(moved={ncx_moved}, index={ncx_index!r}, title={ncx_title!r})",
+    )
+
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
     # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の
     # チェックなので、後続の画面状態に影響しない（元の画面へ戻る遷移は不要）。
@@ -5116,6 +5245,8 @@ async def main() -> int:
         print(f"index.html が見つかりません: {DIST}", file=sys.stderr)
         return 2
     build_sample()
+    SAMPLE2.parent.mkdir(parents=True, exist_ok=True)
+    SAMPLE2.write_bytes(build_sample_epub2())
     server = ThreadingHTTPServer(("127.0.0.1", PORT), SpaHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
