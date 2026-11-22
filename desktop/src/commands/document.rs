@@ -223,6 +223,8 @@ mod test_hooks {
 
     thread_local! {
         pub static FAIL_NEXT_ATOMIC_WRITE: Cell<bool> = const { Cell::new(false) };
+        pub static FAIL_NEXT_BACKUP_METADATA: Cell<bool> = const { Cell::new(false) };
+        pub static FAIL_NEXT_RESTORE_WRITE: Cell<bool> = const { Cell::new(false) };
     }
 }
 
@@ -293,6 +295,76 @@ async fn atomic_write(full_path: &Path, data: &[u8]) -> CoreResult<()> {
     }
 
     Ok(())
+}
+
+/// 保存競合時にディスクを書き込み前へ戻すための退避データ。
+///
+/// 既存ファイルは元バイト列をそのまま保持し、未作成ファイルは `Absent` として
+/// 競合時に作成されたファイルを削除する（新規保存を fail-closed で壊さないため）。
+#[derive(Debug)]
+enum SavedBackup {
+    Bytes(Vec<u8>),
+    Absent,
+}
+
+/// 競合時にディスクを保存前の内容へ戻す。
+///
+/// 復元自体も atomic write を使う。失敗時は Conflict とは別の固定文言
+/// （`CoreError::storage` の code が mapper で固定文言へ変換される）を返し、
+/// 固定文言の警告も出す（本文・パスは一切出さない）。
+async fn restore_disk_on_conflict(path: &Path, backup: SavedBackup) -> CoreResult<()> {
+    let result = async {
+        #[cfg(test)]
+        if test_hooks::FAIL_NEXT_RESTORE_WRITE.replace(false) {
+            return Err(CoreError::storage("injected restore write failure"));
+        }
+        match backup {
+            SavedBackup::Bytes(bytes) => {
+                let result = atomic_write(path, bytes.as_slice()).await;
+                // 退避バイト列は復元が終わった時点で明示的に解放する。
+                drop(bytes);
+                result
+            }
+            SavedBackup::Absent => match tokio::fs::remove_file(path).await {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(CoreError::Io(error)),
+            },
+        }
+    }
+    .await;
+
+    if result.is_err() {
+        log::warn!("document save conflict rollback failed");
+        return Err(CoreError::storage("document save conflict rollback failed"));
+    }
+    Ok(())
+}
+
+/// 保存前に元ファイルのバイト列を退避する。
+///
+/// `NotFound` は新規ファイルとして扱い、それ以外の読み取り失敗は fail-closed で拒否する。
+/// 巨大ファイルを丸ごとメモリへ載せないよう、read 前後にサイズ上限を検査する。
+async fn backup_existing_file(path: &Path) -> CoreResult<SavedBackup> {
+    #[cfg(test)]
+    if test_hooks::FAIL_NEXT_BACKUP_METADATA.replace(false) {
+        return Err(CoreError::storage("injected backup metadata failure"));
+    }
+
+    let metadata = match tokio::fs::metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(SavedBackup::Absent);
+        }
+        Err(error) => return Err(CoreError::Io(error)),
+    };
+    // 内容を 1 バイトも読まずに上限超過を拒否する（fail-closed）。
+    validate_read_size(metadata.len(), DEFAULT_MAX_READ_BYTES)?;
+
+    let bytes = tokio::fs::read(path).await.map_err(CoreError::Io)?;
+    // read 中にファイルが増大した場合も fail-closed で拒否する（TOCTOU 対策）。
+    validate_read_size(bytes.len() as u64, DEFAULT_MAX_READ_BYTES)?;
+    Ok(SavedBackup::Bytes(bytes))
 }
 
 /// 読み取りサイズ超過を拒否する際の固定文言。
@@ -401,6 +473,8 @@ async fn save_document_impl<R: tauri::Runtime>(
     }
 
     // ディスク書き込みが成功した場合にのみメタデータを更新する（fail-closed）。
+    // 競合時に元内容へ戻せるよう、書き込み前にディスクの内容を退避しておく。
+    let mut disk_backup: Option<(PathBuf, SavedBackup)> = None;
     let mut saved_size: Option<u64> = None;
     if let Some(path) = to_save.metadata.path.clone() {
         let config = state.config();
@@ -415,11 +489,20 @@ async fn save_document_impl<R: tauri::Runtime>(
             .full_text()
             .ok_or_else(|| ipc_error(CoreError::validation("Document is not text-editable")))?;
 
+        // atomic_write 前に元バイト列を退避する。読み取り失敗は fail-closed で拒否し、
+        // ディスクを触らずに抜ける（新規ファイルは Absent として扱う）。
+        let backup = backup_existing_file(&resolved.path)
+            .await
+            .map_err(ipc_error)?;
+
         // atomic temp + rename で保存する。失敗時は元ファイルを保持し、
         // ここを抜けるため metadata / mark_saved / emit は行われない。
         atomic_write(&resolved.path, text.as_bytes())
             .await
             .map_err(ipc_error)?;
+
+        // 書き込みが成功した時点で初めて退避を保持する。以降の競合で元内容へ戻す。
+        disk_backup = Some((resolved.path, backup));
 
         #[cfg(test)]
         state.invoke_after_atomic_write_hook();
@@ -429,10 +512,25 @@ async fn save_document_impl<R: tauri::Runtime>(
 
     // await 後に generation と本文を再確認する。割り込み編集があれば
     // 古い snapshot を state へ書き戻さず、固定文言の Conflict を返す。
-    let (mut current, current_generation) = state
-        .document_with_generation(&doc_id)
-        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
+    let (mut current, current_generation) = match state.document_with_generation(&doc_id) {
+        Some(pair) => pair,
+        None => {
+            // await 中に force close された場合も競合なのでディスクを元内容へ戻す。
+            if let Some((path, backup)) = disk_backup.take() {
+                restore_disk_on_conflict(&path, backup)
+                    .await
+                    .map_err(ipc_error)?;
+            }
+            return Err(ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())));
+        }
+    };
     if current_generation != expected_generation || current.full_text() != start_text {
+        // 割り込み編集が勝ったため、ディスクへ書いた保存要求の本文を元内容へ戻す。
+        if let Some((path, backup)) = disk_backup.take() {
+            restore_disk_on_conflict(&path, backup)
+                .await
+                .map_err(ipc_error)?;
+        }
         return Err(ipc_error(CoreError::Conflict(
             DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string(),
         )));
@@ -457,9 +555,17 @@ async fn save_document_impl<R: tauri::Runtime>(
     // 成功時のみ CAS で確定する。比較と文書差し替え・世代前進・unsaved クリアは
     // AppState 側の単一クリティカルセクションで行うため、ここへ至る直前に
     // 別編集が入っても古い snapshot が残ることはない。
-    state
-        .commit_saved_document(&doc_id, expected_generation, current.clone())
-        .map_err(ipc_error)?;
+    // CAS 失敗（force close 検知を含む）も競合なので、ディスクを元内容へ戻す。
+    if let Err(error) = state.commit_saved_document(&doc_id, expected_generation, current.clone()) {
+        if let Some((path, backup)) = disk_backup.take() {
+            restore_disk_on_conflict(&path, backup)
+                .await
+                .map_err(ipc_error)?;
+        }
+        return Err(ipc_error(error));
+    }
+
+    // 成功時は退避を捨てる（以降のスコープで参照しないため自動的に解放される）。
 
     // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
     if app.emit("document-saved", &current).is_err() {
@@ -1114,6 +1220,40 @@ mod tests {
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
+    /// 退避用の読み取りが失敗した場合は fail-closed で保存を拒否し、
+    /// ディスク・state・emit のすべてを不変に保つこと（R4 指摘対応）。
+    #[tokio::test]
+    async fn command_save_document_fails_closed_when_backup_read_fails() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
+
+        test_hooks::FAIL_NEXT_BACKUP_METADATA.set(true);
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("# New\n".to_string()),
+        )
+        .await
+        .expect_err("退避読み取り失敗は保存を拒否する");
+
+        assert_eq!(error, ipc_error(CoreError::storage("injected")));
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert_no_temp_files(&writable.path);
+        let unchanged = harness.state().get_document(&id).unwrap();
+        assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
+        assert!(unchanged.metadata.modified_at.is_none());
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
     #[tokio::test]
     async fn command_save_document_rejects_read_only_root_without_side_effects() {
         let read_only = TempRoot::new();
@@ -1331,6 +1471,56 @@ mod tests {
         error
     }
 
+    /// 競合後の復元が失敗した場合は Conflict とは別の固定文言を返し、
+    /// 復元できなかったディスクの状態をそのまま残すこと（R4 指摘対応）。
+    #[tokio::test]
+    async fn command_save_document_returns_rollback_error_when_restore_fails() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
+
+        test_hooks::FAIL_NEXT_RESTORE_WRITE.set(true);
+        let error = save_with_interleaved_edit(
+            &harness,
+            &id,
+            Some("# New\n".to_string()),
+            "# Interleaved\n",
+        )
+        .await;
+
+        // 復元失敗は Conflict ではなく storage の固定文言（本文/パスなし）。
+        assert_eq!(error, ipc_error(CoreError::storage("injected")));
+        assert_ne!(
+            error,
+            ipc_error(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string()
+            ))
+        );
+        assert!(!error.contains("note.md"));
+        assert!(!error.contains("New"));
+
+        // 復元が失敗したので保存要求の本文がディスクに残る。
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"---\ntitle: Test\n---\n# New\n".to_vec()
+        );
+        assert_no_temp_files(&writable.path);
+        // state は割り込み編集の内容のまま（競合時と同じ）。
+        let current = harness.state().get_document(&id).unwrap();
+        assert_eq!(current.as_text(), Some("# Interleaved\n"));
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            generation_before.map(|generation| generation + 1)
+        );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
     /// content=Some の保存中に別編集が入ると、古い snapshot を書き戻さず
     /// 固定文言の Conflict を返す（第2cycle R6 / R2-RC01 の回帰 test）。
     #[tokio::test]
@@ -1372,11 +1562,9 @@ mod tests {
             "割り込み編集のみが世代を進め、競合保存は進めない"
         );
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
-        // ディスクには保存要求の内容が書かれているが、state は上書きしない。
-        assert_eq!(
-            fs::read(&path).unwrap(),
-            b"---\ntitle: Test\n---\n# New\n".to_vec()
-        );
+        // 競合時はディスクも元内容へ戻り、保存要求の本文は残らない。
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert_no_temp_files(&writable.path);
     }
 
     /// content=None でも await 中の別編集は競合として扱うこと。
@@ -1406,6 +1594,40 @@ mod tests {
             harness.state().document_generation(&id),
             generation_before.map(|generation| generation + 1)
         );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+        // content=None でも競合時はディスクを元内容へ戻す。
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert_no_temp_files(&writable.path);
+    }
+
+    /// 保存前に存在しなかったファイルは、競合時に作成したファイルを削除すること。
+    #[tokio::test]
+    async fn command_save_document_conflict_removes_newly_created_file() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("new.md");
+        let original = "# Placeholder\n";
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        assert!(!path.exists(), "保存前はファイルが存在しない");
+
+        let error = save_with_interleaved_edit(
+            &harness,
+            &id,
+            Some("# New\n".to_string()),
+            "# Interleaved\n",
+        )
+        .await;
+
+        assert_eq!(
+            error,
+            ipc_error(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string()
+            ))
+        );
+        assert!(!path.exists(), "競合時は作成したファイルを削除する");
+        let entries = fs::read_dir(&writable.path).unwrap().collect::<Vec<_>>();
+        assert!(entries.is_empty(), "一時ファイルも残らないこと");
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1501,6 +1723,50 @@ mod tests {
             !harness.state().is_unsaved(&id),
             "close が孤立フラグを掃除する"
         );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+        // CAS 失敗（force close 検知）でもディスクを元内容へ戻す。
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert_no_temp_files(&writable.path);
+    }
+
+    /// 書き込み直後に force close が割り込み、再確認前に文書が消えても
+    /// ディスクを元内容へ戻すこと。
+    #[tokio::test]
+    async fn command_save_document_restores_disk_when_closed_after_write() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+
+        let close_state = harness.state.clone();
+        let close_id = id.clone();
+        harness.state().set_after_atomic_write_hook(move || {
+            close_state
+                .close_document_atomic(&close_id, true)
+                .expect("force close が成功する");
+        });
+
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("# New\n".to_string()),
+        )
+        .await
+        .expect_err("閉じられた文書への保存は失敗する");
+
+        assert_eq!(
+            error,
+            ipc_error(CoreError::DocumentNotFound(
+                DOCUMENT_NOT_FOUND_MESSAGE.to_string()
+            ))
+        );
+        assert!(harness.state().get_document(&id).is_none());
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert_no_temp_files(&writable.path);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
