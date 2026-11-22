@@ -9,7 +9,7 @@ use openrustbooks_core::{
         Document, DocumentContent, DocumentFormat, DocumentId, DocumentMetadata,
         extract_front_matter_preserving,
     },
-    io::DEFAULT_MAX_READ_BYTES,
+    io::{DEFAULT_MAX_READ_BYTES, READ_ONLY_ROOT_MESSAGE},
 };
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -49,6 +49,8 @@ fn canonicalize_existing_prefix(path: &Path) -> CoreResult<PathBuf> {
 struct ResolvedPath {
     path: PathBuf,
     read_only: bool,
+    /// 最深 root 選択に使う root の深さ（component 数）。
+    depth: usize,
 }
 
 /// `local_roots[].path` を root として入力パスを検証する。
@@ -59,6 +61,11 @@ struct ResolvedPath {
 /// - 親ディレクトリを canonicalize → root 配下確認 → ファイル名を連結する。
 ///   ファイル本体が未作成でも拒否しない（ADR-0097 と同じ意味論）。
 /// - 絶対パスも root 配下なら許可する。
+/// - 全候補 root を集め、一つでも `read_only` なら固定文言で拒否する（fail-closed）。
+///   writable 親 + read-only 子の入れ子で子の拒否が無視されないようにする。
+/// - canonical target（symlink の解決先）が別の設定 root に属する場合も候補に含め、
+///   その root の `read_only` も検査する。設定 root 外への symlink は従来どおり拒否する。
+/// - 残った候補から最深 root を選び、その解決済みパスを返す。
 /// - エラー文言にはパスを含めない（ADR-0103）。
 fn resolve_within_roots(roots: &[LocalRootConfig], path: &Path) -> CoreResult<ResolvedPath> {
     if roots.is_empty() {
@@ -89,46 +96,73 @@ fn resolve_within_roots(roots: &[LocalRootConfig], path: &Path) -> CoreResult<Re
         ));
     }
 
-    for (root, read_only) in &canonical_roots {
+    let mut candidates: Vec<ResolvedPath> = Vec::new();
+    for (root, _read_only) in &canonical_roots {
         let candidate = if path.is_absolute() {
             path.to_path_buf()
         } else {
             root.join(path)
         };
-        let name = match candidate.file_name() {
-            Some(name) => name,
-            None => continue,
+        let Some(name) = candidate.file_name() else {
+            continue;
         };
-        let parent = match candidate.parent() {
-            Some(parent) => parent,
-            None => continue,
+        let Some(parent) = candidate.parent() else {
+            continue;
         };
 
         // 親の既存部分を正規化して root 配下を確認し、ファイル名を連結
-        let canonical_parent = match canonicalize_existing_prefix(parent) {
-            Ok(parent) => parent,
-            Err(_) => continue,
+        let Ok(canonical_parent) = canonicalize_existing_prefix(parent) else {
+            continue;
         };
         if !canonical_parent.starts_with(root) {
             continue;
         }
         let resolved = canonical_parent.join(name);
 
-        // 既存ファイルが root 外への symlink なら拒否（新規ファイルは対象外）
-        match resolved.canonicalize() {
-            Ok(target) if target.starts_with(root) => {}
+        // canonical target（既存ファイル・symlink の解決先）を採用する。
+        // 未作成ファイルは resolved をそのまま使う。
+        // 設定 root の外への symlink は従来どおり拒否する。
+        let effective = match resolved.canonicalize() {
+            Ok(target) if canonical_roots.iter().any(|(r, _)| target.starts_with(r)) => target,
             Ok(_) => continue,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => resolved.clone(),
             Err(_) => continue,
-        }
+        };
 
-        return Ok(ResolvedPath {
-            path: resolved,
-            read_only: *read_only,
-        });
+        // canonical target が別の設定 root に属する場合も候補に含める。
+        // writable 親 root 内の symlink 経由で read-only 子 root を書き換える
+        // 経路を塞ぐため、その root の read_only も必ず検査する。
+        for (other_root, other_read_only) in &canonical_roots {
+            if effective.starts_with(other_root) {
+                candidates.push(ResolvedPath {
+                    path: effective.clone(),
+                    read_only: *other_read_only,
+                    depth: other_root.components().count(),
+                });
+            }
+        }
     }
 
-    Err(CoreError::validation("Path escapes storage root"))
+    if candidates.is_empty() {
+        return Err(CoreError::validation("Path escapes storage root"));
+    }
+
+    // 候補に read_only root が一つでもあれば固定文言で拒否する（fail-closed）。
+    if candidates.iter().any(|candidate| candidate.read_only) {
+        return Err(CoreError::validation(READ_ONLY_ROOT_MESSAGE));
+    }
+
+    // 深さは root の component 数で比較する。同深度なら設定順の先頭を保持する。
+    candidates
+        .into_iter()
+        .reduce(|best, candidate| {
+            if candidate.depth > best.depth {
+                candidate
+            } else {
+                best
+            }
+        })
+        .ok_or_else(|| CoreError::validation("Path escapes storage root"))
 }
 
 /// 読み込んだテキストから Document を構築する。
@@ -368,9 +402,8 @@ async fn save_document_impl<R: tauri::Runtime>(
         let resolved =
             resolve_within_roots(&config.storage.local_roots, path).map_err(ipc_error)?;
         if resolved.read_only {
-            return Err(ipc_error(CoreError::validation(
-                "Storage root is read-only",
-            )));
+            // resolve_within_roots の fail-closed 検査が二重ガード。
+            return Err(ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE)));
         }
         let text = document
             .full_text()
@@ -616,15 +649,131 @@ mod tests {
         assert!(error.to_string().contains("not a directory"));
     }
 
+    fn root_config(path: PathBuf, read_only: bool) -> LocalRootConfig {
+        LocalRootConfig {
+            id: "test".to_string(),
+            name: "Test root".to_string(),
+            path,
+            read_only,
+            watch: false,
+        }
+    }
+
+    /// read-only root 単体は固定文言で拒否する（fail-closed）。
     #[test]
-    fn read_only_flag_is_propagated() {
+    fn read_only_root_is_rejected_with_fixed_message() {
         let temp = TempRoot::new();
         let abs = temp.path.canonicalize().unwrap().join("inside.txt");
         fs::write(&abs, b"ok").unwrap();
         let mut roots = temp.roots();
         roots[0].read_only = true;
-        let resolved = resolve_within_roots(&roots, &abs).unwrap();
-        assert!(resolved.read_only);
+        let error = resolve_within_roots(&roots, &abs).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+        );
+    }
+
+    /// writable 親 + read-only 子の入れ子では、設定順がどちらでも子の拒否が無視されないこと。
+    #[test]
+    fn nested_read_only_child_is_rejected_in_both_orders() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let file = child.join("note.txt");
+        fs::write(&file, b"protected").unwrap();
+
+        let writable_parent = root_config(parent.path.clone(), false);
+        let read_only_child = root_config(child, true);
+        for roots in [
+            vec![writable_parent.clone(), read_only_child.clone()],
+            vec![read_only_child, writable_parent],
+        ] {
+            // 相対パス・絶対パスのどちらでも拒否されること。
+            for path in [PathBuf::from("child/note.txt"), file.clone()] {
+                let error = resolve_within_roots(&roots, &path).unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+                );
+            }
+        }
+    }
+
+    /// read-only 親 + writable 子でも、親が候補に残るため拒否されること。
+    #[test]
+    fn read_only_parent_with_writable_child_is_rejected() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let file = child.join("note.txt");
+        fs::write(&file, b"protected").unwrap();
+        let roots = vec![
+            root_config(parent.path.clone(), true),
+            root_config(child, false),
+        ];
+
+        let error = resolve_within_roots(&roots, &file).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+        );
+    }
+
+    /// 単一の writable root は従来どおり許可され、解決済みパスが返ること。
+    #[test]
+    fn single_writable_root_is_allowed() {
+        let temp = TempRoot::new();
+        let file = temp.path.canonicalize().unwrap().join("note.txt");
+        fs::write(&file, b"ok").unwrap();
+
+        let resolved = resolve_within_roots(&temp.roots(), &file).unwrap();
+        assert_eq!(resolved.path, file);
+        assert!(!resolved.read_only);
+    }
+
+    /// 複数 root が設定されていても、すべての root の外は拒否されること。
+    #[test]
+    fn path_outside_all_roots_is_rejected() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let outside = TempRoot::new();
+        let file = outside.path.join("secret.txt");
+        let roots = vec![
+            root_config(parent.path.clone(), false),
+            root_config(child, false),
+        ];
+
+        assert!(resolve_within_roots(&roots, &file).is_err());
+        assert!(resolve_within_roots(&roots, Path::new("../escape")).is_err());
+    }
+
+    /// writable 親 root 内の symlink で read-only 子 root を指しても拒否されること。
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn symlink_into_read_only_child_root_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let target = child.join("target.txt");
+        fs::write(&target, b"protected").unwrap();
+        let link = parent.path.join("link.txt");
+        if symlink(&target, &link).is_err() {
+            return; // symlink を作成できない環境ではスキップ
+        }
+
+        let roots = vec![
+            root_config(parent.path.clone(), false),
+            root_config(child, true),
+        ];
+        let error = resolve_within_roots(&roots, &link).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Validation error: {READ_ONLY_ROOT_MESSAGE}")
+        );
     }
 
     /// DocumentNotFound の id（path 由来）が IPC 文字列へ漏れないこと。
@@ -934,6 +1083,118 @@ mod tests {
         let unchanged = harness.state().get_document(&id).unwrap();
         assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
         assert!(unchanged.metadata.modified_at.is_none());
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
+    /// writable 親 + read-only 子の入れ子で save_document が子 root を書き換えないこと。
+    #[tokio::test]
+    async fn command_save_document_rejects_nested_read_only_child_root() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let path = child.join("note.md");
+        let original = "original";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![
+            (parent.path.clone(), false),
+            (child, true),
+        ]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("updated".to_string()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+        );
+
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        let unchanged = harness.state().get_document(&id).unwrap();
+        assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
+    /// read-only 親 + writable 子でも save_document が拒否されること。
+    #[tokio::test]
+    async fn command_save_document_rejects_read_only_parent_with_writable_child() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let path = child.join("note.md");
+        let original = "original";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![
+            (parent.path.clone(), true),
+            (child, false),
+        ]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("updated".to_string()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+        );
+
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
+    /// writable 親 root 内の symlink 経由でも read-only 子 root は書き換えられないこと。
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn command_save_document_rejects_symlink_into_read_only_child_root() {
+        use std::os::unix::fs::symlink;
+
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let target = child.join("note.md");
+        let original = "protected";
+        fs::write(&target, original.as_bytes()).unwrap();
+        let link = parent.path.join("link.md");
+        if symlink(&target, &link).is_err() {
+            return;
+        }
+
+        let harness = SaveHarness::new(state_with_roots(vec![
+            (parent.path.clone(), false),
+            (child, true),
+        ]));
+        let id = register_document(harness.state(), &link, original);
+        harness.state().mark_unsaved(&id);
+
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("updated".to_string()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE))
+        );
+
+        assert_eq!(fs::read(&target).unwrap(), original.as_bytes().to_vec());
         assert!(harness.state().is_unsaved(&id));
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
