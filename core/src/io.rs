@@ -858,6 +858,8 @@ pub mod local {
             self.ensure_writable()?;
             let full_path = self.resolve_path(path)?;
             self.ensure_root_not_target(&full_path)?;
+            // symlink 差し替え等で解決先が変わっていないことを削除直前にも確認する。
+            self.ensure_path_unchanged(path, &full_path)?;
             if recursive {
                 tokio_fs::remove_dir_all(&full_path).await?;
             } else {
