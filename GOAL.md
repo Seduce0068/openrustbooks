@@ -67,3 +67,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - e2e-traceability / documentation-operations も 258 へ更新。
 - verify.sh 全ゲート成功（E2E 258、WDIO 1）。
 - VC 行の分割は ADR-0329 の未決定。
+
+## 完了記録（続き5）
+
+- prefers-contrast: more を CDP emulation + WCAG 比で検証（5 check）。
+- Checker(expected)=263、E2E/traceability/documentation-operations を更新。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 既存リテラル比較の比ベース化は ADR-0330 の未決定。

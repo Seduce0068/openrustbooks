@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【prefers-contrast: more の E2E を追加】CSS はあるが動的検証が無い。
-      CDP Emulation で light/dark の computed style を検査。根拠 `web/index.html:72-95` / R5-DC01。
 - [ ] 【desktop get_config 失敗の status を区別】「デスクトップ版のみ利用可能」と誤案内。
       IPC 失敗用の固定文言と回復案内、WDIO reject test。根拠 `web/src/lib.rs:4345-4374,4629-4636` / R5-DC01。
 - [ ] 【withGlobalTauri の実効権限表面を可視化】静的 2 command ゲートは source 検査のみで、
@@ -111,6 +109,7 @@ status: current
 
 ## 完了
 
+- [x] 【prefers-contrast E2E】CDP emulation + WCAG 比で 5 check を追加（ADR-0330）。
 - [x] 【EPUB2 NCX E2E】NCX サンプルと 2 check を追加、期待 258 件（ADR-0329）。
 - [x] 【reader 設定】初回のみ config を初期値化し、既存 localStorage を保護（ADR-0328）。
 - [x] 【WDIO lock】trunk serve を --locked --offline 化、4 時点で不変検査（ADR-0327）。
