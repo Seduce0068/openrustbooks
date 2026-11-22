@@ -1,41 +1,30 @@
 # Goal
 
-Wasm JS 境界の CoreError を redaction する（第2cycle R6 / R1-DS01）。
+TableAlignment の未知値を fail-closed 化する（第2cycle R6 / R1-DS01）。
 
 ## Scope
 
 ### 背景
 
-`core/src/wasm.rs::js_error()` と `core/src/wasm/*.rs` の一部が
-`CoreError::to_string()` を JS へ返す。href / パス / 内部型名を含む生文字列が
-公開 Wasm API から読める。desktop IPC は code 由来の固定文言へ統一済み。
+parse_table_format は未知値を CONFIG_VALIDATION で拒否する一方、
+parse_table_alignment は未知値を Left へ黙ってフォールバックする。
+クライアントの誤記が要求と異なる表を生成しても通知されない。
 
 ### 成果物
 
-- `core/src/error.rs`: 共有 code→固定文言 mapper
-- `core/src/wasm.rs`, `core/src/wasm/*.rs`: 変更
-- `desktop/src/commands/mod.rs`: 共有 mapper を利用
-- `docs/decisions/0323-wasm-error-redaction.md`: 追加
+- `desktop/src/commands/ai.rs`: 変更
+- `docs/decisions/0324-table-alignment-validation.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. CoreError::code() から固定文言を返す共有 mapper を core に置く。
-2. Wasm の全 CoreError 変換を共有 mapper 経由にする。
-3. serde_wasm_bindgen エラーなど非 CoreError も固定文言にする。
-4. desktop の ipc_message は共有 mapper へ委譲し、既存文言を維持する。
-5. wasm / core / desktop test と E2E 256 件を維持。
-6. verify.sh 全ゲート成功。
+1. parse_table_alignment を Result 化し、未知値を fixed code の validation エラーで拒否する。
+2. None は従来どおり None を返す。
+3. 大文字小文字無視・既存 left/center/right の成功契約を維持。
+4. 単体 test を更新し、未知値拒否を固定する。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 既存の公開 API 名・シグネチャは変更しない。
-- 外部サービス / 秘密情報は扱わない。
+- 外部 AI API への送信 test は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- core::error::fixed_message を共有化し desktop / wasm 両境界が参照。
-- wasm epub/lint の生エラーと serde エラーを固定文言化。
-- href / lint redaction test を追加、542 tests / verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- wasm runner / 既定文言の分離は ADR-0323 の未決定。
