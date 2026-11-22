@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【backup_failed_config の権限失敗をロールバック】rename 成功後に set_permissions 失敗だと
-      0644 の機微ファイルが退避先へ残る。権限付与を先にするか rename を戻す。
-      根拠 `core/src/config.rs:526-541` / `desktop/src/main.rs:75-86` / R2-RC01。
 - [ ] 【read_directory を全 root 対応にする】先頭 storage 固定で 2 番目以降の root を一覧できない。
       read 専用 root 解決を追加し最深一致。根拠 `desktop/src/commands/fs.rs:204-219` / R1-DS01。
 - [ ] 【ConfigView DTO を共通化 or 契約 test】desktop / web で手書き重複し、deserialize 失敗が実行時まで見えない。
@@ -138,6 +135,7 @@ status: current
 
 ## 完了
 
+- [x] 【config 退避】権限失敗時にロールバックし原文保持を優先（ADR-0320）。
 - [x] 【AI service】confirm 後の再取得で無効化後の送信を防止（ADR-0319）。
 - [x] 【save_document CAS】並行編集/force close の競合を検出、古い snapshot の書き戻しを防止（ADR-0318）。
 - [x] 【import JSON】8 MiB + parse 前構造走査を追加、ヒープ枯渇を防止（ADR-0317）。

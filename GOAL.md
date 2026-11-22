@@ -29,3 +29,10 @@ rename 成功後に set_permissions(0o600) が失敗すると、
 - unsafe FFI / 新規依存は使わない。
 - 絶対パス / 設定値をエラーへ出さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- set_permissions 失敗時に退避を元へ戻し、元へ 0600 再適用。
+- ロールバック失敗時は退避先を残して原文保持を優先。
+- 模擬 test 3 件追加、core 355 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 退避先権限露出 / 実 chmod test は ADR-0320 の未決定。
