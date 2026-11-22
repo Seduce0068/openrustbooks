@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
-- [ ] 【save_document 競合時のディスク復元】Conflict を返しても atomic_write 済みの本文が残り、
-      state とディスクが不整合。ロールバックまたは書き込み前 CAS。
-      根拠 `desktop/src/commands/document.rs:420-437` / ADR-0318 / R2-RC01 / 重大度 high。
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
@@ -145,6 +142,7 @@ status: current
 
 ## 完了
 
+- [x] 【save 競合】ディスクを元内容へ復元、復元失敗を別固定文言化（ADR-0337）。
 - [x] 【API キー】空入力を no-op 化し誤削除を防止（ADR-0336）。
 - [x] 【lint 分離】LintConfig 直接構築で既定 AI 無効でも lint 動作（ADR-0335）。
 - [x] 【set_document_content】本文更新/世代/unsaved を原子化（ADR-0334）。

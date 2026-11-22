@@ -114,3 +114,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - API キー空／空白入力を no-op 化し設定済みキーを保護。
 - web 31 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 削除確認ダイアログ / command 未呼び出し E2E は ADR-0336 の未決定。
+
+## 完了記録（第3cycle-5）
+
+- save 競合時にディスクを元内容へ復元、復元失敗は別固定文言。
+- 退避 read 前後のサイズ検査と失敗注入 3 経路を追加。
+- desktop 184 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 退避 read 本体の注入 / 明示 drop は ADR-0337 の未決定。
