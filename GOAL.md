@@ -1,39 +1,33 @@
 # Goal
 
-CI の gitleaks ゲートが後続 11 ゲートをブロックする問題を修正する（第2cycle R6 / R4-OP01）。
+desktop 設定画面から API キーを設定・削除可能にする（第2cycle R6 最高優先 / R5-DC01）。
 
 ## Scope
 
 ### 背景
 
-`.github/workflows/ci.yml` の extra_gates は gitleaks 未導入時に `exit 1` し、
-後続の rumdl / dependency / version / e2e-count / csp / plugin / updater /
-capability / wasm×2 / wasm-test が到達不能。CI は常時 red のまま回帰を検出できない。
+API Key 欄は常に readonly で `has_api_key` 表示のみ。
+`update_ai_config` / `clear_secrets` command は存在するが web から呼ばれていない。
+そのため初回インストール後に UI から AI を使い始められない。
 
 ### 成果物
 
-- `.github/workflows/ci.yml`: 変更
-- `docs/runbook-verified-build.md`: 変更
-- `docs/decisions/0314-gitleaks-gate-order.md`: 追加
+- `desktop/src/commands/config.rs`: 必要なら専用 command / DTO 追加
+- `web/src/lib.rs`: 変更（秘密入力 UI + invoke wrapper）
+- `docs/decisions/0315-secret-settings-ui.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. gitleaks 検査を extra_gates の末尾（最終ゲート）へ移し、未導入でも先の静的ゲートが実行されるようにする。
-2. 共通 workflow 自体は変更しない。
-3. シークレットスキャンは fail-closed を維持する（未導入 / 検出時に最終的に CI は失敗）。
-4. billing 解消後チェックリストを更新する。
-5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. desktop のみ API キー入力欄を編集可能にし、保存 command を呼ぶ。
+2. 「秘密を削除」ボタンで `clear_secrets` を呼ぶ。
+3. 秘密値は ConfigView / status / log / DOM の永続表示へ出さない（`has_*` と固定文言のみ）。
+4. ブラウザでは従来どおり readonly / 非接続を維持。
+5. 既存 E2E 256 件・check 名・#settings-language / updater / 保存文言を維持。
+6. verify.sh 全ゲート成功、WDIO ゲート維持。
 
 ## Constraints
 
-- 外部サービス / 課金 / 公開操作は行わない。
+- API キー以外の秘密（client_secret / refresh_token）の UI 編集は行わない。
+- 外部 AI API への送信テストは行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- gitleaks を extra_gates 末尾へ移動し、13 ゲートを先に実行。
-- 未導入 / 検出時は最後で fail-closed、共通 workflow は未変更。
-- runbook の billing チェックリストを更新。
-- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- CI 側 gitleaks 恒久導入 / CI-H01 は ADR-0314 の未決定。
