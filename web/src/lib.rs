@@ -5505,6 +5505,20 @@ fn clear_api_key_input() {
     }
 }
 
+/// 空入力のときに status へ出す固定文言。
+///
+/// desktop の `config_with_api_key` は空文字を未設定（`None`）として扱うため、
+/// 空のまま保存すると設定済みキーが消える。空入力では command を呼ばず、この
+/// 文言だけを出して no-op にする。
+const API_KEY_EMPTY_MESSAGE: &str = "入力がありません。変更はありません。";
+
+/// 入力値が空（trim 後）なら no-op の固定文言を返す。非空なら `None`（保存へ進む）。
+///
+/// `start_api_key_save` の分岐を DOM なしで単体 test できるように切り出している。
+fn api_key_blank_status(value: &str) -> Option<&'static str> {
+    value.trim().is_empty().then_some(API_KEY_EMPTY_MESSAGE)
+}
+
 /// API キー保存の共通入口（保存ボタン / Enter の双方から呼ぶ）。
 ///
 /// 入力値は DOM から読んで command へ渡すだけであり、signal や status へは
@@ -5523,6 +5537,13 @@ fn start_api_key_save(
         return;
     };
     let api_key = input.value();
+    // 空入力は command を呼ばない。saving を立てずに DOM をクリアし、固定文言だけを出す。
+    // 空文字を送ると desktop 側で未設定として扱われ、設定済みキーが消えるため。
+    if let Some(message) = api_key_blank_status(&api_key) {
+        clear_api_key_input();
+        status.set(message.to_string());
+        return;
+    }
     let expected = revision.get();
     saving.set(true);
     wasm_bindgen_futures::spawn_local(async move {
@@ -5572,6 +5593,41 @@ fn start_api_key_clear(
         }
         saving.set(false);
     });
+}
+
+#[cfg(test)]
+mod api_key_empty_input_tests {
+    use super::{API_KEY_EMPTY_MESSAGE, api_key_blank_status};
+
+    /// 空・空白のみの入力は no-op 固定文言になり、保存 command へ進まないこと。
+    #[test]
+    fn blank_input_short_circuits_to_fixed_noop_message() {
+        for value in ["", " ", "   ", "\t", "\n", " \t\r\n "] {
+            assert_eq!(
+                api_key_blank_status(value),
+                Some(API_KEY_EMPTY_MESSAGE),
+                "空白のみの入力 {value:?} が no-op 判定されない"
+            );
+        }
+    }
+
+    /// 非空の入力は no-op 判定されず、保存処理へ進むこと。
+    #[test]
+    fn non_blank_input_proceeds_to_save() {
+        for value in ["dummy-value", " dummy-value ", "x"] {
+            assert_eq!(api_key_blank_status(value), None);
+        }
+    }
+
+    /// 固定文言が契約どおりで、秘密値らしき文字列を含まないこと。
+    #[test]
+    fn noop_message_is_fixed_text_without_secret() {
+        assert_eq!(
+            API_KEY_EMPTY_MESSAGE,
+            "入力がありません。変更はありません。"
+        );
+        assert!(!API_KEY_EMPTY_MESSAGE.to_lowercase().contains("sk-"));
+    }
 }
 
 /// 入力イベントから checkbox の checked を取り出す。
