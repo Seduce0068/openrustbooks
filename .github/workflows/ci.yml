@@ -3,8 +3,8 @@
 # （fmt / check / test / clippy）に加え、verify.sh と同じ静的検査を extra_gates で
 # 実行する（no-external-font-refs / distribution-path / secrets /
 # rumdl-featureless / dependency-hygiene / version / e2e-count / csp /
-# updater-honesty / capability-scope / tauri-plugin-config / wasm32 core /
-# wasm32 web）。さらに wasm-bindgen-test を
+# updater-honesty / capability-scope / tauri-plugin-config / config-dto-contract /
+# wasm32 core / wasm32 web）。さらに wasm-bindgen-test を
 # Node 上で実行する wasm-pack test を末尾に置く（verify.sh の wasm-test と同じスクリプト）。
 # audit / trunk build + E2E / WDIO / 配布保持は verify.sh 側のゲート。
 # gitleaks は共通 workflow 側または extra_gates 内（チェックサム付きバイナリ / go install）で
@@ -63,6 +63,7 @@ jobs:
         bash scripts/check-tauri-plugin-config.sh
         bash scripts/check-updater-honesty.sh
         bash scripts/check-capability-scope.sh
+        bash scripts/check-config-dto-contract.sh
         cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
         cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
         bash scripts/ci-wasm-test.sh

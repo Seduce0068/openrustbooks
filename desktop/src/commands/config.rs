@@ -1014,6 +1014,110 @@ mod tests {
         assert_eq!(json["revision"], 7);
     }
 
+    /// ConfigView の JSON キー集合が web 側 DTO と同じであることを desktop 側でも検証する。
+    /// フィールド名の追加・削除・改名はシェルゲートとこの test の両方で検出される。
+    #[test]
+    fn config_view_json_key_set_matches_web_dto_contract() {
+        use std::collections::BTreeSet;
+
+        fn assert_keys(value: &serde_json::Value, expected: &[&str]) {
+            let actual: BTreeSet<&str> = value
+                .as_object()
+                .expect("DTO は JSON オブジェクトであること")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            let expected: BTreeSet<&str> = expected.iter().copied().collect();
+            assert_eq!(actual, expected);
+        }
+
+        let mut config = AppConfig::default();
+        config.storage.local_roots.push(LocalRootConfig {
+            id: "root-1".to_string(),
+            name: "library".to_string(),
+            path: PathBuf::from("/dummy/path"),
+            read_only: true,
+            watch: false,
+        });
+        let json = serde_json::to_value(ConfigView::from_state(&config, 1)).unwrap();
+
+        assert_keys(
+            &json,
+            &[
+                "revision", "general", "ai", "lint", "storage", "editor", "reader",
+            ],
+        );
+        assert_keys(
+            &json["general"],
+            &["language", "theme", "check_updates", "log_level"],
+        );
+        assert_keys(
+            &json["ai"],
+            &[
+                "enabled",
+                "default_provider",
+                "openai",
+                "ollama",
+                "max_tokens_per_request",
+                "prefer_local",
+                "timeout_secs",
+                "streaming",
+            ],
+        );
+        assert_keys(
+            &json["ai"]["openai"],
+            &["base_url", "has_api_key", "model", "organization"],
+        );
+        assert_keys(&json["ai"]["ollama"], &["base_url", "model"]);
+        assert_keys(
+            &json["lint"],
+            &[
+                "enabled",
+                "enable_rules",
+                "disable_rules",
+                "auto_fix",
+                "warnings_as_errors",
+            ],
+        );
+        assert_keys(&json["storage"], &["local_roots", "google_drive"]);
+        assert_keys(
+            &json["storage"]["local_roots"][0],
+            &["id", "name", "read_only"],
+        );
+        assert_keys(
+            &json["editor"],
+            &[
+                "font_family",
+                "font_size",
+                "line_height",
+                "tab_size",
+                "insert_spaces",
+                "line_numbers",
+                "word_wrap",
+                "minimap",
+                "vim_mode",
+                "match_brackets",
+                "auto_close_brackets",
+                "indent_with_tabs",
+            ],
+        );
+        assert_keys(
+            &json["reader"],
+            &[
+                "font_family",
+                "font_size",
+                "line_height",
+                "theme",
+                "column_width",
+                "scroll_mode",
+                "hyphenation",
+                "vertical_writing",
+                "show_page_numbers",
+                "remember_position",
+            ],
+        );
+    }
+
     #[test]
     fn config_patch_requires_expected_and_ignores_revision_from_view_json() {
         let current = AppConfig::default();

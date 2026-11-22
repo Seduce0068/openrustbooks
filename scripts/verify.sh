@@ -355,6 +355,7 @@ run csp-consistency bash scripts/check-csp-consistency.sh
 run tauri-plugin-config bash scripts/check-tauri-plugin-config.sh
 run updater-honesty bash scripts/check-updater-honesty.sh
 run capability-scope bash scripts/check-capability-scope.sh
+run config-dto-contract bash scripts/check-config-dto-contract.sh
 run check cargo check --all-targets --locked
 run test cargo test --all-targets --locked
 run clippy cargo clippy --all-targets --locked -- -D warnings

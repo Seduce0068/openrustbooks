@@ -4715,6 +4715,117 @@ mod command_error_tests {
 }
 
 #[cfg(test)]
+mod settings_dto_contract_tests {
+    use super::SettingsView;
+
+    /// desktop `ConfigView::from_state` の JSON を模した最小 fixture。
+    /// 全フィールドを埋め、未知フィールドは入れず、境界の往復を確認する。
+    fn config_view_fixture() -> serde_json::Value {
+        serde_json::json!({
+            "revision": 7,
+            "general": {
+                "language": "ja",
+                "theme": "dark",
+                "check_updates": false,
+                "log_level": "info"
+            },
+            "ai": {
+                "enabled": false,
+                "default_provider": "openai",
+                "openai": {
+                    "base_url": "https://api.openai.com/v1",
+                    "has_api_key": false,
+                    "model": "gpt-4o-mini",
+                    "organization": null
+                },
+                "ollama": {
+                    "base_url": "http://localhost:11434",
+                    "model": "dummy-model"
+                },
+                "max_tokens_per_request": 4096,
+                "prefer_local": false,
+                "timeout_secs": 60,
+                "streaming": false
+            },
+            "lint": {
+                "enabled": true,
+                "enable_rules": ["MD013"],
+                "disable_rules": [],
+                "auto_fix": false,
+                "warnings_as_errors": false
+            },
+            "storage": {
+                "local_roots": [{ "id": "root-1", "name": "library", "read_only": true }],
+                "google_drive": null
+            },
+            "editor": {
+                "font_family": "monospace",
+                "font_size": 14.0,
+                "line_height": 1.5,
+                "tab_size": 4,
+                "insert_spaces": true,
+                "line_numbers": true,
+                "word_wrap": false,
+                "minimap": false,
+                "vim_mode": false,
+                "match_brackets": true,
+                "auto_close_brackets": true,
+                "indent_with_tabs": false
+            },
+            "reader": {
+                "font_family": "serif",
+                "font_size": 16.0,
+                // f32 で厳密に表現できる値を使い、JSON 往復の等値比較を安定させる。
+                "line_height": 1.75,
+                "theme": "auto",
+                "column_width": null,
+                "scroll_mode": "vertical",
+                "hyphenation": false,
+                "vertical_writing": false,
+                "show_page_numbers": true,
+                "remember_position": true
+            }
+        })
+    }
+
+    #[test]
+    fn settings_view_deserializes_every_config_view_field() {
+        let fixture = config_view_fixture();
+        let view: SettingsView = serde_json::from_value(fixture.clone()).unwrap();
+
+        assert_eq!(view.revision, 7);
+        assert_eq!(view.general.language, "ja");
+        assert_eq!(view.general.log_level, "info");
+        assert!(!view.ai.enabled);
+        assert_eq!(view.ai.openai.model, "gpt-4o-mini");
+        assert!(view.ai.openai.organization.is_none());
+        assert_eq!(view.ai.ollama.base_url, "http://localhost:11434");
+        assert_eq!(view.ai.max_tokens_per_request, 4096);
+        assert_eq!(view.lint.enable_rules, vec!["MD013".to_string()]);
+        assert_eq!(view.storage.local_roots.len(), 1);
+        assert!(view.storage.google_drive.is_none());
+        assert_eq!(view.editor.tab_size, 4);
+        assert_eq!(view.reader.theme, "auto");
+        assert!(view.reader.column_width.is_none());
+        assert!(view.reader.remember_position);
+
+        // 既知フィールドが 1 つも落ちず、未知フィールドも増えない往復。
+        assert_eq!(serde_json::to_value(&view).unwrap(), fixture);
+    }
+
+    #[test]
+    fn settings_view_rejects_missing_nested_field() {
+        let mut fixture = config_view_fixture();
+        fixture["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("log_level");
+
+        assert!(serde_json::from_value::<SettingsView>(fixture).is_err());
+    }
+}
+
+#[cfg(test)]
 mod import_size_tests {
     use super::{
         IMPORT_JSON_MAX_BYTES, IMPORT_JSON_MAX_DEPTH, IMPORT_JSON_MAX_NODES,
