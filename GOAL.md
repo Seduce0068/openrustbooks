@@ -19,7 +19,7 @@ capability / wasm×2 / wasm-test が到達不能。CI は常時 red のまま回
 
 ### 必須事項
 
-1. gitleaks 導入 / 検査を extra_gates の先頭へ移し、未導入でも後続ゲートが実行されるようにする。
+1. gitleaks 検査を extra_gates の末尾（最終ゲート）へ移し、未導入でも先の静的ゲートが実行されるようにする。
 2. 共通 workflow 自体は変更しない。
 3. シークレットスキャンは fail-closed を維持する（未導入 / 検出時に最終的に CI は失敗）。
 4. billing 解消後チェックリストを更新する。
