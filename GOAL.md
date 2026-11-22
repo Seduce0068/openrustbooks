@@ -40,3 +40,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 保存系 code 5 種の専用文言と未知 code フォールバックを test で固定。
 - web 20 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
 - code 集合の共有定数同期は ADR-0325 の未決定。
+
+## 完了記録（続き）
+
+- README の verify.sh 前提 / runbook の --locked 表記 / url 脆弱性を更新。
+- wasm-bindgen CLI / test runner を Cargo.lock 由来で版照合、負向 27 ケース detecting。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 抽出関数の共通ファイル化は ADR-0326 の未決定。
