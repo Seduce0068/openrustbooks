@@ -12,18 +12,10 @@ use openrustbooks_core::CoreError;
 ///
 /// `CoreError` の `Display` は内部向けで、ファイルパス / provider host /
 /// レスポンス本文 / API key を含み得る。IPC へは `CoreError::code()` が返す
-/// 固定 code を通し、ここで定義した固定文言だけを返す（ADR-0287 / R1-ER01）。
+/// 固定 code を通し、core の共有 mapper が返す固定文言だけを返す
+/// （ADR-0287 / R1-ER01）。既存文言は core 側で完全一致するよう定義されている。
 pub(crate) fn ipc_message(code: &str) -> &'static str {
-    match code {
-        "CONFIG_CONFLICT" => "Configuration conflict",
-        "CONFIG_VALIDATION" => "Configuration validation failed",
-        "CONFIG_STORAGE" => "Configuration storage failed",
-        "CONFIG_LOAD_FAILED" => crate::state::CONFIG_LOAD_FAILED_MESSAGE,
-        "AI_PROVIDER" => "AI provider request failed",
-        "WINDOW_INTERNAL" => "Window operation failed",
-        // 未知 code も固定文言へ落とす（code 文字列自体も返さない）。
-        _ => "Internal configuration error",
-    }
+    openrustbooks_core::error::fixed_message(code)
 }
 
 /// `CoreError` を IPC 用の固定文言文字列へ変換する。
@@ -58,6 +50,36 @@ mod tests {
         assert_eq!(
             ipc_message("sk-unknown-code"),
             "Internal configuration error"
+        );
+    }
+
+    /// 共有 mapper へ委譲しても既存 IPC 文言が変わらないこと。
+    #[test]
+    fn ipc_message_matches_core_fixed_message() {
+        for code in [
+            "CONFIG_CONFLICT",
+            "CONFIG_VALIDATION",
+            "CONFIG_STORAGE",
+            "CONFIG_LOAD_FAILED",
+            "AI_PROVIDER",
+            "WINDOW_INTERNAL",
+            "sk-unknown-code",
+        ] {
+            assert_eq!(
+                ipc_message(code),
+                openrustbooks_core::error::fixed_message(code),
+                "code={code}"
+            );
+        }
+        // core の公開定数を共有 mapper が参照していること。
+        assert_eq!(
+            ipc_message("CONFIG_LOAD_FAILED"),
+            openrustbooks_core::error::CONFIG_LOAD_FAILED_MESSAGE
+        );
+        // desktop 側の既存定数との一致も維持する（E2E 依存文言）。
+        assert_eq!(
+            openrustbooks_core::error::CONFIG_LOAD_FAILED_MESSAGE,
+            crate::state::CONFIG_LOAD_FAILED_MESSAGE
         );
     }
 

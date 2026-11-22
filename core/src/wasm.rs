@@ -70,13 +70,26 @@ pub fn sanitize_svg_wasm(bytes: &[u8]) -> Option<Vec<u8>> {
     crate::sanitize::sanitize_svg_xml(svg).map(String::into_bytes)
 }
 
-/// `CoreError` を JS 境界向けの文字列へ変換する共有ヘルパー。
+/// `serde_wasm_bindgen` の変換失敗など、CoreError 以外を JS 境界へ出すときの固定文言。
+#[cfg(target_arch = "wasm32")]
+pub(crate) const SERIALIZATION_FAILED_MESSAGE: &str = "Serialization failed";
+
+/// JS から渡された lint 設定を解釈できないときの固定文言。
+///
+/// `wasm/tests.rs` の wasm unit test が `Invalid lint config` という接頭辞に
+/// 依存するため維持する（ADR-0160 の fail-closed 契約も同じ文言）。
+#[cfg(target_arch = "wasm32")]
+pub(crate) const INVALID_LINT_CONFIG_MESSAGE: &str = "Invalid lint config";
+
+/// `CoreError` を JS 境界向けの固定文言へ変換する共有ヘルパー。
 ///
 /// 子モジュール（`epub` / `lint`）から `super::js_error` として利用する。
-/// パスや内部型名を露出しない固定文言を使う `archive` はこの関数を使わない。
+/// `Display` はパス / host / 本文を含み得るため使わず、`code()` を共有 mapper
+/// [`crate::error::fixed_message`] へ通す。専用の固定文言を使う `archive` は
+/// この関数を使わない。
 #[cfg(target_arch = "wasm32")]
 fn js_error(error: crate::error::CoreError) -> JsValue {
-    JsValue::from_str(&error.to_string())
+    JsValue::from_str(crate::error::fixed_message(error.code()))
 }
 
 // 責務別モジュール。native では子モジュール自体をコンパイルしない。

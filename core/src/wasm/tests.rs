@@ -1,6 +1,6 @@
     use super::{
         ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmArchive, WasmArchiveEntry,
-        WasmMarkdownLinter,
+        WasmEpubBook, WasmMarkdownLinter,
     };
     use crate::archive::{ArchiveLimits, ArchiveReader};
     use std::io::{Cursor, Write};
@@ -18,9 +18,39 @@
         }
     }
 
+    /// 固定文言への完全一致に加え、機密マーカーが一切含まれないことを検証する。
+    fn assert_redacted_js_error<T>(result: Result<T, JsValue>, expected: &str, hidden: &[&str]) {
+        let message = match result {
+            Ok(_) => panic!("expected an error: {expected}"),
+            Err(error) => error.as_string().expect("fixed error is a string"),
+        };
+        assert_eq!(message, expected);
+        for needle in hidden {
+            assert!(
+                !message.contains(needle),
+                "error message leaked {needle:?}: {message:?}"
+            );
+        }
+    }
+
     fn linter() -> WasmMarkdownLinter {
         // null は LintConfig としてパースできないため既定設定へフォールバックする。
         WasmMarkdownLinter::new(JsValue::NULL).expect("linter should build")
+    }
+
+    /// CoreError::validation に secret / path を入れても js_error へ漏れないこと。
+    #[wasm_bindgen_test]
+    fn js_error_masks_validation_secret_and_path() {
+        let secret = "sk-wasm-validation-leak";
+        let path = "/home/koppe/secret/book.epub";
+        let error = crate::error::CoreError::validation(format!("invalid {path} with {secret}"));
+
+        let rendered = super::js_error(error)
+            .as_string()
+            .expect("fixed boundary errors are strings");
+        assert_eq!(rendered, "Configuration validation failed");
+        assert!(!rendered.contains(secret));
+        assert!(!rendered.contains(path));
     }
 
     /// `lint()` が返した JS 配列を rule ID のリストへ変換する。
@@ -112,10 +142,17 @@
             .expect("config should serialize");
         match WasmMarkdownLinter::new(partial) {
             Ok(_) => panic!("incomplete config should be rejected"),
-            Err(error) => assert_eq!(
-                error.as_string().as_deref().unwrap_or("").split(':').next(),
-                Some("Invalid lint config")
-            ),
+            Err(error) => {
+                let message = error.as_string().expect("fixed error is a string");
+                assert_eq!(message, super::INVALID_LINT_CONFIG_MESSAGE);
+                // serde の型名・フィールド名・生エラー本文が漏れないこと。
+                for leaked in ["serde", "LintConfig", "auto_fix", "missing field"] {
+                    assert!(
+                        !message.contains(leaked),
+                        "lint config error leaked {leaked:?}: {message:?}"
+                    );
+                }
+            }
         }
     }
 
@@ -127,6 +164,90 @@
         png.extend_from_slice(&1u32.to_be_bytes());
         assert_eq!(super::image_dimensions_wasm(&png), Some(vec![1, 1]));
         assert_eq!(super::image_dimensions_wasm(b"not an image"), None);
+    }
+
+    /// 有効 EPUB の `container.xml`（OPF は `OEBPS/content.opf`）。
+    const EPUB_CONTAINER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+"#;
+
+    /// 有効 EPUB の最小 OPF（章 1 章のみ）。
+    const EPUB_OPF: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Sample</dc:title>
+    <dc:language>ja</dc:language>
+    <dc:identifier id="pub-id">urn:isbn:9784000000000</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+  </spine>
+</package>
+"#;
+
+    /// 有効 EPUB の章本文。
+    const EPUB_CH1: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter</title></head><body><p>ok</p></body></html>"#;
+
+    /// `mimetype` を先頭に `Stored` で書き、有効な EPUB を組み立てる。
+    fn build_valid_epub() -> Vec<u8> {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file(
+                "mimetype",
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
+            )
+            .expect("mimetype should start");
+        writer
+            .write_all(b"application/epub+zip")
+            .expect("mimetype should write");
+        for (path, data) in [
+            ("META-INF/container.xml", EPUB_CONTAINER.as_bytes()),
+            ("OEBPS/content.opf", EPUB_OPF.as_bytes()),
+            ("OEBPS/ch1.xhtml", EPUB_CH1.as_bytes()),
+        ] {
+            writer
+                .start_file(
+                    path,
+                    SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+                )
+                .expect("entry should start");
+            writer.write_all(data).expect("entry should write");
+        }
+        writer.finish().expect("zip should finish").into_inner()
+    }
+
+    /// 有効 EPUB に対して不正 href を渡しても、JS 境界へは固定文言だけが出る。
+    #[wasm_bindgen_test]
+    fn epub_invalid_href_errors_are_fixed_without_href_or_type_names() {
+        let book = WasmEpubBook::new(build_valid_epub()).expect("valid epub should open");
+        // 不正な `%XX` は chapter_resource / resolve_chapter_link の両方で
+        // CoreError::Validation（CONFIG_VALIDATION）になる。
+        let href = "%ZZ-SECRET_HREF.xhtml";
+        let hidden = [
+            "SECRET_HREF",
+            "javascript:",
+            "file:",
+            "CoreError",
+            "Validation",
+        ];
+        assert_redacted_js_error(
+            book.chapter_resource(0, href.to_string()),
+            "Configuration validation failed",
+            &hidden,
+        );
+        assert_redacted_js_error(
+            book.resolve_chapter_link(0, href.to_string()),
+            "Configuration validation failed",
+            &hidden,
+        );
     }
 
     /// テスト用 ZIP のエントリ。

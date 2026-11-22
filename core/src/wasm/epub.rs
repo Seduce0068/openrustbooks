@@ -20,8 +20,7 @@ impl WasmEpubBook {
     #[wasm_bindgen(constructor)]
     pub fn new(bytes: Vec<u8>) -> Result<WasmEpubBook, JsValue> {
         // JS から渡されたバイト列の所有権をそのまま使い、二重コピーを避ける。
-        let inner =
-            EpubBook::open_owned(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let inner = EpubBook::open_owned(bytes).map_err(super::js_error)?;
         Ok(Self { inner })
     }
 
@@ -45,30 +44,24 @@ impl WasmEpubBook {
 
     /// 指定章の XHTML を返す。
     pub fn chapter_html(&self, index: usize) -> Result<String, JsValue> {
-        self.inner
-            .chapter_html(index)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        self.inner.chapter_html(index).map_err(super::js_error)
     }
 
     /// 指定章のプレーンテキストを返す。
     pub fn chapter_text(&self, index: usize) -> Result<String, JsValue> {
-        self.inner
-            .chapter_text(index)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        self.inner.chapter_text(index).map_err(super::js_error)
     }
 
     /// 指定章の表示名を返す。情報が無ければ `undefined`。
     pub fn chapter_title(&self, index: usize) -> Result<Option<String>, JsValue> {
-        self.inner
-            .chapter_title(index)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        self.inner.chapter_title(index).map_err(super::js_error)
     }
 
     /// 指定章から見た相対リソースをバイト列で返す。
     pub fn chapter_resource(&self, index: usize, href: String) -> Result<Vec<u8>, JsValue> {
         self.inner
             .chapter_resource(index, &href)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+            .map_err(super::js_error)
     }
 
     /// 章内の相対リンクを同じ本の章へ解決する。
@@ -120,12 +113,14 @@ impl WasmEpubBook {
 
 fn serialize_navigation(entries: Vec<EpubTocEntry>) -> Result<JsValue, JsValue> {
     let entries: Vec<WasmEpubTocEntry> = entries.into_iter().map(Into::into).collect();
-    serde_wasm_bindgen::to_value(&entries).map_err(|error| JsValue::from_str(&error.to_string()))
+    serde_wasm_bindgen::to_value(&entries)
+        .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
 }
 
 fn serialize_cover(cover: Option<EpubCoverImage>) -> Result<JsValue, JsValue> {
     let cover: Option<WasmEpubCoverImage> = cover.map(Into::into);
-    serde_wasm_bindgen::to_value(&cover).map_err(|error| JsValue::from_str(&error.to_string()))
+    serde_wasm_bindgen::to_value(&cover)
+        .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
 }
 
 fn serialize_chapter_link(link: Option<ChapterLink>) -> Result<JsValue, JsValue> {
@@ -136,7 +131,7 @@ fn serialize_chapter_link(link: Option<ChapterLink>) -> Result<JsValue, JsValue>
         chapter_index: link.chapter_index,
         fragment: link.fragment,
     })
-    .map_err(|error| JsValue::from_str(&error.to_string()))
+    .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
 }
 
 #[derive(Serialize)]

@@ -90,6 +90,32 @@ impl From<async_openai::error::OpenAIError> for CoreError {
 /// Result type alias for core operations
 pub type CoreResult<T> = Result<T, CoreError>;
 
+/// 設定読み込み失敗の固定文言（desktop IPC 契約の一部）。
+///
+/// desktop 側の `state::CONFIG_LOAD_FAILED_MESSAGE` と同じ値を共有し、
+/// 共有 mapper がこの定数を参照することで文言のドリフトを防ぐ。
+pub const CONFIG_LOAD_FAILED_MESSAGE: &str = "Configuration load failed; saving is disabled";
+
+/// IPC / JS 境界へ渡す固定 code → 固定文言の共有マッパー。
+///
+/// [`CoreError`] の `Display` は内部向けで、ファイルパス / provider host /
+/// レスポンス本文 / API key を含み得る。境界を越えるときは [`CoreError::code`]
+/// が返す固定 code をここへ通し、定義済みの固定文言だけを返す。
+/// 未知 code は code 文字列自体を返さず既定文言へ落とす。
+///
+/// 文言は desktop IPC の既存契約（ADR-0287）と完全一致させること。
+pub fn fixed_message(code: &str) -> &'static str {
+    match code {
+        "CONFIG_CONFLICT" => "Configuration conflict",
+        "CONFIG_VALIDATION" => "Configuration validation failed",
+        "CONFIG_STORAGE" => "Configuration storage failed",
+        "CONFIG_LOAD_FAILED" => CONFIG_LOAD_FAILED_MESSAGE,
+        "AI_PROVIDER" => "AI provider request failed",
+        "WINDOW_INTERNAL" => "Window operation failed",
+        _ => "Internal configuration error",
+    }
+}
+
 impl CoreError {
     /// IPC 契約で使う固定エラーコードを返す（設定値・パスは含まない）。
     ///
@@ -178,6 +204,52 @@ mod tests {
             CoreError::DocumentNotFound("x".into()).code(),
             "CONFIG_INTERNAL"
         );
+    }
+
+    /// desktop IPC の既存文言を共有 mapper でも再現する（回帰防止）。
+    #[test]
+    fn fixed_message_matches_existing_ipc_text() {
+        assert_eq!(fixed_message("CONFIG_CONFLICT"), "Configuration conflict");
+        assert_eq!(
+            fixed_message("CONFIG_VALIDATION"),
+            "Configuration validation failed"
+        );
+        assert_eq!(
+            fixed_message("CONFIG_STORAGE"),
+            "Configuration storage failed"
+        );
+        assert_eq!(
+            fixed_message("CONFIG_LOAD_FAILED"),
+            "Configuration load failed; saving is disabled"
+        );
+        assert_eq!(fixed_message("AI_PROVIDER"), "AI provider request failed");
+        assert_eq!(fixed_message("WINDOW_INTERNAL"), "Window operation failed");
+        // 未知 code も code 文字列自体を出さず既定文言へ落とす。
+        assert_eq!(
+            fixed_message("sk-unknown-code"),
+            "Internal configuration error"
+        );
+        assert_eq!(
+            fixed_message(CoreError::internal("bug").code()),
+            "Internal configuration error"
+        );
+    }
+
+    /// validation の引数に secret / path を入れても境界文言へ漏れないこと。
+    #[test]
+    fn fixed_message_masks_validation_secret_and_path() {
+        let secret = "sk-error-fixed-leak";
+        let path = "/home/koppe/secret/book.epub";
+        let error = CoreError::validation(format!("invalid {path} with {secret}"));
+
+        // Display は内部向けに生値を保持する（既存契約を変えない）。
+        assert!(error.to_string().contains(secret));
+        assert!(error.to_string().contains(path));
+
+        let rendered = fixed_message(error.code());
+        assert_eq!(rendered, "Configuration validation failed");
+        assert!(!rendered.contains(secret));
+        assert!(!rendered.contains(path));
     }
 
     /// Display は内部向けに生値を保持しても、IPC 契約の code には一切含めない。

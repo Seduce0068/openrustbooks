@@ -44,8 +44,9 @@ impl WasmMarkdownLinter {
         } else {
             match serde_wasm_bindgen::from_value::<LintConfig>(config) {
                 Ok(value) => value,
-                Err(error) => {
-                    return Err(JsValue::from_str(&format!("Invalid lint config: {error}")));
+                // serde の生エラー（型名・フィールド名など）は JS へ出さない。
+                Err(_) => {
+                    return Err(JsValue::from_str(super::INVALID_LINT_CONFIG_MESSAGE));
                 }
             }
         };
@@ -61,7 +62,7 @@ impl WasmMarkdownLinter {
         let issues = self.inner.lint(&content).map_err(super::js_error)?;
         let wasm_issues: Vec<WasmLintIssue> = issues.iter().map(to_wasm_issue).collect();
         serde_wasm_bindgen::to_value(&wasm_issues)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+            .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
     }
 
     /// Lint し、`auto_fix` が有効なら自動修正して結果を返す。
@@ -143,7 +144,7 @@ impl WasmLintFixResult {
     #[wasm_bindgen(getter)]
     pub fn issues(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.issues)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+            .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
     }
 
     #[wasm_bindgen(getter)]
