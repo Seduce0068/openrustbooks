@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- config 退避の権限失敗をロールバック（ADR-0320）。
 - AI service を confirm 後に再取得し陳腐化を防止（ADR-0319）。
 - save_document の世代 CAS を導入（ADR-0318）。
 - import JSON に実用上限と構造制限を追加（ADR-0317）。

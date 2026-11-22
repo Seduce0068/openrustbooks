@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 319 件）。
+openrustbooks の ADR 一覧（全 320 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -642,3 +642,5 @@ openrustbooks の ADR 一覧（全 319 件）。
   - status: accepted — 保存と並行編集を世代 CAS で検出し、古い snapshot による state の書き戻しを防ぐ決定。
 - [ADR-0319: 確認ダイアログ後の AI service 再取得](0319-ai-service-post-confirm-check.md)
   - status: accepted — AI command が confirm 待ち中に無効化された古い service を使わないようにする決定。
+- [ADR-0320: config 退避時の権限失敗ロールバック](0320-config-backup-rollback.md)
+  - status: accepted — 権限付与失敗時に退避を元へ戻し、原文保持を優先する決定。

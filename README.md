@@ -860,6 +860,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0317-import-json-limits](docs/decisions/0317-import-json-limits.md)
 - [0318-document-save-cas](docs/decisions/0318-document-save-cas.md)
 - [0319-ai-service-post-confirm-check](docs/decisions/0319-ai-service-post-confirm-check.md)
+- [0320-config-backup-rollback](docs/decisions/0320-config-backup-rollback.md)
+  - 権限付与失敗時に退避を元へ戻し、原文保持を優先する決定。
   - AI command が confirm 待ち中に無効化された古い service を使わないようにする決定。
   - 保存と並行編集を世代 CAS で検出し、古い snapshot による state の書き戻しを防ぐ決定。
   - 8 MiB のバイト上限と parse 前の構造走査で、バックアップ import によるヒープ枯渇を防ぐ決定。
