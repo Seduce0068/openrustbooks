@@ -107,9 +107,9 @@ OKF `type: Decision` と `##` 見出しで記述する。追加時は次をす�
   253 件への追従は [ADR-0220](decisions/0220-traceability-refresh.md) が根拠。
 - 254 件（check 237 + equal 17）は
   [ADR-0225](decisions/0225-broken-image-settling.md) の履歴更新として保持する。
-- current 値は 258 件（check 241 + equal 17）で、
+- current 値は 263 件（check 246 + equal 17）で、
   [ADR-0272](decisions/0272-settings-save-ui.md) が根拠。
-  出典は `tools/verify-web-reader.py` の `Checker(expected=258)` であり、
+  出典は `tools/verify-web-reader.py` の `Checker(expected=263)` であり、
   文書側の current 表記を追従させる決定は
   [ADR-0262](decisions/0262-e2e-count-documentation-refresh.md) に記録する。
   履歴の 255 件（check 238 + equal 17、

@@ -530,6 +530,43 @@ class Cdp:
         return result.get("result", {}).get("result", {}).get("value")
 
 
+def _contrast_ratio(fg: str, bg: str) -> float:
+    """CSS 色（#rgb / #rrggbb / rgb()）から WCAG 相対輝度のコントラスト比を返す。
+
+    色リテラルを期待値として持たず、実行時に読んだ CSS 変数の比だけを判定する
+    （ADR-0236 の色非依存契約）。解析できない色は 0.0 を返し fail-closed にする。
+    """
+
+    def rgb(value: str) -> tuple[int, int, int]:
+        text = str(value).strip()
+        if text.startswith("#"):
+            digits = text[1:]
+            if len(digits) == 3:
+                digits = "".join(ch * 2 for ch in digits)
+            if len(digits) != 6:
+                raise ValueError(text)
+            return tuple(int(digits[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+        match = re.match(r"rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)", text)
+        if match:
+            return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+        raise ValueError(text)
+
+    def luminance(value: str) -> float:
+        def channel(byte: int) -> float:
+            c = byte / 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+        r, g, b = rgb(value)
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    try:
+        a, b = luminance(fg), luminance(bg)
+    except (ValueError, TypeError):
+        return 0.0
+    high, low = max(a, b), min(a, b)
+    return (high + 0.05) / (low + 0.05)
+
+
 class Checker:
     def __init__(self, expected: int):
         self.expected = expected
@@ -980,7 +1017,10 @@ async def run_checks(cdp: Cdp) -> int:
     # 残件数だけが出てキー名・生エラーが出ず現在の本の位置が残ること +1（ADR-0245）。
     # Tauri mock の get_config / update_config_patch 成功経路で、保存ボタン押下後に
     # 固定成功文言・revision +1・JS エラー 0 を 1 check で検証する +1（ADR-0271 / 0272）。
-    checker = Checker(expected=258)
+    # prefers-contrast: more の有効化と、light / dark それぞれの枠線 3:1・
+    # 補助文字 4.5:1（emulation 前後の CSS 変数変化と実効コントラスト比） +5
+    # （ADR-0236 / WCAG 1.4.11 / 1.4.3）。
+    checker = Checker(expected=263)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -2980,6 +3020,93 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
     )
     checker.check("強制カラーモードでも章移動ができる", moved)
     await cdp.send("Emulation.setEmulatedMedia", {"features": []})
+
+    # prefers-contrast: more。色リテラル固定に依存せず、emulation 前後の CSS
+    # 変数の変化と背景とのコントラスト比で検証する（ADR-0236）。
+    # 枠線は WCAG 1.4.11 の 3:1、補助文字は 1.4.3 の 4.5:1 を要求する。
+    async def set_media(features: list[dict[str, str]]) -> None:
+        await cdp.send("Emulation.setEmulatedMedia", {"features": features})
+        await asyncio.sleep(0.3)
+
+    async def contrast_state() -> dict:
+        return await cdp.evaluate(
+            "(() => { const cs = getComputedStyle(document.documentElement);"
+            " const g = (n) => cs.getPropertyValue(n).trim();"
+            " return {"
+            "  matches: window.matchMedia('(prefers-contrast: more)').matches,"
+            "  bg: g('--color-bg'),"
+            "  border: g('--color-border'),"
+            "  muted: g('--color-muted')"
+            " }; })()"
+        )
+
+    try:
+        # ライト（OS が light / html.dark なし）
+        await set_media([{"name": "prefers-color-scheme", "value": "light"}])
+        light_base = await contrast_state()
+        await set_media(
+            [
+                {"name": "prefers-color-scheme", "value": "light"},
+                {"name": "prefers-contrast", "value": "more"},
+            ]
+        )
+        light_more = await contrast_state()
+        checker.check(
+            "prefers-contrast: more が有効になる", light_more.get("matches") is True
+        )
+        light_border = _contrast_ratio(
+            light_more.get("bg", ""), light_more.get("border", "")
+        )
+        light_muted = _contrast_ratio(
+            light_more.get("bg", ""), light_more.get("muted", "")
+        )
+        checker.check(
+            "ライトで prefers-contrast: more の枠線が強調され 3:1 を満たす",
+            light_base.get("border") != light_more.get("border")
+            and light_border >= 3.0,
+            f"(before={light_base.get('border')!r}, after={light_more.get('border')!r},"
+            f" ratio={light_border:.2f})",
+        )
+        checker.check(
+            "ライトで prefers-contrast: more の補助文字が強調され 4.5:1 を満たす",
+            light_base.get("muted") != light_more.get("muted")
+            and light_muted >= 4.5,
+            f"(before={light_base.get('muted')!r}, after={light_more.get('muted')!r},"
+            f" ratio={light_muted:.2f})",
+        )
+
+        # ダーク（OS が dark。html.dark 未付与でも media query の dark 経路が適用される）
+        await set_media([{"name": "prefers-color-scheme", "value": "dark"}])
+        dark_base = await contrast_state()
+        await set_media(
+            [
+                {"name": "prefers-color-scheme", "value": "dark"},
+                {"name": "prefers-contrast", "value": "more"},
+            ]
+        )
+        dark_more = await contrast_state()
+        dark_border = _contrast_ratio(
+            dark_more.get("bg", ""), dark_more.get("border", "")
+        )
+        dark_muted = _contrast_ratio(
+            dark_more.get("bg", ""), dark_more.get("muted", "")
+        )
+        checker.check(
+            "ダークで prefers-contrast: more の枠線が強調され 3:1 を満たす",
+            dark_base.get("border") != dark_more.get("border")
+            and dark_border >= 3.0,
+            f"(before={dark_base.get('border')!r}, after={dark_more.get('border')!r},"
+            f" ratio={dark_border:.2f})",
+        )
+        checker.check(
+            "ダークで prefers-contrast: more の補助文字が強調され 4.5:1 を満たす",
+            dark_base.get("muted") != dark_more.get("muted")
+            and dark_muted >= 4.5,
+            f"(before={dark_base.get('muted')!r}, after={dark_more.get('muted')!r},"
+            f" ratio={dark_muted:.2f})",
+        )
+    finally:
+        await cdp.send("Emulation.setEmulatedMedia", {"features": []})
 
     # prefers-reduced-motion: reduce。色の transition は残し、空間移動は外す。
     # フラグメント移動は画像確定待ちの後の 1 回の適用で即時に反映される。
