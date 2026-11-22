@@ -890,6 +890,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0330-contrast-e2e](docs/decisions/0330-contrast-e2e.md)
 - [0331-get-config-status](docs/decisions/0331-get-config-status.md)
 - [0332-capability-scope-visibility](docs/decisions/0332-capability-scope-visibility.md)
+- [0333-distribution-expected-single-source](docs/decisions/0333-distribution-expected-single-source.md)
+  - check-distribution-path.sh が Checker(expected=N) を AST 抽出し、manifest と照合する決定。
   - check-capability-scope.sh は web 側ソース検査であり、実 WebView の権限制限ではないことを明示する決定。
   - ブラウザ非対応と desktop IPC 失敗を別の固定文言で表示する決定。
   - 高コントラスト設定の CSS を CDP emulation と WCAG コントラスト比で検証する決定。
