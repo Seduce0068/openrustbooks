@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- Wasm JS 境界のエラーを redaction（ADR-0323）。
 - Config DTO 契約を静的ゲート化（ADR-0322）。
 - read_directory を全 root 対応に変更（ADR-0321）。
 - config 退避の権限失敗をロールバック（ADR-0320）。
