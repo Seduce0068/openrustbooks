@@ -7,15 +7,11 @@ use crate::{CoreError, CoreResult};
 
 use super::text::{named_reference, normalize_text};
 use super::xmlutil::{attribute_value, resolve_href, split_fragment, unescape_attribute};
-use super::{EpubTocEntry, MAX_TOC_ENTRIES, NAV_ELEMENT, TOC_TYPE};
+use super::{EpubTocEntry, NAV_ELEMENT, TOC_TYPE, check_structure_limit};
 
 /// 目次のエントリを追加する。上限を超える場合は [`CoreError::Validation`]。
 fn push_toc_entry(entries: &mut Vec<EpubTocEntry>, entry: EpubTocEntry) -> CoreResult<()> {
-    if entries.len() >= MAX_TOC_ENTRIES {
-        return Err(CoreError::validation(format!(
-            "目次のエントリ数が上限を超えています: {MAX_TOC_ENTRIES}"
-        )));
-    }
+    check_structure_limit(entries.len(), "目次のエントリ数")?;
     entries.push(entry);
     Ok(())
 }
@@ -329,6 +325,7 @@ pub(super) fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Ve
                 }
                 match name {
                     "navPoint" => {
+                        check_structure_limit(points.len(), "NCX の navPoint 数")?;
                         points.push(NcxNavPoint {
                             depth: open.len(),
                             title: None,
@@ -422,6 +419,7 @@ pub(super) fn parse_ncx(xml: &str, base_dir: &str, label: &str) -> CoreResult<Ve
         }
     }
 
+    // points は push 時に上限が確認済みなので、この確保は高々 MAX_STRUCTURE_ENTRIES。
     let mut entries: Vec<EpubTocEntry> = Vec::with_capacity(points.len());
     for point in &points {
         let (Some(title), Some(href)) = (&point.title, &point.href) else {

@@ -1164,12 +1164,12 @@
     #[test]
     fn enforces_toc_entry_limit() {
         // 上限ちょうどは通る。
-        let ok = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES));
+        let ok = epub_with_nav(&nav_with_anchors(MAX_STRUCTURE_ENTRIES));
         let book = EpubBook::open(&ok).unwrap();
-        assert_eq!(book.toc().unwrap().len(), MAX_TOC_ENTRIES);
+        assert_eq!(book.toc().unwrap().len(), MAX_STRUCTURE_ENTRIES);
 
         // 上限を 1 つ超えると Validation。
-        let over = epub_with_nav(&nav_with_anchors(MAX_TOC_ENTRIES + 1));
+        let over = epub_with_nav(&nav_with_anchors(MAX_STRUCTURE_ENTRIES + 1));
         assert!(matches!(toc_error(&over), CoreError::Validation(_)));
     }
 
@@ -2036,4 +2036,169 @@
 
         assert!(!book.toc().unwrap().is_empty());
         assert!(book.chapter_html(0).unwrap().contains("<h1>T</h1>"));
+    }
+
+    /// `count` 個の `<item>` を持つ OPF（`id` は `item0` から一意）。
+    fn opf_with_manifest_items(count: usize) -> String {
+        let mut opf = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"pub-id\">\
+             <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>t</dc:title></metadata><manifest>",
+        );
+        for index in 0..count {
+            opf.push_str(&format!(
+                "<item id=\"item{index}\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            ));
+        }
+        opf.push_str("</manifest><spine><itemref idref=\"item0\"/></spine></package>");
+        opf
+    }
+
+    /// `count` 個の `<itemref>` を持つ OPF（manifest は 1 件）。
+    fn opf_with_spine_refs(count: usize) -> String {
+        let mut opf = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"pub-id\">\
+             <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>t</dc:title></metadata>\
+             <manifest><item id=\"spine-target-secret\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine>",
+        );
+        for _ in 0..count {
+            opf.push_str("<itemref idref=\"spine-target-secret\"/>");
+        }
+        opf.push_str("</spine></package>");
+        opf
+    }
+
+    /// `count` 個の `<dc:creator>` を並べた OPF（`collected` を増やす）。
+    fn opf_with_creators(count: usize) -> String {
+        let mut opf = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"pub-id\">\
+             <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
+        );
+        for index in 0..count {
+            opf.push_str(&format!("<dc:creator>creator{index}</dc:creator>"));
+        }
+        opf.push_str(OPF_LIMIT_TAIL);
+        opf
+    }
+
+    /// `count` 個の `<dc:creator>` を入れ子にした OPF（`captures` を増やす）。
+    fn opf_with_nested_creators(count: usize) -> String {
+        let mut opf = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"pub-id\">\
+             <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
+        );
+        for _ in 0..count {
+            opf.push_str("<dc:creator id=\"capture-overflow-marker\">");
+        }
+        opf.push_str("inner");
+        for _ in 0..count {
+            opf.push_str("</dc:creator>");
+        }
+        opf.push_str(OPF_LIMIT_TAIL);
+        opf
+    }
+
+    /// 上限テスト用 OPF の共通末尾（manifest 1 件と spine 1 件）。
+    const OPF_LIMIT_TAIL: &str = "</metadata>\
+        <manifest><item id=\"ch1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/></manifest>\
+        <spine><itemref idref=\"ch1\"/></spine></package>";
+
+    #[test]
+    fn enforces_manifest_item_limit() {
+        let ok = epub_with_opf(&opf_with_manifest_items(MAX_STRUCTURE_ENTRIES));
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.metadata().title.as_deref(), Some("t"));
+
+        let over = epub_with_opf(&opf_with_manifest_items(MAX_STRUCTURE_ENTRIES + 1));
+        match open_error(&over) {
+            CoreError::Validation(message) => {
+                assert!(message.contains("manifest の item"), "{message}");
+                // 超過分の id（item10000）はエラー文言に出さない。
+                assert!(!message.contains("item10000"), "{message}");
+            }
+            other => panic!("CoreError::Validation を期待したが {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enforces_spine_itemref_limit() {
+        let ok = epub_with_opf(&opf_with_spine_refs(MAX_STRUCTURE_ENTRIES));
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.chapters().len(), MAX_STRUCTURE_ENTRIES);
+
+        let over = epub_with_opf(&opf_with_spine_refs(MAX_STRUCTURE_ENTRIES + 1));
+        match open_error(&over) {
+            CoreError::Validation(message) => {
+                assert!(message.contains("spine の itemref"), "{message}");
+                // 超過分の idref 値はエラー文言に出さない。
+                assert!(!message.contains("spine-target-secret"), "{message}");
+            }
+            other => panic!("CoreError::Validation を期待したが {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enforces_metadata_collected_limit() {
+        let ok = epub_with_opf(&opf_with_creators(MAX_STRUCTURE_ENTRIES));
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.metadata().creators.len(), MAX_STRUCTURE_ENTRIES);
+
+        let over = epub_with_opf(&opf_with_creators(MAX_STRUCTURE_ENTRIES + 1));
+        match open_error(&over) {
+            CoreError::Validation(message) => {
+                assert!(message.contains("メタデータの collected"), "{message}");
+                assert!(!message.contains("creator10000"), "{message}");
+            }
+            other => panic!("CoreError::Validation を期待したが {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enforces_metadata_capture_limit() {
+        let ok = epub_with_opf(&opf_with_nested_creators(MAX_STRUCTURE_ENTRIES));
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.metadata().creators, vec!["inner"]);
+
+        let over = epub_with_opf(&opf_with_nested_creators(MAX_STRUCTURE_ENTRIES + 1));
+        match open_error(&over) {
+            CoreError::Validation(message) => {
+                assert!(message.contains("メタデータの capture"), "{message}");
+                // 超過分の id とテキストはエラー文言に出さない。
+                assert!(!message.contains("capture-overflow-marker"), "{message}");
+                assert!(!message.contains("inner"), "{message}");
+            }
+            other => panic!("CoreError::Validation を期待したが {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enforces_ncx_navpoint_limit() {
+        let within = vec!["ch1.xhtml"; MAX_STRUCTURE_ENTRIES];
+        let ok = epub_with_toc(None, Some(&ncx_with_sources(&within)), OPF_NCX);
+        let book = EpubBook::open(&ok).unwrap();
+        assert_eq!(book.toc().unwrap().len(), MAX_STRUCTURE_ENTRIES);
+
+        let over_sources = vec!["ch1.xhtml"; MAX_STRUCTURE_ENTRIES + 1];
+        let over = epub_with_toc(None, Some(&ncx_with_sources(&over_sources)), OPF_NCX);
+        match toc_error(&over) {
+            CoreError::Validation(message) => {
+                assert!(message.contains("NCX の navPoint"), "{message}");
+                // 超過分の id（n10000）はエラー文言に出さない。
+                assert!(!message.contains("n10000"), "{message}");
+            }
+            other => panic!("CoreError::Validation を期待したが {other:?}"),
+        }
+    }
+
+    #[test]
+    fn structure_limits_do_not_break_normal_epub() {
+        let bytes = epub_with_toc(Some(NAV_NESTED), None, OPF);
+        let book = EpubBook::open(&bytes).unwrap();
+
+        assert_eq!(book.metadata().title.as_deref(), Some("サンプル本"));
+        assert_eq!(book.chapters().len(), 2);
+        assert_eq!(book.toc().unwrap().len(), 2);
     }

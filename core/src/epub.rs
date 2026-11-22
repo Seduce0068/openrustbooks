@@ -68,8 +68,25 @@ const TITLE_ELEMENT: &str = "title";
 const BODY_ELEMENT: &str = "body";
 /// nav の要素のローカル名。
 const NAV_ELEMENT: &str = "nav";
-/// 目次エントリ数の上限。
-const MAX_TOC_ENTRIES: usize = 10_000;
+/// OPF / NCX / 目次の構造要素数の上限。
+///
+/// 目次・manifest・spine・メタデータ・navPoint で 1 つの値を共有し、
+/// 64 MiB の文書から数百万要素を確保できないようにする。
+const MAX_STRUCTURE_ENTRIES: usize = 10_000;
+
+/// 構造要素の追加前に上限を確認する。
+///
+/// `subject` は要素名だけを含み、`id` や `href` などの値は渡さない。
+/// 超過時は `subject` と上限値だけを含む [`CoreError::Validation`] を返す
+/// （ADR-0212 の redaction 契約）。
+pub(super) fn check_structure_limit(count: usize, subject: &str) -> CoreResult<()> {
+    if count >= MAX_STRUCTURE_ENTRIES {
+        return Err(CoreError::validation(format!(
+            "{subject}が上限を超えています: {MAX_STRUCTURE_ENTRIES}"
+        )));
+    }
+    Ok(())
+}
 
 /// 本文抽出で改行を挿入する要素のローカル名。
 const BLOCK_ELEMENTS: [&str; 16] = [

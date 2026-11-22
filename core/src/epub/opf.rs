@@ -12,7 +12,7 @@ use super::text::{named_reference, normalize_text};
 use super::xmlutil::{attribute_value, resolve_href, unescape_attribute};
 use super::{
     CONTAINER_PATH, COVER_META_NAME, EpubChapter, EpubMetadata, FULL_PATH_ATTRIBUTE,
-    MODIFIED_PROPERTY, ROOTFILE_ELEMENT,
+    MODIFIED_PROPERTY, ROOTFILE_ELEMENT, check_structure_limit,
 };
 
 /// OPF の解析結果。
@@ -244,6 +244,7 @@ pub(super) fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
                     _ => {}
                 }
                 if let Some(field) = metadata_field(name, &element)? {
+                    check_structure_limit(captures.len(), "メタデータの capture 数")?;
                     captures.push(Capture {
                         element: name.to_string(),
                         field,
@@ -269,6 +270,7 @@ pub(super) fn parse_opf(xml: &str, opf_path: &str) -> CoreResult<ParsedOpf> {
                 if captures.last().map(|c| c.element.as_str()) == Some(name)
                     && let Some(capture) = captures.pop()
                 {
+                    check_structure_limit(collected.len(), "メタデータの collected 数")?;
                     collected.push(CollectedField {
                         field: capture.field,
                         id: capture.id,
@@ -392,6 +394,9 @@ fn push_manifest_item(
     let properties = attribute_value(element, "properties")?.unwrap_or_default();
     let resolved = resolve_href(base_dir, &href)?;
 
+    // manifest と 1:1 で対応する index への挿入より前に上限を確認する。
+    check_structure_limit(manifest.len(), "manifest の item 数")?;
+
     // 重複 id は先着を黙って残さず OPF 全体を拒否する。spine の idref が
     // どちらの item を指すかが実装依存になり、parser differential の原因になる。
     if index.insert(id.clone(), manifest.len()).is_some() {
@@ -414,6 +419,7 @@ fn push_spine_ref(element: &BytesStart<'_>, spine: &mut Vec<SpineRef>) -> CoreRe
         return Err(CoreError::archive("spine の itemref に idref がありません"));
     };
     let linear = attribute_value(element, "linear")?.is_none_or(|value| value.trim() != "no");
+    check_structure_limit(spine.len(), "spine の itemref 数")?;
     spine.push(SpineRef { idref, linear });
     Ok(())
 }
