@@ -1,7 +1,7 @@
 //! Document management commands.
 
 use crate::commands::ipc_error;
-use crate::state::AppState;
+use crate::state::{AppState, DOCUMENT_SAVE_CONFLICT_MESSAGE};
 use openrustbooks_core::{
     CoreError, CoreResult,
     config::LocalRootConfig,
@@ -384,28 +384,34 @@ async fn save_document_impl<R: tauri::Runtime>(
     content: Option<String>,
 ) -> Result<(), String> {
     let doc_id = DocumentId::from_string(id.to_string());
-    let mut document = state
-        .get_document(&doc_id)
+    // 開始時に文書と generation を同じ時点で取得し、比較基準を固定する。
+    let (snapshot, expected_generation) = state
+        .document_with_generation(&doc_id)
         .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
+    // 開始時点の本文（front matter を含む）を競合判定用に残す。保存内容は
+    // ローカルな clone にだけ反映し、ここでは state を一切変更しない。
+    let start_text = snapshot.full_text();
 
-    // Update content if provided
-    if let Some(new_content) = content
-        && let Some(text) = document.as_text_mut()
+    // 保存する本文を組み立てる（content=Some なら現在本文を置き換える）。
+    let mut to_save = snapshot.clone();
+    if let Some(new_content) = content.as_ref()
+        && let Some(text) = to_save.as_text_mut()
     {
-        *text = new_content;
+        *text = new_content.clone();
     }
 
     // ディスク書き込みが成功した場合にのみメタデータを更新する（fail-closed）。
-    if let Some(path) = &document.metadata.path {
+    let mut saved_size: Option<u64> = None;
+    if let Some(path) = to_save.metadata.path.clone() {
         let config = state.config();
         // 設定済み root 配下のみ書き込みを許可する
         let resolved =
-            resolve_within_roots(&config.storage.local_roots, path).map_err(ipc_error)?;
+            resolve_within_roots(&config.storage.local_roots, &path).map_err(ipc_error)?;
         if resolved.read_only {
             // resolve_within_roots の fail-closed 検査が二重ガード。
             return Err(ipc_error(CoreError::validation(READ_ONLY_ROOT_MESSAGE)));
         }
-        let text = document
+        let text = to_save
             .full_text()
             .ok_or_else(|| ipc_error(CoreError::validation("Document is not text-editable")))?;
 
@@ -415,16 +421,48 @@ async fn save_document_impl<R: tauri::Runtime>(
             .await
             .map_err(ipc_error)?;
 
-        // Update metadata（成功後のみ）
-        document.metadata.size_bytes = text.len() as u64;
-        document.metadata.modified_at = Some(chrono::Utc::now());
+        #[cfg(test)]
+        state.invoke_after_atomic_write_hook();
+
+        saved_size = Some(text.len() as u64);
     }
 
-    state.add_document(document.clone());
-    state.mark_saved(&doc_id);
+    // await 後に generation と本文を再確認する。割り込み編集があれば
+    // 古い snapshot を state へ書き戻さず、固定文言の Conflict を返す。
+    let (mut current, current_generation) = state
+        .document_with_generation(&doc_id)
+        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
+    if current_generation != expected_generation || current.full_text() != start_text {
+        return Err(ipc_error(CoreError::Conflict(
+            DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string(),
+        )));
+    }
+
+    // content=Some の保存内容で現在本文を置き換える（現在の document をベースに）。
+    if let Some(new_content) = content.as_ref()
+        && let Some(text) = current.as_text_mut()
+    {
+        *text = new_content.clone();
+    }
+    // metadata も現在の document をベースに、ディスク書き込み成功時のみ更新。
+    if let Some(size) = saved_size {
+        current.metadata.size_bytes = size;
+        current.metadata.modified_at = Some(chrono::Utc::now());
+    }
+
+    // 再確認後〜コミット直前のテストフック（force close の隔挿入に使う）。
+    #[cfg(test)]
+    state.invoke_before_commit_saved_hook();
+
+    // 成功時のみ CAS で確定する。比較と文書差し替え・世代前進・unsaved クリアは
+    // AppState 側の単一クリティカルセクションで行うため、ここへ至る直前に
+    // 別編集が入っても古い snapshot が残ることはない。
+    state
+        .commit_saved_document(&doc_id, expected_generation, current.clone())
+        .map_err(ipc_error)?;
 
     // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
-    if app.emit("document-saved", &document).is_err() {
+    if app.emit("document-saved", &current).is_err() {
         log::warn!("document-saved event failed");
     }
 
@@ -499,15 +537,18 @@ pub fn get_document_content(state: State<'_, Arc<AppState>>, id: String) -> Resu
         .ok_or_else(|| ipc_error(CoreError::validation("Document is not text-editable")))
 }
 
-/// Set document content
-#[command]
-pub fn set_document_content(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
-    id: String,
+/// `set_document_content` の本体。テストから AppHandle / MockRuntime で
+/// 直接呼べるように切り出している（保存 CAS の競合再現にも使う）。
+///
+/// `add_document` を通すことで世代を前進させ、保存側の CAS が並行編集を
+/// 検出できるようにする。
+fn set_document_content_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
     content: String,
 ) -> Result<(), String> {
-    let doc_id = DocumentId::from_string(id);
+    let doc_id = DocumentId::from_string(id.to_string());
     let mut document = state
         .get_document(&doc_id)
         .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
@@ -526,6 +567,17 @@ pub fn set_document_content(
             "Document is not text-editable",
         )))
     }
+}
+
+/// Set document content
+#[command]
+pub fn set_document_content(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    id: String,
+    content: String,
+) -> Result<(), String> {
+    set_document_content_impl(state.inner().as_ref(), &app, &id, content)
 }
 
 #[cfg(test)]
@@ -1045,6 +1097,7 @@ mod tests {
         let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
         let id = register_document(harness.state(), &path, original);
         harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
 
         test_hooks::FAIL_NEXT_ATOMIC_WRITE.set(true);
         assert!(
@@ -1064,6 +1117,7 @@ mod tests {
         assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
         assert!(unchanged.metadata.modified_at.is_none());
         assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1076,6 +1130,7 @@ mod tests {
         let harness = SaveHarness::new(state_with_roots(vec![(read_only.path.clone(), true)]));
         let id = register_document(harness.state(), &path, original);
         harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
 
         assert!(
             save_document_impl(
@@ -1094,6 +1149,7 @@ mod tests {
         assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
         assert!(unchanged.metadata.modified_at.is_none());
         assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1112,6 +1168,7 @@ mod tests {
         ]));
         let id = register_document(harness.state(), &path, original);
         harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
 
         let error = save_document_impl(
             harness.state(),
@@ -1130,6 +1187,7 @@ mod tests {
         let unchanged = harness.state().get_document(&id).unwrap();
         assert_eq!(unchanged.metadata.size_bytes, original.len() as u64);
         assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1148,6 +1206,7 @@ mod tests {
         ]));
         let id = register_document(harness.state(), &path, original);
         harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
 
         let error = save_document_impl(
             harness.state(),
@@ -1164,6 +1223,7 @@ mod tests {
 
         assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
         assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1190,6 +1250,7 @@ mod tests {
         ]));
         let id = register_document(harness.state(), &link, original);
         harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
 
         let error = save_document_impl(
             harness.state(),
@@ -1206,6 +1267,7 @@ mod tests {
 
         assert_eq!(fs::read(&target).unwrap(), original.as_bytes().to_vec());
         assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.state().document_generation(&id), generation_before);
         assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
@@ -1232,6 +1294,221 @@ mod tests {
         let expected =
             "---\r\n# 元のコメント\r\nzzz: \"double\"\r\naaa: 'single'\r\n---\r\n# Changed\r\n";
         assert_eq!(fs::read(&path).unwrap(), expected.as_bytes().to_vec());
+    }
+
+    /// atomic_write 完了直後に別スレッドから set_document_content を割り込ませ、
+    /// 保存が Conflict になる状況を決定論的に作る共通ヘルパ。
+    async fn save_with_interleaved_edit(
+        harness: &SaveHarness,
+        id: &DocumentId,
+        content: Option<String>,
+        edited_text: &str,
+    ) -> String {
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let done_rx = Arc::new(std::sync::Mutex::new(done_rx));
+
+        let editor_state = harness.state.clone();
+        let editor_app = harness.handle();
+        let editor_id = id.clone();
+        let editor_text = edited_text.to_string();
+        let editor_barrier = barrier.clone();
+        let editor = std::thread::spawn(move || {
+            editor_barrier.wait();
+            set_document_content_impl(&editor_state, &editor_app, &editor_id.0, editor_text)
+                .expect("割り込み編集が成功する");
+            done_tx.send(()).unwrap();
+        });
+
+        let hook_barrier = barrier.clone();
+        harness.state().set_after_atomic_write_hook(move || {
+            hook_barrier.wait();
+            // 割り込み編集の完了を待ってから保存側の再確認を走らせる。
+            done_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("割り込みスレッドが編集を完了すること");
+        });
+
+        let error = save_document_impl(harness.state(), &harness.handle(), &id.0, content)
+            .await
+            .expect_err("並行編集があれば Conflict になる");
+        editor.join().unwrap();
+        error
+    }
+
+    /// content=Some の保存中に別編集が入ると、古い snapshot を書き戻さず
+    /// 固定文言の Conflict を返す（第2cycle R6 / R2-RC01 の回帰 test）。
+    #[tokio::test]
+    async fn command_save_document_conflicts_when_edit_interleaves_during_write() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
+
+        let error = save_with_interleaved_edit(
+            &harness,
+            &id,
+            Some("# New\n".to_string()),
+            "# Interleaved\n",
+        )
+        .await;
+
+        // IPC は固定文言のみ（id / path / 本文は出ない）。
+        assert_eq!(
+            error,
+            ipc_error(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string()
+            ))
+        );
+        assert!(!error.contains("note.md"));
+        assert!(!error.contains("Interleaved"));
+
+        // 最新本文が残り、unsaved も維持され、document-saved は発火しない。
+        let current = harness.state().get_document(&id).unwrap();
+        assert_eq!(current.as_text(), Some("# Interleaved\n"));
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            generation_before.map(|generation| generation + 1),
+            "割り込み編集のみが世代を進め、競合保存は進めない"
+        );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+        // ディスクには保存要求の内容が書かれているが、state は上書きしない。
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"---\ntitle: Test\n---\n# New\n".to_vec()
+        );
+    }
+
+    /// content=None でも await 中の別編集は競合として扱うこと。
+    #[tokio::test]
+    async fn command_save_document_without_content_conflicts_on_interleaved_edit() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id);
+
+        let error = save_with_interleaved_edit(&harness, &id, None, "# Interleaved\n").await;
+
+        assert_eq!(
+            error,
+            ipc_error(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string()
+            ))
+        );
+        let current = harness.state().get_document(&id).unwrap();
+        assert_eq!(current.as_text(), Some("# Interleaved\n"));
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            generation_before.map(|generation| generation + 1)
+        );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
+    }
+
+    /// content=None の通常保存は本文を保ったまま commit され emit されること。
+    #[tokio::test]
+    async fn command_save_document_without_content_keeps_body_and_commits() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+
+        save_document_impl(harness.state(), &harness.handle(), &id.0, None)
+            .await
+            .expect("content=None でも保存できる");
+
+        let current = harness.state().get_document(&id).unwrap();
+        assert_eq!(current.as_text(), Some("# Old\n"));
+        assert_eq!(current.metadata.size_bytes, original.len() as u64);
+        assert!(current.metadata.modified_at.is_some());
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes().to_vec());
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 1);
+    }
+
+    /// 再確認後〜コミット直前に force close が割り込んでも、古い保存が
+    /// 削除済み文書を復活させないこと（R4 high の回帰 test）。
+    #[tokio::test]
+    async fn command_save_document_does_not_resurrect_document_closed_before_commit() {
+        let writable = TempRoot::new();
+        let path = writable.path.join("note.md");
+        let original = "---\ntitle: Test\n---\n# Old\n";
+        fs::write(&path, original.as_bytes()).unwrap();
+        let harness = SaveHarness::new(state_with_roots(vec![(writable.path.clone(), false)]));
+        let id = register_document(harness.state(), &path, original);
+        harness.state().mark_unsaved(&id);
+        let generation_before = harness.state().document_generation(&id).unwrap();
+
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let done_rx = Arc::new(std::sync::Mutex::new(done_rx));
+
+        let closer_state = harness.state.clone();
+        let closer_id = id.clone();
+        let closer_barrier = barrier.clone();
+        let closer = std::thread::spawn(move || {
+            closer_barrier.wait();
+            closer_state
+                .close_document_atomic(&closer_id, true)
+                .expect("force close が成功する");
+            done_tx.send(()).unwrap();
+        });
+
+        let hook_barrier = barrier.clone();
+        harness.state().set_before_commit_saved_hook(move || {
+            hook_barrier.wait();
+            done_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("force close スレッドが完了すること");
+        });
+
+        let error = save_document_impl(
+            harness.state(),
+            &harness.handle(),
+            &id.0,
+            Some("# New\n".to_string()),
+        )
+        .await
+        .expect_err("閉じられた文書への保存は Conflict になる");
+
+        assert_eq!(
+            error,
+            ipc_error(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string()
+            ))
+        );
+        closer.join().unwrap();
+
+        assert!(
+            harness.state().get_document(&id).is_none(),
+            "文書は復活しない"
+        );
+        assert_eq!(
+            harness.state().document_generation(&id),
+            Some(generation_before + 1),
+            "close で 1 回だけ世代が進み、競合保存は進めない"
+        );
+        assert!(
+            !harness.state().is_unsaved(&id),
+            "close が孤立フラグを掃除する"
+        );
+        assert_eq!(harness.saved.load(Ordering::SeqCst), 0);
     }
 
     // --- close_document のテスト ---

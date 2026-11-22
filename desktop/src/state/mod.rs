@@ -19,6 +19,12 @@ pub const CONFIG_LOAD_FAILED_MESSAGE: &str = "Configuration load failed; saving 
 /// 変換するため、この文言自体は内部エラーとしてのみ使う（ADR-0287）。
 pub const DOCUMENT_UNSAVED_MESSAGE: &str = "Document has unsaved changes";
 
+/// 保存開始後に本文が変更された場合の固定文言。
+///
+/// 文書 id / path / 本文は一切含めない。IPC へは `ipc_error` が固定 code
+/// 経由で変換するため、この文言自体は内部エラーとしてのみ使う。
+pub const DOCUMENT_SAVE_CONFLICT_MESSAGE: &str = "Document changed since it was read";
+
 /// 設定とその revision を同じロックで保持する（CAS の比較単位）。
 struct ConfigState {
     config: AppConfig,
@@ -36,6 +42,11 @@ pub struct AppState {
     documents: RwLock<HashMap<DocumentId, Document>>,
     ai_service: RwLock<Option<Arc<AiMarkdownService>>>,
     unsaved_changes: RwLock<HashMap<DocumentId, bool>>,
+    /// 文書 id 単位の世代カウンタ。本文を更新するたびに前進し、保存 CAS の
+    /// 比較単位として使う。`documents` と同じ順（documents -> generations）
+    /// でロックを取得すること。文書を閉じても削除しない（再オープン時に
+    /// 古い expected が一致するのを防ぐため、世代は単調に増やし続ける）。
+    document_generations: RwLock<HashMap<DocumentId, u64>>,
     /// `prepare_ai_service` の完了直後に呼ぶテスト専用フック。
     /// await を跨いで `commit_config` が入った状況を外部 AI API なしで再現する。
     /// インスタンスごとに持つため、並列テスト間で干渉しない。
@@ -46,6 +57,16 @@ pub struct AppState {
     /// 状況を疑似的に再現する（実運用では documents guard がブロックする）。
     #[cfg(test)]
     test_after_documents_lock: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `save_document_impl` が `atomic_write().await` を終えた直後に呼ぶ
+    /// テスト専用フック。await 中に別編集が割り込んだ状況を外部ファイル
+    /// イベントなしで再現する。インスタンスごとに持つため並列テスト間で
+    /// 干渉しない。
+    #[cfg(test)]
+    test_after_atomic_write: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `save_document_impl` が保存コミット直前に呼ぶテスト専用フック。
+    /// 再確認後〜コミット前に force close が割り込む状況を再現する。
+    #[cfg(test)]
+    test_before_commit_saved: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl AppState {
@@ -73,10 +94,15 @@ impl AppState {
             documents: RwLock::new(HashMap::new()),
             ai_service: RwLock::new(None),
             unsaved_changes: RwLock::new(HashMap::new()),
+            document_generations: RwLock::new(HashMap::new()),
             #[cfg(test)]
             test_after_prepare: std::sync::Mutex::new(None),
             #[cfg(test)]
             test_after_documents_lock: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            test_after_atomic_write: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            test_before_commit_saved: std::sync::Mutex::new(None),
         }
     }
 
@@ -267,14 +293,121 @@ impl AppState {
     }
 
     /// Add a document
+    ///
+    /// 文書を登録・差し替える経路（open / set_document_content 等）はここを
+    /// 通るため、登録ごとに世代を前進させる。成功した保存コミットは
+    /// `commit_saved_document` が世代を進めるため、ここは通らない。
+    /// ロック順は `documents` -> `document_generations` で、他の経路と同じにする。
     pub fn add_document(&self, document: Document) {
         let id = document.metadata.id.clone();
-        self.documents.write().unwrap().insert(id, document);
+        let mut documents = self.documents.write().unwrap();
+        let mut generations = self.document_generations.write().unwrap();
+        documents.insert(id.clone(), document);
+        // 世代は単調に増やす。overflow しても値が戻って古い expected と
+        // 一致しないよう saturating で留める（実用上到達しないが fail-closed）。
+        let next = generations.get(&id).copied().unwrap_or(0).saturating_add(1);
+        generations.insert(id, next);
     }
 
     /// Get a document
     pub fn get_document(&self, id: &DocumentId) -> Option<Document> {
         self.documents.read().unwrap().get(id).cloned()
+    }
+
+    /// 現在の文書と generation を同じロック・同じ時点で取得する。
+    ///
+    /// 保存コマンドはここで得た `expected` を後続の `commit_saved_document` へ
+    /// 渡す。文書と世代を別々に読むとその間に編集が入り得るため、必ず両方を
+    /// 同じクリティカルセクションで読む。
+    pub fn document_with_generation(&self, id: &DocumentId) -> Option<(Document, u64)> {
+        let documents = self.documents.read().unwrap();
+        let generations = self.document_generations.read().unwrap();
+        let document = documents.get(id)?.clone();
+        let generation = generations.get(id).copied().unwrap_or(0);
+        Some((document, generation))
+    }
+
+    /// 現在の generation を返す。文書が未登録なら `None`。
+    #[cfg(test)]
+    pub fn document_generation(&self, id: &DocumentId) -> Option<u64> {
+        self.document_generations.read().unwrap().get(id).copied()
+    }
+
+    /// 保存コミット（CAS）。
+    ///
+    /// `expected` が現在の generation と一致する場合のみ、文書を `document`
+    /// で置き換えて generation を進め、unsaved をクリアする。不一致なら
+    /// 固定文言の `CoreError::Conflict` を返し、文書・世代・unsaved の
+    /// いずれも変更しない。比較から確定まで `documents` の write guard を
+    /// 保持するため、await 後の再確認とコミットの間に編集が入っても
+    /// 古い snapshot が書き戻されることはない。
+    ///
+    /// 文書が既に閉じられている場合も Conflict とし、古い保存が
+    /// 削除済み文書を復活させない（close 側も世代を前進させる）。
+    pub fn commit_saved_document(
+        &self,
+        id: &DocumentId,
+        expected: u64,
+        document: Document,
+    ) -> CoreResult<()> {
+        // documents -> document_generations -> unsaved_changes の順で取得する。
+        let mut documents = self.documents.write().unwrap();
+        let mut generations = self.document_generations.write().unwrap();
+        // 閉じられた文書は復活させない。generation が一致していても
+        // documents に無ければ競合として扱う（force close の隔挿入対策）。
+        if !documents.contains_key(id) {
+            return Err(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string(),
+            ));
+        }
+        let current = generations.get(id).copied().unwrap_or(0);
+        if current != expected {
+            return Err(CoreError::Conflict(
+                DOCUMENT_SAVE_CONFLICT_MESSAGE.to_string(),
+            ));
+        }
+        let next = expected
+            .checked_add(1)
+            .ok_or_else(|| CoreError::internal("document generation overflow"))?;
+        documents.insert(id.clone(), document);
+        generations.insert(id.clone(), next);
+        // unsaved も同じクリティカルセクションで更新し、コミット直後の
+        // 編集との取り残しを防ぐ。
+        self.unsaved_changes
+            .write()
+            .unwrap()
+            .insert(id.clone(), false);
+        Ok(())
+    }
+
+    /// atomic_write 完了直後に任意の処理を挟む（テスト専用フック）。
+    #[cfg(test)]
+    pub fn set_after_atomic_write_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.test_after_atomic_write.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    /// atomic_write 完了直後のテストフックを 1 回だけ実行する。
+    #[cfg(test)]
+    pub(crate) fn invoke_after_atomic_write_hook(&self) {
+        let hook = self.test_after_atomic_write.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    /// 保存コミット直前に任意の処理を挟む（テスト専用フック）。
+    #[cfg(test)]
+    pub fn set_before_commit_saved_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.test_before_commit_saved.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    /// 保存コミット直前のテストフックを 1 回だけ実行する。
+    #[cfg(test)]
+    pub(crate) fn invoke_before_commit_saved_hook(&self) {
+        let hook = self.test_before_commit_saved.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook();
+        }
     }
 
     /// Remove a document
@@ -293,8 +426,10 @@ impl AppState {
 
     /// 未保存チェックと文書削除を単一クリティカルセクションで行う。
     ///
-    /// `documents` -> `unsaved_changes` の順で両方の write guard を同時に保持し、
-    /// チェックから削除までを排他する（逆順の箇所は作らない）。
+    /// `documents` -> `document_generations` -> `unsaved_changes` の順で
+    /// write guard を同時に保持し、チェックから削除までを排他する
+    /// （逆順の箇所は作らない）。文書を削除できた場合は世代も前進させ、
+    /// 削除前に開始した保存が古い expected で復活しないようにする。
     /// `force=false` で unsaved なら固定文言の Validation を返し、何も変更しない。
     /// `force=true` なら削除する。文書が存在しない場合も `unsaved_changes` の
     /// キーを削除し、孤立フラグを掃除する既存契約を維持する（ADR-0208）。
@@ -320,8 +455,10 @@ impl AppState {
             }
         }
 
-        // unsaved_changes も同じクリティカルセクションで保持する。
-        // documents -> unsaved_changes の順を維持し、逆順の箇所は作らない。
+        // 世代も同じクリティカルセクションで保持する。
+        // documents -> document_generations -> unsaved_changes の順を維持し、
+        // 逆順の箇所は作らない。
+        let mut generations = self.document_generations.write().unwrap();
         let mut unsaved = self.unsaved_changes.write().unwrap();
 
         if !force && unsaved.get(id).copied().unwrap_or(false) {
@@ -329,6 +466,11 @@ impl AppState {
         }
 
         let removed = documents.remove(id);
+        if removed.is_some() {
+            // 削除前に開始した保存の CAS が一致しないよう世代を前進させる。
+            let next = generations.get(id).copied().unwrap_or(0).saturating_add(1);
+            generations.insert(id.clone(), next);
+        }
         // 文書が存在しない場合も孤立フラグを掃除する（既存契約）。
         unsaved.remove(id);
         Ok(removed)
@@ -564,6 +706,105 @@ mod tests {
         assert!(state.get_document(&id).is_some(), "文書は削除されない");
         assert!(state.is_unsaved(&id), "フラグも残る");
         assert!(state.has_unsaved_changes());
+    }
+
+    /// add_document は文書ごとに世代を前進させ、文書と世代を同時に読めること。
+    #[test]
+    fn add_document_advances_generation_and_exposes_consistent_pair() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-generation-basic".to_string());
+        assert_eq!(state.document_generation(&id), None);
+        assert!(state.document_with_generation(&id).is_none());
+
+        state.add_document(sample_document("doc-generation-basic"));
+        let (document, first) = state.document_with_generation(&id).unwrap();
+        assert_eq!(document.as_text(), Some("sample"));
+        assert_eq!(first, 1);
+
+        let mut edited = document;
+        *edited.as_text_mut().unwrap() = "second".to_string();
+        state.add_document(edited);
+        let (document, second) = state.document_with_generation(&id).unwrap();
+        assert_eq!(document.as_text(), Some("second"));
+        assert_eq!(second, first + 1);
+        assert_eq!(state.document_generation(&id), Some(second));
+    }
+
+    /// 成功時のみ文書・世代・unsaved が更新されること。
+    #[test]
+    fn commit_saved_document_success_updates_document_and_generation() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-save-cas-ok".to_string());
+        state.add_document(sample_document("doc-save-cas-ok"));
+        state.mark_unsaved(&id);
+        let (_, expected) = state.document_with_generation(&id).unwrap();
+
+        let mut saved = sample_document("doc-save-cas-ok");
+        *saved.as_text_mut().unwrap() = "saved".to_string();
+        saved.metadata.size_bytes = 5;
+        state
+            .commit_saved_document(&id, expected, saved)
+            .expect("期待世代が一致すればコミットできる");
+
+        let (current, generation) = state.document_with_generation(&id).unwrap();
+        assert_eq!(current.as_text(), Some("saved"));
+        assert_eq!(current.metadata.size_bytes, 5);
+        assert_eq!(generation, expected + 1);
+        assert!(!state.is_unsaved(&id));
+    }
+
+    /// 古い expected でのコミットは固定文言の Conflict になり、変更がないこと。
+    #[test]
+    fn commit_saved_document_stale_generation_conflicts_without_changes() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-save-cas-conflict".to_string());
+        state.add_document(sample_document("doc-save-cas-conflict"));
+        let (snapshot, expected) = state.document_with_generation(&id).unwrap();
+
+        // 保存中の並行編集を再現（add_document が世代を前進させる）。
+        let mut edited = snapshot.clone();
+        *edited.as_text_mut().unwrap() = "edited".to_string();
+        state.add_document(edited);
+        state.mark_unsaved(&id);
+        let (_, after_edit) = state.document_with_generation(&id).unwrap();
+
+        let mut stale = snapshot;
+        *stale.as_text_mut().unwrap() = "stale".to_string();
+        let error = state
+            .commit_saved_document(&id, expected, stale)
+            .expect_err("古い世代は競合する");
+        match error {
+            CoreError::Conflict(message) => {
+                assert_eq!(message, DOCUMENT_SAVE_CONFLICT_MESSAGE);
+            }
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+
+        let (current, generation) = state.document_with_generation(&id).unwrap();
+        assert_eq!(current.as_text(), Some("edited"), "最新本文が残る");
+        assert_eq!(generation, after_edit, "競合で世代は進まない");
+        assert!(state.is_unsaved(&id), "競合で unsaved は残る");
+    }
+
+    /// close 後に古い expected でコミットしても文書が復活しないこと。
+    #[test]
+    fn commit_saved_document_after_close_conflicts_without_resurrection() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-save-cas-closed".to_string());
+        state.add_document(sample_document("doc-save-cas-closed"));
+        let (snapshot, expected) = state.document_with_generation(&id).unwrap();
+
+        state.close_document_atomic(&id, true).unwrap();
+        assert!(state.get_document(&id).is_none());
+        let closed_generation = state.document_generation(&id).unwrap();
+        assert_eq!(closed_generation, expected + 1, "close で世代が前進する");
+
+        let error = state
+            .commit_saved_document(&id, expected, snapshot)
+            .expect_err("閉じた文書への古いコミットは競合する");
+        assert!(matches!(error, CoreError::Conflict(_)));
+        assert!(state.get_document(&id).is_none(), "文書は復活しない");
+        assert_eq!(state.document_generation(&id), Some(closed_generation));
     }
 
     /// 保存済み文書は force=false で削除され、unsaved キーも掃除される（通常系の維持）。
