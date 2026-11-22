@@ -905,6 +905,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0343-ai-preview-tail](docs/decisions/0343-ai-preview-tail.md)
 - [0344-legacy-config-commands-removed](docs/decisions/0344-legacy-config-commands-removed.md)
 - [0345-epub-sanitize-limits](docs/decisions/0345-epub-sanitize-limits.md)
+- [0346-page-list-input](docs/decisions/0346-page-list-input.md)
+  - ページ入力に候補表示・Enter 移動・trim/大小文字無視照合を追加する決定。
   - サニタイザへ渡す前に入力長とタグ深度を制限し、深いネストによる wasm フリーズを防ぐ決定。
   - UI 起点 CAS を満たさない 4 つの config command を invoke_handler から外し、 patch / API キー / clear 経路へ集約する決定。
   - 送信確認ダイアログで先頭だけでなく末尾も抜粋し、省略量と全文確認を明示する決定。
