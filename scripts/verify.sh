@@ -246,7 +246,7 @@ done
 if [[ $RETAIN_DIST -eq 1 ]]; then
 	# 絶対パス / リポジトリ外 / readlink -m による正規化は専用スクリプトに集約し、
 	# CI の extra_gates と同じ判定を共有する。失敗時は従来どおり rc=2 で拒否する。
-	if DIST_ROOT="$(bash "$SCRIPT_DIR/check-distribution-path.sh" "$DIST_ROOT")"; then
+	if DIST_ROOT="$(bash "$SCRIPT_DIR/check-distribution-path.sh" --no-self-test "$DIST_ROOT")"; then
 		:
 	else
 		rc=$?
@@ -414,7 +414,7 @@ retain_verified_dist() {
 	} > "$tmp_manifest"
 	mv "$tmp_manifest" "$STAGE_DIR/manifest.txt"
 
-	# manifest 形式（必須キー / e2e expected=256 / failed:0 / SHA256 行）を
+	# manifest 形式（必須キー / e2e expected=<コード出典> / failed:0 / SHA256 行）を
 	# CI と共通のスクリプトで検査する。不合格なら保持を行わず hard fail する。
 	if ! bash "$SCRIPT_DIR/check-distribution-path.sh" --no-self-test "$DIST_ROOT" "$STAGE_DIR/manifest.txt"; then
 		echo "ERROR: manifest 形式検査に失敗しました: $STAGE_DIR/manifest.txt" >&2

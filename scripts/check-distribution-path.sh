@@ -3,10 +3,10 @@
 # verify.sh の --dist 検証と CI の extra_gates で同じ判定を共有する（単一情報源）。
 #
 # 第 1 引数省略時は DIST_ROOT（未設定なら既定の保持先）を検査する。
-# 第 2 引数に manifest.txt を渡すと、必須キー / e2e expected=256 / failed:0 /
-# SHA256 行形式も検査する。
+# 第 2 引数に manifest.txt を渡すと、必須キー / e2e expected（コード出典の
+# Checker(expected=N) と一致）/ failed:0 / SHA256 行形式も検査する。
 # 成功時は readlink -m で正規化した絶対パスを stdout へ出力する。
-# 失敗時はパス不正が rc=2、manifest 不正が rc=1。
+# 失敗時はパス不正が rc=2、manifest 不正／期待値抽出失敗が rc=1。
 #
 # 本スクリプトは毎回「拒否されるべきパスが実際に拒否されること」と
 # 「manifest 形式検査が正負両方で機能すること」の自己検査を先に実行する。
@@ -16,6 +16,63 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEFAULT_DIST_ROOT="/home/koppe/.local/share/openrustbooks-verified"
+
+# 期待件数の単一情報源は tools/verify-web-reader.py の Checker(expected=N)。
+# AST で厳密に 1 件の正の整数リテラルを抽出し、抽出不能 / 複数 / 不正値は
+# fail-closed で rc=1 とする（grep の先頭一致やコメント混入を避ける）。
+extract_expected_count() {
+	local source_file="$ROOT_DIR/tools/verify-web-reader.py"
+	if [[ ! -f "$source_file" ]]; then
+		echo "ERROR: 期待件数の出典が見つかりません: $source_file" >&2
+		return 1
+	fi
+	python3 - "$source_file" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+    print(f"ERROR: 期待件数の出典を解析できません: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+calls = [
+    node
+    for node in ast.walk(tree)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Name)
+    and node.func.id == "Checker"
+]
+if len(calls) != 1:
+    print(
+        f"ERROR: Checker(...) の呼び出しは 1 件である必要があります（実際: {len(calls)} 件）",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+expected_kw = [kw for kw in calls[0].keywords if kw.arg == "expected"]
+if len(expected_kw) != 1:
+    print(
+        f"ERROR: Checker(expected=...) は 1 件である必要があります（実際: {len(expected_kw)} 件）",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+value = expected_kw[0].value
+if not (
+    isinstance(value, ast.Constant)
+    and isinstance(value.value, int)
+    and not isinstance(value.value, bool)
+    and value.value > 0
+):
+    print("ERROR: Checker(expected=...) は正の整数リテラルである必要があります", file=sys.stderr)
+    sys.exit(1)
+print(value.value)
+PY
+}
+
+EXPECTED="$(extract_expected_count)" || exit 1
 
 # パス検証本体。成功時に正規化パスを stdout、失敗時に rc=2 を返す。
 check_path() {
@@ -76,12 +133,13 @@ check_manifest() {
 		echo "ERROR: manifest に SHA256 セクションがありません: $manifest" >&2
 		return 1
 	fi
-	if ! grep -q -E '^e2e expected[[:space:]]*:[[:space:]]*256[[:space:]]*$' "$manifest"; then
-		echo "ERROR: manifest の e2e expected が 256 ではありません: $manifest" >&2
+	if ! grep -q -E "^e2e expected[[:space:]]*:[[:space:]]*${EXPECTED}[[:space:]]*$" "$manifest"; then
+		echo "ERROR: manifest の e2e expected が ${EXPECTED} ではありません: $manifest" >&2
 		return 1
 	fi
 	# passed: 0 は「1件も実行していない」成功風の記録なので拒否する。
-	# 期待件数（現行契約 256）は ADR 側で管理し、変更時は同じ出典へ追従して更新する。
+	# 期待件数はコード出典（Checker(expected=N)）から抽出した $EXPECTED を使い、
+	# ハードコードしない。変更時は出典を更新すれば自動追従する。
 	if ! grep -q -E '^e2e result[[:space:]]*:[[:space:]]*passed:[[:space:]]*[1-9][0-9]*,[[:space:]]*failed:[[:space:]]*0[[:space:]]*$' "$manifest"; then
 		echo "ERROR: manifest の e2e result が passed>=1 / failed: 0 ではありません: $manifest" >&2
 		return 1
@@ -107,15 +165,16 @@ expect_path_reject() {
 
 # 自己検査用の正常 manifest（verify.sh の生成形式に合わせた最小 fixture）。
 write_manifest_fixture() {
-	cat >"$1" <<'EOF'
+	# $EXPECTED を展開するため区切りをクォートしない（本文に他の $ は無い）。
+	cat >"$1" <<EOF
 openrustbooks verified distribution manifest
 ============================================
 commit sha   : 0123456789abcdef0123456789abcdef01234567
 verified at  : 2026-11-22T01:02:03Z
 rustc        : rustc 1.95.0
 trunk        : trunk 0.22.1
-e2e expected : 256
-e2e result   : passed: 256, failed: 0
+e2e expected : ${EXPECTED}
+e2e result   : passed: ${EXPECTED}, failed: 0
 browser executable : google-chrome
 browser path       : /usr/bin/google-chrome
 browser version    : Google Chrome 1.2.3
@@ -130,7 +189,7 @@ EOF
 
 # 経路と manifest 形式の正負を確認する自己検査（毎回実行）。
 self_test() {
-	local tmp fixture
+	local tmp fixture bad_expected
 
 	expect_path_reject "$ROOT_DIR" || return 1
 	expect_path_reject "relative-dist" || return 1
@@ -160,14 +219,15 @@ self_test() {
 		rm -rf "$tmp"
 		return 1
 	fi
-	# 期待値 256 の変更、passed: 0、failed: 1、SHA256 行の欠落はすべて拒否されるべき。
-	sed 's/^e2e expected[[:space:]]*:.*/e2e expected : 253/' "$fixture" >"$tmp/bad-expected.txt"
+	# 期待値の変更、passed: 0、failed: 1、SHA256 行の欠落はすべて拒否されるべき。
+	bad_expected=$((EXPECTED + 1))
+	sed "s/^e2e expected[[:space:]]*:.*/e2e expected : ${bad_expected}/" "$fixture" >"$tmp/bad-expected.txt"
 	if check_manifest "$tmp/bad-expected.txt" >/dev/null 2>&1; then
-		echo "ERROR: 自己検査失敗: e2e expected=253 が受け入れられました" >&2
+		echo "ERROR: 自己検査失敗: e2e expected=${bad_expected} が受け入れられました" >&2
 		rm -rf "$tmp"
 		return 1
 	fi
-	sed 's/passed: 256/passed: 0/' "$fixture" >"$tmp/bad-passed.txt"
+	sed 's/passed:[[:space:]]*[0-9][0-9]*/passed: 0/' "$fixture" >"$tmp/bad-passed.txt"
 	if check_manifest "$tmp/bad-passed.txt" >/dev/null 2>&1; then
 		echo "ERROR: 自己検査失敗: passed: 0 が受け入れられました" >&2
 		rm -rf "$tmp"
@@ -187,7 +247,7 @@ self_test() {
 	fi
 
 	rm -rf "$tmp"
-	echo "distribution-path self-test OK"
+	echo "distribution-path self-test OK" >&2
 }
 
 # 内部呼び出し（自己検査内）以外は常に自己検査を実行する。

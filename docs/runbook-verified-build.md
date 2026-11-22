@@ -66,7 +66,7 @@ e2e expected / e2e result、browser executable / path / version、
 static port / cdp port、source dist、および dist 内ファイルの SHA256
 （現状 5 行）が記録される（ADR-0266）。
 歴史的な実測例では `e2e expected : 253`、`e2e result   : passed: 253, failed: 0` だった。
-現行の期待値は **256**（check 239 + equal 17、ADR-0272 の Tauri mock +1）で、
+現行の期待値は **263**（check 246 + equal 17、ADR-0272 の Tauri mock +1）で、
 最新の実測は `./scripts/verify.sh` の Runtime Proof を参照する。
 
 ```bash
@@ -131,9 +131,10 @@ python3 -m http.server --directory "$DIST" 8000
   `unknown` とせず hard fail する。成功風の数値は記録しない。
 - 保存先が相対パス、またはリポジトリ配下（`readlink -m` で正規化して判定）なら rc=2 で拒否する。
   判定は `scripts/check-distribution-path.sh` に集約し、CI の `extra_gates` からも同じ
-  スクリプトを呼ぶ。同スクリプトは manifest の必須キー / `e2e expected=256` /
+  スクリプトを呼ぶ。同スクリプトは manifest の必須キー / `e2e expected` /
   `passed>=1` かつ `failed: 0` / SHA256 行形式も検査し、不合格なら保持を行わず
-  hard fail する（期待件数の現行契約 256 と変更時の追従先は ADR 側で管理）。
+  hard fail する。期待件数はコード出典 `Checker(expected=N)` から抽出して照合し、
+  抽出不能 / 複数 / 不正値は fail-closed とする（出典更新で自動追従）。
   CI の無引数呼び出しでも自己検査として正負両方を実行する（恒真ゲートではない）。
 - `web/index.html` に第三者フォント参照（`fonts.googleapis` / `fonts.gstatic` /
   `preconnect`）が含まれる場合は `check-no-external-font-refs.sh` が失敗する。
@@ -182,9 +183,9 @@ python3 -m http.server --directory "$DIST" 8000
       シークレット未検出なら CI が green になる可能性がある。
       検出時は従来どおり fail-closed を維持する。
 - [ ] CI で `trunk build` が成功することを確認する（現在は `verify.sh` 側のみ）。
-- [ ] CI で E2E **256 件**（check 239 + equal 17、ADR-0272 の Tauri mock +1）と
+- [ ] CI で E2E **263 件**（check 246 + equal 17、ADR-0272 の Tauri mock +1）と
       WDIO（`scripts/ci-wdio-test.sh`）が成功することを確認する。
-- [ ] `manifest.txt` の `e2e expected` / `e2e result` が 256 / `failed: 0` であることを
+- [ ] `manifest.txt` の `e2e expected` / `e2e result` が 263 / `failed: 0` であることを
       確認し、配布保持（ローカルの `verify.sh --dist`）が原子的に行われることを確認する。
 - [ ] 実 CI での artifact upload を有効化し、保持物をダウンロードして
       SHA256 検証（`grep -E '^[0-9a-f]{64} ' manifest.txt | sha256sum -c -`）まで行う。
