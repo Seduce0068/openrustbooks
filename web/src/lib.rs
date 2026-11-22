@@ -54,7 +54,7 @@ pub fn main() {
 fn App() -> impl IntoView {
     view! {
         <Router>
-            <Routes fallback=|| view! { <p class="not-found">"Page not found"</p> }>
+            <Routes fallback=|| view! { <p class="not-found">"ページが見つかりません"</p> }>
                 <Route path=path!("/") view=HomePage/>
                 <Route path=path!("/editor/:id") view=EditorPage/>
                 <Route path=path!("/reader/:id") view=ReaderPage/>
@@ -72,40 +72,40 @@ fn HomePage() -> impl IntoView {
         <div class="app home-page">
             <header class="app-header">
                 <h1>"openrustbooks"</h1>
-                <nav>
-                    <a href="/reader/sample" title="サンプル文書を開く">"Reader（サンプル）"</a>
-                    <a href="/editor/sample" title="サンプル文書を編集" aria-label="Editor（サンプル文書を編集）">"Editor（サンプル）"</a>
-                    <a href="/settings">"Settings"</a>
-                    <a href="/about">"About"</a>
+                <nav aria-label="メインナビゲーション">
+                    <a href="/reader/sample" title="サンプル文書をリーダーで開く" aria-label="サンプル文書をリーダーで開く">"リーダー（サンプル）"</a>
+                    <a href="/editor/sample" title="サンプル文書をエディターで編集" aria-label="サンプル文書をエディターで編集">"エディター（サンプル）"</a>
+                    <a href="/settings" title="設定を開く" aria-label="設定を開く">"設定"</a>
+                    <a href="/about" title="このアプリについて表示" aria-label="このアプリについて表示">"このアプリについて"</a>
                 </nav>
             </header>
             <main class="app-main">
                 <section class="document-browser">
-                    <h2>"Documents"</h2>
+                    <h2>"文書"</h2>
                     <div class="toolbar">
                         <button
                             class="btn btn-primary"
                             disabled=true
-                            title="New File (この初版では利用できません)"
-                            aria-label="New File (この初版では利用できません)"
+                            title="新規ファイル（この初版では利用できません）"
+                            aria-label="新規ファイル（この初版では利用できません）"
                         >
-                            "New File"
+                            "新規ファイル"
                         </button>
                         <button
                             class="btn btn-secondary"
                             disabled=true
-                            title="Open Folder (この初版では利用できません)"
-                            aria-label="Open Folder (この初版では利用できません)"
+                            title="フォルダーを開く（この初版では利用できません）"
+                            aria-label="フォルダーを開く（この初版では利用できません）"
                         >
-                            "Open Folder"
+                            "フォルダーを開く"
                         </button>
                         <button
                             class="btn btn-secondary"
                             disabled=true
-                            title="Open File (この初版では利用できません)"
-                            aria-label="Open File (この初版では利用できません)"
+                            title="ファイルを開く（この初版では利用できません）"
+                            aria-label="ファイルを開く（この初版では利用できません）"
                         >
-                            "Open File"
+                            "ファイルを開く"
                         </button>
                     </div>
                     <div class="file-tree">
@@ -133,7 +133,7 @@ fn EditorPage() -> impl IntoView {
             <header class="app-header">
                 <h1>"Editor: " {move || doc_id.get()}</h1>
                 <nav>
-                    <a href="/">"← Back"</a>
+                    <a href="/" title="ホームへ戻る" aria-label="ホームへ戻る">"← ホーム"</a>
                 </nav>
             </header>
             <main class="app-main">
@@ -153,7 +153,7 @@ fn ReaderPage() -> impl IntoView {
             <header class="app-header">
                 <h1>"Reader: " {move || doc_id.get()}</h1>
                 <nav>
-                    <a href="/">"← Back"</a>
+                    <a href="/" title="ホームへ戻る" aria-label="ホームへ戻る">"← ホーム"</a>
                 </nav>
             </header>
             <main class="app-main">
@@ -171,7 +171,7 @@ fn SettingsPage() -> impl IntoView {
             <header class="app-header">
                 <h1>"Settings"</h1>
                 <nav>
-                    <a href="/">"← Back"</a>
+                    <a href="/" title="ホームへ戻る" aria-label="ホームへ戻る">"← ホーム"</a>
                 </nav>
             </header>
             <main class="app-main">
@@ -189,19 +189,34 @@ fn AboutPage() -> impl IntoView {
             <header class="app-header">
                 <h1>"About"</h1>
                 <nav>
-                    <a href="/">"← Back"</a>
+                    <a href="/" title="ホームへ戻る" aria-label="ホームへ戻る">"← ホーム"</a>
                 </nav>
             </header>
             <main class="app-main">
                 <div class="about-content">
                     <h2>"openrustbooks"</h2>
                     <p>"Version: " {env!("CARGO_PKG_VERSION")}</p>
-                    <p>"A Rust-powered document reader and editor"</p>
+                    <p>"Rust で作られた文書リーダー / エディターです"</p>
                     <p>"EPUB reading: available"</p>
                     <p>"TXT / Markdown / PDF / ZIP: planned"</p>
                     <hr/>
                     <p>"Built with: Tauri, Leptos, Rust"</p>
-                    <p>"License: AGPL-3.0-or-later"</p>
+                    <p id="about-license">"License: AGPL-3.0-or-later"</p>
+                    <p>
+                        <a href="#about-license" title="ライセンス情報へ移動" aria-label="ライセンス情報へ移動">
+                            "ライセンス情報を見る"
+                        </a>
+                        " / "
+                        <a
+                            href="https://www.gnu.org/licenses/agpl-3.0.html"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="AGPL-3.0 の全文を新しいタブで開く"
+                            aria-label="AGPL-3.0 の全文を新しいタブで開く"
+                        >
+                            "AGPL-3.0 全文"
+                        </a>
+                    </p>
                 </div>
             </main>
         </div>
@@ -343,8 +358,8 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
             <div class="editor-toolbar">
                 <button
                     class="btn"
-                    title="Save draft (browser local)"
-                    aria-label="Save draft (browser local)"
+                    title="Save draft（ブラウザー内に下書きを保存 / browser local）"
+                    aria-label="Save draft（下書きを保存）"
                     on:click=move |_| {
                         // 手動保存が保留中の自動保存に置き換わるためタイマーを解除する。
                         // これで「下書きを保存しました」が自動保存の文言へ上書きされない。
@@ -368,48 +383,48 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                         }
                     }
                 >
-                    "Save draft"
+                    "下書きを保存"
                 </button>
                 <button
                     class="btn"
                     disabled=true
-                    title="AI Generate (desktop only, not implemented in the browser build)"
-                    aria-label="AI Generate (desktop only, not implemented in the browser build)"
+                    title="AI 生成（desktop only, not implemented in the browser build）"
+                    aria-label="AI 生成（デスクトップ版のみ・ブラウザー版では未実装）"
                 >
-                    "AI Generate"
+                    "AI 生成"
                 </button>
                 <button
                     class="btn"
                     disabled=true
-                    title="AI Refine (desktop only, not implemented in the browser build)"
-                    aria-label="AI Refine (desktop only, not implemented in the browser build)"
+                    title="AI 推敲（desktop only, not implemented in the browser build）"
+                    aria-label="AI 推敲（デスクトップ版のみ・ブラウザー版では未実装）"
                 >
-                    "AI Refine"
+                    "AI 推敲"
                 </button>
                 <button
                     class="btn"
                     disabled=true
-                    title="Lint (desktop only, not implemented in the browser build)"
-                    aria-label="Lint (desktop only, not implemented in the browser build)"
+                    title="静的検査（desktop only, not implemented in the browser build）"
+                    aria-label="静的検査（デスクトップ版のみ・ブラウザー版では未実装）"
                 >
-                    "Lint"
+                    "静的検査"
                 </button>
                 <select
                     class="format-select"
                     disabled=true
-                    title="Format selection (desktop only, not implemented in the browser build)"
-                    aria-label="Format selection (desktop only, not implemented in the browser build)"
+                    title="書式選択（desktop only, not implemented in the browser build）"
+                    aria-label="書式選択（デスクトップ版のみ・ブラウザー版では未実装）"
                 >
                     <option value="markdown">"Markdown"</option>
-                    <option value="txt">"Plain Text"</option>
+                    <option value="txt">"プレーンテキスト"</option>
                 </select>
             </div>
             <p class="editor-status" role="status" aria-live="polite">{move || status.get()}</p>
             <textarea
                 id="editor-input"
                 class="editor-pane"
-                aria-label="Document editor"
-                placeholder="Type text to preview it here..."
+                aria-label="文書エディター"
+                placeholder="ここに入力するとプレビューへ反映されます…"
                 on:input=move |event: web_sys::Event| {
                     if let Some(textarea) = event
                         .target()
@@ -1034,7 +1049,7 @@ fn find_large_image() -> Option<String> {
         let height = image.natural_height();
         if width > LARGE_IMAGE_THRESHOLD || height > LARGE_IMAGE_THRESHOLD {
             return Some(format!(
-                "大きな画像を検出しました（{width}x{height}）。より小さい画像を使用してください。"
+                "大きな画像を検出しました（{width}x{height}）。警告のみで縮小は実行されません。より小さい画像を使用してください。"
             ));
         }
     }
@@ -3759,7 +3774,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         // 例外を投げる環境では None となり、既存どおり削除する（fail-safe）。
         let confirmed = (|| {
             web_sys::window()?
-                .confirm_with_message("すべての読書位置を削除します。よろしいですか？")
+                .confirm_with_message(
+                    "保存済みの読書位置をすべて削除します。この操作は取り消せず、元に戻せません。続けますか？",
+                )
                 .ok()
         })();
         if confirmed == Some(false) {
@@ -3812,7 +3829,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
         let confirmed = (|| {
             web_sys::window()?
                 .confirm_with_message(
-                    "バックアップを取り込みます。現在の読書位置を上書きする場合があります。よろしいですか？",
+                    "バックアップを取り込みます。現在の読書位置を上書きする場合があります。上書きしたデータは元に戻せません。続けますか？",
                 )
                 .ok()
         })();
@@ -4020,27 +4037,29 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             data-doc-id=move || doc_id.get()
         >
             <div class="reader-toolbar">
-                <label class="btn btn-primary" for="epub-file">"Open EPUB"</label>
-                <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" on:change=on_file_change/>
-                <button id="reader-font-smaller" class="btn" title="Smaller text" aria-label="Smaller text" aria-keyshortcuts="-" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
-                <button id="reader-font-larger" class="btn" title="Larger text" aria-label="Larger text" aria-keyshortcuts="+" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
-                <button id="reader-line-spacing" class="btn" title="Line spacing" aria-label="Line spacing" on:click=on_line_spacing>"Line spacing"</button>
+                <label class="btn btn-primary" for="epub-file">"EPUB を開く"</label>
+                <input id="epub-file" class="reader-file-input" type="file" accept=".epub,application/epub+zip" aria-label="EPUB ファイルを選択" aria-describedby="epub-file-help" on:change=on_file_change/>
+                <span id="epub-file-help" class="visually-hidden">"Tab キーでこの入力へ移動し、Enter キーでファイル選択ダイアログを開きます。矢印キーでファイルを選べます。"</span>
+                <button id="reader-font-smaller" class="btn" title="文字を小さくする" aria-label="Smaller text" aria-keyshortcuts="-" on:click=on_font_smaller disabled=move || font_scale.get() == 0>"A-"</button>
+                <button id="reader-font-larger" class="btn" title="文字を大きくする" aria-label="Larger text" aria-keyshortcuts="+" on:click=on_font_larger disabled=move || font_larger_disabled.get()>"A+"</button>
+                <button id="reader-line-spacing" class="btn" title="行間を切り替える" aria-label="行間を切り替える" on:click=on_line_spacing>"行間"</button>
                 // aria-pressed はボタン操作対象のダーク表示が実際に有効か（effective_dark）を示す。
                 // 可視ラベルも同じ実効値に揃え、OS 追従中に状態表示と告知が食い違わないようにする。
                 // 追従の ON/OFF は隣の #reader-theme-auto が follow_system で担う。
-                <button id="reader-theme" class="btn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed=move || if effective_dark.get() { "true" } else { "false" } aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if effective_dark.get() { "Light" } else { "Dark" }}</button>
-                <button id="reader-theme-auto" class="btn" title="Follow the system color scheme" aria-label="Follow the system color scheme" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "Auto:on" } else { "Auto:off" }}</button>
-                <button id="reader-downscale" class="btn" title="Downscale oversized images" aria-label="Downscale oversized images" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "Downscale:on" } else { "Downscale:off" }}</button>
-                <input id="reader-jpeg-quality" class="reader-chapter-select" type="number" min="50" max="100" aria-label="JPEG quality" title="JPEG quality (%)" on:change=on_jpeg_quality_change style="max-width: 6rem;" prop:value=move || jpeg_quality.get().to_string()/>
-                <button id="reader-clear-data" class="btn" title="Clear saved reading positions" aria-label="Clear saved reading positions" on:click=on_clear_data>"Clear data"</button>
-                <button id="reader-reset-settings" class="btn" title="Reset display settings" aria-label="Reset display settings" on:click=on_reset_settings>"Reset settings"</button>
-                <button id="reader-help" class="btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" aria-keyshortcuts="?" on:click=on_help_click>"?"</button>
-                <button id="reader-export" class="btn" title="Export saved reading positions" aria-label="Export saved reading positions" on:click=on_export>"Export"</button>
-                <button id="reader-import" class="btn" title="Import saved reading positions" aria-label="Import saved reading positions" on:click=on_import_click>"Import"</button>
-                <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" on:change=on_import_change/>
-                <button id="reader-back" class="btn" aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"Back"</button>
-                <button id="reader-forward" class="btn" aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"Forward"</button>
-                <select id="reader-history" class="reader-chapter-select" aria-label="History" on:change=on_history_select prop:disabled=move || history_state.get().0 <= 1>
+                <button id="reader-theme" class="btn" title="ダーク表示を切り替える" aria-label="ダーク表示を切り替える" aria-pressed=move || if effective_dark.get() { "true" } else { "false" } aria-keyshortcuts="d" on:click=on_toggle_dark>{move || if effective_dark.get() { "ライト表示" } else { "ダーク表示" }}</button>
+                <button id="reader-theme-auto" class="btn" title="OS の配色設定に追従する" aria-label="OS の配色に追従する" aria-pressed=move || if follow_system.get() { "true" } else { "false" } on:click=on_dark_auto>{move || if follow_system.get() { "自動:on" } else { "自動:off" }}</button>
+                <button id="reader-downscale" class="btn" title="巨大画像を縮小する" aria-label="巨大画像を縮小する" aria-pressed=move || if downscale_images.get() { "true" } else { "false" } on:click=on_downscale_toggle>{move || if downscale_images.get() { "縮小:on" } else { "縮小:off" }}</button>
+                <input id="reader-jpeg-quality" class="reader-chapter-select" type="number" min="50" max="100" aria-label="JPEG 品質" title="JPEG 品質 (%)" on:change=on_jpeg_quality_change style="max-width: 6rem;" prop:value=move || jpeg_quality.get().to_string()/>
+                <button id="reader-clear-data" class="btn btn-danger" title="読書データを削除（元に戻せません）" aria-label="読書データを削除（元に戻せません）" on:click=on_clear_data>"読書データを削除"</button>
+                <button id="reader-reset-settings" class="btn" title="表示設定をリセットする" aria-label="表示設定をリセットする" on:click=on_reset_settings>"表示設定をリセット"</button>
+                <button id="reader-help" class="btn" title="キーボードショートカット (?)" aria-label="キーボードショートカット" aria-keyshortcuts="?" on:click=on_help_click>"?"</button>
+                <button id="reader-export" class="btn" title="保存済みの読書位置を書き出す" aria-label="保存済みの読書位置を書き出す" on:click=on_export>"書き出し"</button>
+                <button id="reader-import" class="btn" title="読書位置のバックアップを読み込む" aria-label="読書位置のバックアップを読み込む" on:click=on_import_click>"読み込み"</button>
+                <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" aria-label="読書位置バックアップファイルを選択" aria-describedby="reader-import-file-help" on:change=on_import_change/>
+                <span id="reader-import-file-help" class="visually-hidden">"Tab キーでこの入力へ移動し、Enter キーでファイル選択ダイアログを開きます。既存の読書位置を上書きする場合があります。"</span>
+                <button id="reader-back" class="btn" aria-label="前の履歴へ戻る" title="前の履歴へ戻る" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"戻る"</button>
+                <button id="reader-forward" class="btn" aria-label="次の履歴へ進む" title="次の履歴へ進む" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"進む"</button>
+                <select id="reader-history" class="reader-chapter-select" aria-label="履歴" title="閲覧履歴" on:change=on_history_select prop:disabled=move || history_state.get().0 <= 1>
                     <For
                         each=move || history_entries.get()
                         key=|(index, chapter_index, fragment, _)| (*index, *chapter_index, fragment.clone())
@@ -4069,13 +4088,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
-                <button class="btn" aria-label="Previous chapter" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
-                <input id="reader-chapter-filter" class="reader-chapter-select" type="search" aria-label="Filter chapters" placeholder="Filter chapters" on:input=move |event: web_sys::Event| {
+                <button class="btn" aria-label="前の章へ" title="前の章へ" aria-keyshortcuts="[" on:click=on_previous disabled=move || current.get() == 0>"◀"</button>
+                <input id="reader-chapter-filter" class="reader-chapter-select" type="search" aria-label="章を絞り込む" placeholder="章を絞り込む" on:input=move |event: web_sys::Event| {
                     if let Some(input) = event.target().and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok()) {
                         set_chapter_filter.set(input.value());
                     }
                 } style="max-width: 10rem;"/>
-                <select id="reader-chapter-select" class="reader-chapter-select" aria-label="Chapter" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
+                <select id="reader-chapter-select" class="reader-chapter-select" aria-label="Chapter" title="章を選択" on:change=on_select prop:disabled=move || chapters.get().is_empty()>
                     <For
                         each=move || filtered_chapters.get()
                         key=|(index, _, _)| *index
@@ -4086,8 +4105,8 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
-                <select id="reader-landmarks" class="reader-chapter-select" aria-label="Landmarks" on:change=on_landmark_select prop:disabled=move || landmark_options.get().is_empty()>
-                    <option value="" disabled selected>"Landmarks"</option>
+                <select id="reader-landmarks" class="reader-chapter-select" aria-label="ランドマーク" title="ランドマーク" on:change=on_landmark_select prop:disabled=move || landmark_options.get().is_empty()>
+                    <option value="" disabled selected>"ランドマークを選択"</option>
                     <For
                         each=move || landmark_options.get()
                         key=|(index, _)| *index
@@ -4096,13 +4115,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                         }
                     />
                 </select>
-                <button id="reader-history-delete" class="btn" aria-label="Delete history entry" title="Delete the selected history entry" on:click=on_history_delete disabled=move || history_state.get().0 <= 1>"Delete"</button>
-                <button id="reader-history-clear" class="btn" aria-label="Clear history" title="Clear navigation history" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"Clear"</button>
-                <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="Page" placeholder="Page" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
-                <input id="reader-swipe-threshold" class="reader-chapter-select" type="number" min="30" max="120" aria-label="Swipe threshold" title="Swipe threshold (px)" on:change=on_swipe_threshold_change style="max-width: 6rem;" prop:value=move || swipe_threshold.get().to_string()/>
-                <input id="reader-vertical-threshold" class="reader-chapter-select" type="number" min="10" max="80" aria-label="Vertical scroll threshold" title="Vertical scroll threshold (px)" on:change=on_vertical_scroll_threshold_change style="max-width: 6rem;" prop:value=move || vertical_scroll_threshold.get().to_string()/>
-                <button id="reader-page-go" class="btn" aria-label="Go to page" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"Go"</button>
-                <button class="btn" aria-label="Next chapter" aria-keyshortcuts="]" on:click=on_next disabled=move || {
+                <button id="reader-history-delete" class="btn" aria-label="選択した履歴を削除" title="選択した履歴を削除" on:click=on_history_delete disabled=move || history_state.get().0 <= 1>"削除"</button>
+                <button id="reader-history-clear" class="btn" aria-label="閲覧履歴を消去" title="現在の位置を残して履歴を消去" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"履歴を消去"</button>
+                <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="ページ" placeholder="ページ" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
+                <input id="reader-swipe-threshold" class="reader-chapter-select" type="number" min="30" max="120" aria-label="横スワイプのしきい値" title="横スワイプのしきい値 (px)" on:change=on_swipe_threshold_change style="max-width: 6rem;" prop:value=move || swipe_threshold.get().to_string()/>
+                <input id="reader-vertical-threshold" class="reader-chapter-select" type="number" min="10" max="80" aria-label="縦スクロールのしきい値" title="縦スクロールのしきい値 (px)" on:change=on_vertical_scroll_threshold_change style="max-width: 6rem;" prop:value=move || vertical_scroll_threshold.get().to_string()/>
+                <button id="reader-page-go" class="btn" aria-label="ページへ移動" title="ページへ移動" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"移動"</button>
+                <button class="btn" aria-label="次の章へ" title="次の章へ" aria-keyshortcuts="]" on:click=on_next disabled=move || {
                     let index = current.get();
                     !chapters.get().iter().any(|(chapter, _, _)| *chapter > index)
                 }>
@@ -4113,38 +4132,41 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             <p class="reader-status" role="status" aria-live="polite">{move || status.get()}</p>
             // 削除の確認ダイアログ。ネイティブ <dialog> のモーダル機能を使う。
             <dialog id="reader-delete-dialog" node_ref=dialog_ref aria-labelledby="reader-delete-title">
-                <h2 id="reader-delete-title">{move || if delete_target.get() == "clear" { "Clear all history?" } else { "Delete this history entry?" }}</h2>
+                <h2 id="reader-delete-title">{move || if delete_target.get() == "clear" { "すべての閲覧履歴を消去しますか？" } else { "この履歴を削除しますか？" }}</h2>
                 <p>{move || if delete_target.get() == "clear" {
-                    "The current position will remain and all other history will be removed."
+                    "現在の位置は残り、それ以外の履歴がすべて削除されます。この操作は元に戻せません。"
                 } else {
-                    "The selected history entry will be removed."
+                    "選択した履歴が削除されます。この操作は元に戻せません。"
                 }}</p>
                 <div class="dialog-actions">
-                    <button type="button" class="btn" autofocus on:click=on_cancel_delete>"Cancel"</button>
-                    <button type="button" class="btn btn-danger" id="reader-delete-confirm" on:click=on_confirm_delete>"Delete"</button>
+                    // E2E が textContent === 'Cancel' で安全側ボタンを特定するため、可視文言は変更しない。
+                    <button type="button" class="btn" autofocus title="キャンセル（削除を取りやめる）" aria-label="キャンセル（削除を取りやめる）" on:click=on_cancel_delete>"Cancel"</button>
+                    <button type="button" class="btn btn-danger" id="reader-delete-confirm" title="削除を確定する（元に戻せません）" on:click=on_confirm_delete>"削除する"</button>
                 </div>
             </dialog>
             // キーボードショートカットの一覧。
             <dialog id="reader-help-dialog" node_ref=help_dialog aria-labelledby="reader-help-title">
-                <h2 id="reader-help-title">"Keyboard shortcuts"</h2>
+                <h2 id="reader-help-title">"キーボードショートカット"</h2>
                 <ul class="shortcut-list">
-                    <li><kbd>"["</kbd> " / " <kbd>"]"</kbd> " — Previous / next chapter"</li>
-                    <li><kbd>"+"</kbd> " / " <kbd>"-"</kbd> " — Larger / smaller text"</li>
-                    <li><kbd>"d"</kbd> " — Toggle dark mode"</li>
-                    <li><kbd>"Alt+←"</kbd> " / " <kbd>"Alt+→"</kbd> " — Back / forward"</li>
-                    <li><kbd>"/"</kbd> " — Focus chapter filter"</li>
-                    <li><kbd>"?"</kbd> " — Show this help"</li>
+                    // E2E が 'Previous' / 'dark mode' で主要ショートカットを検証するため残す。
+                    <li><kbd>"["</kbd> " / " <kbd>"]"</kbd> " — Previous / next chapter（前の章 / 次の章へ移動）"</li>
+                    <li><kbd>"+"</kbd> " / " <kbd>"-"</kbd> " — 文字を大きく / 小さくする"</li>
+                    <li><kbd>"d"</kbd> " — Toggle dark mode（ダーク表示を切り替える）"</li>
+                    <li><kbd>"Alt+←"</kbd> " / " <kbd>"Alt+→"</kbd> " — 前の履歴 / 次の履歴へ移動"</li>
+                    // E2E が 'chapter filter' という文字列で検証するため英語表記を残す。
+                    <li><kbd>"/"</kbd> " — 章フィルター（chapter filter）にフォーカス"</li>
+                    <li><kbd>"?"</kbd> " — このヘルプを表示"</li>
                 </ul>
                 <div class="dialog-actions">
                     <button type="button" class="btn" autofocus on:click=move |_| {
                         if let Some(dialog) = help_dialog.get() { dialog.close(); }
-                    }>"Close"</button>
+                    }>"閉じる"</button>
                 </div>
             </dialog>
             <div class="reader-body">
                 <Show when=move || cover_url.get().is_some()>
                     <aside class="reader-sidebar">
-                        <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="Cover"/>
+                        <img class="reader-cover" src=move || cover_url.get().unwrap_or_default() alt="表紙"/>
                     </aside>
                 </Show>
                 <div class="reader-content" role="region" aria-labelledby="reader-chapter-title" tabindex="0" on:click=on_content_click on:scroll=on_scroll on:touchstart=on_touch_start on:touchend=on_touch_end>
@@ -4712,7 +4734,7 @@ fn SettingsForm() -> impl IntoView {
                 <span id="settings-revision">{move || revision.get().to_string()}</span>
             </p>
             <section>
-                <h3>"General Settings"</h3>
+                <h3>"一般設定"</h3>
                 <label for="settings-language">"言語"</label>
                 <input id="settings-language" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.general.language).unwrap_or_default()
@@ -4762,8 +4784,8 @@ fn SettingsForm() -> impl IntoView {
                 <p class="settings-notice">"更新確認: 未配線（updater は実装されていません）"</p>
             </section>
             <section>
-                <h3>"AI Settings"</h3>
-                <label for="settings-ai-enabled">"Enable AI Features"</label>
+                <h3>"AI 設定"</h3>
+                <label for="settings-ai-enabled">"AI 機能を有効にする"</label>
                 <input id="settings-ai-enabled" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.ai.enabled).unwrap_or(false)
                     on:change=move |event| {
@@ -4776,7 +4798,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-provider">"Provider"</label>
+                <label for="settings-provider">"プロバイダー"</label>
                 <select id="settings-provider" prop:disabled=move || !editable.get() || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.default_provider).unwrap_or_default()
                     on:change=move |event| {
@@ -4792,7 +4814,7 @@ fn SettingsForm() -> impl IntoView {
                     <option value="openai">"OpenAI"</option>
                     <option value="ollama">"Ollama (Local)"</option>
                 </select>
-                <label for="settings-openai-base-url">"OpenAI Base URL"</label>
+                <label for="settings-openai-base-url">"OpenAI ベース URL"</label>
                 <input id="settings-openai-base-url" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.openai.base_url).unwrap_or_default()
                     on:input=move |event| {
@@ -4805,7 +4827,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-openai-model">"OpenAI Model"</label>
+                <label for="settings-openai-model">"OpenAI モデル"</label>
                 <input id="settings-openai-model" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.openai.model).unwrap_or_default()
                     on:input=move |event| {
@@ -4819,12 +4841,12 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 // API Key の値は DTO へ送らない。has_api_key の有無だけを表示する。
-                <label for="settings-api-key">"API Key"</label>
+                <label for="settings-api-key">"API キー"</label>
                 <input id="settings-api-key" type="password" placeholder="設定済みの場合は変更不要" readonly=true/>
                 <span id="settings-api-key-state" class="api-key-state">
                     {move || if config.get().map(|v| v.ai.openai.has_api_key).unwrap_or(false) { "設定済み" } else { "未設定" }}
                 </span>
-                <label for="settings-organization">"Organization"</label>
+                <label for="settings-organization">"組織"</label>
                 <input id="settings-organization" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().and_then(|v| v.ai.openai.organization).unwrap_or_default()
                     on:input=move |event| {
@@ -4839,7 +4861,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-ollama-base-url">"Ollama Base URL"</label>
+                <label for="settings-ollama-base-url">"Ollama ベース URL"</label>
                 <input id="settings-ollama-base-url" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.ollama.base_url).unwrap_or_default()
                     on:input=move |event| {
@@ -4852,7 +4874,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-ollama-model">"Ollama Model"</label>
+                <label for="settings-ollama-model">"Ollama モデル"</label>
                 <input id="settings-ollama-model" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.ai.ollama.model).unwrap_or_default()
                     on:input=move |event| {
@@ -4942,8 +4964,8 @@ fn SettingsForm() -> impl IntoView {
                     }/>
             </section>
             <section>
-                <h3>"Lint Settings"</h3>
-                <label for="settings-lint-enabled">"Enable Linting"</label>
+                <h3>"Lint 設定"</h3>
+                <label for="settings-lint-enabled">"Lint を有効にする"</label>
                 <input id="settings-lint-enabled" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.lint.enabled).unwrap_or(false)
                     on:change=move |event| {
@@ -4984,7 +5006,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-auto-fix">"Auto-fix on Save"</label>
+                <label for="settings-auto-fix">"保存時に自動修正"</label>
                 <input id="settings-auto-fix" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.lint.auto_fix).unwrap_or(false)
                     on:change=move |event| {
@@ -5012,9 +5034,9 @@ fn SettingsForm() -> impl IntoView {
                     }/>
             </section>
             <section>
-                <h3>"Editor Settings"</h3>
+                <h3>"エディター設定"</h3>
                 <p class="settings-notice">"エディタ設定: config.toml の設定値です。エディタの動作には未接続です。"</p>
-                <label for="settings-editor-font-family">"Font Family"</label>
+                <label for="settings-editor-font-family">"フォントファミリー"</label>
                 <input id="settings-editor-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.font_family).unwrap_or_default()
                     on:input=move |event| {
@@ -5027,7 +5049,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-font-size">"Font Size"</label>
+                <label for="settings-editor-font-size">"フォントサイズ"</label>
                 <input id="settings-editor-font-size" type="number" min="10" max="24" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.font_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
@@ -5044,7 +5066,7 @@ fn SettingsForm() -> impl IntoView {
 
                         }
                     }/>
-                <label for="settings-editor-line-height">"Line Height"</label>
+                <label for="settings-editor-line-height">"行の高さ"</label>
                 <input id="settings-editor-line-height" type="number" step="0.1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.line_height.to_string()).unwrap_or_default()
                     on:input=move |event| {
@@ -5061,7 +5083,7 @@ fn SettingsForm() -> impl IntoView {
 
                         }
                     }/>
-                <label for="settings-editor-tab-size">"Tab Size"</label>
+                <label for="settings-editor-tab-size">"タブ幅"</label>
                 <input id="settings-editor-tab-size" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.tab_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
@@ -5081,7 +5103,7 @@ fn SettingsForm() -> impl IntoView {
                 // ADR-0179 / 0217 / 0304: auto_save_delay は未配線（実装は固定 800ms）。
                 // DTO から除外したため固定文言で表示する。
                 <p class="settings-notice">"自動保存間隔: 未配線（固定 800ms）"</p>
-                <label for="settings-editor-line-numbers">"Line Numbers"</label>
+                <label for="settings-editor-line-numbers">"行番号を表示"</label>
                 <input id="settings-editor-line-numbers" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.line_numbers).unwrap_or(false)
                     on:change=move |event| {
@@ -5094,7 +5116,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-word-wrap">"Word Wrap"</label>
+                <label for="settings-editor-word-wrap">"折り返し"</label>
                 <input id="settings-editor-word-wrap" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.word_wrap).unwrap_or(false)
                     on:change=move |event| {
@@ -5107,7 +5129,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-minimap">"Minimap"</label>
+                <label for="settings-editor-minimap">"ミニマップ"</label>
                 <input id="settings-editor-minimap" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.minimap).unwrap_or(false)
                     on:change=move |event| {
@@ -5120,7 +5142,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-insert-spaces">"Insert Spaces"</label>
+                <label for="settings-editor-insert-spaces">"スペースを挿入"</label>
                 <input id="settings-editor-insert-spaces" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.insert_spaces).unwrap_or(false)
                     on:change=move |event| {
@@ -5133,7 +5155,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-vim-mode">"Vim Mode"</label>
+                <label for="settings-editor-vim-mode">"Vim モード"</label>
                 <input id="settings-editor-vim-mode" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.vim_mode).unwrap_or(false)
                     on:change=move |event| {
@@ -5146,7 +5168,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-match-brackets">"Match Brackets"</label>
+                <label for="settings-editor-match-brackets">"対応する括弧を強調"</label>
                 <input id="settings-editor-match-brackets" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.match_brackets).unwrap_or(false)
                     on:change=move |event| {
@@ -5159,7 +5181,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-auto-close-brackets">"Auto Close Brackets"</label>
+                <label for="settings-editor-auto-close-brackets">"括弧を自動で閉じる"</label>
                 <input id="settings-editor-auto-close-brackets" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.auto_close_brackets).unwrap_or(false)
                     on:change=move |event| {
@@ -5172,7 +5194,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-editor-indent-with-tabs">"Indent With Tabs"</label>
+                <label for="settings-editor-indent-with-tabs">"タブでインデント"</label>
                 <input id="settings-editor-indent-with-tabs" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.editor.indent_with_tabs).unwrap_or(false)
                     on:change=move |event| {
@@ -5187,9 +5209,9 @@ fn SettingsForm() -> impl IntoView {
                     }/>
             </section>
             <section>
-                <h3>"Reader Settings"</h3>
+                <h3>"リーダー設定"</h3>
                 <p class="settings-notice">"リーダー設定: config.toml の設定値です。実際の表示はブラウザに保存された表示設定が権威です（ADR-0211）。"</p>
-                <label for="settings-reader-font-family">"Font Family"</label>
+                <label for="settings-reader-font-family">"フォントファミリー"</label>
                 <input id="settings-reader-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.font_family).unwrap_or_default()
                     on:input=move |event| {
@@ -5202,7 +5224,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-font-size">"Font Size"</label>
+                <label for="settings-reader-font-size">"フォントサイズ"</label>
                 <input id="settings-reader-font-size" type="number" min="10" max="48" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.font_size.to_string()).unwrap_or_default()
                     on:input=move |event| {
@@ -5219,7 +5241,7 @@ fn SettingsForm() -> impl IntoView {
 
                         }
                     }/>
-                <label for="settings-reader-line-height">"Line Height"</label>
+                <label for="settings-reader-line-height">"行の高さ"</label>
                 <input id="settings-reader-line-height" type="number" step="0.1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.line_height.to_string()).unwrap_or_default()
                     on:input=move |event| {
@@ -5236,7 +5258,7 @@ fn SettingsForm() -> impl IntoView {
 
                         }
                     }/>
-                <label for="settings-reader-theme">"Theme"</label>
+                <label for="settings-reader-theme">"テーマ"</label>
                 <input id="settings-reader-theme" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.theme).unwrap_or_default()
                     on:input=move |event| {
@@ -5249,7 +5271,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-column-width">"Column Width"</label>
+                <label for="settings-reader-column-width">"列幅"</label>
                 <input id="settings-reader-column-width" type="number" min="1" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().and_then(|v| v.reader.column_width.map(|n| n.to_string())).unwrap_or_default()
                     on:input=move |event| {
@@ -5263,7 +5285,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-scroll-mode">"Scroll Mode"</label>
+                <label for="settings-reader-scroll-mode">"スクロールモード"</label>
                 <input id="settings-reader-scroll-mode" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.scroll_mode).unwrap_or_default()
                     on:input=move |event| {
@@ -5276,7 +5298,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-hyphenation">"Hyphenation"</label>
+                <label for="settings-reader-hyphenation">"ハイフネーション"</label>
                 <input id="settings-reader-hyphenation" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.hyphenation).unwrap_or(false)
                     on:change=move |event| {
@@ -5289,7 +5311,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-vertical-writing">"Vertical Writing"</label>
+                <label for="settings-reader-vertical-writing">"縦書き"</label>
                 <input id="settings-reader-vertical-writing" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.vertical_writing).unwrap_or(false)
                     on:change=move |event| {
@@ -5302,7 +5324,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-page-numbers">"Show Page Numbers"</label>
+                <label for="settings-reader-page-numbers">"ページ番号を表示"</label>
                 <input id="settings-reader-page-numbers" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.show_page_numbers).unwrap_or(false)
                     on:change=move |event| {
@@ -5315,7 +5337,7 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                <label for="settings-reader-remember-position">"Remember Position"</label>
+                <label for="settings-reader-remember-position">"読書位置を記憶"</label>
                 <input id="settings-reader-remember-position" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.reader.remember_position).unwrap_or(false)
                     on:change=move |event| {
@@ -5330,7 +5352,7 @@ fn SettingsForm() -> impl IntoView {
                     }/>
             </section>
             <section>
-                <h3>"Storage Settings"</h3>
+                <h3>"保存先設定"</h3>
                 <p class="settings-notice">"保存先設定は config.toml が権威です。path と秘密情報は画面へ表示しません。"</p>
                 // ADR-0304: default_backend / max_recent は未配線の死設定。
                 // DTO から除外したため固定文言で表示する。

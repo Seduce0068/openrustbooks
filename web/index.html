@@ -126,10 +126,12 @@
             color: var(--color-primary);
         }
 
+        /* リンクは色だけでなく下線でも識別する（WCAG 1.4.1 / modern-web-guidance）。 */
         .app-header nav a {
             margin-left: var(--spacing-md);
             color: var(--color-muted);
-            text-decoration: none;
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
             font-size: 0.875rem;
             transition: color 0.2s;
         }
@@ -327,13 +329,22 @@
             flex-wrap: wrap;
         }
 
-        .reader-file-input {
+        /* display:none にするとキーボード focus で到達できないため、視覚のみ隠す。 */
+        .reader-file-input,
+        .visually-hidden {
             position: absolute;
             width: 1px;
             height: 1px;
             overflow: hidden;
             clip-path: inset(50%);
             white-space: nowrap;
+        }
+
+        /* 非表示の file input が focus されたら、対応する可視ボタンへフォーカス枠を出す。 */
+        .reader-toolbar:has(#epub-file:focus-visible) label[for="epub-file"],
+        .reader-toolbar:has(#reader-import-file:focus-visible) #reader-import {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
         }
 
         .reader-chapter-select {
@@ -471,6 +482,8 @@
 
         .reader-html a {
             color: var(--color-primary);
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
         }
 
         .document-content {
