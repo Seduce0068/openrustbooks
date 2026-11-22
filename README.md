@@ -908,6 +908,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0346-page-list-input](docs/decisions/0346-page-list-input.md)
 - [0347-shared-dialog-style](docs/decisions/0347-shared-dialog-style.md)
 - [0348-capability-json-gate](docs/decisions/0348-capability-json-gate.md)
+- [0349-audit-advisory-allowlist](docs/decisions/0349-audit-advisory-allowlist.md)
+  - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
   - wdio permission がテスト用 capability JSON に閉じ、tauri.conf.json へ混入しないことを検査する決定。
   - 削除確認とヘルプの dialog に共通スタイルと backdrop / forced-colors 対応を適用する決定。
   - ページ入力に候補表示・Enter 移動・trim/大小文字無視照合を追加する決定。
