@@ -30,3 +30,10 @@ fs.rs の resolve_target_storage は全候補を検査し、一つでも read_on
 - 外部サービス / 秘密情報は扱わない。
 - 既存 E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- resolve_within_roots を全候補検査/最深選択へ変更し、入れ子 read-only root を保護。
+- symlink 先の別 root も候補化、command レベル回帰 8 件追加。
+- desktop 136 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 共通化 / emit test 一般化は ADR-0312 の未決定。

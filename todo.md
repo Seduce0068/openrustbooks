@@ -22,10 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
-- [ ] 【save_document の root 選択を read_only fail-closed 化】resolve_within_roots は
-      最初に一致した root を返すため、writable 親 + read-only 子の入れ子で子 root を迂回できる。
-      fs.rs の全候補検査・最深一致方式へ unified し、両順の回帰 test を追加。
-      根拠 `desktop/src/commands/document.rs:92-129,365-383` / `desktop/src/commands/fs.rs:132-200` / R2-RC01 / 重大度 high。
 - [ ] 【close_document の unsaved チェックと削除を atomic 化】`is_unsaved()` と `remove_document()` が別ロックで、
       待ち中に mark_unsaved された編集が黙って失われる。AppState に CAS 系 close を追加。
       根拠 `desktop/src/commands/document.rs:423,429` / `desktop/src/state/mod.rs:269-272` / R2-RC01 / 重大度 high。
@@ -165,6 +161,7 @@ status: current
 
 ## 完了
 
+- [x] 【文書 root 選択】全候補 read_only 検査と最深一致を実装、入れ子/symlink 迂回を防止（ADR-0312）。
 - [x] 【CI ゲート】font/dist/secrets を CI に配線、gitleaks pre-commit を導入（ADR-0311）。
 - [x] 【release 文書】updater 未登録 / 実 WebView 検証済み / ゲート一覧を現行化（ADR-0310）。
 - [x] 【依存ゲート】cargo tree 実測と期限付き例外を追加、CI にも配線（ADR-0309）。
