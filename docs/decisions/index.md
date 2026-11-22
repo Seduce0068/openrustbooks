@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 347 件）。
+openrustbooks の ADR 一覧（全 348 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -698,3 +698,5 @@ openrustbooks の ADR 一覧（全 347 件）。
   - status: accepted — ページ入力に候補表示・Enter 移動・trim/大小文字無視照合を追加する決定。
 - [ADR-0347: ネイティブ dialog の共通スタイル](0347-shared-dialog-style.md)
   - status: accepted — 削除確認とヘルプの dialog に共通スタイルと backdrop / forced-colors 対応を適用する決定。
+- [ADR-0348: wdio capability の静的ゲート](0348-capability-json-gate.md)
+  - status: accepted — wdio permission がテスト用 capability JSON に閉じ、tauri.conf.json へ混入しないことを検査する決定。
