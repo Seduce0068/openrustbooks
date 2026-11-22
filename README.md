@@ -789,6 +789,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0306-a11y-label-cleanup](docs/decisions/0306-a11y-label-cleanup.md)
 - [0307-event-emit-visibility](docs/decisions/0307-event-emit-visibility.md)
 - [0308-storage-backend-contract](docs/decisions/0308-storage-backend-contract.md)
+- [0309-dependency-gate-hardening](docs/decisions/0309-dependency-gate-hardening.md)
+  - serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
   - overwrite の原子的新規作成、resolve_path 再確認、watch 未実装契約、退避後始末を明確化する決定。
   - emit 失敗を警告ログ化し、import 失敗件数と navigation parse 失敗を status で告知する決定。
   - lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。
