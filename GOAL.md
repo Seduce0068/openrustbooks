@@ -151,3 +151,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - DTO contract gate に両側除外を追加、575 tests pass。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - provider 選択への実配線は ADR-0342 の未決定。
+
+## 完了記録（第3cycle-11）
+
+- AI 送信確認に先頭/末尾プレビューと省略量、全文確認文言を追加。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 全文スクロール表示は ADR-0343 の未決定。

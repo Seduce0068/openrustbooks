@@ -72,8 +72,6 @@ status: current
       根拠 `desktop/src/commands/config.rs:747-767,802-828` / R1-DS01。
 - [ ] 【Document / FileEntry の生パス露出を DTO 化】document / fs イベントと返り値が絶対パスを JS へ返す。
       根拠 `core/src/document.rs:98-112` / `core/src/io.rs:97-105` / R1-DS01。
-- [ ] 【AI 送信確認の 80 文字プレビューを改善】末尾の機微情報を見落とす。全文 or 明示承認。
-      根拠 `desktop/src/commands/ai.rs:18-30` / R3-SE01。
 - [ ] 【EPUB XHTML サニタイズに入力長/深度上限】深いネストで wasm が数秒フリーズ。
       根拠 `core/src/sanitize.rs:127-156` / R3-SE01。
 - [ ] 【Page-list 入力を改善】完全一致依存 / Enter 不可 / 候補なし。datalist + trim + case-insensitive。
@@ -126,6 +124,7 @@ status: current
 
 ## 完了
 
+- [x] 【AI 送信確認】先頭／末尾プレビューと省略表示を追加（ADR-0343）。
 - [x] 【prefer_local】DTO 除外・未配線表示・config.toml 値保持（ADR-0304 方針）。
 - [x] 【CI 範囲の文書化】README / runbook-release を実ゲート範囲へ修正（ADR-0283 参照）。
 - [x] 【設定競合】再読み込みボタンを追加し view/revision を最新化（ADR-0341）。
