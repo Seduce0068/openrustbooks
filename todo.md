@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【ConfigView DTO を共通化 or 契約 test】desktop / web で手書き重複し、deserialize 失敗が実行時まで見えない。
-      共通 DTO へ昇格または JSON 往復 test を CI 化。
-      根拠 `desktop/src/commands/config.rs:71-363` / `web/src/lib.rs:4229-4343` / R1-DS01。
 - [ ] 【Wasm JS 境界の CoreError 生文字列を redaction】js_error / wasm/epub.rs が to_string() を返し、
       href / 内部型名が JS へ露出。desktop と同じ code→固定文言を共有。
       根拠 `core/src/wasm.rs:73-80` / `core/src/wasm/epub.rs:46-72` / R1-DS01。
@@ -133,6 +130,7 @@ status: current
 
 ## 完了
 
+- [x] 【Config DTO】12 ペアのフィールド契約を静的ゲート化（ADR-0322）。
 - [x] 【read_directory】read 専用 resolver で全 root を一覧可能化（ADR-0321）。
 - [x] 【config 退避】権限失敗時にロールバックし原文保持を優先（ADR-0320）。
 - [x] 【AI service】confirm 後の再取得で無効化後の送信を防止（ADR-0319）。

@@ -32,3 +32,10 @@ ConfigView / ConfigPatch が desktop と web で手書き重複しており、
 - 新規依存は使わない。
 - core / wasm の既存 DTO 契約を壊さない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- Config DTO 12 ペアの静的比較ゲートを verify.sh / CI へ配線。
+- revision / expected の片側例外のみ許容、負向 7 ケースを検出。
+- desktop 165 / web 19 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 型トークン比較 / deny_unknown_fields は ADR-0322 の未決定。
