@@ -138,3 +138,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - AI 設定差分のみ service 再生成、lint のみ変更は現在 service を維持。
 - 旧 helper を test module 内へ移し clippy 修正。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+
+## 完了記録（第3cycle-9）
+
+- CONFIG_CONFLICT 用の再読み込みボタンを追加。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 未保存編集の扱いは ADR-0341 の未決定。

@@ -77,8 +77,6 @@ status: current
 - [ ] 【レガシー config command を CAS 契約へ集約】update_config / update_ai_config / reset_config / clear_secrets は
       内部 revision を使い UI 起点 CAS を満たさない。patch 経路へ集約 or 登録解除。
       根拠 `desktop/src/commands/config.rs:747-767,802-828` / R1-DS01。
-- [ ] 【設定競合時の再読み込み導線を追加】CONFIG_CONFLICT の案内どおり再取得手段が無い。
-      根拠 `web/src/lib.rs:4815-4817,5613-5629` / R2-RC01 / R5-UX01。
 - [ ] 【Document / FileEntry の生パス露出を DTO 化】document / fs イベントと返り値が絶対パスを JS へ返す。
       根拠 `core/src/document.rs:98-112` / `core/src/io.rs:97-105` / R1-DS01。
 - [ ] 【AI 送信確認の 80 文字プレビューを改善】末尾の機微情報を見落とす。全文 or 明示承認。
@@ -135,6 +133,7 @@ status: current
 
 ## 完了
 
+- [x] 【設定競合】再読み込みボタンを追加し view/revision を最新化（ADR-0341）。
 - [x] 【設定コミット】lint のみ変更で AI service を再生成しない（ADR-0340）。
 - [x] 【delete 競合】削除直前に resolve 再確認を追加（ADR-0286 方針）。
 - [x] 【AI 起動ログ】CoreError の Display をcode()由来へ変更し機微情報の露出を防止。
