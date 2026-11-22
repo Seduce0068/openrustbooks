@@ -4,14 +4,63 @@ use crate::commands::ipc_error;
 use crate::state::AppState;
 use openrustbooks_core::{
     CoreError, CoreResult,
+    document::DocumentFormat,
     io::{
         FileEntry, ListOptions, READ_ONLY_ROOT_MESSAGE, STORAGE_ROOT_OPERATION_MESSAGE,
         StorageBackend, WriteOptions, local::LocalStorage,
     },
 };
+use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State, command};
+
+/// IPC 境界向けの [`FileEntry`] DTO（ADR-0103）。
+///
+/// `path` は除外し、表示に必要なフィールドだけを JS へ渡す。
+/// core の `FileEntry` は storage の列挙結果として内部で維持する。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEntryView {
+    pub name: String,
+    pub is_dir: bool,
+    pub size: Option<u64>,
+    pub modified: Option<chrono::DateTime<chrono::Utc>>,
+    pub format: Option<DocumentFormat>,
+    pub mime_type: Option<String>,
+}
+
+impl From<FileEntry> for FileEntryView {
+    fn from(entry: FileEntry) -> Self {
+        Self {
+            name: entry.name,
+            is_dir: entry.is_dir,
+            size: entry.size,
+            modified: entry.modified,
+            format: entry.format,
+            mime_type: entry.mime_type,
+        }
+    }
+}
+
+/// 作成／削除イベントのペイロード。ディレクトリ部分やユーザー名を含めない。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEventView {
+    pub name: String,
+}
+
+/// 移動イベントのペイロード。移動元・移動先とも basename のみを渡す。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileRenamedView {
+    pub from: String,
+    pub to: String,
+}
+
+/// 絶対パスから basename だけを取り出す（親ディレクトリ／ユーザー名を出さない）。
+fn file_name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
 
 /// 設定された local root ごとに storage を生成し、`path` と `read_only` を対応付けて保持する。
 ///
@@ -289,8 +338,10 @@ pub async fn read_directory(
     state: State<'_, Arc<AppState>>,
     path: String,
     options: Option<ListOptions>,
-) -> Result<Vec<FileEntry>, String> {
-    read_directory_impl(state.inner().as_ref(), path, options).await
+) -> Result<Vec<FileEntryView>, String> {
+    // 内部の resolves / read_only ロジックは変更せず、境界でのみ View へ変換する。
+    let entries = read_directory_impl(state.inner().as_ref(), path, options).await?;
+    Ok(entries.into_iter().map(FileEntryView::from).collect())
 }
 
 /// command 本体。generic の `AppHandle<R>` を使い、test からも同じ経路で呼べるようにする。
@@ -322,16 +373,21 @@ async fn create_file_impl<R: tauri::Runtime>(
         .await
         .map_err(ipc_error)?;
 
-    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（パスは出さない）。
-    if app.emit("file-created", &path).is_err() {
-        log::warn!("file-created event failed");
-    }
-
-    resolved
+    let entry = resolved
         .storage
         .metadata(&resolved.path)
         .await
-        .map_err(ipc_error)
+        .map_err(ipc_error)?;
+
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（パスは出さない）。
+    if app
+        .emit("file-created", &FileEntryView::from(entry.clone()))
+        .is_err()
+    {
+        log::warn!("file-created event failed");
+    }
+
+    Ok(entry)
 }
 
 /// Create a new file
@@ -341,8 +397,10 @@ pub async fn create_file(
     app: AppHandle,
     path: String,
     content: Option<String>,
-) -> Result<FileEntry, String> {
-    create_file_impl(state.inner().as_ref(), &app, path, content).await
+) -> Result<FileEntryView, String> {
+    create_file_impl(state.inner().as_ref(), &app, path, content)
+        .await
+        .map(FileEntryView::from)
 }
 
 async fn delete_file_impl<R: tauri::Runtime>(
@@ -361,7 +419,16 @@ async fn delete_file_impl<R: tauri::Runtime>(
         .await
         .map_err(ipc_error)?;
 
-    if app.emit("file-deleted", &path).is_err() {
+    // 削除後は metadata を取れないため、解決済みパスの basename だけを渡す。
+    if app
+        .emit(
+            "file-deleted",
+            &FileEventView {
+                name: file_name_of(&resolved.path),
+            },
+        )
+        .is_err()
+    {
         log::warn!("file-deleted event failed");
     }
 
@@ -412,7 +479,10 @@ async fn rename_file_impl<R: tauri::Runtime>(
     if app
         .emit(
             "file-renamed",
-            serde_json::json!({ "from": from, "to": to }),
+            &FileRenamedView {
+                from: file_name_of(&from_resolved.path),
+                to: file_name_of(&to_resolved.path),
+            },
         )
         .is_err()
     {
@@ -434,8 +504,10 @@ pub async fn rename_file(
     from: String,
     to: String,
     overwrite: Option<bool>,
-) -> Result<FileEntry, String> {
-    rename_file_impl(state.inner().as_ref(), &app, from, to, overwrite).await
+) -> Result<FileEntryView, String> {
+    rename_file_impl(state.inner().as_ref(), &app, from, to, overwrite)
+        .await
+        .map(FileEntryView::from)
 }
 
 #[cfg(test)]
@@ -640,13 +712,14 @@ mod tests {
     }
 
     /// command 本体（`*_impl`）を実際の AppHandle / MockRuntime で呼ぶ harness。
-    /// emit されたイベント数も記録する。
+    /// emit されたイベント数とペイロードを記録する。
     struct CommandHarness {
         app: tauri::App<MockRuntime>,
         state: Arc<AppState>,
         created: Arc<AtomicUsize>,
         deleted: Arc<AtomicUsize>,
         renamed: Arc<AtomicUsize>,
+        payloads: Arc<std::sync::Mutex<Vec<(String, String)>>>,
     }
 
     impl CommandHarness {
@@ -655,23 +728,39 @@ mod tests {
             let created = Arc::new(AtomicUsize::new(0));
             let deleted = Arc::new(AtomicUsize::new(0));
             let renamed = Arc::new(AtomicUsize::new(0));
+            let payloads = Arc::new(std::sync::Mutex::new(Vec::new()));
 
             app.listen("file-created", {
                 let counter = created.clone();
-                move |_| {
+                let payloads = payloads.clone();
+                move |event: tauri::Event| {
                     counter.fetch_add(1, Ordering::SeqCst);
+                    payloads
+                        .lock()
+                        .unwrap()
+                        .push(("file-created".to_string(), event.payload().to_string()));
                 }
             });
             app.listen("file-deleted", {
                 let counter = deleted.clone();
-                move |_| {
+                let payloads = payloads.clone();
+                move |event: tauri::Event| {
                     counter.fetch_add(1, Ordering::SeqCst);
+                    payloads
+                        .lock()
+                        .unwrap()
+                        .push(("file-deleted".to_string(), event.payload().to_string()));
                 }
             });
             app.listen("file-renamed", {
                 let counter = renamed.clone();
-                move |_| {
+                let payloads = payloads.clone();
+                move |event: tauri::Event| {
                     counter.fetch_add(1, Ordering::SeqCst);
+                    payloads
+                        .lock()
+                        .unwrap()
+                        .push(("file-renamed".to_string(), event.payload().to_string()));
                 }
             });
 
@@ -681,7 +770,12 @@ mod tests {
                 created,
                 deleted,
                 renamed,
+                payloads,
             }
+        }
+
+        fn payloads(&self) -> Vec<(String, String)> {
+            self.payloads.lock().unwrap().clone()
         }
 
         fn state(&self) -> &AppState {
@@ -966,6 +1060,100 @@ mod tests {
         assert_eq!(rendered, "Configuration storage failed");
         assert!(!rendered.contains(host_path));
         assert!(!rendered.contains("private.epub"));
+    }
+
+    /// FileEntryView の JSON に path やホスト情報が出ず、name / format 等は残ること。
+    #[test]
+    fn file_entry_view_json_never_exposes_raw_path() {
+        use std::collections::BTreeSet;
+
+        let entry = FileEntry {
+            name: "note.txt".to_string(),
+            path: PathBuf::from("/home/koppe/secret/note.txt"),
+            is_dir: false,
+            size: Some(12),
+            modified: None,
+            format: Some(DocumentFormat::Txt),
+            mime_type: Some("text/plain".to_string()),
+        };
+        let json = serde_json::to_value(FileEntryView::from(entry)).unwrap();
+        assert_eq!(json["name"], "note.txt");
+        assert_eq!(json["format"], "txt");
+        assert_eq!(json["size"], 12);
+        assert_eq!(json["mime_type"], "text/plain");
+        let keys: BTreeSet<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            BTreeSet::from(["name", "is_dir", "size", "modified", "format", "mime_type"])
+        );
+
+        let raw = json.to_string();
+        for forbidden in ["/home", "koppe", "secret", "\"path\""] {
+            assert!(!raw.contains(forbidden), "leaked: {forbidden}");
+        }
+    }
+
+    /// fs コマンドの返り値・emit ペイロードに生 path が出ないこと。
+    #[tokio::test]
+    async fn fs_ipc_views_and_events_never_expose_host_path() {
+        let root = TempRoot::new();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let harness = CommandHarness::new(state);
+        let raw_root = root.path.to_string_lossy().into_owned();
+
+        // read_directory の境界変換（内部ロジックは変更しない）。
+        fs::write(root.path.join("note.txt"), b"hello").unwrap();
+        let entries = read_directory_impl(harness.state(), ".".to_string(), None)
+            .await
+            .expect("一覧できること");
+        let views: Vec<FileEntryView> = entries.into_iter().map(FileEntryView::from).collect();
+        let listing = serde_json::to_string(&views).unwrap();
+        assert!(!listing.contains(&raw_root), "一覧に生 path");
+        assert!(!listing.contains("/home"), "一覧に /home");
+        assert!(listing.contains("\"name\":\"note.txt\""));
+
+        create_file_impl(
+            harness.state(),
+            &harness.handle(),
+            "fresh.txt".to_string(),
+            Some("x".to_string()),
+        )
+        .await
+        .expect("作成できること");
+        delete_file_impl(
+            harness.state(),
+            &harness.handle(),
+            "fresh.txt".to_string(),
+            None,
+        )
+        .await
+        .expect("削除できること");
+        rename_file_impl(
+            harness.state(),
+            &harness.handle(),
+            "note.txt".to_string(),
+            "renamed.txt".to_string(),
+            None,
+        )
+        .await
+        .expect("移動できること");
+
+        let payloads = harness.payloads();
+        assert_eq!(payloads.len(), 3, "各イベントが 1 回ずつ発火");
+        for (event, payload) in &payloads {
+            assert!(!payload.contains(&raw_root), "{event} に生 path");
+            assert!(!payload.contains("/home"), "{event} に /home");
+            assert!(!payload.contains("koppe"), "{event} にユーザー名");
+        }
+        assert!(payloads[0].1.contains("\"name\":\"fresh.txt\""));
+        assert!(payloads[1].1.contains("\"name\":\"fresh.txt\""));
+        assert!(payloads[2].1.contains("\"from\":\"note.txt\""));
+        assert!(payloads[2].1.contains("\"to\":\"renamed.txt\""));
     }
 
     /// root 拒否が IPC 固定文言へ変換されることを検証する。

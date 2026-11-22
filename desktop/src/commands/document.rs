@@ -11,10 +11,42 @@ use openrustbooks_core::{
     },
     io::{DEFAULT_MAX_READ_BYTES, READ_ONLY_ROOT_MESSAGE},
 };
+use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{AppHandle, Emitter, State, command};
+
+/// IPC 境界向けの [`Document`] DTO（ADR-0103）。
+///
+/// `metadata.path` / `url` / `extra` は JS に渡さない。core の `Document` は
+/// 保存先の解決に必要なため内部処理用として維持する。
+/// `id` は `open_document` で不透明な UUID を採番するため、パスを含まない。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentView {
+    pub id: DocumentId,
+    pub format: DocumentFormat,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub size_bytes: u64,
+}
+
+impl From<&Document> for DocumentView {
+    fn from(document: &Document) -> Self {
+        let metadata = &document.metadata;
+        Self {
+            id: metadata.id.clone(),
+            format: metadata.format,
+            title: metadata.title.clone(),
+            author: metadata.author.clone(),
+            created_at: metadata.created_at,
+            modified_at: metadata.modified_at,
+            size_bytes: metadata.size_bytes,
+        }
+    }
+}
 
 /// 既存の最も深い祖先を正規化し、残りを lexical に連結する（ADR-0097 と同じ意味論）。
 fn canonicalize_existing_prefix(path: &Path) -> CoreResult<PathBuf> {
@@ -392,16 +424,15 @@ async fn ensure_readable_size(path: &Path, limit: u64) -> CoreResult<()> {
     validate_read_size(size, limit)
 }
 
-/// Open a document from path
-#[command]
-pub async fn open_document(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
-    path: String,
-) -> Result<Document, String> {
+/// `open_document` の本体。generic の `AppHandle<R>` を使い、test からも同じ経路で呼べるようにする。
+async fn open_document_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    path: &str,
+) -> Result<DocumentView, String> {
     let config = state.config();
     // 設定済み root 配下のみ読み取りを許可する
-    let path_buf = resolve_within_roots(&config.storage.local_roots, &PathBuf::from(&path))
+    let path_buf = resolve_within_roots(&config.storage.local_roots, &PathBuf::from(path))
         .map_err(ipc_error)?
         .path;
 
@@ -423,8 +454,9 @@ pub async fn open_document(
         DocumentFormat::from_extension(path_buf.extension().and_then(|s| s.to_str()).unwrap_or(""))
             .unwrap_or(DocumentFormat::Txt);
 
-    // Create document
-    let id = DocumentId::from_string(path.clone());
+    // Create document。id はパス由来にせず不透明な UUID を採番する（ADR-0103）。
+    // metadata.path は保存先の解決用に core 内部へ保持するが、View には出さない。
+    let id = DocumentId::new();
     let document = document_from_loaded_text(
         id.clone(),
         format,
@@ -435,17 +467,28 @@ pub async fn open_document(
             .and_then(|s| s.to_str())
             .map(String::from),
     );
+    let view = DocumentView::from(&document);
 
-    state.add_document(document.clone());
+    state.add_document(document);
     state.mark_saved(&id);
 
     // Emit event to frontend
-    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
-    if app.emit("document-opened", &document).is_err() {
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文・パスは出さない）。
+    if app.emit("document-opened", &view).is_err() {
         log::warn!("document-opened event failed");
     }
 
-    Ok(document)
+    Ok(view)
+}
+
+/// Open a document from path
+#[command]
+pub async fn open_document(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    path: String,
+) -> Result<DocumentView, String> {
+    open_document_impl(state.inner().as_ref(), &app, &path).await
 }
 
 /// `save_document` の本体。テストから AppHandle / MockRuntime で直接呼べるように切り出している。
@@ -567,8 +610,11 @@ async fn save_document_impl<R: tauri::Runtime>(
 
     // 成功時は退避を捨てる（以降のスコープで参照しないため自動的に解放される）。
 
-    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
-    if app.emit("document-saved", &current).is_err() {
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文・パスは出さない）。
+    if app
+        .emit("document-saved", &DocumentView::from(&current))
+        .is_err()
+    {
         log::warn!("document-saved event failed");
     }
 
@@ -625,8 +671,12 @@ pub async fn close_document(
 
 /// List all open documents
 #[command]
-pub fn list_documents(state: State<'_, Arc<AppState>>) -> Vec<Document> {
-    state.list_documents()
+pub fn list_documents(state: State<'_, Arc<AppState>>) -> Vec<DocumentView> {
+    state
+        .list_documents()
+        .iter()
+        .map(DocumentView::from)
+        .collect()
 }
 
 /// Get document content
@@ -661,8 +711,11 @@ fn set_document_content_impl<R: tauri::Runtime>(
         .update_document_content_atomic(&doc_id, content)
         .map_err(ipc_error)?;
 
-    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
-    if app.emit("document-changed", &document).is_err() {
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文・パスは出さない）。
+    if app
+        .emit("document-changed", &DocumentView::from(&document))
+        .is_err()
+    {
         log::warn!("document-changed event failed");
     }
     Ok(())
@@ -946,6 +999,92 @@ mod tests {
         assert_eq!(rendered, "Internal configuration error");
         assert!(!rendered.contains(secret_id));
         assert!(!rendered.contains("private.epub"));
+    }
+
+    /// DocumentView の JSON にパス／URL／extra が出ず、表示用フィールドは残ること。
+    #[test]
+    fn document_view_json_never_exposes_path_or_host_details() {
+        use std::collections::BTreeSet;
+
+        let mut metadata = DocumentMetadata::new(
+            DocumentId::from_string("opaque-id".to_string()),
+            DocumentFormat::Markdown,
+        );
+        metadata.title = Some("Secret Notes".to_string());
+        metadata.size_bytes = 42;
+        metadata.path = Some(PathBuf::from("/home/koppe/secret/private.epub"));
+        metadata.extra.insert(
+            "host_path".to_string(),
+            serde_json::json!("/home/koppe/secret"),
+        );
+        let document = Document {
+            metadata,
+            content: DocumentContent::Text("body".to_string()),
+        };
+
+        let json = serde_json::to_value(DocumentView::from(&document)).unwrap();
+        assert_eq!(json["id"], "opaque-id");
+        assert_eq!(json["format"], "markdown");
+        assert_eq!(json["title"], "Secret Notes");
+        assert_eq!(json["size_bytes"], 42);
+        let keys: BTreeSet<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            BTreeSet::from([
+                "id",
+                "format",
+                "title",
+                "author",
+                "created_at",
+                "modified_at",
+                "size_bytes",
+            ])
+        );
+
+        let raw = json.to_string();
+        for forbidden in ["/home", "koppe", "private.epub", "host_path"] {
+            assert!(!raw.contains(forbidden), "leaked: {forbidden}");
+        }
+    }
+
+    /// open_document の返り値と document-opened ペイロードに生 path が出ないこと。
+    #[tokio::test]
+    async fn open_document_ipc_boundary_never_exposes_raw_path() {
+        let root = TempRoot::new();
+        let file_path = root.path.join("private-note.md");
+        fs::write(&file_path, "# hello").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+        let app = mock_app();
+        let payloads = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        app.listen("document-opened", {
+            let payloads = payloads.clone();
+            move |event: tauri::Event| {
+                payloads.lock().unwrap().push(event.payload().to_string());
+            }
+        });
+
+        let view = open_document_impl(&state, app.handle(), file_path.to_string_lossy().as_ref())
+            .await
+            .expect("root 配下のファイルは開けること");
+
+        let raw_path = file_path.to_string_lossy();
+        let returned = serde_json::to_string(&view).unwrap();
+        assert!(!returned.contains(raw_path.as_ref()), "返り値に生 path");
+        assert!(returned.contains("\"title\":\"private-note\""));
+        assert!(returned.contains("\"format\":\"markdown\""));
+
+        let captured = payloads.lock().unwrap();
+        assert_eq!(captured.len(), 1, "document-opened は 1 回だけ発火");
+        let payload = &captured[0];
+        assert!(!payload.contains(raw_path.as_ref()), "emit に生 path");
+        assert!(!payload.contains("private-note.md"), "id が path 由来");
+        assert!(payload.contains("\"title\":\"private-note\""));
+        assert!(payload.contains("\"format\":\"markdown\""));
     }
 
     #[test]
