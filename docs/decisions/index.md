@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 326 件）。
+openrustbooks の ADR 一覧（全 327 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -656,3 +656,5 @@ openrustbooks の ADR 一覧（全 326 件）。
   - status: accepted — desktop が返す CONFIG_LOAD_FAILED code を web の status で専用文言へ表示する決定。
 - [ADR-0326: wasm-bindgen CLI / runner の版固定検証](0326-wasm-bindgen-version-gate.md)
   - status: accepted — Cargo.lock を単一情報源として wasm-bindgen CLI と test runner の版を照合し、不一致を fail-closed で拒否する決定。
+- [ADR-0327: WDIO trunk serve の lock 固定](0327-wdio-serve-lock.md)
+  - status: accepted — WDIO の trunk serve に --locked --offline を付け、readiness 後 / cleanup 前にも lock 不変を検査する決定。

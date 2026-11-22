@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- WDIO trunk serve に lock 固定を追加（ADR-0327）。
 - wasm-bindgen CLI / runner の版を Cargo.lock 由来で検証（ADR-0326）。
 - CONFIG_LOAD_FAILED の web 固定文言を追加（ADR-0325）。
 - TableAlignment の未知値を fail-closed 化（ADR-0324）。
