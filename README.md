@@ -132,6 +132,16 @@ openrustbooks/
   `cargo install wasm-bindgen-cli --version <Cargo.lock の wasm-bindgen と同一>`)
 - Tauri CLI: `cargo install tauri-cli` (デスクトップアプリ開発時)
 - cargo-audit: `cargo install cargo-audit --locked` (一括検証の audit ゲートで必須)
+- gitleaks: `check-secrets.sh` の secrets ゲートで使用（未導入なら rc=127 で失敗）。
+  ローカルは pre-commit（`.pre-commit-config.yaml`）を主軸とし、`verify.sh` と CI の
+  extra_gates が最終ゲートとして fail-closed で検査する（ツール名は現行の gitleaks のまま）。
+- wasm-pack 0.13.1: `ci-wasm-test.sh` の wasm-test ゲートで使用。未導入なら 0.13.1 を
+  自動導入し、導入失敗や版不一致なら fail-closed。
+- Node + npm: WDIO ゲート（Tauri WebView を操作、`npm run test:wdio`）で使用。`npm ci` 済みが前提。
+- Chrome または Chromium: CDP ベースの E2E（`tools/verify-web-reader.py`）専用。
+  `E2E_BROWSER` の既定値は `google-chrome`。
+- DISPLAY（X11 / Xvfb）: WDIO ゲートの Tauri WebView 起動に必要（未設定なら失敗）。
+- Python 3.10 以降 + websockets: `tools/verify-web-reader.py` の CDP E2E ゲートで使用。
 
 ### ビルド
 
@@ -173,6 +183,13 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 ```
 
 ### 一括検証
+
+全ゲートを再現するには「前提条件」のツール（gitleaks / wasm-pack / Node + npm /
+Chrome または Chromium / DISPLAY / Python 3.10 以降 + websockets）が必要で、不足すると
+secrets / E2E / WDIO のいずれかが fail-closed で失敗する。Chrome または Chromium は
+CDP E2E 専用で、WDIO は Tauri WebView を操作するため DISPLAY を要する。wasm-pack は
+未導入時に 0.13.1 を自動導入し、導入失敗や版不一致の場合だけ wasm-test ゲートが
+fail-closed で失敗する。
 
 `./scripts/verify.sh` で、fmt / 静的ゲート（rumdl featureless・dependency-hygiene・
 version・E2E 件数・CSP・Tauri plugin config・updater honesty・capability scope）/
