@@ -36,7 +36,6 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - desktop 167 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
 - 型レベル Deserialize 検証は ADR-0324 の未決定。
 
-
 - web の status_message に CONFIG_LOAD_FAILED の固定日本語文言を追加。
 - 保存系 code 5 種の専用文言と未知 code フォールバックを test で固定。
 - web 20 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
