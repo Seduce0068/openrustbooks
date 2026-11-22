@@ -204,3 +204,12 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - emit ペイロードと返り値から生 path を除外、584 tests pass。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - frontend 接続時の View スキーマは ADR-0350 の未決定。
+
+## 最終状態（第3cycle）
+
+- 実装可能なタスクはすべて完了。ADR-0333〜0350 を追加（全 350 件）。
+- 最終 `./scripts/verify.sh`: rc=0、E2E **263 passed / 0 failed**、WDIO gate rc=0、全検証成功。
+- 残タスク 2 件は外部ブロッカー:
+  - CI の gitleaks 導入（外部取得または共通 workflow 側の対応が必要で、明示承認なしには実施しない）。
+  - CI-H01: GitHub Actions の billing 解消後の実 CI 検証 / artifact upload（外部状態の変更が必要）。
+- これらは todo.md に残し、 Turk に放置しない（次回の明示指示または billing 解消後に着手）。
