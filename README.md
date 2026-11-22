@@ -861,6 +861,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0318-document-save-cas](docs/decisions/0318-document-save-cas.md)
 - [0319-ai-service-post-confirm-check](docs/decisions/0319-ai-service-post-confirm-check.md)
 - [0320-config-backup-rollback](docs/decisions/0320-config-backup-rollback.md)
+- [0321-read-directory-root-resolution](docs/decisions/0321-read-directory-root-resolution.md)
+  - ディレクトリ一覧を先頭 storage 固定ではなく、書き込み系と同じ最深一致 root へ解決する決定。
   - 権限付与失敗時に退避を元へ戻し、原文保持を優先する決定。
   - AI command が confirm 待ち中に無効化された古い service を使わないようにする決定。
   - 保存と並行編集を世代 CAS で検出し、古い snapshot による state の書き戻しを防ぐ決定。

@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- read_directory を全 root 対応に変更（ADR-0321）。
 - config 退避の権限失敗をロールバック（ADR-0320）。
 - AI service を confirm 後に再取得し陳腐化を防止（ADR-0319）。
 - save_document の世代 CAS を導入（ADR-0318）。
