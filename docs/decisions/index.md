@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 305 件）。
+openrustbooks の ADR 一覧（全 306 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -614,3 +614,5 @@ openrustbooks の ADR 一覧（全 305 件）。
   - status: accepted — 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
 - [ADR-0305: EPUB / ZIP の解釈統一](0305-epub-zip-interpretation.md)
   - status: accepted — BOM 入り mimetype、fragment 復号、重複 manifest id、外部スキーム判定を core / web で統一する決定。
+- [ADR-0306: a11y 文言とリンク表示の改善](0306-a11y-label-cleanup.md)
+  - status: accepted — lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。

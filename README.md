@@ -786,6 +786,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0303-unused-tauri-plugins](docs/decisions/0303-unused-tauri-plugins.md)
 - [0304-dead-config-cleanup](docs/decisions/0304-dead-config-cleanup.md)
 - [0305-epub-zip-interpretation](docs/decisions/0305-epub-zip-interpretation.md)
+- [0306-a11y-label-cleanup](docs/decisions/0306-a11y-label-cleanup.md)
+  - lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。
   - BOM 入り mimetype、fragment 復号、重複 manifest id、外部スキーム判定を core / web で統一する決定。
   - 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
   - store / global-shortcut / shell / fs / opener / notification と未使用 crate を削除し、静的ゲートを log + dialog へ絞る決定。
