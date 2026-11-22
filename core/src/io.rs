@@ -34,6 +34,13 @@ pub const MOVE_DESTINATION_EXISTS_MESSAGE: &str = "Destination already exists";
 /// 元と宛先の所在が不確実になったことを fail-closed で伝える。
 pub const MOVE_ROLLBACK_FAILED_MESSAGE: &str = "Move failed and destination could not be restored";
 
+/// 解決済みパスが操作直前に変化したときの固定文言。
+///
+/// `resolve_path` 後に symlink 差し替え等で解決先が別実体へ変わった場合、
+/// 意図しない対象を開いたりrename したりしないよう fail-closed で拒否する。
+/// 設定値・パス・元内容は含めない。
+pub const STORAGE_PATH_CHANGED_MESSAGE: &str = "Resolved path changed during operation";
+
 /// Capabilities of a storage backend
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageCapabilities {
@@ -183,7 +190,15 @@ pub trait StorageBackend: Send + Sync {
     /// Open the path in system file manager (if local)
     async fn open_in_system(&self, path: &Path) -> CoreResult<()>;
 
-    /// Watch for changes (returns a stream of events)
+    /// Watch for changes (returns a stream of events).
+    ///
+    /// # 未実装契約（呼び出し禁止）
+    ///
+    /// 現時点では **すべての backend で未実装** であり、呼び出すと必ず
+    /// `CoreError::Storage("Watch not implemented yet")` を返す。
+    /// `capabilities().can_watch == false`（既定値）の間は呼び出してはならない。
+    /// 型（`StorageWatchStream` / `StorageEvent`）は将来実装のため残してあるが、
+    /// 実装が入り `can_watch` が `true` に変わるまでは利用不可とする（ADR-0178）。
     async fn watch(&self, path: &Path) -> CoreResult<Box<dyn StorageWatchStream>>;
 }
 
@@ -318,8 +333,20 @@ pub mod local {
         )))
     }
 
-    /// 一時ファイルへ書き込んでから rename する。失敗時は一時ファイルを削除する。
-    async fn write_atomic(full_path: &Path, data: &[u8]) -> CoreResult<()> {
+    /// 一時ファイルへ書き込んでから配置する。失敗時は一時ファイルを削除する。
+    ///
+    /// - `overwrite=true`: `rename` で既存宛先を置き換える（従来どおり）。
+    /// - `overwrite=false`: `hard_link` による原子的 no-replace 配置を使う。
+    ///   `hard_link` は宛先が存在すれば `AlreadyExists` で失敗するため、
+    ///   事前チェックをすり抜けて宛先が作られても既存データを破壊しない。
+    ///   一時ファイルは `full_path` と同じディレクトリに作るため filesystem をまたがない。
+    ///   非対応 filesystem 等で `hard_link` が失敗した場合は fail-closed でエラーにする。
+    async fn write_atomic(
+        root: &Path,
+        full_path: &Path,
+        data: &[u8],
+        overwrite: bool,
+    ) -> CoreResult<()> {
         let (temp_path, mut file) = create_atomic_temp(full_path).await?;
 
         let write_result = async {
@@ -338,12 +365,28 @@ pub mod local {
         }
         write_result?;
 
-        if let Err(error) = tokio_fs::rename(&temp_path, full_path).await {
-            let _ = tokio_fs::remove_file(&temp_path).await;
-            return Err(error.into());
-        }
+        let claim_result = if overwrite {
+            tokio_fs::rename(&temp_path, full_path).await
+        } else {
+            tokio_fs::hard_link(&temp_path, full_path).await
+        };
 
-        Ok(())
+        match claim_result {
+            Ok(()) => {
+                if !overwrite {
+                    // 宛先へリンクしたので一時名は不要。削除に失敗しても一意名のため次回に影響しない。
+                    let _ = tokio_fs::remove_file(&temp_path).await;
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = tokio_fs::remove_file(&temp_path).await;
+                if !overwrite && error.kind() == std::io::ErrorKind::AlreadyExists {
+                    return Err(file_exists_error(root, full_path));
+                }
+                Err(error.into())
+            }
+        }
     }
 
     /// 上書き移動の退避先を既存と衝突しない名前で予約する。
@@ -395,6 +438,39 @@ pub mod local {
             tokio_fs::remove_file(path).await?;
         }
         Ok(())
+    }
+
+    /// 既存ファイルを拒否する際の `CoreError::Storage` を組み立てる。
+    ///
+    /// エラー文言には内容も呼び出し元の生パスも出さず、
+    /// 正規化済み root からの相対パスのみを載せる（正規化不能なら固定文言）。
+    fn file_exists_error(root: &Path, full_path: &Path) -> CoreError {
+        let message = root
+            .canonicalize()
+            .ok()
+            .and_then(|root| full_path.strip_prefix(&root).ok().map(Path::to_path_buf))
+            .map(|relative| format!("File already exists: {}", relative.display()))
+            .unwrap_or_else(|| "File already exists".to_string());
+        CoreError::storage(message)
+    }
+
+    /// rename 直前に宛先が無いことを確認する（第2チェック）。
+    ///
+    /// 第1チェックは早期拒否用。この関数は実際に配置する直前の最終ガードとして
+    /// 使い、チェック後に別タスク／プロセスが宛先を作った場合も既存データを保持する。
+    fn ensure_destination_absent(path: &Path) -> CoreResult<()> {
+        if path.exists() {
+            Err(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 退避先を宛先へ復元する。失敗したら所在が不確実なため固定文言で fail-closed に伝える。
+    async fn restore_backup(backup_path: &Path, full_to: &Path) -> CoreResult<()> {
+        tokio_fs::rename(backup_path, full_to)
+            .await
+            .map_err(|_| CoreError::storage(MOVE_ROLLBACK_FAILED_MESSAGE))
     }
 
     #[derive(Debug)]
@@ -541,6 +617,20 @@ pub mod local {
 
             Ok(resolved)
         }
+
+        /// 解決直後に `path` の解決先が変わっていないことを確認する（fail-closed）。
+        ///
+        /// `create_parents` や一時ファイル作成などの I/O を挟んだ前後で
+        /// symlink 差し替え等により別実体が見えていないことを検出する。
+        /// std には `openat2(O_NOFOLLOW)` 相当の safe API が無いため完全な排除はできないが、
+        /// 解決先の不一致を拒否することで意図しない対象の open / rename を防ぐ。
+        fn ensure_path_unchanged(&self, path: &Path, expected: &Path) -> CoreResult<()> {
+            let current = self.resolve_path(path)?;
+            if current != expected {
+                return Err(CoreError::storage(STORAGE_PATH_CHANGED_MESSAGE));
+            }
+            Ok(())
+        }
     }
 
     /// 実際に読み取るバイト数上限を解決する（R6 PR-M04）。
@@ -642,6 +732,9 @@ pub mod local {
 
         async fn read(&self, path: &Path, options: ReadOptions) -> CoreResult<Vec<u8>> {
             let full_path = self.resolve_path(path)?;
+            // open 直前に解決先が不変であることを確認する（fail-closed）。
+            // 削除されていれば open 自体が失敗し、symlink 差し替えならここで拒否する。
+            self.ensure_path_unchanged(path, &full_path)?;
             let mut file = tokio_fs::File::open(&full_path).await?;
 
             if let Some(offset) = options.offset {
@@ -693,28 +786,44 @@ pub mod local {
 
             // overwrite=false のときは既存ファイルへの書き込みを拒否する。
             // atomic 分岐の前で判定するため、atomic=true でも同じガードが効く。
-            // エラー文言には内容も呼び出し元の生パスも出さず、
-            // 正規化済み root からの相対パスのみを載せる（正規化不能なら固定文言）。
             if !options.overwrite && full_path.exists() {
-                let message = self
-                    .root
-                    .canonicalize()
-                    .ok()
-                    .and_then(|root| full_path.strip_prefix(&root).ok().map(Path::to_path_buf))
-                    .map(|relative| format!("File already exists: {}", relative.display()))
-                    .unwrap_or_else(|| "File already exists".to_string());
-                return Err(CoreError::storage(message));
+                return Err(file_exists_error(&self.root, &full_path));
             }
 
             if options.create_parents
                 && let Some(parent) = full_path.parent()
             {
                 tokio_fs::create_dir_all(parent).await?;
+                // 親作成 I/O の後に解決先が変わっていないことを確認する。
+                self.ensure_path_unchanged(path, &full_path)?;
             }
 
             if options.atomic {
-                write_atomic(&full_path, data).await?;
+                // 一時ファイルへの書き込みを挟むため、配置直前に再確認する。
+                // write_atomic 側でも hard_link / rename の原子的ガードをかける。
+                self.ensure_path_unchanged(path, &full_path)?;
+                write_atomic(&self.root, &full_path, data, options.overwrite).await?;
+            } else if !options.overwrite {
+                // create_new は O_CREAT|O_EXCL 相当。事前チェック後に別タスクが
+                // 同名ファイルを作っても上書きせず AlreadyExists で失敗する。
+                self.ensure_path_unchanged(path, &full_path)?;
+                let mut file = tokio_fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&full_path)
+                    .await
+                    .map_err(|error| {
+                        if error.kind() == std::io::ErrorKind::AlreadyExists {
+                            file_exists_error(&self.root, &full_path)
+                        } else {
+                            CoreError::from(error)
+                        }
+                    })?;
+                use tokio::io::AsyncWriteExt;
+                file.write_all(data).await?;
+                file.flush().await?;
             } else {
+                self.ensure_path_unchanged(path, &full_path)?;
                 tokio_fs::write(&full_path, data).await?;
             }
 
@@ -773,6 +882,9 @@ pub mod local {
             if let Some(parent) = full_to.parent() {
                 tokio_fs::create_dir_all(parent).await?;
             }
+            // 親作成後に元・宛先の解決先が変わっていないことを確認する。
+            self.ensure_path_unchanged(from, &full_from)?;
+            self.ensure_path_unchanged(to, &full_to)?;
 
             if !overwrite {
                 // 第1回チェック：既存宛先は早期に拒否する。
@@ -780,15 +892,18 @@ pub mod local {
                     return Err(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE));
                 }
                 // 第2回チェック：POSIX rename は既存宛先を暗黙上書きするため、
-                // rename 直前にもう一度確認して TOCTOU の窓を狭める。
+                // rename 直前にもう一度確認して既存データを保持する。
                 // std には RENAME_NOREPLACE 相当の原子的 API が無く、unsafe FFI は
                 // プロジェクト規約で禁止されているため、この再確認が上限となる。
-                if full_to.exists() {
-                    return Err(CoreError::validation(MOVE_DESTINATION_EXISTS_MESSAGE));
-                }
+                self.ensure_path_unchanged(to, &full_to)?;
+                ensure_destination_absent(&full_to)?;
                 tokio_fs::rename(&full_from, &full_to).await?;
                 return Ok(());
             }
+
+            // rename 直前にも解決先と宛先の状態を確認する。
+            self.ensure_path_unchanged(from, &full_from)?;
+            self.ensure_path_unchanged(to, &full_to)?;
 
             // 宛先が無い場合は退避不要で、単純な rename で元を失わない。
             if !full_to.exists() {
@@ -803,16 +918,16 @@ pub mod local {
             let backup_path = reserve_move_backup(&full_to).await?;
 
             if let Err(error) = tokio_fs::rename(&full_to, &backup_path).await {
-                let _ = tokio_fs::remove_file(&backup_path).await;
+                // 退避先はファイルとは限らない（ディレクトリの場合もある）ため
+                // remove_file ではなく種別を判定する remove_path で後始末する。
+                let _ = remove_path(&backup_path).await;
                 return Err(error.into());
             }
 
             if let Err(rename_error) = tokio_fs::rename(&full_from, &full_to).await {
                 // rename が失敗しても退避先に元があるので復元を試みる。
-                if let Err(_restore_error) = tokio_fs::rename(&backup_path, &full_to).await {
-                    // 復元も失敗した場合は所在が不確実なため固定文言で fail-closed に伝える。
-                    return Err(CoreError::storage(MOVE_ROLLBACK_FAILED_MESSAGE));
-                }
+                // 復元も失敗した場合は所在が不確実なため固定文言で fail-closed に伝える。
+                restore_backup(&backup_path, &full_to).await?;
                 return Err(rename_error.into());
             }
 
@@ -1762,6 +1877,115 @@ pub mod local {
                 "失敗時に宛先が復元される"
             );
             assert_no_temp_leftovers(&temp);
+        }
+
+        /// rename 直後の復元に失敗したとき、固定文言（パスなし）で fail-closed になること。
+        #[tokio::test]
+        async fn restore_backup_failure_reports_fixed_rollback_message() {
+            let temp = TempRoot::new();
+            let destination = temp.path.join("restored.txt");
+
+            // 存在しない退避先を指定すると rename が失敗し、固定文言になる。
+            let error = restore_backup(&temp.path.join("missing-backup.tmp"), &destination)
+                .await
+                .expect_err("退先が無い場合は復元に失敗する");
+            match error {
+                CoreError::Storage(message) => {
+                    assert_eq!(message, MOVE_ROLLBACK_FAILED_MESSAGE);
+                    assert!(!message.contains('/'), "エラー文言にパスを含めない");
+                    assert!(!message.contains("missing-backup"), "退避先名を含めない");
+                }
+                other => panic!("expected Storage error, got {other:?}"),
+            }
+        }
+
+        /// 第1チェック後に宛先が作られたケースを、rename 直前の第2チェックが拒否すること。
+        #[test]
+        fn pre_rename_recheck_rejects_destination_created_after_initial_check() {
+            let temp = TempRoot::new();
+            let destination = temp.path.join("appeared.txt");
+            fs::write(&destination, b"created by another actor").unwrap();
+
+            let error = ensure_destination_absent(&destination)
+                .expect_err("第2チェックは事後作成された宛先を拒否する");
+            match error {
+                CoreError::Validation(message) => {
+                    assert_eq!(message, MOVE_DESTINATION_EXISTS_MESSAGE);
+                    assert!(!message.contains("appeared.txt"), "パスを含めない");
+                }
+                other => panic!("expected Validation error, got {other:?}"),
+            }
+            assert_eq!(
+                fs::read(&destination).unwrap(),
+                b"created by another actor".to_vec(),
+                "拒否しても既存データは保持される"
+            );
+        }
+
+        /// atomic + overwrite=false が hard_link の原子的 no-replace で既存を守ること。
+        /// 事前チェックを直接通す write_atomic 呼び出しでも上書きされない。
+        #[tokio::test]
+        async fn atomic_write_without_overwrite_never_replaces_existing_file() {
+            let temp = TempRoot::new();
+            let existing = temp.path.join("existing.txt");
+            fs::write(&existing, b"original").unwrap();
+
+            let error = write_atomic(&temp.path, &existing, b"replacement", false)
+                .await
+                .expect_err("hard_link は既存宛先を上書きしない");
+            assert_eq!(
+                error.to_string(),
+                "Storage error: File already exists: existing.txt"
+            );
+            assert_eq!(fs::read(&existing).unwrap(), b"original".to_vec());
+            assert_no_temp_leftovers(&temp);
+        }
+
+        /// 削除されたファイルを read すると fail-closed でエラーになること。
+        #[tokio::test]
+        async fn read_of_removed_file_fails_closed() {
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+
+            // resolve_path 自体は存在しない末尾を許すが、open は失敗する。
+            let error = storage
+                .read(Path::new("gone.txt"), ReadOptions::default())
+                .await
+                .expect_err("消えたファイルは読めない");
+            assert!(
+                matches!(error, CoreError::Io(_)),
+                "Io エラーになる: {error:?}"
+            );
+        }
+
+        /// symlink 差し替えを open 前の再解決が検出すること（Linux のみ）。
+        #[cfg(target_os = "linux")]
+        #[tokio::test]
+        async fn recheck_detects_symlink_swap_before_open() {
+            use std::os::unix::fs::symlink;
+
+            let temp = TempRoot::new();
+            let storage = temp.storage();
+            let a = temp.path.join("a.txt");
+            let b = temp.path.join("b.txt");
+            fs::write(&a, b"a").unwrap();
+            fs::write(&b, b"b").unwrap();
+            let expected = storage.resolve_path(Path::new("a.txt")).unwrap();
+
+            fs::remove_file(&a).unwrap();
+            if symlink(&b, &a).is_err() {
+                return;
+            }
+
+            let error = storage
+                .ensure_path_unchanged(Path::new("a.txt"), &expected)
+                .expect_err("symlink 差し替えを検出する");
+            match error {
+                CoreError::Storage(message) => {
+                    assert_eq!(message, STORAGE_PATH_CHANGED_MESSAGE);
+                }
+                other => panic!("expected Storage error, got {other:?}"),
+            }
         }
     }
 }
