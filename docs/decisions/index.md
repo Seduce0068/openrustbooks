@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 321 件）。
+openrustbooks の ADR 一覧（全 322 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -646,3 +646,5 @@ openrustbooks の ADR 一覧（全 321 件）。
   - status: accepted — 権限付与失敗時に退避を元へ戻し、原文保持を優先する決定。
 - [ADR-0321: read_directory の全 root 解決](0321-read-directory-root-resolution.md)
   - status: accepted — ディレクトリ一覧を先頭 storage 固定ではなく、書き込み系と同じ最深一致 root へ解決する決定。
+- [ADR-0322: Config DTO 契約の静的検証](0322-config-dto-contract.md)
+  - status: accepted — desktop / web の ConfigView / ConfigPatch DTO を 12 ペアで比較し、フィールド drift を CI で検出する決定。

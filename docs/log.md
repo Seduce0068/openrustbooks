@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- Config DTO 契約を静的ゲート化（ADR-0322）。
 - read_directory を全 root 対応に変更（ADR-0321）。
 - config 退避の権限失敗をロールバック（ADR-0320）。
 - AI service を confirm 後に再取得し陳腐化を防止（ADR-0319）。
