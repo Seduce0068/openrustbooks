@@ -67,11 +67,6 @@ status: current
 - [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
       extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
       根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
-- [ ] 【README の CI 範囲を実態へ修正】CI は静的ゲート + wasm + audit のみで、
-      E2E / WDIO / trunk build / 配布保持は verify.sh 専任。
-      根拠 `README.md:169-174` / R4-OP01。
-- [ ] 【WDIO が dev server のみであることを明記】バンドル済み desktop の /settings asset not found は未検証。
-      runbook-release の既知問題へ追記。根拠 `docs/runbook-webdriver.md:123-126` / R4-OP01。
 - [ ] 【prefer_local を配線または dead config 化】client 生成で参照されないのに DTO / UI に露出。
       ADR-0304 のリストへ追加するか provider 選択へ反映。根拠 `core/src/config.rs:91` / R1-DS01。
 - [ ] 【レガシー config command を CAS 契約へ集約】update_config / update_ai_config / reset_config / clear_secrets は
@@ -133,6 +128,7 @@ status: current
 
 ## 完了
 
+- [x] 【CI 範囲の文書化】README / runbook-release を実ゲート範囲へ修正（ADR-0283 参照）。
 - [x] 【設定競合】再読み込みボタンを追加し view/revision を最新化（ADR-0341）。
 - [x] 【設定コミット】lint のみ変更で AI service を再生成しない（ADR-0340）。
 - [x] 【delete 競合】削除直前に resolve 再確認を追加（ADR-0286 方針）。

@@ -166,12 +166,14 @@ cargo tauri dev
 
 ### CI
 
-push（`master`）と pull request では、GitHub Actions がローカルのゲートと
-同じ検証を実行する。検証本体は個人リポジトリ共通の再利用ワークフロー
-（`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）に委譲しており、
-`.github/workflows/ci.yml` は Tauri のビルド依存と wasm32 ゲートを渡す
-呼び出し側になっている。desktop を含むワークスペース全体を Linux 向けに
-検証する。
+push（`master`）と pull request では、GitHub Actions が静的ゲート /
+`wasm32` check / wasm-pack test / audit を実行する。検証本体は個人リポジトリ
+共通の再利用ワークフロー（`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）
+に委譲しており、`.github/workflows/ci.yml` は Tauri のビルド依存と
+`extra_gates` を渡す呼び出し側になっている。
+trunk build / ブラウザ E2E / WDIO / 配布保持は CI には組み込まれておらず、
+ローカルの `./scripts/verify.sh` で実行する（billing 解消後の追加は未実施）。
+desktop を含むワークスペース全体を Linux 向けに検証する。
 
 ```bash
 cargo fmt --all -- --check

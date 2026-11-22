@@ -152,6 +152,7 @@ config.toml のファイルバックアップも適用前に取得する。
 | browser AI 無効 | ブラウザの AI API は明示エラー。native のみ提供、既定無効 | ADR-0232 / ADR-0156 |
 | 設定が読み取り専用 | browser は fail-closed readonly。desktop は mock 接続（263/0）＋実 WebView 検証済み。WDIO 独立ゲート運用中。mock 263/0 は実 WebView の代替ではない | ADR-0193 / ADR-0253 / ADR-0272 / ADR-0273 / ADR-0282 / ADR-0283 |
 | 実機 5 ブラウザ未検証 | Chrome / Edge / Brave / Firefox / Safari の実機検証は未実施 | ADR-0232 |
+| WDIO は dev server のみ | 実 WebView E2E は trunk dev server 経由。バンドル済みバイナリの `/settings` は SPA fallback が無く `asset not found` | ADR-0283 / docs/runbook-webdriver.md |
 | CI billing | billing 未解消のため実 CI の検証と artifact upload は未実施 | ADR-0219 / ADR-0237 |
 | OS キーチェーン未配線 | API キー等の平文保存からの移行は未決定（マスク済み、設計受容） | ADR-0098 / ADR-0261 |
 
