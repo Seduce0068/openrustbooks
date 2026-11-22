@@ -164,3 +164,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - clear_secrets の内部 revision 例外を ADR-0344 に記録。
 - desktop 185 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - clear_secrets の expected 必須化は ADR-0344 の未決定。
+
+## 完了記録（第3cycle-13）
+
+- EPUB サニタイズに 4 MiB / 128 深度上限を追加。
+- タグ名スタック / quote 追跡 / void 大文字対応で誤爆とバイパスを防止。
+- core 364 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- web status への拒否通知は ADR-0345 の未決定。
