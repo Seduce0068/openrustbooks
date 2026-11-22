@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
-- [ ] 【set_document_content を atomic 化】get_document → add_document → mark_unsaved が別ロックで、
-      close の unsaved チェックをすり抜ける。documents/generations/unsaved を単一保持。
-      根拠 `desktop/src/commands/document.rs:552-559` / R2-RC01 / 重大度 high。
 - [ ] 【lint コマンドを AI service 依存から分離】lint / auto-fix はローカル処理なのに
       ai_service() を必須とし、既定（AI 無効）で常に失敗する。LintConfig から直接構築。
       根拠 `desktop/src/commands/ai.rs:329-361` / R1-DS01 / 重大度 high。
@@ -154,6 +151,7 @@ status: current
 
 ## 完了
 
+- [x] 【set_document_content】本文更新/世代/unsaved を原子化（ADR-0334）。
 - [x] 【配布保持】Checker(expected) を AST 抽出し、--dist 保持を復旧（ADR-0333）。
 - [x] 【権限表面】capability ゲートの source 検査範囲と実 WebView 到達性を明記（ADR-0332）。
 - [x] 【get_config 失敗】desktop only と IPC 失敗を固定文言で区別（ADR-0331）。

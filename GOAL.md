@@ -94,3 +94,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - self_test ログを stderr 化し --dist 保持フローを修正。
 - verify.sh --dist 実実行で保持成功、E2E 263 / WDIO gate rc=0。
 - verify.sh 側 grep 抽出の共通化は ADR-0333 の未決定。
+
+## 完了記録（第3cycle-2）
+
+- set_document_content を 3 ロック同時保持で原子化。
+- close 競合 test / last-write-wins を明記。
+- desktop 176 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 本文マージは ADR-0334 の未決定。
