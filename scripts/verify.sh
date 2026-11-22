@@ -329,6 +329,64 @@ run() {
 	fi
 }
 
+# cargo audit の警告を advisory ID + 有効期限付きで管理する（ADR-0349）。
+# 未登録 ID / 期限切れ / JSON 解析失敗は fail-closed。
+check_audit_allowlist() {
+	local output_file="$1"
+	python3 - "$output_file" <<'PY'
+import json
+import sys
+from datetime import date
+from pathlib import Path
+
+# 既知の unmaintained / unsound 警告。新規追加時は ADR とこの一覧を更新する。
+ALLOWED = {
+    "RUSTSEC-2024-0370": "2027-03-31",  # proc-macro-error
+    "RUSTSEC-2024-0429": "2027-03-31",  # glib
+    "RUSTSEC-2024-0436": "2027-03-31",  # paste
+    "RUSTSEC-2024-0449": "2027-03-31",  # unsafe-libyaml
+    "RUSTSEC-2025-0141": "2027-03-31",  # bincode
+    "RUSTSEC-2026-0543": "2027-03-31",  # chrono
+}
+
+path = Path(sys.argv[1])
+try:
+    report = json.loads(path.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, ValueError) as exc:
+    print(f"ERROR: cargo audit の JSON を解釈できません: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+errors: list[str] = []
+for group in ("vulnerabilities", "warnings"):
+    section = report.get(group)
+    if not isinstance(section, dict):
+        errors.append(f"cargo audit JSON の {group} が辞書ではありません")
+        continue
+    for item in section.get("list", []):
+        if group == "vulnerabilities":
+            errors.append(
+                f"脆弱性が検出されました: {item.get('id', 'unknown')} "
+                f"({item.get('package', {}).get('name', 'unknown')})"
+            )
+            continue
+        advisory = item.get("advisory", {})
+        advisory_id = advisory.get("id", "")
+        if advisory_id not in ALLOWED:
+            errors.append(f"未登録の advisory 警告: {advisory_id or 'unknown'}")
+            continue
+        if date.today().isoformat() > ALLOWED[advisory_id]:
+            errors.append(f"advisory 例外の有効期限切れ: {advisory_id} ({ALLOWED[advisory_id]})")
+
+if errors:
+    for error in errors:
+        print(f"ERROR: {error}", file=sys.stderr)
+    sys.exit(1)
+
+allowed = ", ".join(sorted(ALLOWED))
+print(f"OK: audit 警告は許可リスト内のみ ({len(ALLOWED)} IDs, 期限 2027-03-31)")
+PY
+}
+
 # 検証済み dist を保持先へコピーし、manifest.txt を生成する。
 # 呼び出し側で全ゲート成功（fail=0）を確認してから呼ぶ。
 # 既存の同名ディレクトリは決して上書きせず、連番の別名を探索する。
@@ -516,7 +574,23 @@ if ((audit_freshness_ok == 1)); then
 	# （未インストールを理由に fail-open にしない）。
 	if command -v cargo-audit >/dev/null 2>&1; then
 		# 鮮度検査で解決した DB を明示渡しし、検査対象と監査対象を一致させる。
-		run audit cargo audit --no-fetch --db "$AUDIT_DB_PATH"
+		# --deny warnings は使わず、ID + 期限付き allowlist で新規警告を拒否する。
+		audit_json="$(mktemp)"
+		echo "===== START: audit ====="
+		if cargo audit --no-fetch --db "$AUDIT_DB_PATH" --json >"$audit_json" 2>/tmp/audit-stderr.$$; then
+			if check_audit_allowlist "$audit_json"; then
+				echo "===== END: audit rc=0 ====="
+			else
+				echo "===== END: audit rc=1 ====="
+				fail=1
+			fi
+		else
+			audit_rc=$?
+			cat /tmp/audit-stderr.$$ >&2
+			echo "===== END: audit rc=$audit_rc ====="
+			fail=1
+		fi
+		rm -f "$audit_json" /tmp/audit-stderr.$$
 	else
 		# run ヘルパーと同じ START/END 形式で失敗を記録し、fail を立てる。
 		echo "===== START: audit ====="
