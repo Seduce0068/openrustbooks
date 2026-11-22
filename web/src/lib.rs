@@ -4665,6 +4665,9 @@ impl CommandError {
             "CONFIG_STORAGE" => {
                 "設定の保存に失敗しました。しばらくしてからもう一度お試しください。"
             }
+            "CONFIG_LOAD_FAILED" => {
+                "設定ファイルを読み込めませんでした。読み込み失敗のため保存は無効です。config.toml を確認してください。"
+            }
             "AI_PROVIDER" => {
                 "AI 機能の処理に失敗しました。しばらくしてからもう一度お試しください。"
             }
@@ -4699,9 +4702,33 @@ mod command_error_tests {
             "設定の保存に失敗しました。しばらくしてからもう一度お試しください。"
         );
         assert_eq!(
+            error("CONFIG_LOAD_FAILED").status_message(),
+            "設定ファイルを読み込めませんでした。読み込み失敗のため保存は無効です。config.toml を確認してください。"
+        );
+        assert_eq!(
             error("AI_PROVIDER").status_message(),
             "AI 機能の処理に失敗しました。しばらくしてからもう一度お試しください。"
         );
+    }
+
+    /// desktop が返し得る code はすべて固定文言を持ち、既定文言へ落ちないこと。
+    #[test]
+    fn all_desktop_codes_have_dedicated_messages() {
+        let fallback = error("__unknown__").status_message();
+        for code in [
+            "CONFIG_CONFLICT",
+            "CONFIG_VALIDATION",
+            "CONFIG_STORAGE",
+            "CONFIG_LOAD_FAILED",
+            "AI_PROVIDER",
+        ] {
+            let message = error(code).status_message();
+            assert_ne!(
+                message, fallback,
+                "desktop code {code} が既定文言へ落ちている"
+            );
+            assert!(!message.contains(code), "code {code} が文言へ漏れている");
+        }
     }
 
     #[test]
