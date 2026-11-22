@@ -25,3 +25,10 @@ runbook-release / README 細部を現行実装へ追従させる（R6 レビュ�
 - 公開鍵 / endpoint / release workflow は追加しない。
 - 外部サービス / 課金 / 破壊的操作は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- updater 未登録・実 WebView 検証済みを runbook へ反映。
+- README の build.rs 配置 / ADR 要約 / ゲート一覧を現行化。
+- R4 high/medium すべて反映、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 公開鍵 / endpoint / workflow / 実ブラウザ / CI billing は未決定として残す。

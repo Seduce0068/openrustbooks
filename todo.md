@@ -66,12 +66,6 @@ status: current
       シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
       billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
       `scripts/verify.sh:250-269,331-387` / R4-CI01 / 重大度 medium-high。
-- [ ] 【runbook-release / README 細部の現行値を更新（今回範囲外）】runbook-release の
-      updater 文言、README の build.rs 配置、`--locked` 未決定表記、ゲート対象の拡張、
-      README ADR 要約の誤配置を更新する。runbook-verified-build / ADR-0273 / ADR-0265 は
-      今回の docfix で反映済みのため重複しない。
-      根拠 `README.md:733,754-763` / `docs/runbook-release.md` /
-      `docs/decisions/0278-settings-ipc-capability-scope.md:20,67` / R1-FG01 + R5-DC01 / 重大度 medium。
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
@@ -112,6 +106,7 @@ status: current
 
 ## 完了
 
+- [x] 【release 文書】updater 未登録 / 実 WebView 検証済み / ゲート一覧を現行化（ADR-0310）。
 - [x] 【依存ゲート】cargo tree 実測と期限付き例外を追加、CI にも配線（ADR-0309）。
 - [x] 【StorageBackend】create_new/hard_link と resolve 再確認で競合を緩和（ADR-0308）。
 - [x] 【emit/import 可視化】失敗ログ・失敗件数・nav parse status を追加（ADR-0307）。
