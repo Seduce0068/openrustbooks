@@ -350,9 +350,16 @@ check_rumdl_featureless() {
 	bash "$SCRIPT_DIR/check-rumdl-featureless.sh"
 }
 
+# serde_yaml / tikv-jemalloc-sys の lock 残存を既知例外（ID / 期限 / 経路）なしに
+# 通さない。rumdl featureless を前提とするため、直前に並べて実行する。
+check_dependency_hygiene() {
+	bash "$SCRIPT_DIR/check-dependency-hygiene.sh"
+}
+
 run fmt cargo fmt --all -- --check
 run no-external-font-refs check_no_external_font_refs
 run rumdl-featureless check_rumdl_featureless
+run dependency-hygiene check_dependency_hygiene
 run version-consistency bash scripts/check-version-consistency.sh
 run e2e-count-consistency bash scripts/check-e2e-count-consistency.sh
 run csp-consistency bash scripts/check-csp-consistency.sh

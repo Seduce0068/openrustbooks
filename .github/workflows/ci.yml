@@ -1,8 +1,9 @@
 # 個人リポジトリ共通の再利用可能ワークフロー
 # （Seduce0068/workflows の rust-gates.yml）へ委譲する。共通側の基本ゲート
 # （fmt / check / test / clippy）に加え、verify.sh と同じ静的検査を extra_gates で
-# 実行する（rumdl-featureless / version / e2e-count / csp / updater-honesty /
-# capability-scope / tauri-plugin-config / wasm32 core / wasm32 web）。さらに wasm-bindgen-test を
+# 実行する（rumdl-featureless / dependency-hygiene / version / e2e-count / csp /
+# updater-honesty / capability-scope / tauri-plugin-config / wasm32 core /
+# wasm32 web）。さらに wasm-bindgen-test を
 # Node 上で実行する wasm-pack test を末尾に置く（verify.sh の wasm-test と同じスクリプト）。
 # no-external-font-refs / audit / trunk build + E2E は verify.sh 側のゲート。
 # desktop を含むワークスペース全体を Linux 向けに検証するため、
@@ -46,6 +47,7 @@ jobs:
         CARGO_INCREMENTAL=0
       extra_gates: |
         bash scripts/check-rumdl-featureless.sh
+        bash scripts/check-dependency-hygiene.sh
         bash scripts/check-version-consistency.sh
         bash scripts/check-e2e-count-consistency.sh
         bash scripts/check-csp-consistency.sh
