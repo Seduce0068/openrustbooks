@@ -4801,38 +4801,7 @@ struct SettingsReaderView {
     remember_position: bool,
 }
 
-/// Tauri IPC への薄いラッパ。
-///
-/// `window.__TAURI__` が無いブラウザ単体では invoke を呼ばず `Err("desktop only")` を返す。
-/// 保存コマンドの接続は ADR 未決定のため、今は読み取り専用の下準備にとどめる。
-async fn invoke(command: &str, args: &JsValue) -> Result<JsValue, String> {
-    let window = web_sys::window().ok_or_else(|| "desktop only".to_string())?;
-    let window: JsValue = window.into();
-    let tauri = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
-        .map_err(|_| "desktop only".to_string())?;
-    if tauri.is_undefined() || tauri.is_null() {
-        return Err("desktop only".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &JsValue::from_str("core"))
-        .map_err(|_| "desktop only".to_string())?;
-    if core.is_undefined() || core.is_null() {
-        return Err("desktop only".to_string());
-    }
-    let invoke_fn = js_sys::Reflect::get(&core, &JsValue::from_str("invoke"))
-        .map_err(|_| "desktop only".to_string())?;
-    let invoke_fn: js_sys::Function = invoke_fn
-        .dyn_into()
-        .map_err(|_| "desktop only".to_string())?;
-    let promise = invoke_fn
-        .call2(&core, &JsValue::from_str(command), args)
-        .map_err(|_| "desktop only".to_string())?;
-    let promise: js_sys::Promise = promise.dyn_into().map_err(|_| "desktop only".to_string())?;
-    wasm_bindgen_futures::JsFuture::from(promise)
-        .await
-        .map_err(|_| "デスクトップ版の設定を取得できませんでした".to_string())
-}
-
-/// 保存コマンド専用のエラー。Promise reject が Object なら `code` だけを取り、
+/// 設定コマンド共通のエラー。Promise reject が Object なら `code` だけを取り、
 /// 生 `message`（設定値・パス・秘密情報を含み得る）は保持しない（ADR-0269 / 0226）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CommandError {
@@ -5299,7 +5268,7 @@ mod epub_link_safety_tests {
     }
 }
 
-/// `update_config_patch` 呼び出し用。reflect 経路は `invoke` と同じで、
+/// Tauri command（設定の読み取り・更新）呼び出し用。
 /// reject から `code` のみを取り出して `CommandError` に変換する。
 async fn invoke_update(command: &str, args: &JsValue) -> Result<JsValue, CommandError> {
     let window = web_sys::window().ok_or_else(|| CommandError {
@@ -5380,11 +5349,52 @@ fn command_error_code(reason: &JsValue) -> String {
     "CONFIG_INTERNAL".to_string()
 }
 
-/// `get_config` を呼び出して DTO に変換する（ブラウザでは Err）。
-async fn fetch_config() -> Result<SettingsView, String> {
+/// `get_config` を呼び出して DTO に変換する。
+///
+/// ブラウザ（__TAURI__ 不在）では `CommandError { code: "desktop only" }`、
+/// IPC reject はその code、deserialize 失敗は `CONFIG_INTERNAL` を返す。
+async fn fetch_config() -> Result<SettingsView, CommandError> {
     let args: JsValue = js_sys::Object::new().into();
-    let value = invoke("get_config", &args).await?;
-    serde_wasm_bindgen::from_value(value).map_err(|_| "設定の形式が正しくありません".to_string())
+    let value = invoke_update("get_config", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
+/// get_config 失敗時の固定日本語文言。
+///
+/// `desktop only`（ブラウザ単体）は既存文言を維持し、それ以外（desktop の
+/// IPC reject / deserialize 失敗）は生 message を出さず config.toml の確認を案内する。
+fn config_fetch_status_message(code: &str) -> &'static str {
+    match code {
+        "desktop only" => "デスクトップ版のみ利用可能",
+        _ => "設定を取得できませんでした。config.toml を確認してください。",
+    }
+}
+
+#[cfg(test)]
+mod config_fetch_status_tests {
+    use super::config_fetch_status_message;
+
+    #[test]
+    fn browser_code_keeps_existing_message() {
+        assert_eq!(
+            config_fetch_status_message("desktop only"),
+            "デスクトップ版のみ利用可能"
+        );
+    }
+
+    #[test]
+    fn desktop_codes_use_fixed_failure_message_without_echoing_code() {
+        let message = "設定を取得できませんでした。config.toml を確認してください。";
+        for code in [
+            "CONFIG_INTERNAL",
+            "CONFIG_LOAD_FAILED",
+            "CONFIG_STORAGE",
+            "sk-leak-host-body",
+        ] {
+            assert_eq!(config_fetch_status_message(code), message);
+            assert!(!message.contains(code), "code {code} が文言へ漏れている");
+        }
+    }
 }
 
 /// 設定を保存する。`revision` を `expected` へコピーした `ConfigPatch` JSON を渡し、
@@ -5589,6 +5599,9 @@ fn select_value(event: &web_sys::Event) -> Option<String> {
 fn SettingsForm() -> impl IntoView {
     let status = RwSignal::new(String::new());
     let config = RwSignal::new(Option::<SettingsView>::None);
+    // fetch_config の失敗 code を保持し、on_save の config=None 分岐でも
+    // ブラウザ（desktop only）と desktop の取得失敗を切り分ける。
+    let fetch_error_code = RwSignal::new(Option::<String>::None);
     let editable = RwSignal::new(false);
     // 保存 in-flight 中の編集を防ぎ、成功レスポンスでローカル編集が
     // 上書きされる lost update を回避する（R6 レビュー / R2-BV01）。
@@ -5607,8 +5620,9 @@ fn SettingsForm() -> impl IntoView {
                     // __TAURI__ の存在ではなく IPC 成功を権威にする。
                     editable.set(true);
                 }
-                Err(_) => {
-                    status.set("デスクトップ版のみ利用可能".to_string());
+                Err(error) => {
+                    status.set(config_fetch_status_message(&error.code).to_string());
+                    fetch_error_code.set(Some(error.code));
                 }
             }
         });
@@ -5634,7 +5648,10 @@ fn SettingsForm() -> impl IntoView {
         }
         saving.set(true);
         let Some(view) = config.get() else {
-            status.set("デスクトップ版のみ利用可能".to_string());
+            let code = fetch_error_code
+                .get()
+                .unwrap_or_else(|| "desktop only".to_string());
+            status.set(config_fetch_status_message(&code).to_string());
             saving.set(false);
             return;
         };
@@ -5673,7 +5690,7 @@ fn SettingsForm() -> impl IntoView {
     view! {
         <form class="settings-form">
             // ADR-0128 / 0193: ブラウザ版は読み取り専用。readonly のときだけ説明を表示し、
-            // fetch_config の成否を伝える status（「デスクトップ版のみ利用可能」）は常時併記する。
+            // fetch_config の成否を伝える status は常時併記する。
             // R6 A05: desktop（editable=true）では browser-only 説明を DOM から除く。
             <Show when=move || !editable.get()>
                 <p class="settings-notice">"ブラウザ版は表示のみです。設定の変更・保存はデスクトップ版で行ってください。"</p>
