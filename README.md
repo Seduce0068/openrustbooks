@@ -895,6 +895,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0335-lint-without-ai-service](docs/decisions/0335-lint-without-ai-service.md)
 - [0336-api-key-blank-guard](docs/decisions/0336-api-key-blank-guard.md)
 - [0337-save-conflict-disk-restore](docs/decisions/0337-save-conflict-disk-restore.md)
+- [0338-ai-startup-log-redaction](docs/decisions/0338-ai-startup-log-redaction.md)
+  - AI service 初期化失敗時に CoreError の Display をログへ出さず、code() 由来の情報だけを記録する決定。
   - CAS 競合時に atomic_write 済みのディスクを元内容へ戻し、state とディスクの不整合を防ぐ決定。
   - 空／空白のみの API キー入力を保存 command へ送らず、設定済みキーを誤って削除しないようにする決定。
   - lint / auto-fix はローカル処理として LintConfig から直接構築し、既定の AI 無効でも動作可能にする決定。

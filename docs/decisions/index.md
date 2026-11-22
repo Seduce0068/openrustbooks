@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 337 件）。
+openrustbooks の ADR 一覧（全 338 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -678,3 +678,5 @@ openrustbooks の ADR 一覧（全 337 件）。
   - status: accepted — 空／空白のみの API キー入力を保存 command へ送らず、設定済みキーを誤って削除しないようにする決定。
 - [ADR-0337: save_document 競合時のディスク復元](0337-save-conflict-disk-restore.md)
   - status: accepted — CAS 競合時に atomic_write 済みのディスクを元内容へ戻し、state とディスクの不整合を防ぐ決定。
+- [ADR-0338: AI 初期化エラーのログ redaction](0338-ai-startup-log-redaction.md)
+  - status: accepted — AI service 初期化失敗時に CoreError の Display をログへ出さず、code() 由来の情報だけを記録する決定。
