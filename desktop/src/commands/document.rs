@@ -442,24 +442,22 @@ pub async fn save_document(
     save_document_impl(state.inner().as_ref(), &app, &id, content).await
 }
 
-/// Close a document
-#[command]
-pub async fn close_document(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
-    id: String,
-    force: Option<bool>,
+/// `close_document` の本体。テストから AppHandle / MockRuntime で直接呼べるように切り出している。
+fn close_document_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    force: bool,
 ) -> Result<(), String> {
-    let doc_id = DocumentId::from_string(id);
+    let doc_id = DocumentId::from_string(id.to_string());
 
-    // Check for unsaved changes
-    if !force.unwrap_or(false) && state.is_unsaved(&doc_id) {
-        return Err(ipc_error(CoreError::validation(
-            "Document has unsaved changes",
-        )));
-    }
+    // unsaved チェックと削除は AppState 側で両ロックを保持して原子的に行う。
+    // 拒否は CoreError を ipc_error に通し、固定文言の Tauri String にする
+    // （id / path を一切出さない）。
+    let document = state
+        .close_document_atomic(&doc_id, force)
+        .map_err(ipc_error)?;
 
-    let document = state.remove_document(&doc_id);
     if document.is_some() {
         // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（id は出さない）。
         if app.emit("document-closed", doc_id.0).is_err() {
@@ -468,6 +466,17 @@ pub async fn close_document(
     }
 
     Ok(())
+}
+
+/// Close a document
+#[command]
+pub async fn close_document(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    id: String,
+    force: Option<bool>,
+) -> Result<(), String> {
+    close_document_impl(state.inner().as_ref(), &app, &id, force.unwrap_or(false))
 }
 
 /// List all open documents
@@ -522,6 +531,7 @@ pub fn set_document_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::DOCUMENT_UNSAVED_MESSAGE;
     use openrustbooks_core::AppConfig;
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1222,5 +1232,122 @@ mod tests {
         let expected =
             "---\r\n# 元のコメント\r\nzzz: \"double\"\r\naaa: 'single'\r\n---\r\n# Changed\r\n";
         assert_eq!(fs::read(&path).unwrap(), expected.as_bytes().to_vec());
+    }
+
+    // --- close_document のテスト ---
+
+    /// close コマンドの emit を記録するハーネス（SaveHarness と同じ mock_app 機構）。
+    struct CloseHarness {
+        app: tauri::App<MockRuntime>,
+        state: Arc<AppState>,
+        closed: Arc<AtomicUsize>,
+    }
+
+    impl CloseHarness {
+        fn new(state: AppState) -> Self {
+            let app = mock_app();
+            let closed = Arc::new(AtomicUsize::new(0));
+            app.listen("document-closed", {
+                let counter = closed.clone();
+                move |_| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+            Self {
+                app,
+                state: Arc::new(state),
+                closed,
+            }
+        }
+
+        fn state(&self) -> &AppState {
+            self.state.as_ref()
+        }
+
+        fn handle(&self) -> tauri::AppHandle<MockRuntime> {
+            self.app.handle().clone()
+        }
+    }
+
+    /// close テスト用の単純なテキスト文書。
+    fn close_test_document(id: &str) -> Document {
+        Document {
+            metadata: DocumentMetadata::new(
+                DocumentId::from_string(id.to_string()),
+                DocumentFormat::Txt,
+            ),
+            content: DocumentContent::Text("close target".to_string()),
+        }
+    }
+
+    /// unsaved 文書を force=false で閉じると固定文言で拒否され、
+    /// 削除も emit も起きないこと。
+    #[test]
+    fn command_close_document_rejects_unsaved_without_removal_or_emit() {
+        let harness = CloseHarness::new(AppState::new(AppConfig::default()));
+        let document = close_test_document("close-unsaved");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_unsaved(&id);
+
+        let error = close_document_impl(harness.state(), &harness.handle(), &id.0, false)
+            .expect_err("unsaved 文書は拒否される");
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation(DOCUMENT_UNSAVED_MESSAGE))
+        );
+        // IPC には固定文言のみで、文書 id は出ない。
+        assert!(!error.contains("close-unsaved"));
+        assert!(harness.state().get_document(&id).is_some());
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(harness.closed.load(Ordering::SeqCst), 0);
+    }
+
+    /// 保存済み文書の通常 close は削除され、document-closed は 1 回だけ発火する。
+    #[test]
+    fn command_close_document_emits_once_for_saved_document() {
+        let harness = CloseHarness::new(AppState::new(AppConfig::default()));
+        let document = close_test_document("close-saved");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_saved(&id);
+
+        close_document_impl(harness.state(), &harness.handle(), &id.0, false)
+            .expect("保存済み文書は閉じられる");
+
+        assert!(harness.state().get_document(&id).is_none());
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(harness.closed.load(Ordering::SeqCst), 1);
+    }
+
+    /// force=true なら unsaved でも削除され、emit 回数は従来どおり 1 回。
+    #[test]
+    fn command_close_document_force_removes_and_emits_once() {
+        let harness = CloseHarness::new(AppState::new(AppConfig::default()));
+        let document = close_test_document("close-force");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_unsaved(&id);
+
+        close_document_impl(harness.state(), &harness.handle(), &id.0, true)
+            .expect("force なら閉じられる");
+
+        assert!(harness.state().get_document(&id).is_none());
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(harness.closed.load(Ordering::SeqCst), 1);
+    }
+
+    /// 存在しない文書は emit せず、force=true なら孤立フラグだけ掃除する。
+    #[test]
+    fn command_close_document_nonexistent_cleans_orphan_without_emit() {
+        let harness = CloseHarness::new(AppState::new(AppConfig::default()));
+        let id = DocumentId::from_string("close-orphan".to_string());
+        harness.state().mark_unsaved(&id);
+
+        close_document_impl(harness.state(), &harness.handle(), &id.0, true)
+            .expect("force なら孤立フラグを掃除できる");
+
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(harness.closed.load(Ordering::SeqCst), 0);
     }
 }

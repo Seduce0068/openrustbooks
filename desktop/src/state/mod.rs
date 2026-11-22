@@ -13,6 +13,12 @@ use std::sync::{Arc, RwLock};
 /// 設定値・パス・生エラー文字列は一切含めない（R2-ER01 / fail-closed）。
 pub const CONFIG_LOAD_FAILED_MESSAGE: &str = "Configuration load failed; saving is disabled";
 
+/// 未保存文書を non-force で閉じようとした場合の固定文言。
+///
+/// 文書 id / path は一切含めない。IPC へは `ipc_error` が固定 code 経由で
+/// 変換するため、この文言自体は内部エラーとしてのみ使う（ADR-0287）。
+pub const DOCUMENT_UNSAVED_MESSAGE: &str = "Document has unsaved changes";
+
 /// 設定とその revision を同じロックで保持する（CAS の比較単位）。
 struct ConfigState {
     config: AppConfig,
@@ -35,6 +41,11 @@ pub struct AppState {
     /// インスタンスごとに持つため、並列テスト間で干渉しない。
     #[cfg(test)]
     test_after_prepare: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `close_document_atomic` が documents の write guard を取得した直後に呼ぶ
+    /// テスト専用フック。unsaved チェックの直前に `mark_unsaved` が割り込む
+    /// 状況を疑似的に再現する（実運用では documents guard がブロックする）。
+    #[cfg(test)]
+    test_after_documents_lock: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl AppState {
@@ -64,6 +75,8 @@ impl AppState {
             unsaved_changes: RwLock::new(HashMap::new()),
             #[cfg(test)]
             test_after_prepare: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            test_after_documents_lock: std::sync::Mutex::new(None),
         }
     }
 
@@ -210,7 +223,9 @@ impl AppState {
 
         #[cfg(test)]
         {
-            if let Some(hook) = self.test_after_prepare.lock().unwrap().as_ref() {
+            // 1 回限りで解除し、callback を呼ぶ前に MutexGuard を drop する。
+            let hook = self.test_after_prepare.lock().unwrap().take();
+            if let Some(hook) = hook {
                 hook();
             }
         }
@@ -266,10 +281,57 @@ impl AppState {
     ///
     /// documents と unsaved_changes のロックは順番に取得・解放する（同時保持しない）。
     /// 文書が存在しない場合でも unsaved キーを削除し、孤立フラグを掃除する。
+    ///
+    /// `close_document_atomic` の導入で production の呼び出しは無くなったが、
+    /// ADR-0208 の削除契約を残すため維持する（unit test から使用）。
+    #[allow(dead_code)]
     pub fn remove_document(&self, id: &DocumentId) -> Option<Document> {
         let removed = self.documents.write().unwrap().remove(id);
         self.unsaved_changes.write().unwrap().remove(id);
         removed
+    }
+
+    /// 未保存チェックと文書削除を単一クリティカルセクションで行う。
+    ///
+    /// `documents` -> `unsaved_changes` の順で両方の write guard を同時に保持し、
+    /// チェックから削除までを排他する（逆順の箇所は作らない）。
+    /// `force=false` で unsaved なら固定文言の Validation を返し、何も変更しない。
+    /// `force=true` なら削除する。文書が存在しない場合も `unsaved_changes` の
+    /// キーを削除し、孤立フラグを掃除する既存契約を維持する（ADR-0208）。
+    pub fn close_document_atomic(
+        &self,
+        id: &DocumentId,
+        force: bool,
+    ) -> CoreResult<Option<Document>> {
+        // 既存の remove_document と同じく documents を先に取得する。
+        let mut documents = self.documents.write().unwrap();
+
+        #[cfg(test)]
+        {
+            // 疑似的な隔挿入: documents guard を保持したまま mark_unsaved を
+            // 割り込ませ、チェック時点の最新フラグで拒否されることを確認する。
+            // 実運用の set_document_content は documents を経由するためここで
+            // ブロックされるが、unsaved_changes 側からの直接割込みを模する。
+            // guard は take() で 1 回限りにし、callback を呼ぶ前に drop する
+            // （callback が Mutex を再取得してもデッドロックしないように）。
+            let hook = self.test_after_documents_lock.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+        }
+
+        // unsaved_changes も同じクリティカルセクションで保持する。
+        // documents -> unsaved_changes の順を維持し、逆順の箇所は作らない。
+        let mut unsaved = self.unsaved_changes.write().unwrap();
+
+        if !force && unsaved.get(id).copied().unwrap_or(false) {
+            return Err(CoreError::validation(DOCUMENT_UNSAVED_MESSAGE));
+        }
+
+        let removed = documents.remove(id);
+        // 文書が存在しない場合も孤立フラグを掃除する（既存契約）。
+        unsaved.remove(id);
+        Ok(removed)
     }
 
     /// List all documents
@@ -294,6 +356,10 @@ impl AppState {
     }
 
     /// Check if document has unsaved changes
+    ///
+    /// `close_document_atomic` が両 guard 保持下で同じ判定を行うため production
+    /// では未使用だが、状態確認 API として維持する（unit test から使用）。
+    #[allow(dead_code)]
     pub fn is_unsaved(&self, id: &DocumentId) -> bool {
         self.unsaved_changes
             .read()
@@ -390,6 +456,11 @@ mod tests {
         fn set_after_prepare_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
             *self.test_after_prepare.lock().unwrap() = Some(Box::new(hook));
         }
+
+        /// close が documents guard を取得した直後に任意の処理を挟む（テスト専用フック）。
+        fn set_after_documents_lock_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+            *self.test_after_documents_lock.lock().unwrap() = Some(Box::new(hook));
+        }
     }
 
     /// 有効設定と ollama の service を revision を進めてコミットする。
@@ -470,6 +541,167 @@ mod tests {
 
         // 文書が無くても remove_document は孤立フラグを掃除する。
         assert!(state.remove_document(&id).is_none());
+        assert!(!state.is_unsaved(&id));
+        assert!(!state.has_unsaved_changes());
+    }
+
+    /// force=false の unsaved 拒否は固定文言の Validation で、状態は一切変化しない。
+    #[test]
+    fn close_document_atomic_rejects_unsaved_without_force() {
+        let state = AppState::new(AppConfig::default());
+        let document = sample_document("doc-atomic-unsaved");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+        state.mark_unsaved(&id);
+
+        let error = state
+            .close_document_atomic(&id, false)
+            .expect_err("unsaved 文書は force なしで拒否される");
+        match error {
+            CoreError::Validation(message) => assert_eq!(message, DOCUMENT_UNSAVED_MESSAGE),
+            other => panic!("expected Validation, got {other:?}"),
+        }
+        assert!(state.get_document(&id).is_some(), "文書は削除されない");
+        assert!(state.is_unsaved(&id), "フラグも残る");
+        assert!(state.has_unsaved_changes());
+    }
+
+    /// 保存済み文書は force=false で削除され、unsaved キーも掃除される（通常系の維持）。
+    #[test]
+    fn close_document_atomic_removes_saved_document() {
+        let state = AppState::new(AppConfig::default());
+        let document = sample_document("doc-atomic-saved");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+        state.mark_saved(&id);
+
+        let removed = state
+            .close_document_atomic(&id, false)
+            .expect("保存済みは閉じられる");
+        assert!(removed.is_some());
+        assert!(state.get_document(&id).is_none());
+        assert!(!state.is_unsaved(&id));
+        assert!(!state.has_unsaved_changes());
+    }
+
+    /// force=true なら unsaved でも削除され、フラグも消える（既存契約の維持）。
+    #[test]
+    fn close_document_atomic_force_removes_unsaved_document() {
+        let state = AppState::new(AppConfig::default());
+        let document = sample_document("doc-atomic-force");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+        state.mark_unsaved(&id);
+
+        let removed = state
+            .close_document_atomic(&id, true)
+            .expect("force なら削除される");
+        assert!(removed.is_some());
+        assert!(state.get_document(&id).is_none());
+        assert!(!state.is_unsaved(&id));
+        assert!(!state.has_unsaved_changes());
+    }
+
+    /// 疑似注入 test: documents guard 取得直後に mark_unsaved を直接呼び
+    /// （別スレッド・barrier を使わず同スレッドで隔挿入を模する）、
+    /// チェックが最新フラグを読んで拒否し文書が削除されないことを確認する。
+    /// 実スレッドによる回帰 test は
+    /// `close_document_atomic_does_not_lose_edit_injected_between_legacy_check_and_remove` を参照。
+    #[test]
+    fn close_document_atomic_rejects_when_mark_unsaved_interleaves_after_documents_lock() {
+        let state = Arc::new(AppState::new(AppConfig::default()));
+        let document = sample_document("doc-atomic-interleave");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+        assert!(!state.is_unsaved(&id));
+
+        let state_for_hook = state.clone();
+        let id_for_hook = id.clone();
+        state.set_after_documents_lock_hook(move || {
+            state_for_hook.mark_unsaved(&id_for_hook);
+        });
+
+        let error = state
+            .close_document_atomic(&id, false)
+            .expect_err("割り込んだ未保存編集は拒否される");
+        match error {
+            CoreError::Validation(message) => assert_eq!(message, DOCUMENT_UNSAVED_MESSAGE),
+            other => panic!("expected Validation, got {other:?}"),
+        }
+        assert!(state.get_document(&id).is_some(), "文書は削除されない");
+        assert!(state.is_unsaved(&id), "割り込んだフラグは残る");
+    }
+
+    /// 旧 2 段階手順（is_unsaved() → remove_document()）の
+    /// 「unsaved 検査後・削除前」と同じ隔挿入点に別スレッドの mark_unsaved を
+    /// 入れても、force=false で未保存編集が失われないことの回帰 test。
+    ///
+    /// barrier で両者を同じ時点に揃え、隔挿入スレッドの完了を待ってから
+    /// atomic なチェックが走るようにする（決定論的）。旧実装では検査を
+    /// 通過した直後にフラグが立ち、その後の削除で編集が黙って失われた。
+    #[test]
+    fn close_document_atomic_does_not_lose_edit_injected_between_legacy_check_and_remove() {
+        let state = Arc::new(AppState::new(AppConfig::default()));
+        let document = sample_document("doc-legacy-race");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+
+        // 旧手順の is_unsaved() に相当: 検査時点では未保存ではない。
+        assert!(!state.is_unsaved(&id));
+
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        // Receiver は Sync ではないため、フックの Sync 要件を満たす Mutex で包む。
+        let done_rx = Arc::new(std::sync::Mutex::new(done_rx));
+
+        // set_document_content 相当の別スレッド: close が documents guard を
+        // 取得した直後（旧手順の検査後・削除前と同じ隔挿入点）で unsaved を立てる。
+        let writer_state = state.clone();
+        let writer_id = id.clone();
+        let writer_barrier = barrier.clone();
+        let writer = std::thread::spawn(move || {
+            writer_barrier.wait();
+            writer_state.mark_unsaved(&writer_id);
+            done_tx.send(()).unwrap();
+        });
+
+        let hook_barrier = barrier.clone();
+        state.set_after_documents_lock_hook(move || {
+            hook_barrier.wait();
+            // 隔挿入が完了してからチェックが走るように待つ。
+            done_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("隔挿入スレッドが mark_unsaved を完了すること");
+        });
+
+        let error = state
+            .close_document_atomic(&id, false)
+            .expect_err("割り込んだ未保存編集は拒否される");
+        assert!(matches!(error, CoreError::Validation(_)));
+        writer.join().unwrap();
+
+        // 未保存編集は失われず、文書もフラグも残る（旧実装ではここで削除された）。
+        assert!(state.get_document(&id).is_some());
+        assert!(state.is_unsaved(&id));
+    }
+
+    /// 文書が存在しなくても force=true なら孤立フラグを掃除する（既存契約）。
+    #[test]
+    fn close_document_atomic_cleans_orphaned_unsaved_flag() {
+        let state = AppState::new(AppConfig::default());
+        let orphan = sample_document("doc-atomic-orphan");
+        let id = orphan.metadata.id.clone();
+        state.mark_unsaved(&id);
+        assert!(state.is_unsaved(&id));
+
+        assert!(
+            state
+                .close_document_atomic(&id, true)
+                .expect("force なら孤立フラグを掃除できる")
+                .is_none()
+        );
         assert!(!state.is_unsaved(&id));
         assert!(!state.has_unsaved_changes());
     }
