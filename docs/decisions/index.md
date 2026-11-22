@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 334 件）。
+openrustbooks の ADR 一覧（全 335 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -672,3 +672,5 @@ openrustbooks の ADR 一覧（全 334 件）。
   - status: accepted — check-distribution-path.sh が Checker(expected=N) を AST 抽出し、manifest と照合する決定。
 - [ADR-0334: set_document_content の原子化](0334-document-content-atomic.md)
   - status: accepted — 本文更新・世代前進・unsaved 設定を単一クリティカルセクションで行い、close との競合を防ぐ決定。
+- [ADR-0335: lint を AI service 依存から分離](0335-lint-without-ai-service.md)
+  - status: accepted — lint / auto-fix はローカル処理として LintConfig から直接構築し、既定の AI 無効でも動作可能にする決定。
