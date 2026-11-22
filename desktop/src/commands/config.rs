@@ -42,21 +42,13 @@ impl From<CoreError> for CommandError {
 
 /// 起動時の読み込み失敗状態では、保存コマンドを固定文言で拒否する。
 ///
-/// 値・パス・生エラーは返さない。`String` を返す既存コマンド向けの
-/// [`load_failure_message`] と同じ文言を使う。
+/// 値・パス・生エラーは返さない。文言は [`CONFIG_LOAD_FAILED_MESSAGE`] に固定する。
 fn load_failed_command_error(state: &AppState) -> Result<(), CommandError> {
     if state.config_load_failed() {
         Err(CommandError::from_code("CONFIG_LOAD_FAILED"))
     } else {
         Ok(())
     }
-}
-
-/// `Result<_, String>` を返す保存コマンド向けの読み込み失敗チェック。
-fn load_failure_message(state: &AppState) -> Option<String> {
-    state
-        .config_load_failed()
-        .then(|| CONFIG_LOAD_FAILED_MESSAGE.to_string())
 }
 
 /// Allow-list view of [`AppConfig`] returned to the JS side.
@@ -655,9 +647,9 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     merged
 }
 
-/// JS から届いた生の [`AppConfig`] を [`ConfigView`] / [`ConfigPatch`] と同じ DTO 境界へ正規化する。
+/// JS 由来の値を [`ConfigView`] / [`ConfigPatch`] と同じ DTO 境界へ正規化する。
 ///
-/// `update_config` は `AppConfig` 全体を受け取るため、JS が DTO 外の
+/// `AppConfig` 全体が渡される経路では、JS が DTO 外の
 /// `extra_headers` / ローカルパス / 秘密値を直接注入できる。ここで
 /// `ConfigPatch::apply_to()` と同じプレースホルダ化を通し、現在値の復元を
 /// [`merge_secrets`] に一本化する（ADR-0132 の不変条件を維持）。
@@ -668,15 +660,6 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
 fn normalize_to_dto_boundary(raw: &AppConfig, current: &AppConfig) -> AppConfig {
     // expected は CAS の入力だが、この正規化は apply_to() だけを呼ぶため値は無関係。
     ConfigPatch::from((raw, 0)).apply_to(current)
-}
-
-/// JS から届いた生の [`AiConfig`] のうち、DTO 外の `extra_headers` だけを落とす。
-///
-/// `api_key` は ADR-0098 の契約で明示的新値を受け入れるため維持する。
-/// 空にした `extra_headers` は [`merge_secrets`] が現在値を復元する（既存契約）。
-fn normalize_ai_from_js(mut ai: AiConfig) -> AiConfig {
-    ai.openai.extra_headers.clear();
-    ai
 }
 
 /// API キー更新専用の純粋ヘルパー。
@@ -747,28 +730,6 @@ pub fn get_config(state: State<'_, Arc<AppState>>) -> ConfigView {
     ConfigView::from_state(&config, revision)
 }
 
-/// Update configuration
-#[command]
-pub async fn update_config(
-    state: State<'_, Arc<AppState>>,
-    config: AppConfig,
-) -> Result<(), String> {
-    if let Some(message) = load_failure_message(state.inner()) {
-        return Err(message);
-    }
-    let (current, expected) = state.config_with_revision();
-    // 生 AppConfig の DTO 外フィールドは JS の注入を許さない。境界まで落としてから
-    // merge_secrets() に渡し、現在値の復元は従来どおり merge_secrets() に任せる。
-    let normalized = normalize_to_dto_boundary(&config, &current);
-    let merged = merge_secrets(&current, &normalized);
-    validate_ai_base_urls(&merged.ai)?;
-    let changed = ai_changed(&current, &merged);
-    commit_validated_config(state.inner(), expected, merged, changed)
-        .await
-        .map_err(ipc_error)?;
-    Ok(())
-}
-
 /// Update configuration from a DTO patch, returning the resulting view.
 #[command]
 pub async fn update_config_patch(
@@ -802,31 +763,6 @@ async fn update_config_patch_inner(
     Ok(ConfigView::from_state(&config, revision))
 }
 
-/// Update AI configuration
-#[command]
-pub async fn update_ai_config(
-    state: State<'_, Arc<AppState>>,
-    ai_config: AiConfig,
-) -> Result<(), String> {
-    if let Some(message) = load_failure_message(state.inner()) {
-        return Err(message);
-    }
-    let (current, expected) = state.config_with_revision();
-    let mut incoming = current.clone();
-    // extra_headers は DTO 外。JS の注入を許さず空にし、merge_secrets() の
-    // 現在値復元に任せる。api_key は ADR-0098 の明示的新値契約を維持する。
-    incoming.ai = normalize_ai_from_js(ai_config);
-    let config = merge_secrets(&current, &incoming);
-    validate_ai_base_urls(&config.ai)?;
-    let changed = ai_changed(&current, &config);
-
-    // AI 設定が変わった時だけ再準備。失敗時はコミットしないため状態は不変。
-    commit_validated_config(state.inner(), expected, config, changed)
-        .await
-        .map_err(ipc_error)?;
-    Ok(())
-}
-
 /// Web の API キー保存専用コマンド。
 ///
 /// 秘密値は DTO（`ConfigPatch` / `ConfigView`）を通さず、この引数 `api_key`
@@ -858,44 +794,6 @@ async fn set_openai_api_key_inner(
         .map_err(CommandError::from)?;
     let (config, revision) = state.config_with_revision();
     Ok(ConfigView::from_state(&config, revision))
-}
-
-/// Update lint configuration
-#[command]
-pub async fn update_lint_config(
-    state: State<'_, Arc<AppState>>,
-    lint_config: LintConfig,
-) -> Result<(), String> {
-    if let Some(message) = load_failure_message(state.inner()) {
-        return Err(message);
-    }
-    let (current, expected) = state.config_with_revision();
-    let mut incoming = current.clone();
-    incoming.lint = lint_config;
-    // DTO から除外した config_file / rule_config を消さないようマージを通す。
-    let config = merge_secrets(&current, &incoming);
-    let changed = ai_changed(&current, &config);
-    commit_validated_config(state.inner(), expected, config, changed)
-        .await
-        .map_err(ipc_error)?;
-    Ok(())
-}
-
-/// Reset configuration to defaults (secrets redacted)
-#[command]
-pub async fn reset_config(state: State<'_, Arc<AppState>>) -> Result<ConfigView, String> {
-    if let Some(message) = load_failure_message(state.inner()) {
-        return Err(message);
-    }
-    // current 自体は不要だが、読み取った revision を expected として渡す。
-    let (_, expected) = state.config_with_revision();
-    let config = AppConfig::default();
-    // 既定は AI 無効。prepare は None を返し、保存後に service もクリアされる。
-    commit_validated_config(state.inner(), expected, config, true)
-        .await
-        .map_err(ipc_error)?;
-    let (current, revision) = state.config_with_revision();
-    Ok(ConfigView::from_state(&current, revision))
 }
 
 /// 個別に消すシークレットの指定。既定はすべて false（消さない fail-closed）。
@@ -940,8 +838,8 @@ pub async fn clear_secrets(
     state: State<'_, Arc<AppState>>,
     targets: SecretTargets,
 ) -> Result<ConfigView, String> {
-    if let Some(message) = load_failure_message(state.inner()) {
-        return Err(message);
+    if state.inner().config_load_failed() {
+        return Err(CONFIG_LOAD_FAILED_MESSAGE.to_string());
     }
     let (mut config, expected) = state.config_with_revision();
     let cleared = clear_targeted_secrets(&mut config, targets);
@@ -1402,48 +1300,6 @@ mod tests {
         assert_eq!(merged.ai.openai.api_key, current.ai.openai.api_key);
         assert_eq!(merged.general.data_dir, current.general.data_dir);
         assert_eq!(merged.storage.recent_paths, current.storage.recent_paths);
-    }
-
-    /// `update_ai_config` 相当の正規化＋マージで、JS が送った extra_headers が
-    /// 保存されず現在値が残ること。api_key の明示的新値は受け入れられること。
-    #[test]
-    fn update_ai_normalization_drops_js_headers_but_accepts_new_api_key() {
-        let mut current = config_with_secrets();
-        current.ai.openai.extra_headers.insert(
-            "X-Real-Header".to_string(),
-            "real-value-from-config-toml".to_string(),
-        );
-
-        // JS が生 AiConfig に詰めて送ってきた想定の入力。
-        let mut js_ai = current.ai.clone();
-        js_ai.openai.extra_headers.insert(
-            "X-Js-Injected".to_string(),
-            "attacker-controlled".to_string(),
-        );
-        js_ai.openai.api_key = Some("sk-explicit-new-key".to_string());
-
-        let normalized = normalize_ai_from_js(js_ai);
-        assert!(normalized.openai.extra_headers.is_empty());
-        assert_eq!(
-            normalized.openai.api_key.as_deref(),
-            Some("sk-explicit-new-key")
-        );
-
-        let mut incoming = current.clone();
-        incoming.ai = normalized;
-        let merged = merge_secrets(&current, &incoming);
-
-        // 注入ヘッダは保存されず、config.toml 側の実ヘッダだけが残る。
-        assert_eq!(
-            merged.ai.openai.extra_headers,
-            current.ai.openai.extra_headers
-        );
-        assert!(!merged.ai.openai.extra_headers.contains_key("X-Js-Injected"));
-        // api_key は ADR-0098 の契約どおり明示的新値が採用される。
-        assert_eq!(
-            merged.ai.openai.api_key.as_deref(),
-            Some("sk-explicit-new-key")
-        );
     }
 
     /// マスク値キーは現在値を復元し、それ以外のキーは incoming を採用すること。
@@ -2514,18 +2370,6 @@ mod tests {
         assert!(!error.message.contains("dark"));
         assert_eq!(state.config_with_revision().1, 0);
         assert_config_eq_for_commands(&state.config(), &AppConfig::default());
-    }
-
-    /// `String` を返す保存コマンドが使う拒否文言も、値・パスを含まない固定文言であること。
-    #[test]
-    fn load_failure_message_returns_fixed_text_without_values() {
-        let state = AppState::new_with_load_failure(AppConfig::default());
-        let message = load_failure_message(&state).expect("拒否文言が返ること");
-        assert_eq!(message, CONFIG_LOAD_FAILED_MESSAGE);
-        assert!(!message.contains("config.toml"));
-
-        let healthy = AppState::new(AppConfig::default());
-        assert!(load_failure_message(&healthy).is_none());
     }
 
     fn assert_config_eq_for_commands(actual: &AppConfig, expected: &AppConfig) {

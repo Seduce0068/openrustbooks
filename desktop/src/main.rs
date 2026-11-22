@@ -155,11 +155,8 @@ pub fn run() -> tauri::Result<()> {
             commands::ai::lint_and_fix_markdown,
             // Configuration commands
             commands::config::get_config,
-            commands::config::update_config,
+            // レガシー 4 command は UI 起点 CAS を満たさないため登録解除（ADR-0344）。
             commands::config::update_config_patch,
-            commands::config::update_ai_config,
-            commands::config::update_lint_config,
-            commands::config::reset_config,
             commands::config::clear_secrets,
             commands::config::set_openai_api_key,
             // Window commands
