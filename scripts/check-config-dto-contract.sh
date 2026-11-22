@@ -10,6 +10,10 @@
 #                ConfigPatch 側には無いため、ConfigPatch ペアでは web 側のみ許可。
 #   - expected : desktop 側 ConfigPatch の CAS 入力。web 側には現れない。
 #
+# 未配線の死設定（ADR-0304 方式で DTO 除外した prefer_local）は「両側に現れない」
+# ことを明示的に検査する。片側例外（allowed = desktop + web）は設けず、
+# どちらかへ再登場した場合も fail-closed で拒否する。
+#
 # desktop には ReaderConfigView が無いため、reader の PEER は core::ReaderConfig
 # （ConfigView.reader の実型）と web::SettingsReaderView の組を使う。
 #
@@ -114,6 +118,9 @@ WEB_RULE = {"allowed": {"web"}, "required": {"web"}}
 DESKTOP_RULE = {"allowed": {"desktop"}, "required": {"desktop"}}
 BOTH_RULE = {"allowed": {"desktop", "web"}, "required": {"web"}}
 
+# DTO から完全に除外したフィールド。allow-list に戻す片側例外は作らない。
+EXCLUDED_FROM_BOTH = {"prefer_local"}
+
 PEERS = [
     ("ConfigView", "SettingsView", DESKTOP, {"revision": BOTH_RULE}),
     (
@@ -171,6 +178,20 @@ for desktop_name, web_name, desktop_rel, one_sided in PEERS:
                 errors.append(
                     f"{desktop_rel}:{desktop_name} ↔ {WEB}:{web_name}: "
                     f"{field} が {side} 側にありません（CAS 契約上必須）"
+                )
+        only_desktop.discard(field)
+        only_web.discard(field)
+
+    # 死設定は desktop / web のどちらにも現れてはならない（片側例外なし）。
+    for field in sorted(EXCLUDED_FROM_BOTH):
+        for side, present in (
+            ("desktop", field in only_desktop),
+            ("web", field in only_web),
+        ):
+            if present:
+                errors.append(
+                    f"{desktop_rel}:{desktop_name} ↔ {WEB}:{web_name}: "
+                    f"{field} は DTO 除外対象のため {side} 側に現れてはいけません"
                 )
         only_desktop.discard(field)
         only_web.discard(field)

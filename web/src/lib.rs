@@ -4731,7 +4731,6 @@ struct SettingsAiView {
     openai: SettingsOpenAiView,
     ollama: SettingsOllamaView,
     max_tokens_per_request: usize,
-    prefer_local: bool,
     timeout_secs: u64,
     streaming: bool,
 }
@@ -4924,7 +4923,6 @@ mod settings_dto_contract_tests {
                     "model": "dummy-model"
                 },
                 "max_tokens_per_request": 4096,
-                "prefer_local": false,
                 "timeout_secs": 60,
                 "streaming": false
             },
@@ -5994,19 +5992,9 @@ fn SettingsForm() -> impl IntoView {
                         }
                     }/>
                 <p id="settings-timeout-error" class="settings-error" role="alert">{move || timeout_error.get()}</p>
-                <label for="settings-prefer-local">"ローカル優先"</label>
-                <input id="settings-prefer-local" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
-                    prop:checked=move || config.get().map(|v| v.ai.prefer_local).unwrap_or(false)
-                    on:change=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(checked) = input_checked(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.ai.prefer_local = checked; }
-                            });
-                        }
-                    }/>
+                // prefer_local は provider 選択に未配線の死設定。DTO から除外したため
+                // 操作できないようにし、固定文言で正直に表示する（ADR-0304 方式）。
+                <p class="settings-notice">"ローカル優先: 未配線"</p>
                 <label for="settings-streaming">"ストリーミング"</label>
                 <input id="settings-streaming" type="checkbox" prop:disabled=move || !editable.get() || saving.get()
                     prop:checked=move || config.get().map(|v| v.ai.streaming).unwrap_or(false)

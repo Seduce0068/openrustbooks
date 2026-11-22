@@ -4707,7 +4707,6 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
                 "model": "llama3.1:8b",
             },
             "max_tokens_per_request": 4096,
-            "prefer_local": False,
             "timeout_secs": 60,
             "streaming": True,
         },

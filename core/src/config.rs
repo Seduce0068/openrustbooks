@@ -88,6 +88,10 @@ pub struct AiConfig {
     #[serde(default = "default_max_retries")]
     pub max_retries: usize,
     /// Prefer local models
+    ///
+    /// 未配線の死設定（provider 選択は `default_provider` のみを参照）。
+    /// config.toml の値は読み書きとも維持するが、ConfigView / ConfigPatch には
+    /// 露出しない（ADR-0304 方式）。
     pub prefer_local: bool,
     /// Timeout for API requests (seconds)
     pub timeout_secs: u64,
@@ -807,6 +811,7 @@ mod tests {
 
         assert!(config.general.telemetry);
         assert_eq!(config.ai.max_tokens_per_month, Some(1234));
+        assert!(config.ai.prefer_local);
         assert_eq!(config.ai.ollama.keep_alive_minutes, 17);
         assert_eq!(
             config.ai.model_overrides.get("custom"),
@@ -832,6 +837,7 @@ mod tests {
 
         assert!(value["general"]["telemetry"].as_bool().unwrap());
         assert_eq!(value["ai"]["max_tokens_per_month"].as_integer(), Some(1234));
+        assert!(value["ai"]["prefer_local"].as_bool().unwrap());
         assert_eq!(
             value["ai"]["ollama"]["keep_alive_minutes"].as_integer(),
             Some(17)
@@ -878,6 +884,7 @@ mod tests {
             .extract()
             .unwrap();
         assert!(config.general.telemetry);
+        assert!(config.ai.prefer_local);
         assert_eq!(config.storage.max_recent, 42);
     }
 
@@ -905,6 +912,7 @@ mod tests {
             toml::Value::String("alias".to_string()),
         );
         ai.insert("model_overrides".to_string(), toml::Value::Table(overrides));
+        ai.insert("prefer_local".to_string(), toml::Value::Boolean(true));
 
         value
             .get_mut("ai")
@@ -1026,6 +1034,8 @@ mod tests {
         assert_eq!(map_env_key("GENERAL_LANGUAGE"), "general.language");
         // 死設定の telemetry は明示マップを外され、serde に無視される（ADR-0304）。
         assert_eq!(map_env_key("GENERAL_TELEMETRY"), "general_telemetry");
+        // prefer_local も未配線のため明示マップせず、serde 側で無視させる。
+        assert_eq!(map_env_key("AI_PREFER_LOCAL"), "ai_prefer_local");
         assert_eq!(map_env_key("AI_ENABLED"), "ai.enabled");
         assert_eq!(map_env_key("AI_OPENAI_MODEL"), "ai.openai.model");
         assert_eq!(map_env_key("READER_THEME"), "reader.theme");

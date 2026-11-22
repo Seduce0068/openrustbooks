@@ -66,8 +66,8 @@ fn load_failure_message(state: &AppState) -> Option<String> {
 /// local_roots[].path / recent_paths）も DTO から除外して JS への開示を防ぐ。
 /// さらに未配線の死設定（telemetry / max_tokens_per_month / model_overrides /
 /// keep_alive_minutes / default_backend / max_recent / auto_save_delay /
-/// local_roots[].watch）も DTO から除外する（ADR-0304）。config.toml の値は
-/// `merge_secrets()` が現在値から復元するため、保存で失われない。
+/// local_roots[].watch / prefer_local）も DTO から除外する（ADR-0304 方式）。
+/// config.toml の値は `merge_secrets()` が現在値から復元するため、保存で失われない。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigView {
     /// 現在の revision。コミット衝突後に `get_config` で再取得し、
@@ -125,8 +125,10 @@ impl From<&GeneralConfig> for GeneralConfigView {
 }
 
 /// Allow-list view of [`AiConfig`].
-/// 死設定の `model_overrides` / `max_tokens_per_month` と `max_retries` は除外する
-/// （ADR-0228 / 0304）。値は `merge_secrets()` が現在値から復元する。
+/// 死設定の `model_overrides` / `max_tokens_per_month` / `prefer_local` と
+/// `max_retries` は除外する（ADR-0228 / 0304 方式）。provider 選択は
+/// `default_provider` のみを参照するため、`prefer_local` を DTO に出しても
+/// 動作へ反映されない。値は `merge_secrets()` が現在値から復元する。
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AiConfigView {
     pub enabled: bool,
@@ -134,7 +136,6 @@ pub struct AiConfigView {
     pub openai: OpenAiConfigView,
     pub ollama: OllamaConfigView,
     pub max_tokens_per_request: usize,
-    pub prefer_local: bool,
     pub timeout_secs: u64,
     pub streaming: bool,
 }
@@ -147,7 +148,6 @@ impl From<&AiConfig> for AiConfigView {
             openai: OpenAiConfigView::from(&ai.openai),
             ollama: OllamaConfigView::from(&ai.ollama),
             max_tokens_per_request: ai.max_tokens_per_request,
-            prefer_local: ai.prefer_local,
             timeout_secs: ai.timeout_secs,
             streaming: ai.streaming,
         }
@@ -422,7 +422,7 @@ impl AiConfigView {
             max_tokens_per_request: self.max_tokens_per_request,
             // DTO 外: merge_secrets() が現在値を復元する。
             max_tokens_per_month: None,
-            prefer_local: self.prefer_local,
+            prefer_local: false,
             timeout_secs: self.timeout_secs,
             streaming: self.streaming,
             // DTO 外: プレースホルダを入れ、現在値は merge_secrets() が復元する。
@@ -596,6 +596,9 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     // local_roots[].watch は直下の id 一致ロジックで復元する。
     merged.general.telemetry = current.general.telemetry;
     merged.ai.max_tokens_per_month = current.ai.max_tokens_per_month;
+    // prefer_local は provider 選択に未配線の死設定。DTO 外なので JS 往復で
+    // 消えても config.toml の現在値を常に復元する（値は JS に開示しない）。
+    merged.ai.prefer_local = current.ai.prefer_local;
     merged.ai.ollama.keep_alive_minutes = current.ai.ollama.keep_alive_minutes;
     merged.storage.default_backend = current.storage.default_backend.clone();
     merged.storage.max_recent = current.storage.max_recent;
@@ -1061,7 +1064,6 @@ mod tests {
                 "openai",
                 "ollama",
                 "max_tokens_per_request",
-                "prefer_local",
                 "timeout_secs",
                 "streaming",
             ],
@@ -1655,6 +1657,7 @@ mod tests {
         let mut config = config_with_paths();
         config.general.telemetry = true;
         config.ai.max_tokens_per_month = Some(1234);
+        config.ai.prefer_local = true;
         config.ai.ollama.keep_alive_minutes = 17;
         config
             .ai
@@ -1667,7 +1670,8 @@ mod tests {
         config
     }
 
-    /// ADR-0304: 死設定 9 件が ConfigView の JSON に一切出ないこと。
+    /// ADR-0304 の死設定 9 件と prefer_local（未配線）が ConfigView の JSON に
+    /// 一切出ないこと。
     #[test]
     fn config_view_json_excludes_dead_fields() {
         let json = serde_json::to_string(&ConfigView::from(&config_with_dead_values())).unwrap();
@@ -1678,6 +1682,7 @@ mod tests {
         for forbidden in [
             "telemetry",
             "max_tokens_per_month",
+            "prefer_local",
             "keep_alive_minutes",
             "model_overrides",
             "config_file",
@@ -1691,6 +1696,20 @@ mod tests {
                 "leaked dead field in ConfigView: {forbidden}"
             );
         }
+    }
+
+    /// prefer_local は未配線の死設定。ConfigView の JSON にキーとして現れないこと。
+    #[test]
+    fn config_view_json_excludes_prefer_local() {
+        let json = serde_json::to_string(&ConfigView::from(&config_with_dead_values())).unwrap();
+        assert!(
+            !json.contains("prefer_local"),
+            "ConfigView に prefer_local が露出しています"
+        );
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let mut keys = Vec::new();
+        collect_json_keys(&value, &mut keys);
+        assert!(!keys.iter().any(|key| key == "prefer_local"));
     }
 
     /// ADR-0304: DTO 往復で dead 値がプレースホルダ化されても、
@@ -1709,6 +1728,7 @@ mod tests {
         // apply_to 単体では dead 値がプレースホルダ／既定値になる。
         assert!(!applied.general.telemetry);
         assert_eq!(applied.ai.max_tokens_per_month, None);
+        assert!(!applied.ai.prefer_local);
         assert_eq!(applied.ai.ollama.keep_alive_minutes, 0);
         assert!(applied.ai.model_overrides.is_empty());
         assert!(applied.lint.config_file.is_none());
@@ -1720,11 +1740,28 @@ mod tests {
         }
 
         let merged = merge_secrets(&current, &applied);
+        // prefer_local を含む config.toml の現在値が復元されていること。
+        assert!(merged.ai.prefer_local);
         // config.toml へ保存される値（AppConfig の serde 表現）が不変であること。
         assert_eq!(
             serde_json::to_value(&merged).unwrap(),
             serde_json::to_value(&current).unwrap()
         );
+    }
+
+    /// prefer_local は DTO 外: JS 側の値に関わらず config.toml の現在値を保持する。
+    #[test]
+    fn merge_secrets_preserves_prefer_local() {
+        let mut current = AppConfig::default();
+        current.ai.prefer_local = true;
+        let mut incoming = AppConfig::default();
+        incoming.ai.prefer_local = false;
+        assert!(merge_secrets(&current, &incoming).ai.prefer_local);
+
+        // 現在値が false なら JS 側で true が届いても true に昇格させない。
+        current.ai.prefer_local = false;
+        incoming.ai.prefer_local = true;
+        assert!(!merge_secrets(&current, &incoming).ai.prefer_local);
     }
 
     #[test]
@@ -1968,6 +2005,7 @@ mod tests {
         // DTO 外のフィールドはすべてプレースホルダ／既定値になる。
         assert!(!applied.general.telemetry);
         assert_eq!(applied.ai.max_tokens_per_month, None);
+        assert!(!applied.ai.prefer_local);
         assert_eq!(applied.ai.ollama.keep_alive_minutes, 0);
         assert!(applied.storage.default_backend.is_empty());
         assert_eq!(applied.storage.max_recent, 0);
