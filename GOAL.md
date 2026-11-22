@@ -1,40 +1,31 @@
 # Goal
 
-close_document の unsaved チェックと削除を atomic 化する（第2cycle R6 / R2-RC01）。
+CI の gitleaks ゲートが後続 11 ゲートをブロックする問題を修正する（第2cycle R6 / R4-OP01）。
 
 ## Scope
 
 ### 背景
 
-close_document は `is_unsaved()` と `remove_document()` を別ロックで呼ぶ。
-その間に `set_document_content` が mark_unsaved すると、
-force=false でも未保存編集が警告なしに削除される。
+`.github/workflows/ci.yml` の extra_gates は gitleaks 未導入時に `exit 1` し、
+後続の rumdl / dependency / version / e2e-count / csp / plugin / updater /
+capability / wasm×2 / wasm-test が到達不能。CI は常時 red のまま回帰を検出できない。
 
 ### 成果物
 
-- `desktop/src/state/mod.rs`: 変更（atomic close API）
-- `desktop/src/commands/document.rs`: 変更
-- `docs/decisions/0313-atomic-document-close.md`: 追加
+- `.github/workflows/ci.yml`: 変更
+- `docs/runbook-verified-build.md`: 変更
+- `docs/decisions/0314-gitleaks-gate-order.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. unsaved 検査と文書削除を単一 write lock クリティカルセクションで行う。
-2. force=false で unsaved なら削除せず固定エラーを返す。
-3. force=true は従来どおり削除する。
-4. emit / unsaved フラグ / documents の整合を壊さない。
-5. 競合再現 test（疑似的に隔挿入）と force 分岐 test を追加。
-6. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. gitleaks 導入 / 検査を extra_gates の先頭へ移し、未導入でも後続ゲートが実行されるようにする。
+2. 共通 workflow 自体は変更しない。
+3. シークレットスキャンは fail-closed を維持する（未導入 / 検出時に最終的に CI は失敗）。
+4. billing 解消後チェックリストを更新する。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 外部サービス / 秘密情報は扱わない。
-- E2E check 名・件数を変更しない。
+- 外部サービス / 課金 / 公開操作は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- close_document_atomic を追加し、unsaved 検査と削除を単一ロック化。
-- Barrier で実 TOCTOU を再現する回帰 test を追加。
-- desktop 146 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- IPC assert 強化 / 旧 API 完全廃止は ADR-0313 の未決定。
