@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- runbook-release / README を現行状態へ追従（ADR-0310）。
 - 依存ゲートに cargo tree 実測と期限付き例外を追加（ADR-0309）。
 - StorageBackend の競合安全性と未実装契約を整理（ADR-0308）。
 - emit 失敗と import 混在状態を可視化（ADR-0307）。
