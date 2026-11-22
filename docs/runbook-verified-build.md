@@ -153,7 +153,9 @@ python3 -m http.server --directory "$DIST" 8000
   未導入でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は実行され、
   末尾で fail-closed となる。下記の billing 解消後チェックリストを参照。
 - `web/dist` は git 管理外で未検証の開発パス残存の可能性がある。復旧には本手順の保持物を使う。
-- 本番プロファイル（`--release` / `--debug`）、`trunk build --locked` は未決定（ADR-0219）。
+- 本番プロファイル（`--release` / `--debug`）は未決定（ADR-0219）。
+  `trunk build --locked` は ADR-0237 で決定済みで、verify.sh / build-desktop.sh は
+  `--offline --locked` を実行する（ADR-0289）。
 - 保存先の固定場所と保持期間／ローテーションは未決定で、現在は手動管理である。
 - SHA256 は完全性のみ。署名／真正性、Release 専用ワークフローとの境界は未決定（ADR-0219）。
 

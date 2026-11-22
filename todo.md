@@ -65,8 +65,6 @@ status: current
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
 - [ ] 【README の verify.sh 前提を補完】gitleaks / wasm-pack / Node+npm / Chrome / DISPLAY / Python3 が無い。
       一括検証の再現性を修復。根拠 `README.md:126-134,175-187` / R4-OP01。
-- [ ] 【runbook-verified-build の --locked 未決定表記を修正】実装は --offline --locked 済み。
-      未決定なのは本番プロファイルのみ。根拠 `docs/runbook-verified-build.md:153` / R4-OP01。
 - [ ] 【wasm-bindgen CLI バージョンを fail-closed 検証】固定パスのみで Cargo.lock との一致検査が無い。
       ロックから導出またはバージョン検証。根拠 `scripts/verify.sh:416-417` / `scripts/build-desktop.sh:25-27` / R4-OP01。
 - [ ] 【WDIO trunk serve に --locked / lock 再検査】serve は lock を固定せず、readiness 後の不変確認も無い。
@@ -123,6 +121,7 @@ status: current
 
 ## 完了
 
+- [x] 【runbook】`trunk build --locked` は決定済みと明記（ADR-0237 / 0289）。
 - [x] 【web エラー文言】CONFIG_LOAD_FAILED に固定日本語文言を追加（ADR-0325）。
 - [x] 【TableAlignment】未知値を固定 validation で拒否、confirm 前に検証（ADR-0324）。
 - [x] 【Wasm redaction】共通 mapper で desktop/wasm 両境界の固定文言を統一（ADR-0323）。
