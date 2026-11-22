@@ -108,3 +108,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 新規 4 test、desktop 180 passed。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 未使用 AppHandle の扱いは ADR-0335 の未決定。
+
+## 完了記録（第3cycle-4）
+
+- API キー空／空白入力を no-op 化し設定済みキーを保護。
+- web 31 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 削除確認ダイアログ / command 未呼び出し E2E は ADR-0336 の未決定。
