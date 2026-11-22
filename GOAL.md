@@ -121,3 +121,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 退避 read 前後のサイズ検査と失敗注入 3 経路を追加。
 - desktop 184 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 退避 read 本体の注入 / 明示 drop は ADR-0337 の未決定。
+
+## 完了記録（第3cycle-6）
+
+- AI 初期化エラーのログを code() 由来へ変更。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- UI status 伝播は ADR-0338 の未決定。

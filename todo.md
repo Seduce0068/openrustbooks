@@ -64,9 +64,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-23 R6 中優先度 -->
-- [ ] 【AI 起動エラーの Display をログへ出さない】main.rs が CoreError::Display を log::error! に埋め込み、
-      provider 生エラー / host / body が Stdout / LogDir / Webview へ残る。code() 由来の固定文言へ。
-      根拠 `desktop/src/main.rs:122-128` / R3-SE01。
 - [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
       extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
       根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
@@ -142,6 +139,7 @@ status: current
 
 ## 完了
 
+- [x] 【AI 起動ログ】CoreError の Display をcode()由来へ変更し機微情報の露出を防止。
 - [x] 【save 競合】ディスクを元内容へ復元、復元失敗を別固定文言化（ADR-0337）。
 - [x] 【API キー】空入力を no-op 化し誤削除を防止（ADR-0336）。
 - [x] 【lint 分離】LintConfig 直接構築で既定 AI 無効でも lint 動作（ADR-0335）。
