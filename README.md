@@ -902,6 +902,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0340-lint-only-config-change](docs/decisions/0340-lint-only-config-change.md)
 - [0341-settings-reload-button](docs/decisions/0341-settings-reload-button.md)
 - [0342-prefer-local-dead-config](docs/decisions/0342-prefer-local-dead-config.md)
+- [0343-ai-preview-tail](docs/decisions/0343-ai-preview-tail.md)
+  - 送信確認ダイアログで先頭だけでなく末尾も抜粋し、省略量と全文確認を明示する決定。
   - 未配線の ai.prefer_local を DTO / UI から除外し、config.toml の値だけを保持する決定。
   - 設定画面に get_config 再実行ボタンを追加し、競合時に view / revision を復帰可能にする決定。
   - commit_validated_config の再準備判定を ai 設定差分に限定し、lint のみ変更が生成失敗でブロックされないようにする決定。
