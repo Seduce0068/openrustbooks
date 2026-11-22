@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 324 件）。
+openrustbooks の ADR 一覧（全 325 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -652,3 +652,5 @@ openrustbooks の ADR 一覧（全 324 件）。
   - status: accepted — CoreError を共通 fixed_message(code) 経由で JS へ返し、生文字列の漏洩を防ぐ決定。
 - [ADR-0324: TableAlignment の fail-closed 検証](0324-table-alignment-validation.md)
   - status: accepted — 未知の alignment を Left へ黙ってフォールバックせず、TableFormat と同じ validation で拒否する決定。
+- [ADR-0325: CONFIG_LOAD_FAILED の web 固定文言](0325-config-load-failed-status.md)
+  - status: accepted — desktop が返す CONFIG_LOAD_FAILED code を web の status で専用文言へ表示する決定。

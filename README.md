@@ -865,6 +865,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0322-config-dto-contract](docs/decisions/0322-config-dto-contract.md)
 - [0323-wasm-error-redaction](docs/decisions/0323-wasm-error-redaction.md)
 - [0324-table-alignment-validation](docs/decisions/0324-table-alignment-validation.md)
+- [0325-config-load-failed-status](docs/decisions/0325-config-load-failed-status.md)
+  - desktop が返す CONFIG_LOAD_FAILED code を web の status で専用文言へ表示する決定。
   - 未知の alignment を Left へ黙ってフォールバックせず、TableFormat と同じ validation で拒否する決定。
   - CoreError を共通 fixed_message(code) 経由で JS へ返し、生文字列の漏洩を防ぐ決定。
   - desktop / web の ConfigView / ConfigPatch DTO を 12 ペアで比較し、フィールド drift を CI で検出する決定。

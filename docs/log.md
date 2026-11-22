@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- CONFIG_LOAD_FAILED の web 固定文言を追加（ADR-0325）。
 - TableAlignment の未知値を fail-closed 化（ADR-0324）。
 - Wasm JS 境界のエラーを redaction（ADR-0323）。
 - Config DTO 契約を静的ゲート化（ADR-0322）。
