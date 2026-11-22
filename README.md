@@ -897,6 +897,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0337-save-conflict-disk-restore](docs/decisions/0337-save-conflict-disk-restore.md)
 - [0338-ai-startup-log-redaction](docs/decisions/0338-ai-startup-log-redaction.md)
 - [0339-delete-path-recheck](docs/decisions/0339-delete-path-recheck.md)
+- [0340-lint-only-config-change](docs/decisions/0340-lint-only-config-change.md)
+  - commit_validated_config の再準備判定を ai 設定差分に限定し、lint のみ変更が生成失敗でブロックされないようにする決定。
   - LocalStorage::delete が削除直前に resolve_path を再実行し、symlink 差し替えを fail-closed で拒否する決定。
   - AI service 初期化失敗時に CoreError の Display をログへ出さず、code() 由来の情報だけを記録する決定。
   - CAS 競合時に atomic_write 済みのディスクを元内容へ戻し、state とディスクの不整合を防ぐ決定。
