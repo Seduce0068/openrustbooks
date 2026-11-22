@@ -5684,6 +5684,31 @@ fn SettingsForm() -> impl IntoView {
         });
     });
 
+    // CONFIG_CONFLICT 後の復帰導線。現在の get_config を再実行し、
+    // UI の view / revision / editable を最新化する（生 message は status へ出さない）。
+    let on_reload = move |_event: web_sys::MouseEvent| {
+        if saving.get() {
+            return;
+        }
+        saving.set(true);
+        wasm_bindgen_futures::spawn_local(async move {
+            match fetch_config().await {
+                Ok(cfg) => {
+                    revision.set(cfg.revision);
+                    config.set(Some(cfg));
+                    editable.set(true);
+                    fetch_error_code.set(None);
+                    status.set("設定を再読み込みしました。".to_string());
+                }
+                Err(error) => {
+                    status.set(config_fetch_status_message(&error.code).to_string());
+                    fetch_error_code.set(Some(error.code));
+                }
+            }
+            saving.set(false);
+        });
+    };
+
     let on_api_key_save = move |_event: web_sys::MouseEvent| {
         start_api_key_save(editable, saving, revision, config, status);
     };
@@ -6403,6 +6428,9 @@ fn SettingsForm() -> impl IntoView {
             </section>
             <button id="settings-save" type="button" class="btn btn-primary" prop:disabled=move || !editable.get() || saving.get() on:click=on_save>
                 {move || if editable.get() { "設定を保存" } else { "保存はデスクトップ版のみ" }}
+            </button>
+            <button id="settings-reload" type="button" class="btn" prop:disabled=move || !editable.get() || saving.get() on:click=on_reload>
+                "設定を再読み込み"
             </button>
         </form>
     }
