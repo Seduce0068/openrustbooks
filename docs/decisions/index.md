@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 314 件）。
+openrustbooks の ADR 一覧（全 315 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -632,3 +632,5 @@ openrustbooks の ADR 一覧（全 314 件）。
   - status: accepted — unsaved チェックと文書削除を単一クリティカルセクションで行い、並行編集の喪失を防ぐ決定。
 - [ADR-0314: gitleaks を CI 最終ゲートへ配置](0314-gitleaks-gate-order.md)
   - status: accepted — シークレットスキャンを extra_gates の末尾に置き、未導入時でも他の静的ゲートが実行されるようにする決定。
+- [ADR-0315: desktop 設定画面の API キー設定と削除](0315-secret-settings-ui.md)
+  - status: accepted — 既存 redaction 契約を維持したまま、desktop のみ API キーを設定・削除できる UI を接続する決定。

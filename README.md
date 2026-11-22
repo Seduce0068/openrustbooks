@@ -855,6 +855,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0312-document-root-selection](docs/decisions/0312-document-root-selection.md)
 - [0313-atomic-document-close](docs/decisions/0313-atomic-document-close.md)
 - [0314-gitleaks-gate-order](docs/decisions/0314-gitleaks-gate-order.md)
+- [0315-secret-settings-ui](docs/decisions/0315-secret-settings-ui.md)
+  - 既存 redaction 契約を維持したまま、desktop のみ API キーを設定・削除できる UI を接続する決定。
   - シークレットスキャンを extra_gates の末尾に置き、未導入時でも他の静的ゲートが実行されるようにする決定。
   - unsaved チェックと文書削除を単一クリティカルセクションで行い、並行編集の喪失を防ぐ決定。
   - 全候補 root を検査し、入れ子の read-only root を save_document から書き換えられないようにする決定。
