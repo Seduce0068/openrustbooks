@@ -159,6 +159,7 @@ pub fn run() -> tauri::Result<()> {
             commands::config::update_lint_config,
             commands::config::reset_config,
             commands::config::clear_secrets,
+            commands::config::set_openai_api_key,
             // Window commands
             commands::window::close_window,
             commands::window::set_title,

@@ -4666,12 +4666,148 @@ async fn save_config(view: &SettingsView) -> Result<SettingsView, CommandError> 
     })
 }
 
+fn internal_error() -> CommandError {
+    CommandError {
+        code: "CONFIG_INTERNAL".to_string(),
+    }
+}
+
+/// API キー保存 command の呼び出し。秘密値は command 引数としてのみ渡し、
+/// signal / status / ログへ保持しない（ADR-0315）。
+async fn set_api_key(expected: u64, api_key: String) -> Result<SettingsView, CommandError> {
+    let args = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &args,
+        &JsValue::from_str("expected"),
+        &JsValue::from_f64(expected as f64),
+    )
+    .map_err(|_| internal_error())?;
+    js_sys::Reflect::set(
+        &args,
+        &JsValue::from_str("api_key"),
+        &JsValue::from_str(&api_key),
+    )
+    .map_err(|_| internal_error())?;
+    let args: JsValue = args.into();
+    let value = invoke_update("set_openai_api_key", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
+/// 「秘密を削除」command の呼び出し。api_key のみを対象にする（fail-closed）。
+async fn clear_secrets() -> Result<SettingsView, CommandError> {
+    let targets = js_sys::Object::new();
+    for (name, value) in [
+        ("api_key", true),
+        ("client_secret", false),
+        ("refresh_token", false),
+    ] {
+        js_sys::Reflect::set(
+            &targets,
+            &JsValue::from_str(name),
+            &JsValue::from_bool(value),
+        )
+        .map_err(|_| internal_error())?;
+    }
+    let targets: JsValue = targets.into();
+    let args = js_sys::Object::new();
+    js_sys::Reflect::set(&args, &JsValue::from_str("targets"), &targets)
+        .map_err(|_| internal_error())?;
+    let args: JsValue = args.into();
+    let value = invoke_update("clear_secrets", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
 /// 入力イベントから HTMLInputElement の値を取り出す。
 fn input_value(event: &web_sys::Event) -> Option<String> {
     event
         .target()
         .and_then(|target| target.dyn_into::<web_sys::HtmlInputElement>().ok())
         .map(|input| input.value())
+}
+
+/// API キー input の DOM 参照。値は signal へ入れず、呼び出し時に直接読む。
+fn api_key_input_element() -> Option<web_sys::HtmlInputElement> {
+    web_sys::window()?
+        .document()?
+        .get_element_by_id("settings-api-key")?
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .ok()
+}
+
+/// 成功・失敗にかかわらず、呼び出し後に DOM の入力値を必ずクリアする。
+fn clear_api_key_input() {
+    if let Some(input) = api_key_input_element() {
+        input.set_value("");
+    }
+}
+
+/// API キー保存の共通入口（保存ボタン / Enter の双方から呼ぶ）。
+///
+/// 入力値は DOM から読んで command へ渡すだけであり、signal や status へは
+/// 入れない。呼び出し後は成否にかかわらず DOM 値をクリアする。
+fn start_api_key_save(
+    editable: RwSignal<bool>,
+    saving: RwSignal<bool>,
+    revision: RwSignal<u64>,
+    config: RwSignal<Option<SettingsView>>,
+    status: RwSignal<String>,
+) {
+    if !editable.get() || saving.get() {
+        return;
+    }
+    let Some(input) = api_key_input_element() else {
+        return;
+    };
+    let api_key = input.value();
+    let expected = revision.get();
+    saving.set(true);
+    wasm_bindgen_futures::spawn_local(async move {
+        let result = set_api_key(expected, api_key).await;
+        clear_api_key_input();
+        match result {
+            Ok(updated) => {
+                revision.set(updated.revision);
+                config.update(|slot| {
+                    if let Some(view) = slot {
+                        view.ai.openai.has_api_key = updated.ai.openai.has_api_key;
+                    }
+                });
+                status.set("API キーを保存しました。".to_string());
+            }
+            Err(error) => status.set(error.status_message().to_string()),
+        }
+        saving.set(false);
+    });
+}
+
+/// API キー削除の共通入口。`clear_secrets` の api_key 対象のみを呼ぶ。
+fn start_api_key_clear(
+    editable: RwSignal<bool>,
+    saving: RwSignal<bool>,
+    revision: RwSignal<u64>,
+    config: RwSignal<Option<SettingsView>>,
+    status: RwSignal<String>,
+) {
+    if !editable.get() || saving.get() {
+        return;
+    }
+    saving.set(true);
+    wasm_bindgen_futures::spawn_local(async move {
+        match clear_secrets().await {
+            Ok(updated) => {
+                revision.set(updated.revision);
+                config.update(|slot| {
+                    if let Some(view) = slot {
+                        view.ai.openai.has_api_key = updated.ai.openai.has_api_key;
+                    }
+                });
+                clear_api_key_input();
+                status.set("API キーを削除しました。".to_string());
+            }
+            Err(error) => status.set(error.status_message().to_string()),
+        }
+        saving.set(false);
+    });
 }
 
 /// 入力イベントから checkbox の checked を取り出す。
@@ -4723,6 +4859,19 @@ fn SettingsForm() -> impl IntoView {
             }
         });
     });
+
+    let on_api_key_save = move |_event: web_sys::MouseEvent| {
+        start_api_key_save(editable, saving, revision, config, status);
+    };
+    let on_api_key_keydown = move |event: web_sys::KeyboardEvent| {
+        if event.key() == "Enter" {
+            event.prevent_default();
+            start_api_key_save(editable, saving, revision, config, status);
+        }
+    };
+    let on_api_key_clear = move |_event: web_sys::MouseEvent| {
+        start_api_key_clear(editable, saving, revision, config, status);
+    };
 
     let on_save = move |_event: web_sys::MouseEvent| {
         // prop:disabled が反映される前の連続クリックもここで弾く。
@@ -4869,9 +5018,19 @@ fn SettingsForm() -> impl IntoView {
                             });
                         }
                     }/>
-                // API Key の値は DTO へ送らない。has_api_key の有無だけを表示する。
+                // API キーの値は signal / DTO / status へ残さず、DOM から
+                // 専用 command へ渡すだけにする。desktop のみ編集可能。
                 <label for="settings-api-key">"API キー"</label>
-                <input id="settings-api-key" type="password" placeholder="設定済みの場合は変更不要" readonly=true/>
+                <input id="settings-api-key" type="password" placeholder="設定済みの場合は変更不要"
+                    readonly=move || !editable.get() || saving.get()
+                    prop:disabled=move || !editable.get() || saving.get()
+                    on:keydown=on_api_key_keydown/>
+                <button id="settings-api-key-save" type="button" class="btn btn-secondary"
+                    prop:disabled=move || !editable.get() || saving.get()
+                    on:click=on_api_key_save>"API キーを保存"</button>
+                <button id="settings-api-key-clear" type="button" class="btn btn-secondary"
+                    prop:disabled=move || !editable.get() || saving.get()
+                    on:click=on_api_key_clear>"API キーを削除"</button>
                 <span id="settings-api-key-state" class="api-key-state">
                     {move || if config.get().map(|v| v.ai.openai.has_api_key).unwrap_or(false) { "設定済み" } else { "未設定" }}
                 </span>

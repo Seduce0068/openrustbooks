@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 設定画面の Tauri IPC を get_config / update_config_patch に限定する静的ゲート（fail-closed）。
+# 設定画面の Tauri IPC を get_config / update_config_patch / set_openai_api_key / clear_secrets に限定する静的ゲート（fail-closed）。
 # web 側ソースの静的解析であり、runtime の権限制限（capability / ACL）ではない。
 # 独自 command は ACL 非対象という根拠は ADR-0253:73-74（ADR-0264 は IPC 経路の設計受容）。
 # 出典はコードのみ（GOAL.md「R6 A05 前提 2」/ ADR-0253:73-74 / ADR-0274）。
@@ -24,7 +24,12 @@ root = Path(sys.argv[1])
 errors: list[str] = []
 
 # 設定画面から許可する command 名（GOAL.md の必須事項 1）。
-ALLOWED_COMMANDS = {"get_config", "update_config_patch"}
+ALLOWED_COMMANDS = {
+    "get_config",
+    "update_config_patch",
+    "set_openai_api_key",
+    "clear_secrets",
+}
 
 
 def read_text(rel: str) -> str | None:
@@ -113,5 +118,5 @@ if errors:
         print(f"ERROR: {error}", file=sys.stderr)
     sys.exit(1)
 
-print("OK: 設定画面の IPC は get_config / update_config_patch に限定されています")
+print("OK: 設定画面の IPC は get_config / update_config_patch / set_openai_api_key / clear_secrets に限定されています")
 PY

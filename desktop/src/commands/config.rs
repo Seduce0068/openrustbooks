@@ -676,6 +676,22 @@ fn normalize_ai_from_js(mut ai: AiConfig) -> AiConfig {
     ai
 }
 
+/// API キー更新専用の純粋ヘルパー。
+///
+/// 現在設定を DTO 境界へ落としてから [`merge_secrets`] で復元し、
+/// `api_key` だけを差し替える。空文字は未設定（`None`）として扱う。
+/// 値はログ・エラー・DTO へ一切出さない。
+fn config_with_api_key(current: &AppConfig, api_key: String) -> AppConfig {
+    let normalized = normalize_to_dto_boundary(current, current);
+    let mut config = merge_secrets(current, &normalized);
+    config.ai.openai.api_key = if api_key.is_empty() {
+        None
+    } else {
+        Some(api_key)
+    };
+    config
+}
+
 /// 保存・再初期化前に両プロバイダの base_url を検証する。
 /// JS は AppConfig 全体を渡せるため、ホストの許可リストは core 側にハードコードする。
 fn validate_ai_base_urls(ai: &AiConfig) -> Result<(), String> {
@@ -806,6 +822,39 @@ pub async fn update_ai_config(
     Ok(())
 }
 
+/// Web の API キー保存専用コマンド。
+///
+/// 秘密値は DTO（`ConfigPatch` / `ConfigView`）を通さず、この引数 `api_key`
+/// だけから受け取る。`expected` は UI が `get_config` で読んだ revision を
+/// そのまま CAS に使う（ADR-0253）。成功時は更新後の view を返す。
+#[command]
+pub async fn set_openai_api_key(
+    state: State<'_, Arc<AppState>>,
+    expected: u64,
+    api_key: String,
+) -> Result<ConfigView, CommandError> {
+    set_openai_api_key_inner(state.inner(), expected, api_key).await
+}
+
+/// コマンド本体。テストから `AppState` を直接渡せるよう分離している。
+async fn set_openai_api_key_inner(
+    state: &AppState,
+    expected: u64,
+    api_key: String,
+) -> Result<ConfigView, CommandError> {
+    load_failed_command_error(state)?;
+    let (current, _internal_revision) = state.config_with_revision();
+    let config = config_with_api_key(&current, api_key);
+    // 生メッセージは返さず code ごとの固定文言へ変換する。
+    validate_ai_base_urls(&config.ai).map_err(|_| CommandError::from_code("CONFIG_VALIDATION"))?;
+    let changed = ai_or_lint_changed(&current, &config);
+    commit_validated_config(state, expected, config, changed)
+        .await
+        .map_err(CommandError::from)?;
+    let (config, revision) = state.config_with_revision();
+    Ok(ConfigView::from_state(&config, revision))
+}
+
 /// Update lint configuration
 #[command]
 pub async fn update_lint_config(
@@ -923,6 +972,39 @@ mod tests {
             scopes: vec!["scope".to_string()],
         });
         config
+    }
+
+    /// API キー以外の設定（含む DTO 外フィールド）が不変であること。
+    #[test]
+    fn config_with_api_key_replaces_only_the_key() {
+        let current = config_with_dead_values();
+        let updated = config_with_api_key(&current, "sk-replacement-for-tests".to_string());
+
+        let mut expected = serde_json::to_value(&current).unwrap();
+        expected["ai"]["openai"]["api_key"] = serde_json::json!("sk-replacement-for-tests");
+        assert_eq!(serde_json::to_value(&updated).unwrap(), expected);
+    }
+
+    /// 空文字は未設定として扱い、変更検知に反映されること。
+    #[test]
+    fn config_with_api_key_treats_empty_as_unset() {
+        let current = config_with_secrets();
+        let updated = config_with_api_key(&current, String::new());
+
+        assert!(updated.ai.openai.api_key.is_none());
+        assert!(ai_or_lint_changed(&current, &updated));
+    }
+
+    /// 返却 view に秘密値が出ないこと（value は has_api_key フラグのみ）。
+    #[test]
+    fn set_api_key_result_view_never_exposes_the_value() {
+        let current = config_with_secrets();
+        let config = config_with_api_key(&current, "sk-do-not-expose-in-view".to_string());
+        let json = serde_json::to_string(&ConfigView::from_state(&config, 3)).unwrap();
+
+        assert!(!json.contains("sk-do-not-expose-in-view"));
+        assert!(json.contains("\"has_api_key\":true"));
+        assert!(json.contains("\"revision\":3"));
     }
 
     #[test]
