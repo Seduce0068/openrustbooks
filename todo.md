@@ -22,9 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
-- [ ] 【close_document の unsaved チェックと削除を atomic 化】`is_unsaved()` と `remove_document()` が別ロックで、
-      待ち中に mark_unsaved された編集が黙って失われる。AppState に CAS 系 close を追加。
-      根拠 `desktop/src/commands/document.rs:423,429` / `desktop/src/state/mod.rs:269-272` / R2-RC01 / 重大度 high。
 - [ ] 【CI extra_gates の gitleaks 常時 fail を修正】`exit 1` が extra_gates 途中にあるため、
       後続11ゲート（rumdl / dependency / version / e2e-count / csp / plugin / updater / capability / wasm×2 / wasm-test）が到達不能。
       gitleaks 導入を先頭へ移すか、後続ゲートを別ステップへ分割する。
@@ -161,6 +158,7 @@ status: current
 
 ## 完了
 
+- [x] 【文書 close】unsaved 検査と削除を単一ロック化、並行編集の喪失を防止（ADR-0313）。
 - [x] 【文書 root 選択】全候補 read_only 検査と最深一致を実装、入れ子/symlink 迂回を防止（ADR-0312）。
 - [x] 【CI ゲート】font/dist/secrets を CI に配線、gitleaks pre-commit を導入（ADR-0311）。
 - [x] 【release 文書】updater 未登録 / 実 WebView 検証済み / ゲート一覧を現行化（ADR-0310）。

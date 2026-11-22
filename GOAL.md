@@ -31,3 +31,10 @@ force=false でも未保存編集が警告なしに削除される。
 - 外部サービス / 秘密情報は扱わない。
 - E2E check 名・件数を変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- close_document_atomic を追加し、unsaved 検査と削除を単一ロック化。
+- Barrier で実 TOCTOU を再現する回帰 test を追加。
+- desktop 146 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- IPC assert 強化 / 旧 API 完全廃止は ADR-0313 の未決定。
