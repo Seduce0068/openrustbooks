@@ -223,7 +223,7 @@ version・E2E 件数・CSP・Tauri plugin config・updater honesty・capability 
   （[ADR-0289](docs/decisions/0289-desktop-frontend-build-dependency.md)）。
 - **WDIO**: `ci-wdio-test.sh` を `verify.sh` 末尾の独立ゲートとして実行する。
   debug 限定の `wdio` feature と `@wdio/tauri-service` で実 WebView の settings を
-  検証し、既存 E2E 258 件・check 名は変更しない
+  検証し、既存 E2E 263 件・check 名は変更しない
   （[ADR-0283](docs/decisions/0283-webdriverio-adoption.md) /
   [ADR-0296](docs/decisions/0296-wdio-save-roundtrip.md)）。
 
@@ -887,6 +887,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0327-wdio-serve-lock](docs/decisions/0327-wdio-serve-lock.md)
 - [0328-reader-settings-authority](docs/decisions/0328-reader-settings-authority.md)
 - [0329-epub2-ncx-e2e](docs/decisions/0329-epub2-ncx-e2e.md)
+- [0330-contrast-e2e](docs/decisions/0330-contrast-e2e.md)
+  - 高コントラスト設定の CSS を CDP emulation と WCAG コントラスト比で検証する決定。
   - EPUB3 nav だけでなく EPUB2 NCX の目次読み込みと章移動を Web E2E で検証する決定。
   - config.toml の reader 設定は初回のみ localStorage の初期値として使い、以後はブラウザ設定を権威とする決定。
   - WDIO の trunk serve に --locked --offline を付け、readiness 後 / cleanup 前にも lock 不変を検査する決定。
