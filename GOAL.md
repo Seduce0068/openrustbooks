@@ -132,3 +132,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 
 - delete 直前の resolve 再確認を追加、ADR-0286 方針を適用。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+
+## 完了記録（第3cycle-8）
+
+- AI 設定差分のみ service 再生成、lint のみ変更は現在 service を維持。
+- 旧 helper を test module 内へ移し clippy 修正。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
