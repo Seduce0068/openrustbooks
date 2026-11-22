@@ -46,9 +46,9 @@ openrustbooks/
 │   ├── prompts/                  # プロンプトテンプレート
 │   └── Cargo.toml
 ├── desktop/                      # Tauriデスクトップアプリ
+│   ├── build.rs                  # tauri-build（クレート直下）
 │   ├── src/
 │   │   ├── main.rs
-│   │   ├── build.rs              # tauri-build
 │   │   ├── state/                # アプリケーション状態
 │   │   ├── window/               # ウィンドウ管理
 │   │   └── commands/             # Tauriコマンド
@@ -174,15 +174,41 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 
 ### 一括検証
 
-`./scripts/verify.sh` で、上記ゲート・wasm-test・audit・`trunk build`・パス検査・E2E をまとめて実行できる
+`./scripts/verify.sh` で、fmt / 静的ゲート（rumdl featureless・dependency-hygiene・
+version・E2E 件数・CSP・Tauri plugin config・updater honesty・capability scope）/
+`cargo check` / `test` / `clippy` / wasm check / wasm-test / audit-db-freshness /
+`cargo audit` / `trunk build --offline --locked` / build-desktop /
+生成 JS グルーを含むパス検査 / E2E / WDIO をまとめて実行できる
 （一時出力先は自動で削除される）。全ゲート成功時だけ成果物を残したい場合は
 `./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/` を指定する。
 保持物の確認・SHA256 検証・serve・復旧手順は
 [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) を参照。
 公開 installer / updater / 署名成果物が無い現状と、導入・更新・ロールバック手順は
 [リリース運用](docs/runbook-release.md) を参照。
-`trunk build` は `--offline --locked` で実行し、`Cargo.lock` の黙った更新を防ぐ
-（[ADR-0237](docs/decisions/0237-ci-gate-consistency.md)）。
+
+現行のゲート契約は次のとおり。
+
+- **trunk / Cargo**: `trunk build` と `build-desktop.sh` 内の trunk は
+  `--offline --locked`、Cargo の check / test / clippy / build も `--locked` で実行し、
+  `Cargo.lock` の黙った更新を防ぐ（[ADR-0237](docs/decisions/0237-ci-gate-consistency.md) /
+  [ADR-0290](docs/decisions/0290-ci-reproducibility.md)）。
+- **dependency-hygiene**: `check-dependency-hygiene.sh` が serde_yaml /
+  tikv-jemalloc-sys の既知例外を ID・理由・期限付きで管理し、未登録の残存を拒否する
+  （[ADR-0309](docs/decisions/0309-dependency-gate-hardening.md)）。
+- **audit / audit-db-freshness**: advisory DB の鮮度を先に検査し（既定 7 日・最大 90 日）、
+  不合格なら `cargo audit` を実行せずゲート失敗とする。`cargo audit --no-fetch --db <db-dir>`
+  で検査対象と監査対象を一致させ、cargo-audit 未インストールも失敗とする
+  （[ADR-0294](docs/decisions/0294-audit-db-freshness.md)）。
+- **build-desktop / check-frontend-dist**: `build-desktop.sh` が
+  `trunk build --offline --locked` の直後に `check-frontend-dist.sh` で
+  index.html / WASM / JS の欠落を fail-closed で検証し、
+  `cargo build -p openrustbooks-desktop --locked` を実行する
+  （[ADR-0289](docs/decisions/0289-desktop-frontend-build-dependency.md)）。
+- **WDIO**: `ci-wdio-test.sh` を `verify.sh` 末尾の独立ゲートとして実行する。
+  debug 限定の `wdio` feature と `@wdio/tauri-service` で実 WebView の settings を
+  検証し、既存 E2E 256 件・check 名は変更しない
+  （[ADR-0283](docs/decisions/0283-webdriverio-adoption.md) /
+  [ADR-0296](docs/decisions/0296-wdio-save-roundtrip.md)）。
 
 ### 手動の E2E 検証
 
@@ -751,79 +777,82 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0272-settings-save-ui](docs/decisions/0272-settings-save-ui.md)
   - 完全な ConfigView DTO 往復と Tauri mock E2E を用いて、desktop のみ設定保存 UI を接続する決定を記録する。
 - [0273-real-webview-verification-deferred](docs/decisions/0273-real-webview-verification-deferred.md)
-  - Tauri CLI 未導入で実 WebView 検証を実行不可と記録し、未実施のまま pass とせず導入後の手順を残す決定。
+  - Tauri CLI 未導入を環境ブロッカーとして記録した決定（その後 ADR-0282 / 0283 で解消）。
 - [0274-a05-traceability-reconciliation](docs/decisions/0274-a05-traceability-reconciliation.md)
-  - A05 の前提別状態を再分類し、JS / IPC 契約レベル達成と実 WebView 未達を切り分ける。
+  - R6 A05 監査で判明した前提 1〜6 の達成度を再分類し、JS / IPC 契約レベルと実 WebView 未達を
+    切り分ける（当時の履歴。現在は ADR-0282 / 0283 で実 WebView 検証済み）。
 - [0275-settings-notice-visibility](docs/decisions/0275-settings-notice-visibility.md)
   - desktop で設定保存 UI が有効なとき、ブラウザ専用の読み取り説明を DOM から除外する決定を記録する。
 - [0276-investigation-artifacts-status](docs/decisions/0276-investigation-artifacts-status.md)
-- [0277-updater-honesty-restoration](docs/decisions/0277-updater-honesty-restoration.md)
-- [0278-settings-ipc-capability-scope](docs/decisions/0278-settings-ipc-capability-scope.md)
-- [0279-updater-check-pattern](docs/decisions/0279-updater-check-pattern.md)
-- [0280-tauri-plugin-config-cleanup](docs/decisions/0280-tauri-plugin-config-cleanup.md)
-- [0281-local-root-flags-server-authoritative](docs/decisions/0281-local-root-flags-server-authoritative.md)
-- [0282-real-webview-runtime-proof](docs/decisions/0282-real-webview-runtime-proof.md)
-- [0283-webdriverio-adoption](docs/decisions/0283-webdriverio-adoption.md)
-- [0284-config-load-fail-closed](docs/decisions/0284-config-load-fail-closed.md)
-- [0285-fs-read-only-enforcement](docs/decisions/0285-fs-read-only-enforcement.md)
-- [0286-storage-destructive-guard](docs/decisions/0286-storage-destructive-guard.md)
-- [0287-ipc-error-redaction](docs/decisions/0287-ipc-error-redaction.md)
-- [0288-home-navigation](docs/decisions/0288-home-navigation.md)
-- [0289-desktop-frontend-build-dependency](docs/decisions/0289-desktop-frontend-build-dependency.md)
-- [0290-ci-reproducibility](docs/decisions/0290-ci-reproducibility.md)
-- [0291-e2e-count-single-source](docs/decisions/0291-e2e-count-single-source.md)
-- [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
-- [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
-- [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
-- [0295-documentation-current-state](docs/decisions/0295-documentation-current-state.md)
-- [0296-wdio-save-roundtrip](docs/decisions/0296-wdio-save-roundtrip.md)
-- [0297-front-matter-byte-preservation](docs/decisions/0297-front-matter-byte-preservation.md)
-- [0298-atomic-document-save](docs/decisions/0298-atomic-document-save.md)
-- [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
-- [0300-lost-update-guard](docs/decisions/0300-lost-update-guard.md)
-- [0301-input-size-bounds](docs/decisions/0301-input-size-bounds.md)
-- [0302-settings-import-disclosure](docs/decisions/0302-settings-import-disclosure.md)
-- [0303-unused-tauri-plugins](docs/decisions/0303-unused-tauri-plugins.md)
-- [0304-dead-config-cleanup](docs/decisions/0304-dead-config-cleanup.md)
-- [0305-epub-zip-interpretation](docs/decisions/0305-epub-zip-interpretation.md)
-- [0306-a11y-label-cleanup](docs/decisions/0306-a11y-label-cleanup.md)
-- [0307-event-emit-visibility](docs/decisions/0307-event-emit-visibility.md)
-- [0308-storage-backend-contract](docs/decisions/0308-storage-backend-contract.md)
-- [0309-dependency-gate-hardening](docs/decisions/0309-dependency-gate-hardening.md)
-  - serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
-  - overwrite の原子的新規作成、resolve_path 再確認、watch 未実装契約、退避後始末を明確化する決定。
-  - emit 失敗を警告ログ化し、import 失敗件数と navigation parse 失敗を status で告知する決定。
-  - lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。
-  - BOM 入り mimetype、fragment 復号、重複 manifest id、外部スキーム判定を core / web で統一する決定。
-  - 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
-  - store / global-shortcut / shell / fs / opener / notification と未使用 crate を削除し、静的ゲートを log + dialog へ絞る決定。
-  - 現在値保護でバックアップの表示設定を復元しない場合に固定文言で告知する決定。
-  - open / import 前に 256 MiB 上限を検査し、読み取り後にも実バイト長を再確認する決定。
-  - settings 保存中の入力を遮断し、editor の last_text を doc_id 変更・手動保存時に同期する決定。
-  - AI service 生成中に config が更新されても古い service で上書きしない決定。
-  - save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。
-  - front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
-  - WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。
-  - 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
-  - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
-  - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
-  - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
-  - E2E 期待件数を Checker(expected=N) のみに依存させ、todo.md の CI-H01 行をゲート条件から外す決定。
-  - wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
-  - tauri.conf.json の frontendDist 依存を明示化し、生成済み web/dist の存在と安全性を fail-closed で検証する決定。
-  - Reader / Editor への導線を追加し、未接続ボタンとダミー FileTree を誤解のない表示へ変更する決定。
-  - desktop command の生エラー文字列を廃し、固定 code と固定文言だけを IPC へ返す決定。
-  - storage root 自身の削除・改名を拒否し、move_item の上書き競合で既存データを保持する決定。
-  - local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
-  - 設定読み込みエラーを握り潰して既定値で上書きする経路を廃し、退避と保存拒否を義務付ける決定。
-  - Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。
-  - Tauri CLI 導入後に実 WebView で起動ブロッカーと保存ブロッカーを修正し、設定保存を検証した決定を記録する。
-  - 設定 DTO で read_only / watch が writable でも、マージ時に現在値を復元して権限昇格を防ぐ決定を記録する。
-  - tauri.conf.json の plugins.*.scope.allowedPaths が無効キーであるため、plugins ブロックを削除し再混入を静的ゲートで防ぐ決定を記録する。
-  - 静的ゲートが Tauri v2 の実呼び出し `.check()` を見逃す fail-open を修正する決定を記録する。
-  - 設定画面から呼ぶ Tauri command を get_config / update_config_patch に限定する静的ゲートを記録する。
-  - 設定保存 UI の editable 化で失われた ADR-0222 の固定表示と、check_updates の保存時 fail-closed を復元する決定。
   - 未追跡の調査レポート群を当時スナップショットとして導線に明示し、生ファイルは変更しない決定を記録する。
+- [0277-updater-honesty-restoration](docs/decisions/0277-updater-honesty-restoration.md)
+  - 設定保存 UI の editable 化で失われた ADR-0222 の固定表示と、check_updates の保存時 fail-closed を復元する決定。
+- [0278-settings-ipc-capability-scope](docs/decisions/0278-settings-ipc-capability-scope.md)
+  - 設定画面から呼ぶ Tauri command を get_config / update_config_patch に限定する静的ゲートを記録する。
+- [0279-updater-check-pattern](docs/decisions/0279-updater-check-pattern.md)
+  - 静的ゲートが Tauri v2 の実呼び出し `.check()` を見逃す fail-open を修正する決定を記録する。
+- [0280-tauri-plugin-config-cleanup](docs/decisions/0280-tauri-plugin-config-cleanup.md)
+  - tauri.conf.json の plugins.*.scope.allowedPaths が無効キーであるため、plugins ブロックを削除し再混入を静的ゲートで防ぐ決定を記録する。
+- [0281-local-root-flags-server-authoritative](docs/decisions/0281-local-root-flags-server-authoritative.md)
+  - 設定 DTO で read_only / watch が writable でも、マージ時に現在値を復元して権限昇格を防ぐ決定を記録する。
+- [0282-real-webview-runtime-proof](docs/decisions/0282-real-webview-runtime-proof.md)
+  - Tauri CLI 導入後に実 WebView で起動ブロッカーと保存ブロッカーを修正し、設定保存を検証した決定を記録する。
+- [0283-webdriverio-adoption](docs/decisions/0283-webdriverio-adoption.md)
+  - Tauri 公式推奨の WebdriverIO と @wdio/tauri-service を debug 限定で導入し、xdotool に依存しない実 WebView 検証を確立する決定。
+- [0284-config-load-fail-closed](docs/decisions/0284-config-load-fail-closed.md)
+  - 設定読み込みエラーを握り潰して既定値で上書きする経路を廃し、退避と保存拒否を義務付ける決定。
+- [0285-fs-read-only-enforcement](docs/decisions/0285-fs-read-only-enforcement.md)
+  - local_roots[].read_only を save_document だけでなく fs コマンドにも適用し、入れ子 root と symlink の迂回を塞ぐ決定。
+- [0286-storage-destructive-guard](docs/decisions/0286-storage-destructive-guard.md)
+  - storage root 自身の削除・改名を拒否し、move_item の上書き競合で既存データを保持する決定。
+- [0287-ipc-error-redaction](docs/decisions/0287-ipc-error-redaction.md)
+  - desktop command の生エラー文字列を廃し、固定 code と固定文言だけを IPC へ返す決定。
+- [0288-home-navigation](docs/decisions/0288-home-navigation.md)
+  - Reader / Editor への導線を追加し、未接続ボタンとダミー FileTree を誤解のない表示へ変更する決定。
+- [0289-desktop-frontend-build-dependency](docs/decisions/0289-desktop-frontend-build-dependency.md)
+  - tauri.conf.json の frontendDist 依存を明示化し、生成済み web/dist の存在と安全性を fail-closed で検証する決定。
+- [0290-ci-reproducibility](docs/decisions/0290-ci-reproducibility.md)
+  - wasm-pack 固定、lock 不変検証、dependabot npm、WDIO cleanup の安全化で CI の再現性を高める決定。
+- [0291-e2e-count-single-source](docs/decisions/0291-e2e-count-single-source.md)
+  - E2E 期待件数を Checker(expected=N) のみに依存させ、todo.md の CI-H01 行をゲート条件から外す決定。
+- [0292-ai-empty-response](docs/decisions/0292-ai-empty-response.md)
+  - choices / content / response が欠落した応答を空文字成功とせず、固定文言の provider エラーへ変換する決定。
+- [0293-lint-retry-feedback](docs/decisions/0293-lint-retry-feedback.md)
+  - Table / FrontMatter の lint 不合格時に同一 prompt の無駄な AI 再呼び出しを行わない決定。
+- [0294-audit-db-freshness](docs/decisions/0294-audit-db-freshness.md)
+  - verify.sh の cargo audit が古い advisory DB で脆弱性を見逃さないよう、DB 鮮度と監査対象の一致を fail-closed で検査する決定。
+- [0295-documentation-current-state](docs/decisions/0295-documentation-current-state.md)
+  - 実 WebView 検証済み、EPUB/ZIP 実装済み、E2E current 256 を入口文書へ反映する決定。
+- [0296-wdio-save-roundtrip](docs/decisions/0296-wdio-save-roundtrip.md)
+  - WebdriverIO の settings spec に update_config_patch の revision +1 と config.toml 永続化を追加する決定。
+- [0297-front-matter-byte-preservation](docs/decisions/0297-front-matter-byte-preservation.md)
+  - front matter を構造化値と元テキストの両方で保持し、無編集 open→save でバイト列が変わらないようにする決定。
+- [0298-atomic-document-save](docs/decisions/0298-atomic-document-save.md)
+  - save_document を temp + rename 方式へ変更し、書き込み失敗時に既存ファイルを保持する決定。
+- [0299-ai-service-refresh-race](docs/decisions/0299-ai-service-refresh-race.md)
+  - AI service 生成中に config が更新されても古い service で上書きしない決定。
+- [0300-lost-update-guard](docs/decisions/0300-lost-update-guard.md)
+  - settings 保存中の入力を遮断し、editor の last_text を doc_id 変更・手動保存時に同期する決定。
+- [0301-input-size-bounds](docs/decisions/0301-input-size-bounds.md)
+  - open / import 前に 256 MiB 上限を検査し、読み取り後にも実バイト長を再確認する決定。
+- [0302-settings-import-disclosure](docs/decisions/0302-settings-import-disclosure.md)
+  - 現在値保護でバックアップの表示設定を復元しない場合に固定文言で告知する決定。
+- [0303-unused-tauri-plugins](docs/decisions/0303-unused-tauri-plugins.md)
+  - store / global-shortcut / shell / fs / opener / notification と未使用 crate を削除し、静的ゲートを log + dialog へ絞る決定。
+- [0304-dead-config-cleanup](docs/decisions/0304-dead-config-cleanup.md)
+  - 9 件の dead config を JS DTO から除外しつつ config.toml の値を保持し、未配線 UI を固定表示へ置き換える決定。
+- [0305-epub-zip-interpretation](docs/decisions/0305-epub-zip-interpretation.md)
+  - BOM 入り mimetype、fragment 復号、重複 manifest id、外部スキーム判定を core / web で統一する決定。
+- [0306-a11y-label-cleanup](docs/decisions/0306-a11y-label-cleanup.md)
+  - lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。
+- [0307-event-emit-visibility](docs/decisions/0307-event-emit-visibility.md)
+  - emit 失敗を警告ログ化し、import 失敗件数と navigation parse 失敗を status で告知する決定。
+- [0308-storage-backend-contract](docs/decisions/0308-storage-backend-contract.md)
+  - overwrite の原子的新規作成、resolve_path 再確認、watch 未実装契約、退避後始末を明確化する決定。
+- [0309-dependency-gate-hardening](docs/decisions/0309-dependency-gate-hardening.md)
+- [0310-release-doc-current-state](docs/decisions/0310-release-doc-current-state.md)
+  - updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。
+  - serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
 
 ## ライセンス
 
