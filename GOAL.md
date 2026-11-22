@@ -190,3 +190,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - wdio permission を test 用 capability JSON に閉じる静的ゲートを追加。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - runtime ACL 検証は ADR-0348 の未決定。
+
+## 完了記録（第3cycle-17）
+
+- audit 警告を advisory ID + 期限付き allowlist で管理。
+- 新規 ID / 期限切れ / JSON 失敗を fail-closed 化。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- chrono 移行は ADR-0349 の未決定。
