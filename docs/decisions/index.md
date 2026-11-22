@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 317 件）。
+openrustbooks の ADR 一覧（全 318 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -638,3 +638,5 @@ openrustbooks の ADR 一覧（全 317 件）。
   - status: accepted — OPF / NCX の構造要素蓄積時に上限を適用し、細工 EPUB によるメモリ枯渇を fail-closed で拒否する決定。
 - [ADR-0317: バックアップ JSON の実用上限と構造制限](0317-import-json-limits.md)
   - status: accepted — 8 MiB のバイト上限と parse 前の構造走査で、バックアップ import によるヒープ枯渇を防ぐ決定。
+- [ADR-0318: save_document の世代 CAS](0318-document-save-cas.md)
+  - status: accepted — 保存と並行編集を世代 CAS で検出し、古い snapshot による state の書き戻しを防ぐ決定。
