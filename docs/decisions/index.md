@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 330 件）。
+openrustbooks の ADR 一覧（全 331 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -664,3 +664,5 @@ openrustbooks の ADR 一覧（全 330 件）。
   - status: accepted — EPUB3 nav だけでなく EPUB2 NCX の目次読み込みと章移動を Web E2E で検証する決定。
 - [ADR-0330: prefers-contrast: more の動的 E2E](0330-contrast-e2e.md)
   - status: accepted — 高コントラスト設定の CSS を CDP emulation と WCAG コントラスト比で検証する決定。
+- [ADR-0331: get_config 失敗 status の区別](0331-get-config-status.md)
+  - status: accepted — ブラウザ非対応と desktop IPC 失敗を別の固定文言で表示する決定。
