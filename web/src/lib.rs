@@ -18,6 +18,10 @@ use openrustbooks_core::wasm::sanitize_svg_wasm;
 // Leptos の非公開 re-export ではなく、直接依存の send_wrapper クレートを使う（ADR-0166 / TD-M07）。
 use send_wrapper::SendWrapper;
 use wasm_bindgen::prelude::*;
+// インポート JSON の構造制限は Value を組み立てずにストリーミングで走査する。
+// wasm32 とネイティブの単体テストの両方で使うため、宣言側も同じ条件でゲートする。
+#[cfg(any(target_arch = "wasm32", test))]
+use serde::de::DeserializeSeed;
 
 /// E2E の起動診断用に Wasm の実行段階へタイムスタンプを付ける。
 /// wasm-bindgen の init() が完了したか、Leptos のマウントまで進んだかを
@@ -1662,20 +1666,272 @@ fn report_position_prune(deleted: usize, remaining: usize, saved: bool) {
     POSITION_PRUNE_NOTICE.set(None);
 }
 
-/// インポート JSON のサイズ上限（core::io::DEFAULT_MAX_READ_BYTES = 256 MiB から導出）。
-/// EPUB 上限・下書き上限とは独立に、巨大な JSON のテキスト読み取りを拒否する。
+/// インポート JSON のサイズ上限（8 MiB）。
+///
+/// core::io::DEFAULT_MAX_READ_BYTES（256 MiB）は EPUB などのバイナリを
+/// ストリーミングで読むための上限であり、そのまま JSON に流用すると
+/// `serde_json::Value` の展開で元テキストに加えて数百 MB のツリーを確保し、
+/// ブラウザタブのヒープを枯渇させ得る。したがって core の上限からは導出せず、
+/// バックアップ JSON 専用の実用値として固定する（R3-SE01 / ADR-0317）。
 #[cfg(any(target_arch = "wasm32", test))]
-const IMPORT_JSON_MAX_BYTES: f64 = openrustbooks_core::io::DEFAULT_MAX_READ_BYTES as f64;
+const IMPORT_JSON_MAX_BYTES: f64 = 8.0 * 1024.0 * 1024.0;
 
 /// 上限超過のインポートを拒否する際の固定文言。
-/// パス・サイズ値・ファイル名は一切出さない（R3-IV01）。
+/// パス・サイズ値・ファイル名・キー・値は一切出さない（R3-IV01）。
 #[cfg(any(target_arch = "wasm32", test))]
 const IMPORT_JSON_TOO_LARGE_MESSAGE: &str = "ファイルが大きすぎます。";
+
+/// 構造制限の固定上限。正規のエクスポートはトップレベル 5 キー、
+/// positions / settings は高々数千件、深さは 4 程度なので、これらは
+/// 十分に余裕のある拒否閾値である。上限値は利用者向け文言へ出さない。
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_TOP_LEVEL_KEYS: usize = 64;
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_SECTION_KEYS: usize = 10_000;
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_SETTINGS_KEYS: usize = 64;
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_STRING_BYTES: usize = 2 * 1024 * 1024;
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_DEPTH: usize = 16;
+/// ノード総数の上限。バイト上限内でも `[null,...]` のような入力で
+/// Value のノード数が膨らむため、全体の確保量もここで抑える。
+#[cfg(any(target_arch = "wasm32", test))]
+const IMPORT_JSON_MAX_NODES: usize = 20_000;
 
 /// `file.text()` の前に呼ぶ fail-closed なサイズ検査。
 #[cfg(any(target_arch = "wasm32", test))]
 fn import_json_exceeds_limit(size: f64) -> bool {
     size > IMPORT_JSON_MAX_BYTES
+}
+
+/// 構造走査中のコンテナ種別。トップレベルの positions / settings だけを
+/// 個別のキー上限で検査し、それ以外は一律のセクション上限を適用する。
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Clone, Copy)]
+enum ImportJsonSection {
+    Root,
+    Positions,
+    Settings,
+    Other,
+}
+
+/// `serde_json::Value` を組み立てる前に構造を走査するビジター。
+///
+/// 各ノードの確保をカウントし、キー数・文字列長・深さ・ノード総数が
+/// 固定上限を超えた時点で打ち切る。エラー文言は内部で捨てられ、
+/// 利用者には `IMPORT_JSON_TOO_LARGE_MESSAGE` だけが返る。
+#[cfg(any(target_arch = "wasm32", test))]
+struct ImportJsonStructureVisitor<'a> {
+    depth: usize,
+    section: ImportJsonSection,
+    budget: &'a std::cell::Cell<usize>,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl<'a> ImportJsonStructureVisitor<'a> {
+    /// 1 ノード分の予算を消費する。
+    fn charge(&self) -> Result<(), String> {
+        let used = self.budget.get();
+        if used >= IMPORT_JSON_MAX_NODES {
+            return Err("node budget exceeded".to_string());
+        }
+        self.budget.set(used + 1);
+        Ok(())
+    }
+
+    /// キー・値の文字列長を検査する。
+    fn check_string(value: &str) -> Result<(), String> {
+        if value.len() > IMPORT_JSON_MAX_STRING_BYTES {
+            return Err("string length exceeded".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl<'de, 'a> serde::de::Visitor<'de> for ImportJsonStructureVisitor<'a> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a JSON value within import limits")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        if self.depth > IMPORT_JSON_MAX_DEPTH {
+            return Err(serde::de::Error::custom("depth exceeded"));
+        }
+        self.charge().map_err(serde::de::Error::custom)?;
+        let key_limit = match self.section {
+            ImportJsonSection::Root => IMPORT_JSON_MAX_TOP_LEVEL_KEYS,
+            ImportJsonSection::Settings => IMPORT_JSON_MAX_SETTINGS_KEYS,
+            ImportJsonSection::Positions | ImportJsonSection::Other => IMPORT_JSON_MAX_SECTION_KEYS,
+        };
+        let mut count = 0_usize;
+        while let Some(key) = map.next_key::<String>()? {
+            count += 1;
+            if count > key_limit {
+                return Err(serde::de::Error::custom("key count exceeded"));
+            }
+            Self::check_string(&key).map_err(serde::de::Error::custom)?;
+            let child_section = match self.section {
+                ImportJsonSection::Root if key == "positions" => ImportJsonSection::Positions,
+                ImportJsonSection::Root if key == "settings" => ImportJsonSection::Settings,
+                _ => ImportJsonSection::Other,
+            };
+            map.next_value_seed(ImportJsonStructureSeed {
+                depth: self.depth + 1,
+                section: child_section,
+                budget: self.budget,
+            })?;
+        }
+        Ok(())
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        if self.depth > IMPORT_JSON_MAX_DEPTH {
+            return Err(serde::de::Error::custom("depth exceeded"));
+        }
+        self.charge().map_err(serde::de::Error::custom)?;
+        let mut count = 0_usize;
+        while seq
+            .next_element_seed(ImportJsonStructureSeed {
+                depth: self.depth + 1,
+                section: ImportJsonSection::Other,
+                budget: self.budget,
+            })?
+            .is_some()
+        {
+            count += 1;
+            if count > IMPORT_JSON_MAX_SECTION_KEYS {
+                return Err(serde::de::Error::custom("element count exceeded"));
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)?;
+        Self::check_string(value).map_err(E::custom)
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(&value)
+    }
+
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+
+    fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.charge().map_err(E::custom)
+    }
+}
+
+/// 再帰的な構造走査のためのシード。
+#[cfg(any(target_arch = "wasm32", test))]
+struct ImportJsonStructureSeed<'a> {
+    depth: usize,
+    section: ImportJsonSection,
+    budget: &'a std::cell::Cell<usize>,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl<'de, 'a> DeserializeSeed<'de> for ImportJsonStructureSeed<'a> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(ImportJsonStructureVisitor {
+            depth: self.depth,
+            section: self.section,
+            budget: self.budget,
+        })
+    }
+}
+
+/// 構造走査の失敗種別。構文エラーは既存の「JSON の解析に失敗しました」へ、
+/// 上限超過は `IMPORT_JSON_TOO_LARGE_MESSAGE` へ変換するため区別する。
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Debug, PartialEq, Eq)]
+enum ImportJsonStructureError {
+    Syntax,
+    Limit,
+}
+
+/// `serde_json::Value` 化の前に、構造が固定上限内かどうかを判定する。
+/// Value を一切組み立てないため、拒否時のヒープ確保を抑えられる。
+/// 上限超過は `Limit`、JSON として不正な構文は `Syntax` を返す。
+#[cfg(any(target_arch = "wasm32", test))]
+fn import_json_structure_allowed(raw: &str) -> Result<(), ImportJsonStructureError> {
+    let budget = std::cell::Cell::new(0_usize);
+    let mut deserializer = serde_json::Deserializer::from_str(raw);
+    let result = ImportJsonStructureSeed {
+        depth: 1,
+        section: ImportJsonSection::Root,
+        budget: &budget,
+    }
+    .deserialize(&mut deserializer);
+    match result {
+        Ok(()) => Ok(()),
+        // 上限超過は `serde::de::Error::custom` 由来なので serde_json では
+        // Category::Data になる。それ以外は構文エラーとして扱い、既存の
+        // 解析エラー文言を維持する（E2E の文言・check 名は変更しない）。
+        Err(error) => match error.classify() {
+            serde_json::error::Category::Data => Err(ImportJsonStructureError::Limit),
+            serde_json::error::Category::Syntax
+            | serde_json::error::Category::Eof
+            | serde_json::error::Category::Io => Err(ImportJsonStructureError::Syntax),
+        },
+    }
 }
 
 /// 下書きの最大サイズ（UTF-8 バイト数）。これを超える本文は保存しない。
@@ -2163,6 +2419,24 @@ fn import_positions(
     failed: &mut usize,
     settings_preserved: &mut bool,
 ) -> Result<(usize, usize), String> {
+    // `Value` 展開の前に元テキスト長を再検査し、構造も固定上限で拒否する。
+    // ハンドラ側の file.size() 検査に加えて、読み取り後の実長と構造を
+    // ここでも確認することで TOCTOU とヒープ枯渇を防ぐ（R3-SE01）。
+    // 拒否時は固定文言だけを返し、サイズ・キー・値・パスは出さない。
+    if import_json_exceeds_limit(raw.len() as f64) {
+        return Err(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
+    }
+    // 構文エラーは既存の解析エラー文言へ、上限超過だけ固定文言へ変換する。
+    // どちらもキー・値・サイズ・パスは出さない。
+    match import_json_structure_allowed(raw) {
+        Ok(()) => {}
+        Err(ImportJsonStructureError::Syntax) => {
+            return Err("JSON の解析に失敗しました".to_string());
+        }
+        Err(ImportJsonStructureError::Limit) => {
+            return Err(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
+        }
+    }
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Err("JSON の解析に失敗しました".to_string());
     };
@@ -2174,7 +2448,7 @@ fn import_positions(
     if let Some(version) = map.get("version")
         && version.as_u64() != Some(EXPORT_VERSION as u64)
     {
-        return Err(format!("未対応のエクスポート形式です: {version}。"));
+        return Err("未対応のエクスポート形式です。".to_string());
     }
     let Some(window) = web_sys::window() else {
         return Err("window が取得できません".to_string());
@@ -3873,7 +4147,7 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             // 読み取り中にサイズが増えた場合も拒否する（TOCTOU 対策）。
-            if raw.len() as f64 > IMPORT_JSON_MAX_BYTES {
+            if import_json_exceeds_limit(raw.len() as f64) {
                 set_status.set(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
                 return;
             }
@@ -4442,13 +4716,40 @@ mod command_error_tests {
 
 #[cfg(test)]
 mod import_size_tests {
-    use super::{IMPORT_JSON_MAX_BYTES, IMPORT_JSON_TOO_LARGE_MESSAGE, import_json_exceeds_limit};
+    use super::{
+        IMPORT_JSON_MAX_BYTES, IMPORT_JSON_MAX_DEPTH, IMPORT_JSON_MAX_NODES,
+        IMPORT_JSON_MAX_SECTION_KEYS, IMPORT_JSON_MAX_SETTINGS_KEYS, IMPORT_JSON_MAX_STRING_BYTES,
+        IMPORT_JSON_MAX_TOP_LEVEL_KEYS, IMPORT_JSON_TOO_LARGE_MESSAGE, ImportJsonStructureError,
+        import_json_exceeds_limit, import_json_structure_allowed,
+    };
+
+    /// 指定した数の null 値キーを持つ JSON オブジェクトを作る。
+    fn object_with_keys(count: usize) -> String {
+        let entries = (0..count)
+            .map(|index| format!("\"k{index}\":null"))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("{{{entries}}}")
+    }
+
+    #[test]
+    fn import_size_limit_is_practical_and_not_derived_from_core() {
+        assert_eq!(IMPORT_JSON_MAX_BYTES, 8.0 * 1024.0 * 1024.0);
+        const { assert!(IMPORT_JSON_MAX_BYTES < 256.0 * 1024.0 * 1024.0) };
+    }
 
     #[test]
     fn import_size_limit_accepts_boundary_and_rejects_one_byte_over() {
         assert!(!import_json_exceeds_limit(IMPORT_JSON_MAX_BYTES));
         assert!(import_json_exceeds_limit(IMPORT_JSON_MAX_BYTES + 1.0));
         assert!(!import_json_exceeds_limit(0.0));
+
+        // raw.len() ベースの再チェックも境界で一致することを確認する。
+        let at_limit = "x".repeat(IMPORT_JSON_MAX_BYTES as usize);
+        assert!(!import_json_exceeds_limit(at_limit.len() as f64));
+        let mut over_limit = at_limit;
+        over_limit.push('x');
+        assert!(import_json_exceeds_limit(over_limit.len() as f64));
     }
 
     #[test]
@@ -4459,6 +4760,136 @@ mod import_size_tests {
         assert!(!message.contains("MiB"));
         assert!(!message.contains('/'));
         assert!(!message.contains("backup.json"));
+        // 構造制限の上限値も固定文言へ露出させない。
+        for limit in [
+            IMPORT_JSON_MAX_BYTES.to_string(),
+            IMPORT_JSON_MAX_TOP_LEVEL_KEYS.to_string(),
+            IMPORT_JSON_MAX_SECTION_KEYS.to_string(),
+            IMPORT_JSON_MAX_SETTINGS_KEYS.to_string(),
+            IMPORT_JSON_MAX_STRING_BYTES.to_string(),
+            IMPORT_JSON_MAX_DEPTH.to_string(),
+            IMPORT_JSON_MAX_NODES.to_string(),
+        ] {
+            assert!(!message.contains(&limit), "上限値 {limit} が露出しています");
+        }
+    }
+
+    #[test]
+    fn normal_export_payload_is_accepted_by_structure_check() {
+        // 通常のエクスポート JSON（version / positions / settings / history / drafts）は
+        // 構造制限を通過し、その後の既存 import フローへ渡される。
+        let raw = r#"{
+            "version": 1,
+            "positions": {
+                "openrustbooks:position:ch1": "{\"chapterIndex\":1,\"fragment\":\"p2\",\"scrollTop\":42,\"savedAt\":1700000000000.0}"
+            },
+            "settings": {"fontScale": 125, "lineHeight": 180, "dark": true, "followSystem": false, "swipeThreshold": 50, "verticalScrollThreshold": 60, "downscaleImages": false, "jpegQuality": 80},
+            "history": {
+                "openrustbooks:history:doc": "{\"entries\":[{\"chapterIndex\":1,\"fragment\":null,\"scrollTop\":0,\"savedAt\":1700000000000.0}],\"index\":0}"
+            },
+            "drafts": {"openrustbooks:editor:doc": "下書き本文"}
+        }"#;
+        assert!(import_json_structure_allowed(raw).is_ok());
+    }
+
+    #[test]
+    fn structure_check_rejects_excessive_top_level_keys() {
+        assert!(
+            import_json_structure_allowed(&object_with_keys(IMPORT_JSON_MAX_TOP_LEVEL_KEYS))
+                .is_ok()
+        );
+        assert_eq!(
+            import_json_structure_allowed(&object_with_keys(IMPORT_JSON_MAX_TOP_LEVEL_KEYS + 1)),
+            Err(ImportJsonStructureError::Limit)
+        );
+    }
+
+    #[test]
+    fn structure_check_rejects_excessive_positions_and_settings_keys() {
+        for (section, limit) in [
+            ("positions", IMPORT_JSON_MAX_SECTION_KEYS),
+            ("settings", IMPORT_JSON_MAX_SETTINGS_KEYS),
+        ] {
+            let within = format!("{{\"{section}\":{}}}", object_with_keys(limit));
+            assert!(
+                import_json_structure_allowed(&within).is_ok(),
+                "section={section}"
+            );
+            let over = format!("{{\"{section}\":{}}}", object_with_keys(limit + 1));
+            assert_eq!(
+                import_json_structure_allowed(&over),
+                Err(ImportJsonStructureError::Limit),
+                "section={section}"
+            );
+        }
+    }
+
+    #[test]
+    fn structure_check_rejects_excessive_nesting_depth() {
+        let within = format!(
+            "{}null{}",
+            "[".repeat(IMPORT_JSON_MAX_DEPTH),
+            "]".repeat(IMPORT_JSON_MAX_DEPTH)
+        );
+        assert!(import_json_structure_allowed(&within).is_ok());
+        let over = format!(
+            "{}null{}",
+            "[".repeat(IMPORT_JSON_MAX_DEPTH + 1),
+            "]".repeat(IMPORT_JSON_MAX_DEPTH + 1)
+        );
+        assert_eq!(
+            import_json_structure_allowed(&over),
+            Err(ImportJsonStructureError::Limit)
+        );
+    }
+
+    #[test]
+    fn structure_check_rejects_excessive_string_length() {
+        // 値の文字列が上限超え。JSON 全体は 8 MiB 以下なので構造制限で拒否される。
+        let long_value = "x".repeat(IMPORT_JSON_MAX_STRING_BYTES + 1);
+        let with_long_value =
+            format!("{{\"positions\":{{\"openrustbooks:position:ch1\":\"{long_value}\"}}}}");
+        assert_eq!(
+            import_json_structure_allowed(&with_long_value),
+            Err(ImportJsonStructureError::Limit)
+        );
+
+        // キーの文字列も同じ上限で拒否する。
+        let long_key = "x".repeat(IMPORT_JSON_MAX_STRING_BYTES + 1);
+        let with_long_key = format!("{{\"{long_key}\":null}}");
+        assert_eq!(
+            import_json_structure_allowed(&with_long_key),
+            Err(ImportJsonStructureError::Limit)
+        );
+    }
+
+    #[test]
+    fn structure_check_rejects_excessive_total_nodes() {
+        // 各セクションはキー上限内でも、合計のノード数が上限を超えれば拒否する。
+        let section = object_with_keys(IMPORT_JSON_MAX_SECTION_KEYS);
+        let raw = format!("{{\"positions\":{section},\"history\":{section},\"drafts\":{section}}}");
+        assert_eq!(
+            import_json_structure_allowed(&raw),
+            Err(ImportJsonStructureError::Limit)
+        );
+    }
+
+    #[test]
+    fn structure_check_distinguishes_syntax_errors_from_limit_violations() {
+        // 構文エラーは上限超過ではなく Syntax として扱い、既存の
+        // 「JSON の解析に失敗しました」文言へ変換される契約を守る。
+        for malformed in ["{", "{\"version\":", "{\"version\":1,}", "not json"] {
+            assert_eq!(
+                import_json_structure_allowed(malformed),
+                Err(ImportJsonStructureError::Syntax),
+                "malformed={malformed}"
+            );
+        }
+        let over = object_with_keys(IMPORT_JSON_MAX_TOP_LEVEL_KEYS + 1);
+        assert_eq!(
+            import_json_structure_allowed(&over),
+            Err(ImportJsonStructureError::Limit)
+        );
     }
 }
 
