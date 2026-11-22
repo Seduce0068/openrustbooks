@@ -58,8 +58,10 @@ bash scripts/ci-wdio-test.sh
 - `npm ls --depth=0` による依存整合の検査（`npm ci` が前提）
 - `cargo build -p openrustbooks-desktop --features wdio --locked`
 - port 1420 の事前占有検査（ビルド前と trunk 起動前の 2 回）
-- port 1420 で `trunk serve`（専用プロセスグループ、一時ログ）
+- port 1420 で `trunk serve --locked --offline`（専用プロセスグループ、一時ログ）
 - readiness 時に listener が自プロセスグループに属することの確認
+- readiness 成功直後と cleanup 実行前の lock ファイル再検査
+  （`--locked` ビルドと同様、差分があれば fail-closed）
 - `npm run test:wdio`
 - 自プロセスグループのみ停止し、一時ログは失敗時のみ表示して削除
   （PGID 取得失敗時は起動した launcher を停止）
@@ -95,8 +97,9 @@ bash scripts/verify.sh --check-wasm-bindgen   # ゲート単独の事前確認�
   固定パス更新を忘れても古い CLI が黙って使われることはない。
   単独確認は `bash scripts/verify.sh --check-wasm-bindgen [<lockfile>]`。
 - `Cargo.lock` / `package-lock.json`: `scripts/ci-wdio-test.sh` が
-  `git diff --exit-code HEAD -- <file>` でビルド前後の不変を確認する。
-  ステージ済み差分も検知し、ビルド中の変更も失敗する。
+  `git diff --exit-code HEAD -- <file>` でビルド前後、readiness 成功直後、
+  cleanup 実行前の不変を確認する。ステージ済み差分も検知し、
+  ビルド中・`trunk serve` 中・E2E 中の変更も失敗する。
 - npm: `npm ci` が lock ファイルどおりに依存を導入する。
   `npm install` による lock の暗黙更新は行わない。ゲート内では
   `npm ls --depth=0` で依存ツリーの整合も検査する。

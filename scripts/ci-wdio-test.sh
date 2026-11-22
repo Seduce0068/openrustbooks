@@ -130,7 +130,7 @@ echo "wdio: starting trunk dev server on port $WEB_PORT"
 setsid bash -c '
 	echo "$$" > "$1"
 	cd "$2"
-	exec trunk serve --port "$3"
+	exec trunk serve --port "$3" --locked --offline
 ' _ "$TRUNK_PGID_FILE" "$ROOT/web" "$WEB_PORT" >"$TRUNK_LOG" 2>&1 &
 TRUNK_LAUNCHER_PID=$!
 
@@ -167,6 +167,10 @@ if [[ "$ready" -ne 1 ]]; then
 	exit 1
 fi
 
+# trunk serve が lock ファイルを書き換えた場合は想定外のため fail-closed とする。
+check_lock_clean "Cargo.lock (after trunk serve)" Cargo.lock || exit 1
+check_lock_clean "package-lock.json (after trunk serve)" package-lock.json || exit 1
+
 export GDK_BACKEND="${GDK_BACKEND:-x11}"
 if [[ -z "${DISPLAY:-}" ]]; then
 	echo "wdio: DISPLAY must be set (e.g. :1 or an Xvfb display)" >&2
@@ -175,3 +179,7 @@ fi
 
 echo "wdio: running WebdriverIO specs"
 npm run test:wdio
+
+# cleanup 実行前に lock ファイルを再検査する（E2E 中の変更も fail-closed）。
+check_lock_clean "Cargo.lock (before cleanup)" Cargo.lock || exit 1
+check_lock_clean "package-lock.json (before cleanup)" package-lock.json || exit 1
