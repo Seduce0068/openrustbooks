@@ -1,38 +1,31 @@
 # Goal
 
-confirm 待ち後の AI service 陳腐化を防止する（第2cycle R6 / R2-RC01）。
+backup_failed_config の権限失敗時に退避をロールバックする（第2cycle R6 / R2-RC01）。
 
 ## Scope
 
 ### 背景
 
-generate / refine / convert_to_table / generate_front_matter は
-confirm_send().await の前に ai_service() を取得する。
-ダイアログ表示中に commit_config が AI を無効化／provider 変更すると、
-古い service で外部送信される。
+rename 成功後に set_permissions(0o600) が失敗すると、
+機微情報を含む config.toml が 0644 のまま `*.failed-*` に残る。
+呼び出し側は「退避失敗」と表示するが、実際は退避済みで状態が食い違う。
 
 ### 成果物
 
-- `desktop/src/commands/ai.rs`: 変更（service 取得を confirm 後へ移動）
-- `docs/decisions/0319-ai-service-post-confirm-check.md`: 追加
+- `core/src/config.rs`: 変更
+- `docs/decisions/0320-config-backup-rollback.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. 4 コマンドすべてで confirm_send().await 後に ai_service() を取得する。
-2. 無効化された場合は固定文言で送信前に拒否する。
-3. 確認ダイアログの文言 / E2E 256 件 / 既存 AI 成功契約を壊さない。
-4. 単体 test で confirm 中の無効化を模して送信が行われないことを検証する（外部 API なし）。
-5. verify.sh 全ゲート成功。
+1. Unix で set_permissions 失敗時に rename を元へ戻す。
+2. ロールバック失敗时は固定文言の CoreError で fail-closed を維持する。
+3. 既存の retention test / 0600 test / 連続起動 test を壊さない。
+4. 権限失敗を模した単体 test を追加する（可能なら cfg(unix) の mod bit 操作）。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 外部 AI API への送信 test は行わない。
+- unsafe FFI / 新規依存は使わない。
+- 絶対パス / 設定値をエラーへ出さない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- 4 AI コマンドで confirm 後に service を再取得し、無効化後の送信を防止。
-- 既存 IPC 文言 / parse 順序 / ダイアログ文言を維持。
-- desktop 158 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- AI_PIPELINE code / config 変更経路 test / hook スレッドローカル化は ADR-0319 の未決定。
