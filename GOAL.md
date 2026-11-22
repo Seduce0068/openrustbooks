@@ -1,34 +1,30 @@
 # Goal
 
-runbook-release / README 細部を現行実装へ追従させる（R6 レビュー / R1-FG01 + R5-DC01）。
+CI ゲートの欠落を解消する（R6 レビュー / R4-CI01）。
 
 ## Scope
 
 ### 成果物
 
-- `docs/runbook-release.md`: 変更
-- `README.md`: 変更
-- `docs/decisions/0310-release-doc-current-state.md`: 追加
-- `todo.md` / 索引 / log: 更新
+- `scripts/check-no-external-font-refs.sh`: 追加（verify.sh の inline gate を抽出）
+- `scripts/check-distribution-path.sh`: 追加（--dist 絶対パス / repo 外 / manifest 形式を検査）
+- `scripts/check-secrets.sh`: 追加（gitleaks を pre-commit 主軸、CI も final gate）
+- `.pre-commit-config.yaml`: 追加（gitleaks hook）
+- `scripts/verify.sh`:  inline gate を script 呼び出しへ変更、secret gate 追加
+- `.github/workflows/ci.yml`: extra_gates に静的 gate を追加
+- `docs/runbook-ci.md` または `docs/runbook-verified-build.md`: billing 解消後チェックリスト
+- `docs/decisions/0311-ci-gate-coverage.md`: 追加
+- `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. updater を「初期化のみ」ではなく「未実装・固定表示・check 禁止ゲート」へ更新する。
-2. README の build.rs 配置表記を現行 tree と整合させる。
-3. `--locked` 未決定表記を現行ゲート（trunk / Cargo / WDIO / audit freshness）へ更新する。
-4. README ADR 要約の誤配置（旧 ADR の要約が欠落 / 重複している行）を修正する。
-5. ゲート対象（dependency-hygiene / audit freshness / build-desktop 等）を追記する。
-6. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. no-external-font-refs / 配布パス / シークレットスキャンを CI の extra_gates で実行する。
+2. gitleaks は pre-commit を主軸とし、CI でも final gate として実行する。
+3. trunk build + E2E / WDIO は重いため billing 解消後チェックリストに明示する（勝手に common workflow を変更しない）。
+4. E2E 256 件・check 名・verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 公開鍵 / endpoint / release workflow は追加しない。
-- 外部サービス / 課金 / 破壊的操作は行わない。
+- 共通 workflow（Seduce0068/workflows）自体は変更しない（ローカル ci.yml の extra_gates のみ）。
+- 外部サービスへの課金・公開操作は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- updater 未登録・実 WebView 検証済みを runbook へ反映。
-- README の build.rs 配置 / ADR 要約 / ゲート一覧を現行化。
-- R4 high/medium すべて反映、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- 公開鍵 / endpoint / workflow / 実ブラウザ / CI billing は未決定として残す。
