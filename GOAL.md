@@ -29,3 +29,10 @@ watch は未実装 stub で trait に残っており、実装も削除もされ�
 - unsafe FFI / 新規依存は使わない。
 - 新機能としての watch 実装は今回の範囲外。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- write(overwrite=false) を create_new/hard_link 化、resolve_path 再確認を追加。
+- watch 未実装契約を明記、退避先後始末を remove_path へ統一。
+- core 346 / desktop 128 / web 9 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- openat2 / hard_link 非対応 FS / watch trait 分離は ADR-0308 の未決定。
