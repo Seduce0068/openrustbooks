@@ -71,8 +71,6 @@ status: current
       根拠 `core/src/document.rs:98-112` / `core/src/io.rs:97-105` / R1-DS01。
 - [ ] 【EPUB XHTML サニタイズに入力長/深度上限】深いネストで wasm が数秒フリーズ。
       根拠 `core/src/sanitize.rs:127-156` / R3-SE01。
-- [ ] 【Page-list 入力を改善】完全一致依存 / Enter 不可 / 候補なし。datalist + trim + case-insensitive。
-      根拠 `web/src/lib.rs:4608,3914-3948` / R5-UX01。
 - [ ] 【ヘルプダイアログへ CSS を適用】reader-help-dialog にスタイルが無く dark で浮く。
       根拠 `web/index.html:568-583` / R5-UX01。
 - [ ] 【capability JSON を静的ゲートへ】wdio permission が本番ビルドへ混入し得る。
@@ -121,6 +119,7 @@ status: current
 
 ## 完了
 
+- [x] 【Page-list】datalist / Enter / trim + case-insensitive 照合を追加（ADR-0346）。
 - [x] 【CAS 契約】レガシー config command 4 種を invoke_handler から解除（ADR-0344）。
 - [x] 【AI 送信確認】先頭／末尾プレビューと省略表示を追加（ADR-0343）。
 - [x] 【prefer_local】DTO 除外・未配線表示・config.toml 値保持（ADR-0304 方針）。

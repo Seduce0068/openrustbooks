@@ -171,3 +171,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - タグ名スタック / quote 追跡 / void 大文字対応で誤爆とバイパスを防止。
 - core 364 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - web status への拒否通知は ADR-0345 の未決定。
+
+## 完了記録（第3cycle-14）
+
+- Page-list 入力に datalist / Enter / trim+case-insensitive 照合を追加。
+- E2E 263 契約を維持しつつ数字以外のエコーを防止。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- あいまい検索は ADR-0346 の未決定。
