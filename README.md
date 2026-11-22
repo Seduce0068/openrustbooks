@@ -851,6 +851,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - overwrite の原子的新規作成、resolve_path 再確認、watch 未実装契約、退避後始末を明確化する決定。
 - [0309-dependency-gate-hardening](docs/decisions/0309-dependency-gate-hardening.md)
 - [0310-release-doc-current-state](docs/decisions/0310-release-doc-current-state.md)
+- [0311-ci-gate-coverage](docs/decisions/0311-ci-gate-coverage.md)
+  - no-external-font-refs / 配布パス / gitleaks を verify.sh と CI extra_gates の両方へ配線する決定。
   - updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。
   - serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
 

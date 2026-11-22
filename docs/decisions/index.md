@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 310 件）。
+openrustbooks の ADR 一覧（全 311 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -624,3 +624,5 @@ openrustbooks の ADR 一覧（全 310 件）。
   - status: accepted — serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
 - [ADR-0310: runbook-release / README の現行状態追従](0310-release-doc-current-state.md)
   - status: accepted — updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。
+- [ADR-0311: CI ゲートの静的検査とシークレットスキャン](0311-ci-gate-coverage.md)
+  - status: accepted — no-external-font-refs / 配布パス / gitleaks を verify.sh と CI extra_gates の両方へ配線する決定。

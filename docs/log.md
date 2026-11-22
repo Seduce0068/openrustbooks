@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- CI に font/dist/secrets ゲートを追加（ADR-0311）。
 - runbook-release / README を現行状態へ追従（ADR-0310）。
 - 依存ゲートに cargo tree 実測と期限付き例外を追加（ADR-0309）。
 - StorageBackend の競合安全性と未実装契約を整理（ADR-0308）。
