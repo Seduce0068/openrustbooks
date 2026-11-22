@@ -31,3 +31,11 @@ API Key 欄は常に readonly で `has_api_key` 表示のみ。
 - API キー以外の秘密（client_secret / refresh_token）の UI 編集は行わない。
 - 外部 AI API への送信テストは行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- set_openai_api_key と clear_secrets を desktop 設定 UI へ接続。
+- API キー値は DTO/status/log/DOM へ残さず、has_api_key と固定文言のみ。
+- capability scope に 2 command を追加。
+- desktop 149 / web 9 tests、WDIO 1 passing、verify.sh 全ゲート成功（E2E 256）。
+- 他秘密 UI / 削除失敗時 DOM クリアは ADR-0315 の未決定。

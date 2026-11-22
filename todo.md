@@ -22,10 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
-- [ ] 【desktop で API キー／秘密を UI から設定・削除可能にする】API Key 欄は常に readonly で
-      update_ai_config / clear_secrets が web から呼ばれていない。既有 command を接続し、
-      値を DTO/status へ出さず has_* フラグと固定文言のみを維持。
-      根拠 `web/src/lib.rs:4872-4877` / `docs/decisions/0253:168` / R5-DC01 / 重大度 high。
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
 
@@ -154,6 +150,7 @@ status: current
 
 ## 完了
 
+- [x] 【秘密設定 UI】desktop で API キー設定/削除を接続、値を DTO/status へ出さない（ADR-0315）。
 - [x] 【CI gitleaks】最終ゲート化して 13 ゲートの到達性を確保（ADR-0314）。
 - [x] 【文書 close】unsaved 検査と削除を単一ロック化、並行編集の喪失を防止（ADR-0313）。
 - [x] 【文書 root 選択】全候補 read_only 検査と最深一致を実装、入れ子/symlink 迂回を防止（ADR-0312）。
