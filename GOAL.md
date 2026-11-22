@@ -53,3 +53,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - WDIO trunk serve に --locked --offline を追加、lock 不変を 4 時点で検査。
 - runbook-webdriver を同期、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
 - 失敗経路の lock 可視化は ADR-0327 の未決定。
+
+## 完了記録（続き3）
+
+- reader.font_size / line_height を初回のみ localStorage 初期値化。
+- 既存設定を守り、権威 / 未配線 / 失敗時の固定文言を統一。
+- web 26 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- editor 配線 / 即時 signal 更新は ADR-0328 の未決定。

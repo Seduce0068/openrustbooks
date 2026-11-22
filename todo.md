@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【設定画面 editor/reader の権威を一本化】config.toml 設定が描画へ反映されず localStorage が権威。
-      最小サブセットを配線するか未配線表示へ。根拠 `web/src/lib.rs:4315-4343,5067-5382` / ADR-0217 / R5-DC01。
 - [ ] 【EPUB2 NCX の Web E2E を追加】NCX サンプルが無く、Web 側回帰を検出できない。
       256 件・トレーサビリティ表を同時更新。根拠 `tools/verify-web-reader.py:100-151` / R5-DC01。
 - [ ] 【prefers-contrast: more の E2E を追加】CSS はあるが動的検証が無い。
@@ -115,6 +113,7 @@ status: current
 
 ## 完了
 
+- [x] 【reader 設定】初回のみ config を初期値化し、既存 localStorage を保護（ADR-0328）。
 - [x] 【WDIO lock】trunk serve を --locked --offline 化、4 時点で不変検査（ADR-0327）。
 - [x] 【wasm-bindgen 版】Cargo.lock 由来で CLI/runner を照合、不一致を fail-closed（ADR-0326）。
 - [x] 【runbook】`trunk build --locked` は決定済みと明記（ADR-0237 / 0289）。
