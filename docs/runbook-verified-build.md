@@ -131,8 +131,9 @@ python3 -m http.server --directory "$DIST" 8000
   `preconnect`）が含まれる場合は `check-no-external-font-refs.sh` が失敗する。
 - `gitleaks` 未インストール時は `check-secrets.sh` が「install gitleaks」を表示して
   rc=127 で失敗する。検出時も gitleaks の終了コードを伝播して fail-closed とする。
-  CI の共通 workflow には gitleaks 導入入力が無いため、`extra_gates` で存在を検査し、
-  未導入なら失敗させる。
+  CI の共通 workflow には gitleaks 導入入力が無いため、`extra_gates` の末尾で
+  存在を検査し、未導入ならそこで fail-closed とする。末尾へ置いたことで、
+  未導入でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は実行済みとなる。
 - コピーはステージング（`*.tmp.<PID>`）経由で `mv -n -T` により原子的に配置する。
   中途失敗時は EXIT trap がステージングを削除し、不完全な成果物は残らない。
 - 同名ディレクトリは上書きせず連番を探索する。`-99` まで使用中ならエラーとなる。
@@ -148,7 +149,9 @@ python3 -m http.server --directory "$DIST" 8000
   （fail-closed）を受容している**。解消策は共通 workflow 側の導入に限らず、
   `extra_gates` 内でチェックサム付きバイナリを取得するか
   `go install github.com/gitleaks/gitleaks/v8@v8.28.0` で導入する選択肢もある。
-  下記の billing 解消後チェックリストを参照。
+  gitleaks ゲートは `extra_gates` の末尾（最終ゲート）に置いているため、
+  未導入でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は実行され、
+  末尾で fail-closed となる。下記の billing 解消後チェックリストを参照。
 - `web/dist` は git 管理外で未検証の開発パス残存の可能性がある。復旧には本手順の保持物を使う。
 - 本番プロファイル（`--release` / `--debug`）、`trunk build --locked` は未決定（ADR-0219）。
 - 保存先の固定場所と保持期間／ローテーションは未決定で、現在は手動管理である。
@@ -162,8 +165,12 @@ python3 -m http.server --directory "$DIST" 8000
 - [ ] CI で gitleaks を利用可能にする。共通 workflow 側で導入するほか、
       `extra_gates` 内でチェックサム付きバイナリを取得する、または
       `go install github.com/gitleaks/gitleaks/v8@v8.28.0` で導入する選択肢がある。
-      現状は未導入のため常時 fail を受容している。導入後は `extra_gates` の
-      存在検査を通過し、`check-secrets.sh` の実スキャンが自動実行されることを確認する。
+      現状は未導入でも、gitleaks は `extra_gates` の末尾（最終ゲート）へ
+      移しているため、他の静的ゲート / wasm check / `ci-wasm-test.sh` は
+      すべて実行済みで、末尾の存在検査でのみ fail-closed となる。
+      導入後は存在検査を通過して `check-secrets.sh` の実スキャンが実行され、
+      シークレット未検出なら CI が green になる可能性がある。
+      検出時は従来どおり fail-closed を維持する。
 - [ ] CI で `trunk build` が成功することを確認する（現在は `verify.sh` 側のみ）。
 - [ ] CI で E2E **256 件**（check 239 + equal 17、ADR-0272 の Tauri mock +1）と
       WDIO（`scripts/ci-wdio-test.sh`）が成功することを確認する。
