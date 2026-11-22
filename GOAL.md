@@ -1,40 +1,27 @@
 # Goal
 
-依存ゲートを強化する（R6 レビュー / R2-DP01）。
+runbook-release / README 細部を現行実装へ追従させる（R6 レビュー / R1-FG01 + R5-DC01）。
 
 ## Scope
 
-### 背景
-
-`check-rumdl-featureless.sh` は Cargo.toml の featureless 宣言のみを検査し、
-Cargo.lock に残る serde_yaml / tikv-jemalloc-sys を検出しない。
-cargo audit は unmaintained 警告を許容しており、
-既知例外の根拠・期限管理が無い。
-
 ### 成果物
 
-- `scripts/check-dependency-hygiene.sh`: 追加
-- `scripts/check-rumdl-featureless.sh`: 必要なら変更
-- `scripts/verify.sh`: ゲート配線
-- `docs/decisions/0309-dependency-gate-hardening.md`: 追加
-- `todo.md` / README / 索引 / log: 更新
+- `docs/runbook-release.md`: 変更
+- `README.md`: 変更
+- `docs/decisions/0310-release-doc-current-state.md`: 追加
+- `todo.md` / 索引 / log: 更新
 
 ### 必須事項
 
-1. `cargo tree -i <crate>` で serde_yaml / tikv-jemalloc-sys の必須依存経路を検出する。
-2. 既知例外は ID / 理由 / 期限を管理し、期限切れは fail-closed にする。
-3. 未使用依存の lock 残存を警告ではなく失敗にする（例外は明示）。
-4. verify.sh にゲートを追加し、全ゲート成功・E2E 256 件を維持。
+1. updater を「初期化のみ」ではなく「未実装・固定表示・check 禁止ゲート」へ更新する。
+2. README の build.rs 配置表記を現行 tree と整合させる。
+3. `--locked` 未決定表記を現行ゲート（trunk / Cargo / WDIO / audit freshness）へ更新する。
+4. README ADR 要約の誤配置（旧 ADR の要約が欠落 / 重複している行）を修正する。
+5. ゲート対象（dependency-hygiene / audit freshness / build-desktop 等）を追記する。
+6. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- 依存そのものの更新 / 削除は行わない（既知 baseline の扱いのみ）。
-- 外部サービス / 課金 / 公開設定は扱わない。
+- 公開鍵 / endpoint / release workflow は追加しない。
+- 外部サービス / 課金 / 破壊的操作は行わない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- dependency-hygiene ゲートを追加し、cargo tree 実測 + 期限付き例外を管理。
-- verify.sh と CI extra_gates の両方へ配線。
-- 負向 test 5 ケースすべて rc=1、全ゲート成功（E2E 256、WDIO 1）。
-- unmaintained 警告の個別管理は ADR-0309 の未決定。
