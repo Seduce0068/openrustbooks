@@ -28,3 +28,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 
 - 外部 AI API への送信 test は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- TableAlignment を Result 化し未知値を固定 validation で拒否、confirm 前に検証。
+- wasm-bindgen-test-runner の PATH を ci-wasm-test.sh で解決。
+- desktop 167 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 型レベル Deserialize 検証は ADR-0324 の未決定。
