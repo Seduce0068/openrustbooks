@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# 設定画面の Tauri IPC を get_config / update_config_patch / set_openai_api_key / clear_secrets に限定する静的ゲート（fail-closed）。
-# web 側ソースの静的解析であり、runtime の権限制限（capability / ACL）ではない。
+# web 側ソースが呼び出す設定 command を get_config / update_config_patch /
+# set_openai_api_key / clear_secrets に限定する静的ゲート（fail-closed）。
+# これはソース検査であり、runtime の capability / ACL ではない。
+# withGlobalTauri=true のため、実 WebView からは invoke_handler 登録済みの全 command
+# （fs / document / ai / window を含む）へ到達可能な点に注意（ADR-0324 で可視化）。
 # 独自 command は ACL 非対象という根拠は ADR-0253:73-74（ADR-0264 は IPC 経路の設計受容）。
 # 出典はコードのみ（GOAL.md「R6 A05 前提 2」/ ADR-0253:73-74 / ADR-0274）。
 # 第 1 引数で検査対象の repo root を差し替えられる（負向 test 用）。
@@ -118,5 +121,5 @@ if errors:
         print(f"ERROR: {error}", file=sys.stderr)
     sys.exit(1)
 
-print("OK: 設定画面の IPC は get_config / update_config_patch / set_openai_api_key / clear_secrets に限定されています")
+print("OK: web 側ソースの設定 command 呼び出しは get_config / update_config_patch / set_openai_api_key / clear_secrets に限定されています（source inspection のみ。実 WebView は invoke_handler 登録全 command へ到達可能）")
 PY
