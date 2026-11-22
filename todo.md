@@ -71,8 +71,6 @@ status: current
       根拠 `core/src/document.rs:98-112` / `core/src/io.rs:97-105` / R1-DS01。
 - [ ] 【EPUB XHTML サニタイズに入力長/深度上限】深いネストで wasm が数秒フリーズ。
       根拠 `core/src/sanitize.rs:127-156` / R3-SE01。
-- [ ] 【capability JSON を静的ゲートへ】wdio permission が本番ビルドへ混入し得る。
-      根拠 `desktop/capabilities/wdio/wdio.json:6-11` / R3-SE01。
 - [ ] 【cargo audit 警告を ID + 期限管理】chrono unmaintained を暗黙 baseline にせず allowlist 化。
       根拠 `scripts/verify.sh:507` / R3-SE01。
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
@@ -117,6 +115,7 @@ status: current
 
 ## 完了
 
+- [x] 【capability gate】wdio permission を test 用 JSON に閉じ込め（ADR-0348）。
 - [x] 【dialog CSS】削除確認とヘルプで共通スタイル / backdrop / forced-colors を適用（ADR-0347）。
 - [x] 【Page-list】datalist / Enter / trim + case-insensitive 照合を追加（ADR-0346）。
 - [x] 【CAS 契約】レガシー config command 4 種を invoke_handler から解除（ADR-0344）。

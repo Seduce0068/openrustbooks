@@ -184,3 +184,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 削除確認 / ヘルプ dialog に共通 CSS と backdrop 対策を適用。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - E2E 画像比較は ADR-0347 の未決定。
+
+## 完了記録（第3cycle-16）
+
+- wdio permission を test 用 capability JSON に閉じる静的ゲートを追加。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- runtime ACL 検証は ADR-0348 の未決定。
