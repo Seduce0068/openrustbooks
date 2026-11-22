@@ -74,3 +74,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - Checker(expected)=263、E2E/traceability/documentation-operations を更新。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 既存リテラル比較の比ベース化は ADR-0330 の未決定。
+
+## 完了記録（続き6）
+
+- get_config 失敗を desktop only / IPC 失敗で固定文言分岐。
+- WDIO reject 注入は tauri-service 競合で却下、単体 test で代替。
+- web 28 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 再読み込みボタンは ADR-0331 の未決定。

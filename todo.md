@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【desktop get_config 失敗の status を区別】「デスクトップ版のみ利用可能」と誤案内。
-      IPC 失敗用の固定文言と回復案内、WDIO reject test。根拠 `web/src/lib.rs:4345-4374,4629-4636` / R5-DC01。
 - [ ] 【withGlobalTauri の実効権限表面を可視化】静的 2 command ゲートは source 検査のみで、
       実 Webview は全 command へ到達可能。success 文言を明示し実効権限を別ゲートで検証。
       根拠 `scripts/check-capability-scope.sh:1-5` / `desktop/src/main.rs:133-166` / R3-SE01。
@@ -109,6 +107,7 @@ status: current
 
 ## 完了
 
+- [x] 【get_config 失敗】desktop only と IPC 失敗を固定文言で区別（ADR-0331）。
 - [x] 【prefers-contrast E2E】CDP emulation + WCAG 比で 5 check を追加（ADR-0330）。
 - [x] 【EPUB2 NCX E2E】NCX サンプルと 2 check を追加、期待 258 件（ADR-0329）。
 - [x] 【reader 設定】初回のみ config を初期値化し、既存 localStorage を保護（ADR-0328）。
