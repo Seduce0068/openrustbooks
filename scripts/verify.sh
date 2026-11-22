@@ -124,22 +124,14 @@ while (($# > 0)); do
 done
 
 if [[ $RETAIN_DIST -eq 1 ]]; then
-	# 絶対パスを推奨（相対パスは cwd 依存で危険なため拒否）。
-	if [[ "$DIST_ROOT" != /* ]]; then
-		echo "ERROR: --dist には絶対パスを指定してください: $DIST_ROOT" >&2
-		usage >&2
-		exit 2
+	# 絶対パス / リポジトリ外 / readlink -m による正規化は専用スクリプトに集約し、
+	# CI の extra_gates と同じ判定を共有する。失敗時は従来どおり rc=2 で拒否する。
+	if DIST_ROOT="$(bash "$SCRIPT_DIR/check-distribution-path.sh" "$DIST_ROOT")"; then
+		:
+	else
+		rc=$?
+		exit "$rc"
 	fi
-	# シンボリックリンクと .. を解決し、リポジトリ配下への生成を拒否する。
-	DIST_ROOT="$(readlink -m "$DIST_ROOT")"
-	ROOT_CANON="$(readlink -f "$ROOT_DIR")"
-	case "$DIST_ROOT" in
-		"$ROOT_CANON"|"$ROOT_CANON"/*)
-			echo "ERROR: --dist はリポジトリ配下（$ROOT_CANON）を指定できません: $DIST_ROOT" >&2
-			usage >&2
-			exit 2
-			;;
-	esac
 fi
 
 # E2E ブラウザ識別子（ADR-0265 / GOAL.md）。環境変数で上書き可能。
@@ -302,6 +294,13 @@ retain_verified_dist() {
 	} > "$tmp_manifest"
 	mv "$tmp_manifest" "$STAGE_DIR/manifest.txt"
 
+	# manifest 形式（必須キー / e2e expected=256 / failed:0 / SHA256 行）を
+	# CI と共通のスクリプトで検査する。不合格なら保持を行わず hard fail する。
+	if ! bash "$SCRIPT_DIR/check-distribution-path.sh" --no-self-test "$DIST_ROOT" "$STAGE_DIR/manifest.txt"; then
+		echo "ERROR: manifest 形式検査に失敗しました: $STAGE_DIR/manifest.txt" >&2
+		exit 1
+	fi
+
 	if [[ $metadata_ok -eq 0 ]]; then
 		echo "ERROR: manifest の必須メタデータを取得できませんでした（unknown を記録）: e2e_expected=$e2e_expected e2e_result=$e2e_result trunk=$trunk_ver" >&2
 		exit 1
@@ -321,27 +320,16 @@ retain_verified_dist() {
 	echo "===== 検証済み dist を保持しました: $dest ====="
 }
 
-# web/index.html に第三者フォント参照が混入していないことを静的に検査する。
-# Google Fonts の外部送信（preconnect / stylesheet）が再混入するのをゲートで防ぐ。
+# web/index.html の第三者フォント参照を検査する。
+# 実体は専用スクリプトに置き、CI の extra_gates からも同じ検査を呼べるようにする。
 check_no_external_font_refs() {
-	local file="web/index.html"
-	if [[ ! -f "$file" ]]; then
-		echo "ERROR: $file が見つかりません"
-		return 1
-	fi
+	bash "$SCRIPT_DIR/check-no-external-font-refs.sh"
+}
 
-	# 一致なし (rc=1) は成功、読取不可などのエラー (rc>=2) は fail-closed とする。
-	local grep_rc=0
-	grep -n -F -e 'fonts.googleapis' -e 'fonts.gstatic' -e 'preconnect' "$file" || grep_rc=$?
-	if ((grep_rc == 0)); then
-		echo "ERROR: $file に第三者フォント参照（fonts.googleapis / fonts.gstatic / preconnect）が含まれています"
-		return 1
-	fi
-	if ((grep_rc >= 2)); then
-		echo "ERROR: $file の第三者フォント参照検査に失敗しました (grep rc=$grep_rc)"
-		return 1
-	fi
-	return 0
+# シークレット走査（gitleaks）。ローカルは pre-commit を主軸とし、
+# 本ゲートと CI の extra_gates が最終ゲートとして fail-closed で検査する。
+check_secrets() {
+	bash "$SCRIPT_DIR/check-secrets.sh"
 }
 
 # core/Cargo.toml の rumdl 2 行が featureless であることを検査する。
@@ -358,6 +346,7 @@ check_dependency_hygiene() {
 
 run fmt cargo fmt --all -- --check
 run no-external-font-refs check_no_external_font_refs
+run secrets check_secrets
 run rumdl-featureless check_rumdl_featureless
 run dependency-hygiene check_dependency_hygiene
 run version-consistency bash scripts/check-version-consistency.sh
