@@ -2049,23 +2049,24 @@ fn save_position(key: &str, position: &SavedPosition) {
 const SETTINGS_KEY: &str = "openrustbooks:settings";
 
 /// 文字サイズの段階（rem）。
-#[cfg(target_arch = "wasm32")]
+/// wasm の描画と、config → localStorage の変換テストの双方から使う。
+#[cfg(any(target_arch = "wasm32", test))]
 const FONT_SCALES: [f64; 5] = [1.0, 1.125, 1.25, 1.5, 1.75];
 
 /// 行間の段階。
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 const LINE_HEIGHTS: [f64; 3] = [1.5, 1.8, 2.1];
 
 /// 既定の文字サイズの段階。
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 const DEFAULT_FONT_SCALE: usize = 1;
 
 /// 既定の行間の段階。
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 const DEFAULT_LINE_HEIGHT: usize = 1;
 
 /// リーダーの表示設定。
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 #[derive(serde::Deserialize, serde::Serialize, Clone, Copy, PartialEq)]
 struct ReaderSettings {
     #[serde(rename = "fontScale", default = "default_font_scale")]
@@ -2094,32 +2095,32 @@ struct ReaderSettings {
     jpeg_quality: usize,
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 fn default_jpeg_quality() -> usize {
     85
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 fn default_swipe_threshold() -> usize {
     50
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 fn default_vertical_scroll_threshold() -> usize {
     30
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 fn default_font_scale() -> usize {
     DEFAULT_FONT_SCALE
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 fn default_line_height() -> usize {
     DEFAULT_LINE_HEIGHT
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 impl Default for ReaderSettings {
     fn default() -> Self {
         Self {
@@ -2135,6 +2136,7 @@ impl Default for ReaderSettings {
     }
 }
 
+// `normalized` は wasm の load_settings() からのみ使うため wasm 限定。
 #[cfg(target_arch = "wasm32")]
 impl ReaderSettings {
     /// 範囲外の値を既定へ戻す。
@@ -2202,6 +2204,189 @@ fn save_settings(settings: &ReaderSettings) -> bool {
         return false;
     }
     true
+}
+
+/// CSS の 1rem を px に換算する係数（ブラウザ既定の 16px）。
+#[cfg(any(target_arch = "wasm32", test))]
+const REM_PX: f64 = 16.0;
+
+/// Config の reader.font_size（px）を FONT_SCALES の段階へ変換する。
+///
+/// リーダーは rem 倍率の段階で描画するため、config の px 値に最も近い
+/// 段階を選ぶ。不正値・範囲外は既定段階へフォールバックする。
+#[cfg(any(target_arch = "wasm32", test))]
+fn reader_font_size_to_scale(font_size: f32) -> usize {
+    if !font_size.is_finite() || font_size <= 0.0 {
+        return DEFAULT_FONT_SCALE;
+    }
+    let target = f64::from(font_size);
+    FONT_SCALES
+        .iter()
+        .copied()
+        .enumerate()
+        .min_by(|(_, left), (_, right)| {
+            let left_gap = (*left * REM_PX - target).abs();
+            let right_gap = (*right * REM_PX - target).abs();
+            left_gap.total_cmp(&right_gap)
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(DEFAULT_FONT_SCALE)
+}
+
+/// Config の reader.line_height（倍率）を LINE_HEIGHTS の段階へ変換する。
+#[cfg(any(target_arch = "wasm32", test))]
+fn reader_line_height_to_index(line_height: f32) -> usize {
+    if !line_height.is_finite() || line_height <= 0.0 {
+        return DEFAULT_LINE_HEIGHT;
+    }
+    let target = f64::from(line_height);
+    LINE_HEIGHTS
+        .iter()
+        .copied()
+        .enumerate()
+        .min_by(|(_, left), (_, right)| {
+            let left_gap = (*left - target).abs();
+            let right_gap = (*right - target).abs();
+            left_gap.total_cmp(&right_gap)
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(DEFAULT_LINE_HEIGHT)
+}
+
+/// config 由来の表示設定初期値をブラウザへ保存できなかった場合の固定文言。
+/// 値・キー名・パスは出さない（設定保存自体は成功している点も伝える）。
+#[cfg(target_arch = "wasm32")]
+const READER_SETTINGS_INIT_FAILED_MESSAGE: &str =
+    "設定は保存しましたが、初回の表示設定をブラウザへ反映できませんでした。";
+
+/// 初回（localStorage に表示設定が無い場合）に限り、config の reader 値を
+/// 初期値として適用する純粋ロジック。
+///
+/// `settings_exist` が true なら既存設定が権威のため None を返し、
+/// font_scale / line_height を含むどのフィールドも変更しない。
+/// `base` は適用元の設定（wasm では `load_settings()` の戻り値）。
+#[cfg(any(target_arch = "wasm32", test))]
+fn reader_settings_for_first_run(
+    settings_exist: bool,
+    reader: &SettingsReaderView,
+    base: ReaderSettings,
+) -> Option<ReaderSettings> {
+    if settings_exist {
+        return None;
+    }
+    let mut settings = base;
+    settings.font_scale = reader_font_size_to_scale(reader.font_size);
+    settings.line_height = reader_line_height_to_index(reader.line_height);
+    Some(settings)
+}
+
+/// 設定保存成功時に config の reader 初期値をブラウザの表示設定へ書き込む（wasm のみ）。
+///
+/// - 既存の表示設定がある場合: 何もせず None を返す（ブラウザ設定が権威を維持）。
+/// - 初回の場合: 適用して保存結果を Some(Ok/Err) で返す。
+///   実際の反映はリロード / リーダー再オープン後に Reader が localStorage を
+///   読む時点で行われる（即時の画面更新は行わない）。
+#[cfg(target_arch = "wasm32")]
+fn apply_reader_settings_from_config(reader: &SettingsReaderView) -> Option<Result<(), ()>> {
+    let settings_exist = web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(SETTINGS_KEY).ok().flatten())
+        .is_some();
+    let settings = reader_settings_for_first_run(settings_exist, reader, load_settings())?;
+    Some(if save_settings(&settings) {
+        Ok(())
+    } else {
+        Err(())
+    })
+}
+
+#[cfg(test)]
+mod reader_settings_mapping_tests {
+    use super::{
+        ReaderSettings, SettingsReaderView, reader_font_size_to_scale, reader_line_height_to_index,
+        reader_settings_for_first_run,
+    };
+
+    #[test]
+    fn reader_font_size_maps_to_nearest_scale() {
+        assert_eq!(reader_font_size_to_scale(16.0), 0);
+        assert_eq!(reader_font_size_to_scale(18.0), 1);
+        assert_eq!(reader_font_size_to_scale(20.0), 2);
+        assert_eq!(reader_font_size_to_scale(24.0), 3);
+        assert_eq!(reader_font_size_to_scale(28.0), 4);
+    }
+
+    #[test]
+    fn reader_font_size_falls_back_on_invalid_values() {
+        assert_eq!(reader_font_size_to_scale(0.0), 1);
+        assert_eq!(reader_font_size_to_scale(-3.0), 1);
+        assert_eq!(reader_font_size_to_scale(f32::NAN), 1);
+    }
+
+    #[test]
+    fn reader_line_height_maps_to_nearest_step() {
+        assert_eq!(reader_line_height_to_index(1.5), 0);
+        assert_eq!(reader_line_height_to_index(1.8), 1);
+        assert_eq!(reader_line_height_to_index(2.1), 2);
+        // 1.75 は 1.8（差 0.05）の方が 1.5（差 0.25）より近い。
+        assert_eq!(reader_line_height_to_index(1.75), 1);
+    }
+
+    #[test]
+    fn reader_line_height_falls_back_on_invalid_values() {
+        assert_eq!(reader_line_height_to_index(0.0), 1);
+        assert_eq!(reader_line_height_to_index(f32::INFINITY), 1);
+    }
+
+    /// Config fixture の reader 部（desktop ConfigView と同形）。
+    fn reader_view() -> SettingsReaderView {
+        SettingsReaderView {
+            font_family: "serif".to_string(),
+            font_size: 16.0,
+            line_height: 1.8,
+            theme: "auto".to_string(),
+            column_width: None,
+            scroll_mode: "vertical".to_string(),
+            hyphenation: false,
+            vertical_writing: false,
+            show_page_numbers: true,
+            remember_position: true,
+        }
+    }
+
+    #[test]
+    fn first_run_applies_config_reader_defaults_and_keeps_other_fields() {
+        let base = ReaderSettings::default();
+        let applied = reader_settings_for_first_run(false, &reader_view(), base)
+            .expect("初回は必ず適用される");
+        assert_eq!(applied.font_scale, 0); // 16px
+        assert_eq!(applied.line_height, 1); // 1.8
+        assert_eq!(applied.dark, base.dark);
+        assert_eq!(applied.follow_system, base.follow_system);
+        assert_eq!(applied.swipe_threshold, base.swipe_threshold);
+        assert_eq!(
+            applied.vertical_scroll_threshold,
+            base.vertical_scroll_threshold
+        );
+        assert_eq!(applied.downscale_images, base.downscale_images);
+        assert_eq!(applied.jpeg_quality, base.jpeg_quality);
+    }
+
+    #[test]
+    fn existing_local_settings_are_never_overwritten() {
+        // 既存のブラウザ設定がある場合は config 値を一切適用しない。
+        let base = ReaderSettings {
+            font_scale: 3,
+            line_height: 2,
+            dark: true,
+            follow_system: true,
+            swipe_threshold: 90,
+            vertical_scroll_threshold: 70,
+            downscale_images: true,
+            jpeg_quality: 60,
+        };
+        assert!(reader_settings_for_first_run(true, &reader_view(), base).is_none());
+    }
 }
 
 /// `<html>` に dark クラスを付け外しする。
@@ -5456,8 +5641,26 @@ fn SettingsForm() -> impl IntoView {
         wasm_bindgen_futures::spawn_local(async move {
             match save_config(&view).await {
                 Ok(updated) => {
+                    // ADR-0217 / R2-RS01: 初回（localStorage に表示設定が無い場合）だけ
+                    // config の reader.font_size / line_height を初期値として書き込む。
+                    // 既存設定がある場合は一切触らず、以後はブラウザ設定が権威。
+                    // 反映はリロード / リーダー再オープン後に Reader が localStorage を
+                    // 読む時点で行われ、保存ボタン押下では即時に画面更新しない。
+                    // 初期値の保存に失敗した場合は専用固定文言で告知する。
+                    #[cfg(target_arch = "wasm32")]
+                    let init_failed = matches!(
+                        apply_reader_settings_from_config(&updated.reader),
+                        Some(Err(()))
+                    );
                     revision.set(updated.revision);
                     config.set(Some(updated));
+                    #[cfg(target_arch = "wasm32")]
+                    if init_failed {
+                        status.set(READER_SETTINGS_INIT_FAILED_MESSAGE.to_string());
+                    } else {
+                        status.set("設定を保存しました。".to_string());
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
                     status.set("設定を保存しました。".to_string());
                 }
                 Err(error) => status.set(error.status_message().to_string()),
@@ -5793,6 +5996,10 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"エディター設定"</h3>
                 <p class="settings-notice">"エディタ設定: config.toml の設定値です。エディタの動作には未接続です。"</p>
+                // ADR-0217 / R2-RS01: 下記のエディタ設定はすべて未配線（表示用）。
+                // textarea の描画・動作へは反映されないことを明示し、
+                // 「設定すれば効く」という誤解を防ぐ（id / 既存文言は不変更）。
+                <p class="settings-notice">"タブ幅・折り返しを含むエディタ設定は未配線です。保存しても textarea の動作・描画には反映されません。"</p>
                 <label for="settings-editor-font-family">"フォントファミリー"</label>
                 <input id="settings-editor-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.editor.font_family).unwrap_or_default()
@@ -5968,6 +6175,11 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"リーダー設定"</h3>
                 <p class="settings-notice">"リーダー設定: config.toml の設定値です。実際の表示はブラウザに保存された表示設定が権威です（ADR-0211）。"</p>
+                // ADR-0217 / R2-RS01（R4 指摘反映）: 即時反映を謳わず、
+                // 初回のみ / 以後はブラウザ設定が権威 / リロード・開き直しで反映、
+                // という契約に統一する。上の ADR-0211 注記とも矛盾させない。
+                // font_size / line_height 以外のフィールドは未配線であることを明示する。
+                <p class="settings-notice">"フォントサイズと行の高さは、ブラウザに表示設定が無い初回のみ config.toml から初期値として適用されます。以後はブラウザ設定が権威で、反映はリロード/開き直し後に行われます。それ以外のリーダー設定は未配線です。"</p>
                 <label for="settings-reader-font-family">"フォントファミリー"</label>
                 <input id="settings-reader-font-family" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
                     prop:value=move || config.get().map(|v| v.reader.font_family).unwrap_or_default()
