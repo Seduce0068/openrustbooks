@@ -21,7 +21,8 @@ ADR-0282 / ADR-0283 の補完ゲートとして使う。
 ## 前提
 
 - Node 24 系、npm 11 系。
-- `trunk` と `wasm-bindgen` が PATH にあること。
+- `trunk` と `wasm-bindgen` が PATH にあること。Cargo.lock の `wasm-bindgen` 版と
+  CLI の `--version` が一致するか fail-closed で検査される（下記「バージョン固定ゲート」）。
 - `DISPLAY` が設定され、X11 バックエンドが利用できること。
 - `cargo tauri --version` が成功すること（現状は 2.12.5）。
 - `RUST_LOG` は desktop では tracing filter として効かない（ADR-0282）。
@@ -65,8 +66,13 @@ bash scripts/ci-wdio-test.sh
 
  1. 全体検証に含める。
 
+ `verify.sh` / `build-desktop.sh` が Cargo.lock の版からキャッシュ PATH を導出し、
+ CLI の `--version` まで照合するため、旧来の固定パス指定
+（`wasm-bindgen-<版>` ディレクトリを直接 PATH へ追加する書式）は不要（削除済み）。
+
 ```bash
-export PATH="/tmp/wbbin:$HOME/.cache/trunk/wasm-bindgen-0.2.129:$PATH"
+# Kubuntu: リポジトリルートで実行
+bash scripts/verify.sh --check-wasm-bindgen   # ゲート単独の事前確認（任意）
 ./scripts/verify.sh
 ```
 
@@ -80,6 +86,14 @@ export PATH="/tmp/wbbin:$HOME/.cache/trunk/wasm-bindgen-0.2.129:$PATH"
   未導入時のみ `cargo install wasm-pack --locked --version 0.13.1` で
   導入し、導入後も同じ確認を再実行する。PATH は `CARGO_HOME`
   （既定は `$HOME/.cargo`）配下の `bin` も対象とする。
+- `wasm-bindgen`: `verify.sh` / `build-desktop.sh` の共通ゲートが Cargo.lock の
+  `[[package]] name = "wasm-bindgen"` からバージョンを抽出し、解決された CLI の
+  `wasm-bindgen --version`（書式: `wasm-bindgen <版>`）と一致するか検査する。
+  抽出失敗（0 件 / 複数件 / 不正 semver）、CLI 不在、不一致はすべて
+  fail-closed（rc=1）。キャッシュは
+  `$HOME/.cache/trunk/wasm-bindgen-<抽出版>` を自動で PATH へ追加するため、
+  固定パス更新を忘れても古い CLI が黙って使われることはない。
+  単独確認は `bash scripts/verify.sh --check-wasm-bindgen [<lockfile>]`。
 - `Cargo.lock` / `package-lock.json`: `scripts/ci-wdio-test.sh` が
   `git diff --exit-code HEAD -- <file>` でビルド前後の不変を確認する。
   ステージ済み差分も検知し、ビルド中の変更も失敗する。

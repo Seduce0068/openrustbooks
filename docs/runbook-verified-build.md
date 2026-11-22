@@ -30,8 +30,12 @@ generated:
   `verify.sh` と CI の `extra_gates` を最終ゲートとして併設する。
   pre-commit の gitleaks hook は Go 製のため、初回構築時には Go toolchain が必要。
 - `trunk` 0.22.1。E2E は Python 3.10 以降（`websockets`）と Chrome / Chromium を使う。
-- `wasm-bindgen` が PATH にあること。`verify.sh` は必要に応じて
-  `$HOME/.cache/trunk/wasm-bindgen-0.2.129` を PATH へ追加する。
+- `wasm-bindgen` が PATH にあること。`verify.sh` / `build-desktop.sh` は Cargo.lock が
+  固定するバージョンを抽出し、`$HOME/.cache/trunk/wasm-bindgen-<抽出版>` を PATH へ
+  追加したうえで、解決された CLI の `wasm-bindgen --version` が Cargo.lock 版と
+  一致するか fail-closed で検査する（不一致 / コマンド不在 / 抽出失敗は rc=1）。
+  固定パスのディレクトリ名だけを信じず実際の CLI 出力を照合するため、
+  複数バージョンがキャッシュにあっても古い CLI が黙って使われることはない。
 - 保存先は**リポジトリ外の絶対パス**。`--dist` は相対パスとリポジトリ配下を拒否する。
   推奨先は `/home/koppe/.local/share/openrustbooks-verified/`。
   `/tmp` は再起動で消えるため恒久保持先としては避ける。
@@ -119,6 +123,10 @@ python3 -m http.server --directory "$DIST" 8000
 
 - ゲート失敗（fmt / check / test / clippy / wasm / audit など）時は E2E と trunk build へ
   進まず rc=1 となる。配布物のコピーは行われない。
+- wasm-bindgen ゲートは Cargo.lock 版の抽出と CLI `--version` の照合を trunk build の
+  直前に行う。抽出失敗（0 件 / 複数件 / 不正 semver）、CLI 不在、不一致は
+  fail-closed で rc=1 となる。`verify.sh` / `build-desktop.sh` は同一ロジックを
+  持ち、単独確認は `bash scripts/verify.sh --check-wasm-bindgen [<lockfile>]` で行う。
 - E2E 結果行（`passed: N, failed: N`）や trunk バージョンを抽出できない場合は
   `unknown` とせず hard fail する。成功風の数値は記録しない。
 - 保存先が相対パス、またはリポジトリ配下（`readlink -m` で正規化して判定）なら rc=2 で拒否する。
