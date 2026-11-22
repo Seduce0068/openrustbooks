@@ -21,6 +21,23 @@ status: current
 
 ### 優先度: 高
 
+<!-- 2026-11-23 R6: review + discovery 第3cycle -->
+- [ ] 【配布保持ゲートの E2E 期待値を単一情報源化】check-distribution-path.sh が
+      256 をハードコードし、Checker(expected=263) の現行値と不一致。
+      verify.sh --dist が常に失敗する。期待値をコードから抽出し、fixture / runbook も追従。
+      根拠 `scripts/check-distribution-path.sh:79,115-118` / R4-OP01 / 重大度 high。
+- [ ] 【set_document_content を atomic 化】get_document → add_document → mark_unsaved が別ロックで、
+      close の unsaved チェックをすり抜ける。documents/generations/unsaved を単一保持。
+      根拠 `desktop/src/commands/document.rs:552-559` / R2-RC01 / 重大度 high。
+- [ ] 【lint コマンドを AI service 依存から分離】lint / auto-fix はローカル処理なのに
+      ai_service() を必須とし、既定（AI 無効）で常に失敗する。LintConfig から直接構築。
+      根拠 `desktop/src/commands/ai.rs:329-361` / R1-DS01 / 重大度 high。
+- [ ] 【API キー空入力で設定済みキーを消さない】start_api_key_save が空入力を送信し、
+      set_openai_api_key が空文字を None 化する。no-op または明示削除へ変更。
+      根拠 `web/src/lib.rs:5512-5545` / R5-UX01 / 重大度 high。
+- [ ] 【save_document 競合時のディスク復元】Conflict を返しても atomic_write 済みの本文が残り、
+      state とディスクが不整合。ロールバックまたは書き込み前 CAS。
+      根拠 `desktop/src/commands/document.rs:420-437` / ADR-0318 / R2-RC01 / 重大度 high。
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
 <!-- R6-2026-11-21: swarm-project-review + swarm-todo-discovery 統合 -->
@@ -62,6 +79,43 @@ status: current
 
 ### 優先度: 中
 
+<!-- 2026-11-23 R6 中優先度 -->
+- [ ] 【AI 起動エラーの Display をログへ出さない】main.rs が CoreError::Display を log::error! に埋め込み、
+      provider 生エラー / host / body が Stdout / LogDir / Webview へ残る。code() 由来の固定文言へ。
+      根拠 `desktop/src/main.rs:122-128` / R3-SE01。
+- [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
+      extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
+      根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
+- [ ] 【README の CI 範囲を実態へ修正】CI は静的ゲート + wasm + audit のみで、
+      E2E / WDIO / trunk build / 配布保持は verify.sh 専任。
+      根拠 `README.md:169-174` / R4-OP01。
+- [ ] 【WDIO が dev server のみであることを明記】バンドル済み desktop の /settings asset not found は未検証。
+      runbook-release の既知問題へ追記。根拠 `docs/runbook-webdriver.md:123-126` / R4-OP01。
+- [ ] 【prefer_local を配線または dead config 化】client 生成で参照されないのに DTO / UI に露出。
+      ADR-0304 のリストへ追加するか provider 選択へ反映。根拠 `core/src/config.rs:91` / R1-DS01。
+- [ ] 【レガシー config command を CAS 契約へ集約】update_config / update_ai_config / reset_config / clear_secrets は
+      内部 revision を使い UI 起点 CAS を満たさない。patch 経路へ集約 or 登録解除。
+      根拠 `desktop/src/commands/config.rs:747-767,802-828` / R1-DS01。
+- [ ] 【delete に ensure_path_unchanged を追加】resolve 後の symlink 差し替えを detect せず削除する。
+      根拠 `core/src/io.rs:857-866` / R2-RC01。
+- [ ] 【lint のみ変更で AI service を再生成しない】ai_or_lint_changed を分離し、
+      lint のみなら現在 service を維持。根拠 `desktop/src/commands/config.rs:705-735` / R2-RC01。
+- [ ] 【設定競合時の再読み込み導線を追加】CONFIG_CONFLICT の案内どおり再取得手段が無い。
+      根拠 `web/src/lib.rs:4815-4817,5613-5629` / R2-RC01 / R5-UX01。
+- [ ] 【Document / FileEntry の生パス露出を DTO 化】document / fs イベントと返り値が絶対パスを JS へ返す。
+      根拠 `core/src/document.rs:98-112` / `core/src/io.rs:97-105` / R1-DS01。
+- [ ] 【AI 送信確認の 80 文字プレビューを改善】末尾の機微情報を見落とす。全文 or 明示承認。
+      根拠 `desktop/src/commands/ai.rs:18-30` / R3-SE01。
+- [ ] 【EPUB XHTML サニタイズに入力長/深度上限】深いネストで wasm が数秒フリーズ。
+      根拠 `core/src/sanitize.rs:127-156` / R3-SE01。
+- [ ] 【Page-list 入力を改善】完全一致依存 / Enter 不可 / 候補なし。datalist + trim + case-insensitive。
+      根拠 `web/src/lib.rs:4608,3914-3948` / R5-UX01。
+- [ ] 【ヘルプダイアログへ CSS を適用】reader-help-dialog にスタイルが無く dark で浮く。
+      根拠 `web/index.html:568-583` / R5-UX01。
+- [ ] 【capability JSON を静的ゲートへ】wdio permission が本番ビルドへ混入し得る。
+      根拠 `desktop/capabilities/wdio/wdio.json:6-11` / R3-SE01。
+- [ ] 【cargo audit 警告を ID + 期限管理】chrono unmaintained を暗黙 baseline にせず allowlist 化。
+      根拠 `scripts/verify.sh:507` / R3-SE01。
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
 <!-- 2026-11-22 R6 中優先度 -->
 
