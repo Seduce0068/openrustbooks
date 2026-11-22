@@ -16,16 +16,33 @@ use tauri::{AppHandle, State, command};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tokio::sync::oneshot;
 
-/// ダイアログに出す要約のプレビュー文字数。
+/// ダイアログに出す要約の先頭／末尾プレビュー文字数。
 const PREVIEW_CHARS: usize = 80;
 
-/// 操作名と各フィールドの文字数・先頭だけを並べた要約を作る。
+/// 操作名と各フィールドの文字数・先頭と末尾の抜粋を並べた要約を作る。
+/// 長い内容は省略されるため、利用者へ全文確認を促す固定文言を必ず添える。
 fn build_summary(operation: &str, fields: &[(&str, String)]) -> String {
     let mut summary = format!("「{operation}」で以下の内容を AI に送信します。\n");
+    summary.push_str("表示は抜粋です。送信前に全文を確認してください。\n");
     for (name, value) in fields {
-        let count = value.chars().count();
-        let preview: String = value.chars().take(PREVIEW_CHARS).collect();
-        summary.push_str(&format!("\n- {name}: {count} chars\n{preview}\n"));
+        let chars: Vec<char> = value.chars().collect();
+        let count = chars.len();
+        let head: String = chars.iter().take(PREVIEW_CHARS).collect();
+        let tail: String = if count > PREVIEW_CHARS {
+            let start = count.saturating_sub(PREVIEW_CHARS);
+            format!("…[末尾]\n{}", chars.iter().skip(start).collect::<String>())
+        } else {
+            String::new()
+        };
+        let omitted = count.saturating_sub(PREVIEW_CHARS * 2);
+        let omitted_note = if omitted > 0 {
+            format!("\n… 省略: {omitted} chars …\n")
+        } else {
+            String::new()
+        };
+        summary.push_str(&format!(
+            "\n- {name}: {count} chars\n{head}{omitted_note}{tail}\n"
+        ));
     }
     summary
 }
@@ -392,14 +409,16 @@ mod tests {
 
     #[test]
     fn summary_truncates_long_multibyte_value_to_80_chars() {
-        let long = "あ".repeat(100);
+        let long = "あ".repeat(200);
         let summary = build_summary("テスト", &[("content", long.clone())]);
         let preview = "あ".repeat(PREVIEW_CHARS);
         let over = "あ".repeat(PREVIEW_CHARS + 1);
 
-        // 文字数は全体、プレビューは先頭 80 文字だけ。
-        assert!(summary.contains("100 chars"));
+        // 文字数は全体、抜粋は先頭 80 文字と末尾 80 文字だけ。
+        assert!(summary.contains("200 chars"));
         assert!(summary.contains(&preview));
+        assert!(summary.contains("省略: 40 chars"));
+        assert!(summary.contains("表示は抜粋です。送信前に全文を確認してください。"));
         assert!(!summary.contains(&over));
         assert!(!summary.contains(&long));
     }
