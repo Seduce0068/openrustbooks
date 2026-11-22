@@ -898,6 +898,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0338-ai-startup-log-redaction](docs/decisions/0338-ai-startup-log-redaction.md)
 - [0339-delete-path-recheck](docs/decisions/0339-delete-path-recheck.md)
 - [0340-lint-only-config-change](docs/decisions/0340-lint-only-config-change.md)
+- [0341-settings-reload-button](docs/decisions/0341-settings-reload-button.md)
+  - 設定画面に get_config 再実行ボタンを追加し、競合時に view / revision を復帰可能にする決定。
   - commit_validated_config の再準備判定を ai 設定差分に限定し、lint のみ変更が生成失敗でブロックされないようにする決定。
   - LocalStorage::delete が削除直前に resolve_path を再実行し、symlink 差し替えを fail-closed で拒否する決定。
   - AI service 初期化失敗時に CoreError の Display をログへ出さず、code() 由来の情報だけを記録する決定。

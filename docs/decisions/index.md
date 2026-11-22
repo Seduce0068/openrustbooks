@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 340 件）。
+openrustbooks の ADR 一覧（全 341 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -684,3 +684,5 @@ openrustbooks の ADR 一覧（全 340 件）。
   - status: accepted — LocalStorage::delete が削除直前に resolve_path を再実行し、symlink 差し替えを fail-closed で拒否する決定。
 - [ADR-0340: lint 設定変更では AI service を再生成しない](0340-lint-only-config-change.md)
   - status: accepted — commit_validated_config の再準備判定を ai 設定差分に限定し、lint のみ変更が生成失敗でブロックされないようにする決定。
+- [ADR-0341: CONFIG_CONFLICT 時の再読み込み導線](0341-settings-reload-button.md)
+  - status: accepted — 設定画面に get_config 再実行ボタンを追加し、競合時に view / revision を復帰可能にする決定。
