@@ -417,6 +417,7 @@ fi
 if [[ -d "$HOME/.cache/trunk/wasm-bindgen-0.2.129" ]]; then
 	export PATH="$HOME/.cache/trunk/wasm-bindgen-0.2.129:$PATH"
 fi
+# wasm-bindgen-test-runner の PATH 解決は scripts/ci-wasm-test.sh に集約する。
 
 DIST_DIR="$(mktemp -d)"
 # E2E 出力を保持して manifest の結果欄に使う（常に一時ファイルとして扱う）。

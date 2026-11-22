@@ -38,5 +38,16 @@ else
 	fi
 fi
 
+# wasm-pack は wasm-bindgen CLI と同じディレクトリに test runner を期待する。
+# trunk の CLI ディレクトリには runner が無いため、Cargo.lock と同一版の
+# runner がある wasm-pack キャッシュを先に PATH へ追加する（無い場合は既定のまま）。
+for runner_dir in "$HOME"/.cache/.wasm-pack/wasm-bindgen-*; do
+	if [[ -x "$runner_dir/wasm-bindgen-test-runner" ]] \
+		&& [[ "$("$runner_dir/wasm-bindgen-test-runner" --version 2>/dev/null || true)" == wasm-bindgen-test-runner\ 0.2.129* ]]; then
+		export PATH="$runner_dir:$PATH"
+		break
+	fi
+done
+
 cd core
 wasm-pack test --node --locked

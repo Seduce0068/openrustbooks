@@ -192,18 +192,27 @@ fn parse_table_format(format: &str) -> Result<TableFormat, String> {
     }
 }
 
-/// alignment 文字列群を TableAlignment に解釈する（大小文字無視、未知値は Left）。
-fn parse_table_alignment(alignment: Option<Vec<String>>) -> Option<Vec<TableAlignment>> {
-    alignment.map(|a| {
-        a.into_iter()
-            .map(|s| match s.to_lowercase().as_str() {
-                "left" => TableAlignment::Left,
-                "center" => TableAlignment::Center,
-                "right" => TableAlignment::Right,
-                _ => TableAlignment::Left,
-            })
-            .collect()
-    })
+/// alignment 文字列群を TableAlignment に解釈する（大小文字無視、未知値は拒否）。
+///
+/// 未知値は left へ黙ってフォールバックせず、`parse_table_format` と同じく
+/// CONFIG_VALIDATION の固定文言を返す。None は従来どおり Ok(None)。
+fn parse_table_alignment(
+    alignment: Option<Vec<String>>,
+) -> Result<Option<Vec<TableAlignment>>, String> {
+    alignment
+        .map(|a| {
+            a.into_iter()
+                .map(|s| match s.to_lowercase().as_str() {
+                    "left" => Ok(TableAlignment::Left),
+                    "center" => Ok(TableAlignment::Center),
+                    "right" => Ok(TableAlignment::Right),
+                    _ => Err(ipc_error(CoreError::validation(
+                        "Invalid alignment. Use left, center, or right",
+                    ))),
+                })
+                .collect()
+        })
+        .transpose()
 }
 
 /// command 本体。入力エラーは確認ダイアログより前に返す既存契約を維持する。
@@ -215,8 +224,9 @@ async fn convert_to_table_impl<R: tauri::Runtime>(
     headers: Option<Vec<String>>,
     alignment: Option<Vec<String>>,
 ) -> Result<TableResult, String> {
-    // parse_table_format は confirm 前に置き、不正入力ならダイアログを出さない。
+    // parse_table_format / parse_table_alignment は confirm 前に置き、不正入力ならダイアログを出さない。
     let table_format = parse_table_format(&format)?;
+    let table_alignment = parse_table_alignment(alignment.clone())?;
 
     confirm_send(
         app,
@@ -239,8 +249,6 @@ async fn convert_to_table_impl<R: tauri::Runtime>(
     let service = state
         .ai_service()
         .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
-    let table_alignment = parse_table_alignment(alignment);
 
     service
         .pipeline()
@@ -476,6 +484,7 @@ mod tests {
             "center".to_string(),
             "right".to_string(),
         ]))
+        .expect("既知の値なのでエラーにならない")
         .expect("Some を渡したので Some が返る");
 
         assert_eq!(parsed.len(), 3);
@@ -485,25 +494,41 @@ mod tests {
     }
 
     #[test]
-    fn table_alignment_case_insensitive_and_unknown_falls_back_to_left() {
+    fn table_alignment_case_insensitive() {
         let parsed = parse_table_alignment(Some(vec![
             "LEFT".to_string(),
             "CeNtEr".to_string(),
             "RIGHT".to_string(),
-            "bogus".to_string(),
         ]))
+        .expect("大小文字違いの既知の値なのでエラーにならない")
         .expect("Some を渡したので Some が返る");
 
-        assert_eq!(parsed.len(), 4);
+        assert_eq!(parsed.len(), 3);
         assert!(matches!(parsed[0], TableAlignment::Left));
         assert!(matches!(parsed[1], TableAlignment::Center));
         assert!(matches!(parsed[2], TableAlignment::Right));
-        assert!(matches!(parsed[3], TableAlignment::Left)); // 未知値は Left にフォールバック
+    }
+
+    #[test]
+    fn table_alignment_unknown_returns_validation_error() {
+        assert_eq!(
+            parse_table_alignment(Some(vec!["centre".to_string()])).unwrap_err(),
+            ipc_error(CoreError::validation(
+                "Invalid alignment. Use left, center, or right"
+            ))
+        );
+        assert_eq!(
+            parse_table_alignment(Some(vec!["left".to_string(), "bogus".to_string(),]))
+                .unwrap_err(),
+            ipc_error(CoreError::validation(
+                "Invalid alignment. Use left, center, or right"
+            ))
+        );
     }
 
     #[test]
     fn table_alignment_none_returns_none() {
-        assert!(parse_table_alignment(None).is_none());
+        assert!(matches!(parse_table_alignment(None), Ok(None)));
     }
 
     /// confirm 待ち中に service を無効化するフックを仕込み、confirm 後の
@@ -587,6 +612,34 @@ mod tests {
                 ))
             ),
             Ok(_) => panic!("不正 format が confirm 前に拒否されなかった"),
+        }
+
+        // parse_table_alignment の入力エラーも確認ダイアログより前に返る。
+        *TEST_CONFIRM_HOOK.lock().unwrap() = Some(Box::new(|| {
+            panic!("入力エラーなのに確認ダイアログが呼ばれた");
+        }));
+        let invalid_alignment = convert_to_table_impl(
+            state.as_ref(),
+            &handle,
+            "a,b\n1,2".to_string(),
+            "csv".to_string(),
+            None,
+            Some(vec!["centre".to_string()]),
+        )
+        .await;
+        assert!(
+            TEST_CONFIRM_HOOK.lock().unwrap().is_some(),
+            "不正 alignment では confirm フックが消費されないこと"
+        );
+        TEST_CONFIRM_HOOK.lock().unwrap().take();
+        match invalid_alignment {
+            Err(message) => assert_eq!(
+                message,
+                ipc_error(CoreError::validation(
+                    "Invalid alignment. Use left, center, or right"
+                ))
+            ),
+            Ok(_) => panic!("不正 alignment が confirm 前に拒否されなかった"),
         }
 
         // 静的フックの取り違えを避けるため、4 コマンドは直列に検証する。
