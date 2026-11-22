@@ -67,8 +67,6 @@ status: current
 - [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
       extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
       根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
-- [ ] 【prefer_local を配線または dead config 化】client 生成で参照されないのに DTO / UI に露出。
-      ADR-0304 のリストへ追加するか provider 選択へ反映。根拠 `core/src/config.rs:91` / R1-DS01。
 - [ ] 【レガシー config command を CAS 契約へ集約】update_config / update_ai_config / reset_config / clear_secrets は
       内部 revision を使い UI 起点 CAS を満たさない。patch 経路へ集約 or 登録解除。
       根拠 `desktop/src/commands/config.rs:747-767,802-828` / R1-DS01。
@@ -128,6 +126,7 @@ status: current
 
 ## 完了
 
+- [x] 【prefer_local】DTO 除外・未配線表示・config.toml 値保持（ADR-0304 方針）。
 - [x] 【CI 範囲の文書化】README / runbook-release を実ゲート範囲へ修正（ADR-0283 参照）。
 - [x] 【設定競合】再読み込みボタンを追加し view/revision を最新化（ADR-0341）。
 - [x] 【設定コミット】lint のみ変更で AI service を再生成しない（ADR-0340）。

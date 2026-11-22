@@ -144,3 +144,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - CONFIG_CONFLICT 用の再読み込みボタンを追加。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 未保存編集の扱いは ADR-0341 の未決定。
+
+## 完了記録（第3cycle-10）
+
+- prefer_local を DTO / UI から除外し config.toml 値を保持。
+- DTO contract gate に両側除外を追加、575 tests pass。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- provider 選択への実配線は ADR-0342 の未決定。
