@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 307 件）。
+openrustbooks の ADR 一覧（全 308 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -618,3 +618,5 @@ openrustbooks の ADR 一覧（全 307 件）。
   - status: accepted — lang=ja に合わせた日本語化、リンク下線、file input focus、破壊操作の危険告知とライセンス導線を追加する決定。
 - [ADR-0307: イベント発行失敗と import 混在状態の可視化](0307-event-emit-visibility.md)
   - status: accepted — emit 失敗を警告ログ化し、import 失敗件数と navigation parse 失敗を status で告知する決定。
+- [ADR-0308: StorageBackend の競合安全性と未実装契約](0308-storage-backend-contract.md)
+  - status: accepted — overwrite の原子的新規作成、resolve_path 再確認、watch 未実装契約、退避後始末を明確化する決定。

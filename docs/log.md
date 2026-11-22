@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- StorageBackend の競合安全性と未実装契約を整理（ADR-0308）。
 - emit 失敗と import 混在状態を可視化（ADR-0307）。
 - a11y 文言とリンク表示を改善（ADR-0306）。
 - EPUB / ZIP の解釈を core / web で統一（ADR-0305）。
