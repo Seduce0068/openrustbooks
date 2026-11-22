@@ -1,7 +1,7 @@
 //! Application state management.
 
 use openrustbooks_core::{
-    AppConfig, CoreError, CoreResult,
+    AppConfig, CoreError, CoreResult, LintConfig,
     ai_markdown::AiMarkdownService,
     document::{Document, DocumentId},
 };
@@ -127,6 +127,15 @@ impl AppState {
     /// Get current configuration
     pub fn config(&self) -> AppConfig {
         self.config.read().unwrap().config.clone()
+    }
+
+    /// 現在の `LintConfig` のクローンを返す。
+    ///
+    /// Lint はローカル処理（`MarkdownLinter`）であり AI service を必要としないため、
+    /// AI 無効時でも設定を反映して実行できるようにする（返り値は clone なので
+    /// 呼び出し側が書き換えても state は変化しない）。
+    pub fn lint_config(&self) -> LintConfig {
+        self.config.read().unwrap().config.lint.clone()
     }
 
     /// 現在の設定と revision を同一ロック・同一時点で取得する。
@@ -1031,6 +1040,29 @@ mod tests {
         state.update_config(config).unwrap();
         assert!(state.is_ai_enabled());
         assert!(state.config().ai.enabled);
+    }
+
+    /// lint_config は現在の lint 設定を clone で返し、変更は state へ漏れないこと。
+    #[test]
+    fn lint_config_returns_current_settings_as_clone() {
+        let state = AppState::new(AppConfig::default());
+        let expected = state.config().lint;
+        assert!(expected.enabled);
+        assert!(expected.disable_rules.iter().any(|r| r == "MD013"));
+        assert!(!expected.warnings_as_errors);
+
+        let mut config = state.config();
+        config.lint.warnings_as_errors = true;
+        config.lint.enable_rules.push("MD001".to_string());
+        state.update_config(config).unwrap();
+
+        let actual = state.lint_config();
+        assert!(actual.warnings_as_errors);
+        assert_eq!(actual.enable_rules, vec!["MD001".to_string()]);
+        // 返り値を書き換えても state の設定は不変（clone であることの確認）。
+        let mut mutated = actual;
+        mutated.warnings_as_errors = false;
+        assert!(state.lint_config().warnings_as_errors);
     }
 
     #[test]

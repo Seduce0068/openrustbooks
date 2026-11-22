@@ -7,6 +7,7 @@ use openrustbooks_core::{
     ai_markdown::{
         FrontMatterRequest, FrontMatterResult, GenerateRequest, GenerateResult, RefineRequest,
         RefineResult, TableAlignment, TableFormat, TableRequest, TableResult,
+        lint::{LintIssue, LintResultWrapper, MarkdownLinter},
     },
 };
 use std::sync::Arc;
@@ -325,39 +326,46 @@ pub async fn generate_front_matter(
     generate_front_matter_impl(state.inner().as_ref(), &app, content, schema).await
 }
 
+/// command 本体。Lint はローカル処理のため AI service を要求せず、
+/// state の `LintConfig` から直接 linter を構築する。
+/// `app` は mock_app を使う既存のテストパターンを維持するための注入引数。
+fn lint_markdown_impl<R: tauri::Runtime>(
+    state: &AppState,
+    _app: &AppHandle<R>,
+    content: String,
+) -> Result<Vec<LintIssue>, String> {
+    let linter = MarkdownLinter::new(&state.lint_config()).map_err(ipc_error)?;
+    linter.lint(&content).map_err(ipc_error)
+}
+
 /// Lint Markdown content
 #[command]
 pub async fn lint_markdown(
     state: State<'_, Arc<AppState>>,
+    app: AppHandle,
     content: String,
-) -> Result<Vec<openrustbooks_core::ai_markdown::lint::LintIssue>, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
+) -> Result<Vec<LintIssue>, String> {
+    lint_markdown_impl(state.inner().as_ref(), &app, content)
+}
 
-    service
-        .pipeline()
-        .linter()
-        .lint(&content)
-        .map_err(ipc_error)
+/// command 本体。lint_and_fix も AI service を使わず `LintConfig` から直接構築する。
+async fn lint_and_fix_markdown_impl<R: tauri::Runtime>(
+    state: &AppState,
+    _app: &AppHandle<R>,
+    content: String,
+) -> Result<LintResultWrapper, String> {
+    let linter = MarkdownLinter::new(&state.lint_config()).map_err(ipc_error)?;
+    linter.lint_and_fix(&content).await.map_err(ipc_error)
 }
 
 /// Lint and auto-fix Markdown content
 #[command]
 pub async fn lint_and_fix_markdown(
     state: State<'_, Arc<AppState>>,
+    app: AppHandle,
     content: String,
-) -> Result<openrustbooks_core::ai_markdown::lint::LintResultWrapper, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
-    service
-        .pipeline()
-        .linter()
-        .lint_and_fix(&content)
-        .await
-        .map_err(ipc_error)
+) -> Result<LintResultWrapper, String> {
+    lint_and_fix_markdown_impl(state.inner().as_ref(), &app, content).await
 }
 
 #[cfg(test)]
@@ -677,5 +685,117 @@ mod tests {
             generate_front_matter_impl(state.as_ref(), &handle, "# 見出し".to_string(), None).await
         })
         .await;
+    }
+
+    /// lint 設定だけを差し替えるテストヘルパー（AI service は一切触らない）。
+    fn set_lint_config(state: &AppState, mutate: impl FnOnce(&mut openrustbooks_core::LintConfig)) {
+        let mut config = state.config();
+        mutate(&mut config.lint);
+        state.update_config(config).unwrap();
+    }
+
+    /// AI 既定無効（service なし）でも、ローカル lint が成功して実際に問題を検出すること。
+    /// ollama 等の初期化も外部送信も行わない。
+    #[test]
+    fn lint_works_with_ai_disabled_by_default() {
+        use openrustbooks_core::AppConfig;
+        use tauri::test::mock_app;
+
+        let app = mock_app();
+        let handle = app.handle().clone();
+        let state = AppState::new(AppConfig::default());
+        assert!(!state.is_ai_enabled(), "AI は既定で無効");
+        assert!(state.ai_service().is_none(), "AI service は存在しない");
+
+        let issues = lint_markdown_impl(
+            &state,
+            &handle,
+            "# Title\n\nTrailing spaces here   \n".to_string(),
+        )
+        .expect("AI 無効でもローカル lint は成功すること");
+        assert!(
+            issues.iter().any(|issue| issue.rule == "MD009"),
+            "ローカル lint が実際に走ること: {issues:?}"
+        );
+    }
+
+    /// state の enable_rules / disable_rules が linter に反映されること。
+    #[test]
+    fn lint_config_enable_disable_rules_are_reflected() {
+        use openrustbooks_core::AppConfig;
+        use tauri::test::mock_app;
+
+        let app = mock_app();
+        let handle = app.handle().clone();
+        let state = AppState::new(AppConfig::default());
+        let dirty = "# Title\n\nTrailing spaces here   \n";
+
+        // 既定の disable_rules は MD013 のみなので MD009 が検出される。
+        let issues = lint_markdown_impl(&state, &handle, dirty.to_string()).unwrap();
+        assert!(
+            issues.iter().any(|issue| issue.rule == "MD009"),
+            "既定設定で MD009 が検出されること: {issues:?}"
+        );
+
+        // disable_rules に MD009 を追加すると消える（設定が反映される）。
+        set_lint_config(&state, |lint| lint.disable_rules.push("MD009".to_string()));
+        let issues = lint_markdown_impl(&state, &handle, dirty.to_string()).unwrap();
+        assert!(
+            !issues.iter().any(|issue| issue.rule == "MD009"),
+            "無効化したルールは出ないこと: {issues:?}"
+        );
+
+        // enable_rules を MD013 のみに絞ると、長い行で MD013 が検出される。
+        let long_line = "word ".repeat(19);
+        let long_content = format!("# Title\n\n{}\n", long_line.trim_end());
+        set_lint_config(&state, |lint| {
+            lint.disable_rules.clear();
+            lint.enable_rules.push("MD013".to_string());
+        });
+        let issues = lint_markdown_impl(&state, &handle, long_content).unwrap();
+        assert!(
+            issues.iter().any(|issue| issue.rule == "MD013"),
+            "有効化したルールが出ること: {issues:?}"
+        );
+    }
+
+    /// warnings_as_errors が lint_and_fix の判定に反映されること。
+    /// 既定 AI 無効のまま実行し、外部 AI 送信は行わない。
+    #[tokio::test]
+    async fn lint_config_warnings_as_errors_is_reflected() {
+        use openrustbooks_core::{AppConfig, ai_markdown::lint::LintSeverity};
+        use tauri::test::mock_app;
+
+        let app = mock_app();
+        let handle = app.handle().clone();
+        let state = AppState::new(AppConfig::default());
+        let warning_only = "# Title\n\n<div>html</div>\n";
+
+        let result = lint_and_fix_markdown_impl(&state, &handle, warning_only.to_string())
+            .await
+            .expect("AI 無効でも lint_and_fix は成功すること");
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.severity == LintSeverity::Warning),
+            "比較対象の Warning が存在すること: {:?}",
+            result.issues
+        );
+        assert!(result.passed, "既定 false では Warning だけなら合格");
+
+        set_lint_config(&state, |lint| lint.warnings_as_errors = true);
+        let result = lint_and_fix_markdown_impl(&state, &handle, warning_only.to_string())
+            .await
+            .unwrap();
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.severity == LintSeverity::Warning),
+            "severity は Warning のままであること: {:?}",
+            result.issues
+        );
+        assert!(!result.passed, "true では Warning を不合格にすること");
     }
 }
