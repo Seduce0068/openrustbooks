@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 344 件）。
+openrustbooks の ADR 一覧（全 345 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -692,3 +692,5 @@ openrustbooks の ADR 一覧（全 344 件）。
   - status: accepted — 送信確認ダイアログで先頭だけでなく末尾も抜粋し、省略量と全文確認を明示する決定。
 - [ADR-0344: レガシー config command の登録解除](0344-legacy-config-commands-removed.md)
   - status: accepted — UI 起点 CAS を満たさない 4 つの config command を invoke_handler から外し、 patch / API キー / clear 経路へ集約する決定。
+- [ADR-0345: EPUB XHTML サニタイズの入力上限](0345-epub-sanitize-limits.md)
+  - status: accepted — サニタイザへ渡す前に入力長とタグ深度を制限し、深いネストによる wasm フリーズを防ぐ決定。
