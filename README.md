@@ -889,6 +889,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0329-epub2-ncx-e2e](docs/decisions/0329-epub2-ncx-e2e.md)
 - [0330-contrast-e2e](docs/decisions/0330-contrast-e2e.md)
 - [0331-get-config-status](docs/decisions/0331-get-config-status.md)
+- [0332-capability-scope-visibility](docs/decisions/0332-capability-scope-visibility.md)
+  - check-capability-scope.sh は web 側ソース検査であり、実 WebView の権限制限ではないことを明示する決定。
   - ブラウザ非対応と desktop IPC 失敗を別の固定文言で表示する決定。
   - 高コントラスト設定の CSS を CDP emulation と WCAG コントラスト比で検証する決定。
   - EPUB3 nav だけでなく EPUB2 NCX の目次読み込みと章移動を Web E2E で検証する決定。

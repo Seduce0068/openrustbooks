@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 331 件）。
+openrustbooks の ADR 一覧（全 332 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -666,3 +666,5 @@ openrustbooks の ADR 一覧（全 331 件）。
   - status: accepted — 高コントラスト設定の CSS を CDP emulation と WCAG コントラスト比で検証する決定。
 - [ADR-0331: get_config 失敗 status の区別](0331-get-config-status.md)
   - status: accepted — ブラウザ非対応と desktop IPC 失敗を別の固定文言で表示する決定。
+- [ADR-0332: capability ゲートの検査範囲を明示](0332-capability-scope-visibility.md)
+  - status: accepted — check-capability-scope.sh は web 側ソース検査であり、実 WebView の権限制限ではないことを明示する決定。
