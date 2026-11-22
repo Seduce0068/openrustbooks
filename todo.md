@@ -67,8 +67,6 @@ status: current
 - [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
       extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
       根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
-- [ ] 【EPUB XHTML サニタイズに入力長/深度上限】深いネストで wasm が数秒フリーズ。
-      根拠 `core/src/sanitize.rs:127-156` / R3-SE01。
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
 <!-- 2026-11-22 R6 中優先度 -->
 
@@ -111,6 +109,7 @@ status: current
 
 ## 完了
 
+- [x] 【EPUB サニタイズ】入力長 4 MiB / タグ深度 128 の上限を追加（ADR-0345、重複 TODO を整理）。
 - [x] 【document/fs DTO】IPC 境界から生 path と path 由来 id を除外（ADR-0350）。
 - [x] 【audit allowlist】advisory ID + 期限管理で新規警告を fail-closed（ADR-0349）。
 - [x] 【capability gate】wdio permission を test 用 JSON に閉じ込め（ADR-0348）。
