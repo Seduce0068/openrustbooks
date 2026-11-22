@@ -906,6 +906,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0344-legacy-config-commands-removed](docs/decisions/0344-legacy-config-commands-removed.md)
 - [0345-epub-sanitize-limits](docs/decisions/0345-epub-sanitize-limits.md)
 - [0346-page-list-input](docs/decisions/0346-page-list-input.md)
+- [0347-shared-dialog-style](docs/decisions/0347-shared-dialog-style.md)
+  - 削除確認とヘルプの dialog に共通スタイルと backdrop / forced-colors 対応を適用する決定。
   - ページ入力に候補表示・Enter 移動・trim/大小文字無視照合を追加する決定。
   - サニタイザへ渡す前に入力長とタグ深度を制限し、深いネストによる wasm フリーズを防ぐ決定。
   - UI 起点 CAS を満たさない 4 つの config command を invoke_handler から外し、 patch / API キー / clear 経路へ集約する決定。
