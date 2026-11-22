@@ -31,3 +31,10 @@ cargo audit は unmaintained 警告を許容しており、
 - 依存そのものの更新 / 削除は行わない（既知 baseline の扱いのみ）。
 - 外部サービス / 課金 / 公開設定は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- dependency-hygiene ゲートを追加し、cargo tree 実測 + 期限付き例外を管理。
+- verify.sh と CI extra_gates の両方へ配線。
+- 負向 test 5 ケースすべて rc=1、全ゲート成功（E2E 256、WDIO 1）。
+- unmaintained 警告の個別管理は ADR-0309 の未決定。

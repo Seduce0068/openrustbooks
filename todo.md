@@ -83,11 +83,6 @@ status: current
 
 ### 優先度: 低
 
-- [ ] 【cargo audit / 依存ゲートを強化】rumdl featureless ゲートは serde_yaml /
-      tikv-jemalloc-sys の lock 残存を検出できず、cargo audit は unmaintained 警告を許容。
-      `cargo tree -i` と lock 残存チェック、既知例外の ID / 期限管理を追加。
-      根拠 `scripts/check-rumdl-featureless.sh:15-37` / `scripts/verify.sh:295-305` /
-      R2-DP01 / 重大度 medium-low。
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
@@ -118,6 +113,7 @@ status: current
 
 ## 完了
 
+- [x] 【依存ゲート】cargo tree 実測と期限付き例外を追加、CI にも配線（ADR-0309）。
 - [x] 【StorageBackend】create_new/hard_link と resolve 再確認で競合を緩和（ADR-0308）。
 - [x] 【emit/import 可視化】失敗ログ・失敗件数・nav parse status を追加（ADR-0307）。
 - [x] 【a11y】日本語化・リンク下線・focus 可視化・危険告知を実装（ADR-0306）。
