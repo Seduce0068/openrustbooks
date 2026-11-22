@@ -63,8 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【read_directory を全 root 対応にする】先頭 storage 固定で 2 番目以降の root を一覧できない。
-      read 専用 root 解決を追加し最深一致。根拠 `desktop/src/commands/fs.rs:204-219` / R1-DS01。
 - [ ] 【ConfigView DTO を共通化 or 契約 test】desktop / web で手書き重複し、deserialize 失敗が実行時まで見えない。
       共通 DTO へ昇格または JSON 往復 test を CI 化。
       根拠 `desktop/src/commands/config.rs:71-363` / `web/src/lib.rs:4229-4343` / R1-DS01。
@@ -135,6 +133,7 @@ status: current
 
 ## 完了
 
+- [x] 【read_directory】read 専用 resolver で全 root を一覧可能化（ADR-0321）。
 - [x] 【config 退避】権限失敗時にロールバックし原文保持を優先（ADR-0320）。
 - [x] 【AI service】confirm 後の再取得で無効化後の送信を防止（ADR-0319）。
 - [x] 【save_document CAS】並行編集/force close の競合を検出、古い snapshot の書き戻しを防止（ADR-0318）。

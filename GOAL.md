@@ -29,3 +29,10 @@ read_directory は storages.first() 固定で一覧取得する。
 
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- read_directory に read 専用 resolver を追加し、最深一致 root を選択。
+- read_only root の一覧を許可しつつ書き込み側 fail-closed を維持。
+- 新規 7 test、desktop 164 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 同深度 root の選択順は ADR-0321 の未決定。
