@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 341 件）。
+openrustbooks の ADR 一覧（全 342 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -686,3 +686,5 @@ openrustbooks の ADR 一覧（全 341 件）。
   - status: accepted — commit_validated_config の再準備判定を ai 設定差分に限定し、lint のみ変更が生成失敗でブロックされないようにする決定。
 - [ADR-0341: CONFIG_CONFLICT 時の再読み込み導線](0341-settings-reload-button.md)
   - status: accepted — 設定画面に get_config 再実行ボタンを追加し、競合時に view / revision を復帰可能にする決定。
+- [ADR-0342: prefer_local の dead config 化](0342-prefer-local-dead-config.md)
+  - status: accepted — 未配線の ai.prefer_local を DTO / UI から除外し、config.toml の値だけを保持する決定。
