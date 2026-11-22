@@ -25,6 +25,12 @@ pub const DOCUMENT_UNSAVED_MESSAGE: &str = "Document has unsaved changes";
 /// 経由で変換するため、この文言自体は内部エラーとしてのみ使う。
 pub const DOCUMENT_SAVE_CONFLICT_MESSAGE: &str = "Document changed since it was read";
 
+/// 編集対象の文書が存在しない場合の固定文言。
+///
+/// 文書 id / path は一切含めない（IPC へは `ipc_error` が固定 code 経由で
+/// 変換するため、この文言自体は内部エラーとしてのみ使う）。
+pub const DOCUMENT_NOT_FOUND_MESSAGE: &str = "Document not found";
+
 /// 設定とその revision を同じロックで保持する（CAS の比較単位）。
 struct ConfigState {
     config: AppConfig,
@@ -67,6 +73,11 @@ pub struct AppState {
     /// 再確認後〜コミット前に force close が割り込む状況を再現する。
     #[cfg(test)]
     test_before_commit_saved: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `update_document_content_atomic` が本文更新後・unsaved 設定前に呼ぶ
+    /// テスト専用フック。全 guard を保持している間に close が割り込めない
+    /// ことを再現する。インスタンスごとに持つため並列テスト間で干渉しない。
+    #[cfg(test)]
+    test_after_content_update: std::sync::Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl AppState {
@@ -103,6 +114,8 @@ impl AppState {
             test_after_atomic_write: std::sync::Mutex::new(None),
             #[cfg(test)]
             test_before_commit_saved: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            test_after_content_update: std::sync::Mutex::new(None),
         }
     }
 
@@ -309,6 +322,54 @@ impl AppState {
         generations.insert(id, next);
     }
 
+    /// 文書本文の更新・世代前進・unsaved=true を単一クリティカルセクションで行う。
+    ///
+    /// `documents` -> `document_generations` -> `unsaved_changes` の順で
+    /// write guard を同時に保持し、本文の更新から unsaved 設定までを排他する
+    /// （逆順の箇所は作らない）。旧来の `get_document` -> `add_document` ->
+    /// `mark_unsaved` では `add_document` が documents guard を解放した隙間に
+    /// close が走り、編集が失われる／孤立フラグが残る問題があった。
+    ///
+    /// 文書が存在しない場合は固定文言の `DocumentNotFound` を返し、何も変更
+    /// しない（既に閉じられた文書を復活させない）。本文が編集不能な場合も
+    /// 固定文言の Validation を返し、世代・unsaved を一切変更しない。
+    /// 成功時は更新後の文書を返す（emit は guard 解放後に呼び出し側が行う）。
+    pub fn update_document_content_atomic(
+        &self,
+        id: &DocumentId,
+        content: String,
+    ) -> CoreResult<Document> {
+        let mut documents = self.documents.write().unwrap();
+        let mut generations = self.document_generations.write().unwrap();
+        let mut unsaved = self.unsaved_changes.write().unwrap();
+
+        let document = documents
+            .get_mut(id)
+            .ok_or_else(|| CoreError::DocumentNotFound(DOCUMENT_NOT_FOUND_MESSAGE.to_string()))?;
+        let text = document
+            .as_text_mut()
+            .ok_or_else(|| CoreError::validation("Document is not text-editable"))?;
+        *text = content;
+
+        #[cfg(test)]
+        {
+            // guard を保持したまま close の割込みを試すための 1 回限りフック。
+            // callback を呼ぶ前に MutexGuard を drop する（再取得で死結しない）。
+            let hook = self.test_after_content_update.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+        }
+
+        // 世代は単調に増やす。overflow しても値が戻って古い expected と
+        // 一致しないよう saturating で留める（add_document と同じ契約）。
+        let next = generations.get(id).copied().unwrap_or(0).saturating_add(1);
+        generations.insert(id.clone(), next);
+        unsaved.insert(id.clone(), true);
+
+        Ok(document.clone())
+    }
+
     /// Get a document
     pub fn get_document(&self, id: &DocumentId) -> Option<Document> {
         self.documents.read().unwrap().get(id).cloned()
@@ -378,6 +439,15 @@ impl AppState {
             .unwrap()
             .insert(id.clone(), false);
         Ok(())
+    }
+
+    /// 本文更新直後に任意の処理を挟む（テスト専用フック）。
+    ///
+    /// 全 guard を保持したまま close コマンドを割り込ませ、unsaved 拒否を
+    /// 検証するコマンド側テストからも使う。
+    #[cfg(test)]
+    pub(crate) fn set_after_content_update_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.test_after_content_update.lock().unwrap() = Some(Box::new(hook));
     }
 
     /// atomic_write 完了直後に任意の処理を挟む（テスト専用フック）。
@@ -482,6 +552,11 @@ impl AppState {
     }
 
     /// Mark document as having unsaved changes
+    ///
+    /// 編集コマンドは `update_document_content_atomic` 経由で unsaved を立てる
+    /// ため production からは呼ばれないが、状態確認 API として維持する
+    /// （unit test および close の割込み再現から使用）。
+    #[allow(dead_code)]
     pub fn mark_unsaved(&self, id: &DocumentId) {
         self.unsaved_changes
             .write()
@@ -1340,5 +1415,151 @@ mod tests {
         assert_eq!(state.config_with_revision().1, 1);
         let winner = if first.is_ok() { "dark" } else { "light" };
         assert_eq!(state.config().general.theme, winner);
+    }
+
+    /// 通常更新で本文・世代・unsaved が不可分に更新され、更新後文書が返ること。
+    #[test]
+    fn update_document_content_atomic_updates_content_generation_and_unsaved() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-atomic-content-ok".to_string());
+        state.add_document(sample_document("doc-atomic-content-ok"));
+        state.mark_saved(&id);
+        let (snapshot, before) = state.document_with_generation(&id).unwrap();
+
+        let updated = state
+            .update_document_content_atomic(&id, "edited".to_string())
+            .expect("更新は成功する");
+        assert_eq!(updated.as_text(), Some("edited"));
+        assert_eq!(state.get_document(&id).unwrap().as_text(), Some("edited"));
+        assert_eq!(state.document_generation(&id), Some(before + 1));
+        assert!(state.is_unsaved(&id));
+
+        // さらに 1 回更新しても世代は単調に前進し、snapshot は変わらない。
+        let updated_again = state
+            .update_document_content_atomic(&id, "edited twice".to_string())
+            .unwrap();
+        assert_eq!(updated_again.as_text(), Some("edited twice"));
+        assert_eq!(state.document_generation(&id), Some(before + 2));
+        assert_eq!(snapshot.as_text(), Some("sample"));
+    }
+
+    /// 存在しない文書は固定文言の DocumentNotFound で、状態を一切変えないこと。
+    #[test]
+    fn update_document_content_atomic_missing_document_returns_fixed_error() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-atomic-content-missing".to_string());
+
+        let error = state
+            .update_document_content_atomic(&id, "edited".to_string())
+            .expect_err("未登録文書は更新できない");
+        match error {
+            CoreError::DocumentNotFound(message) => {
+                assert_eq!(message, DOCUMENT_NOT_FOUND_MESSAGE);
+            }
+            other => panic!("expected DocumentNotFound, got {other:?}"),
+        }
+        assert!(state.get_document(&id).is_none(), "文書を復活させない");
+        assert_eq!(state.document_generation(&id), None, "世代も作らない");
+        assert!(!state.is_unsaved(&id), "孤立フラグも作らない");
+    }
+
+    /// 本文編集不能な文書は固定文言の Validation で、状態を一切変えないこと。
+    #[test]
+    fn update_document_content_atomic_rejects_non_text_without_changes() {
+        let state = AppState::new(AppConfig::default());
+        let id = DocumentId::from_string("doc-atomic-content-binary".to_string());
+        let document = Document {
+            metadata: DocumentMetadata::new(id.clone(), DocumentFormat::Txt),
+            content: DocumentContent::Binary(vec![1, 2, 3]),
+        };
+        state.add_document(document);
+        let generation_before = state.document_generation(&id);
+
+        let error = state
+            .update_document_content_atomic(&id, "edited".to_string())
+            .expect_err("バイナリ文書は本文編集できない");
+        match error {
+            CoreError::Validation(message) => {
+                assert_eq!(message, "Document is not text-editable");
+            }
+            other => panic!("expected Validation, got {other:?}"),
+        }
+        assert_eq!(state.document_generation(&id), generation_before);
+        assert!(!state.is_unsaved(&id));
+    }
+
+    /// 本文更新中（全 guard 保持中）に close が割り込めないこと。
+    ///
+    /// フックで別スレッドの close を開始させ、guard が解放されるまで完了
+    /// しないことを確認してから更新を終える。解放後に再開した close は
+    /// unsaved を見て拒否され、編集もフラグも残る。
+    #[test]
+    fn update_document_content_atomic_does_not_allow_close_to_interleave() {
+        let state = Arc::new(AppState::new(AppConfig::default()));
+        let id = DocumentId::from_string("doc-atomic-content-close".to_string());
+        state.add_document(sample_document("doc-atomic-content-close"));
+        state.mark_saved(&id);
+        let generation_before = state.document_generation(&id).unwrap();
+
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let started_rx = Arc::new(std::sync::Mutex::new(started_rx));
+        let result_rx = Arc::new(std::sync::Mutex::new(result_rx));
+
+        let closer_state = state.clone();
+        let closer_id = id.clone();
+        let closer_barrier = barrier.clone();
+        let closer = std::thread::spawn(move || {
+            closer_barrier.wait();
+            started_tx.send(()).unwrap();
+            let result = closer_state.close_document_atomic(&closer_id, false);
+            result_tx.send(result).unwrap();
+        });
+
+        let hook_barrier = barrier.clone();
+        let hook_result_rx = result_rx.clone();
+        state.set_after_content_update_hook(move || {
+            hook_barrier.wait();
+            started_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("close スレッドが開始すること");
+            // guard を保持している間は close が完了しないこと。
+            assert!(
+                hook_result_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(std::time::Duration::from_millis(100))
+                    .is_err(),
+                "close は更新が終わるまでブロックされる"
+            );
+        });
+
+        let document = state
+            .update_document_content_atomic(&id, "edited".to_string())
+            .expect("更新は成功する");
+        assert_eq!(document.as_text(), Some("edited"));
+
+        let close_result = result_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("更新後に close が完了する");
+        match close_result {
+            Err(CoreError::Validation(message)) => assert_eq!(message, DOCUMENT_UNSAVED_MESSAGE),
+            other => panic!("expected Validation, got {other:?}"),
+        }
+        closer.join().unwrap();
+
+        let current = state.get_document(&id).expect("文書は残る");
+        assert_eq!(current.as_text(), Some("edited"));
+        assert!(state.is_unsaved(&id));
+        assert_eq!(
+            state.document_generation(&id),
+            Some(generation_before + 1),
+            "編集のみが世代を進め、拒否された close は進めない"
+        );
     }
 }

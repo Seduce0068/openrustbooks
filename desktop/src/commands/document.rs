@@ -540,8 +540,10 @@ pub fn get_document_content(state: State<'_, Arc<AppState>>, id: String) -> Resu
 /// `set_document_content` の本体。テストから AppHandle / MockRuntime で
 /// 直接呼べるように切り出している（保存 CAS の競合再現にも使う）。
 ///
-/// `add_document` を通すことで世代を前進させ、保存側の CAS が並行編集を
-/// 検出できるようにする。
+/// 本文更新・世代前進・unsaved=true は `update_document_content_atomic` の
+/// 単一クリティカルセクションで行う。旧来のように `add_document` が documents
+/// guard を解放した隙間に close が走ると、編集が失われる／孤立フラグが残る。
+/// emit は guard 解放後に 1 回だけ行う。
 fn set_document_content_impl<R: tauri::Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
@@ -549,24 +551,15 @@ fn set_document_content_impl<R: tauri::Runtime>(
     content: String,
 ) -> Result<(), String> {
     let doc_id = DocumentId::from_string(id.to_string());
-    let mut document = state
-        .get_document(&doc_id)
-        .ok_or_else(|| ipc_error(CoreError::DocumentNotFound(doc_id.0.to_string())))?;
+    let document = state
+        .update_document_content_atomic(&doc_id, content)
+        .map_err(ipc_error)?;
 
-    if let Some(text) = document.as_text_mut() {
-        *text = content;
-        state.add_document(document.clone());
-        state.mark_unsaved(&doc_id);
-        // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
-        if app.emit("document-changed", &document).is_err() {
-            log::warn!("document-changed event failed");
-        }
-        Ok(())
-    } else {
-        Err(ipc_error(CoreError::validation(
-            "Document is not text-editable",
-        )))
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
+    if app.emit("document-changed", &document).is_err() {
+        log::warn!("document-changed event failed");
     }
+    Ok(())
 }
 
 /// Set document content
@@ -583,7 +576,7 @@ pub fn set_document_content(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::DOCUMENT_UNSAVED_MESSAGE;
+    use crate::state::{DOCUMENT_NOT_FOUND_MESSAGE, DOCUMENT_UNSAVED_MESSAGE};
     use openrustbooks_core::AppConfig;
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1626,5 +1619,267 @@ mod tests {
 
         assert!(!harness.state().is_unsaved(&id));
         assert_eq!(harness.closed.load(Ordering::SeqCst), 0);
+    }
+
+    // --- set_document_content のテスト ---
+
+    /// 編集コマンドの emit を記録するハーネス（SaveHarness と同じ mock_app 機構）。
+    struct ChangeHarness {
+        app: tauri::App<MockRuntime>,
+        state: Arc<AppState>,
+        changed: Arc<AtomicUsize>,
+    }
+
+    impl ChangeHarness {
+        fn new(state: AppState) -> Self {
+            let app = mock_app();
+            let changed = Arc::new(AtomicUsize::new(0));
+            app.listen("document-changed", {
+                let counter = changed.clone();
+                move |_| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+            Self {
+                app,
+                state: Arc::new(state),
+                changed,
+            }
+        }
+
+        fn state(&self) -> &AppState {
+            self.state.as_ref()
+        }
+
+        fn handle(&self) -> tauri::AppHandle<MockRuntime> {
+            self.app.handle().clone()
+        }
+    }
+
+    /// 編集テスト用の単純なテキスト文書（path なし）。
+    fn edit_test_document(id: &str, text: &str) -> Document {
+        Document::new_text(DocumentId::from_string(id.to_string()), text.to_string())
+    }
+
+    /// 通常更新で本文・unsaved・世代が更新され、document-changed が 1 回だけ発火すること。
+    #[test]
+    fn command_set_document_content_updates_content_marks_unsaved_and_emits_once() {
+        let harness = ChangeHarness::new(AppState::new(AppConfig::default()));
+        let document = edit_test_document("set-content-ok", "old");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_saved(&id);
+        let generation_before = harness.state().document_generation(&id).unwrap();
+
+        set_document_content_impl(harness.state(), &harness.handle(), &id.0, "new".to_string())
+            .expect("通常更新は成功する");
+
+        let current = harness.state().get_document(&id).unwrap();
+        assert_eq!(current.as_text(), Some("new"));
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            Some(generation_before + 1)
+        );
+        assert_eq!(harness.changed.load(Ordering::SeqCst), 1);
+    }
+
+    /// 既に閉じられた文書は固定文言で拒否され、復活も孤立フラグも生じないこと。
+    #[test]
+    fn command_set_document_content_does_not_resurrect_closed_document() {
+        let harness = ChangeHarness::new(AppState::new(AppConfig::default()));
+        let document = edit_test_document("set-content-closed", "old");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_saved(&id);
+        harness.state().close_document_atomic(&id, true).unwrap();
+        let generation_after_close = harness.state().document_generation(&id);
+
+        let error =
+            set_document_content_impl(harness.state(), &harness.handle(), &id.0, "new".to_string())
+                .expect_err("閉じた文書は更新できない");
+        assert_eq!(
+            error,
+            ipc_error(CoreError::DocumentNotFound(
+                DOCUMENT_NOT_FOUND_MESSAGE.to_string()
+            ))
+        );
+        // IPC には固定文言のみで、文書 id は出ない。
+        assert!(!error.contains("set-content-closed"));
+        assert!(harness.state().get_document(&id).is_none());
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            generation_after_close
+        );
+        assert_eq!(harness.changed.load(Ordering::SeqCst), 0);
+    }
+
+    /// 2 つの同時更新では、世代は両方前進し unsaved も維持されること。
+    ///
+    /// 本文は last-write-wins（最後に更新したスレッドの内容が残る）を意図仕様
+    /// とする。両方の編集をマージして保持する設計ではないため、世代と
+    /// unsaved が失われないことをここで固定する。
+    #[test]
+    fn command_set_document_content_concurrent_updates_advance_both_generations_with_last_write_wins()
+     {
+        let harness = ChangeHarness::new(AppState::new(AppConfig::default()));
+        let document = edit_test_document("set-content-concurrent", "old");
+        let id = document.metadata.id.clone();
+        harness.state().add_document(document);
+        harness.state().mark_saved(&id);
+        let generation_before = harness.state().document_generation(&id).unwrap();
+
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut threads = Vec::new();
+        for text in ["first", "second"] {
+            let state = harness.state.clone();
+            let app = harness.handle();
+            let id_for_thread = id.clone();
+            let thread_barrier = barrier.clone();
+            threads.push(std::thread::spawn(move || {
+                thread_barrier.wait();
+                set_document_content_impl(&state, &app, &id_for_thread.0, text.to_string())
+                    .expect("同時更新も成功する");
+            }));
+        }
+        barrier.wait();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        let current = harness.state().get_document(&id).unwrap();
+        // 最後に書いた内容が残る（last-write-wins）。どちらかであることは保証される。
+        assert!(matches!(current.as_text(), Some("first") | Some("second")));
+        assert!(harness.state().is_unsaved(&id));
+        assert_eq!(
+            harness.state().document_generation(&id),
+            Some(generation_before + 2),
+            "2 回の更新それぞれで世代が進む"
+        );
+        assert_eq!(harness.changed.load(Ordering::SeqCst), 2);
+    }
+
+    /// 編集コマンドと close コマンドを競合させたとき、旧 `add_document` の
+    /// guard 解放後の隙間（本文更新後・unsaved 設定前）に close が走っても
+    /// unsaved 拒否され、本文・フラグ・世代が残ること。
+    ///
+    /// 旧実装では close がその隙間で文書とフラグを削除し、その後の
+    /// `mark_unsaved` が孤立フラグを残していた。新実装では atomic API が
+    /// 全 guard を保持するため close は更新完了までブロックされ、解放後に
+    /// unsaved を見て拒否される。
+    #[test]
+    fn command_set_content_and_close_race_preserves_edit_and_rejects_close() {
+        let app = mock_app();
+        let changed = Arc::new(AtomicUsize::new(0));
+        let closed = Arc::new(AtomicUsize::new(0));
+        app.listen("document-changed", {
+            let counter = changed.clone();
+            move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        app.listen("document-closed", {
+            let counter = closed.clone();
+            move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        let state = Arc::new(AppState::new(AppConfig::default()));
+        let document = edit_test_document("set-content-close-race", "old");
+        let id = document.metadata.id.clone();
+        state.add_document(document);
+        state.mark_saved(&id);
+        let generation_before = state.document_generation(&id).unwrap();
+
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let started_rx = Arc::new(std::sync::Mutex::new(started_rx));
+        let result_rx = Arc::new(std::sync::Mutex::new(result_rx));
+
+        let closer_state = state.clone();
+        let closer_app = app.handle().clone();
+        let closer_id = id.clone();
+        let closer_barrier = barrier.clone();
+        let closer = std::thread::spawn(move || {
+            closer_barrier.wait();
+            started_tx.send(()).unwrap();
+            let result = close_document_impl(&closer_state, &closer_app, &closer_id.0, false);
+            result_tx.send(result).unwrap();
+        });
+
+        let hook_barrier = barrier.clone();
+        let hook_result_rx = result_rx.clone();
+        state.set_after_content_update_hook(move || {
+            hook_barrier.wait();
+            started_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("close スレッドが開始すること");
+            // guard を保持している間は close が完了しないこと。
+            assert!(
+                hook_result_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(std::time::Duration::from_millis(100))
+                    .is_err(),
+                "close は編集が完了するまでブロックされる"
+            );
+        });
+
+        set_document_content_impl(&state, app.handle(), &id.0, "edited".to_string())
+            .expect("編集コマンドは成功する");
+
+        let close_result = result_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("編集後に close が完了する");
+        assert_eq!(
+            close_result,
+            Err(ipc_error(CoreError::validation(DOCUMENT_UNSAVED_MESSAGE)))
+        );
+        closer.join().unwrap();
+
+        let current = state.get_document(&id).expect("本文が残る");
+        assert_eq!(current.as_text(), Some("edited"));
+        assert!(state.is_unsaved(&id), "フラグが残る");
+        assert_eq!(
+            state.document_generation(&id),
+            Some(generation_before + 1),
+            "編集のみが世代を進め、拒否された close は進めない"
+        );
+        assert_eq!(changed.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            closed.load(Ordering::SeqCst),
+            0,
+            "拒否された close は emit しない"
+        );
+    }
+
+    /// 本文編集不能な文書は拒否され、状態も emit も変化しないこと。
+    #[test]
+    fn command_set_document_content_non_text_is_rejected_without_emit() {
+        let harness = ChangeHarness::new(AppState::new(AppConfig::default()));
+        let id = DocumentId::from_string("set-content-binary".to_string());
+        let document = Document {
+            metadata: DocumentMetadata::new(id.clone(), DocumentFormat::Txt),
+            content: DocumentContent::Binary(vec![1, 2, 3]),
+        };
+        harness.state().add_document(document);
+        let generation_before = harness.state().document_generation(&id);
+
+        let error =
+            set_document_content_impl(harness.state(), &harness.handle(), &id.0, "new".to_string())
+                .expect_err("バイナリ文書は編集できない");
+        assert_eq!(
+            error,
+            ipc_error(CoreError::validation("Document is not text-editable"))
+        );
+        assert_eq!(harness.state().document_generation(&id), generation_before);
+        assert!(!harness.state().is_unsaved(&id));
+        assert_eq!(harness.changed.load(Ordering::SeqCst), 0);
     }
 }
