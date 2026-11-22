@@ -29,3 +29,10 @@ confirm_send().await の前に ai_service() を取得する。
 
 - 外部 AI API への送信 test は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 4 AI コマンドで confirm 後に service を再取得し、無効化後の送信を防止。
+- 既存 IPC 文言 / parse 順序 / ダイアログ文言を維持。
+- desktop 158 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- AI_PIPELINE code / config 変更経路 test / hook スレッドローカル化は ADR-0319 の未決定。

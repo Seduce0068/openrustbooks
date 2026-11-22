@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【confirm 待ち後の AI service 陳腐化を防止】confirm_send().await 中に config 更新されても古い service で送信する。
-      確認後に ai_service() を再取得し revision 照合。
-      根拠 `desktop/src/commands/ai.rs:74-97,109-132,171-206,217-238` / R2-RC01。
 - [ ] 【backup_failed_config の権限失敗をロールバック】rename 成功後に set_permissions 失敗だと
       0644 の機微ファイルが退避先へ残る。権限付与を先にするか rename を戻す。
       根拠 `core/src/config.rs:526-541` / `desktop/src/main.rs:75-86` / R2-RC01。
@@ -141,6 +138,7 @@ status: current
 
 ## 完了
 
+- [x] 【AI service】confirm 後の再取得で無効化後の送信を防止（ADR-0319）。
 - [x] 【save_document CAS】並行編集/force close の競合を検出、古い snapshot の書き戻しを防止（ADR-0318）。
 - [x] 【import JSON】8 MiB + parse 前構造走査を追加、ヒープ枯渇を防止（ADR-0317）。
 - [x] 【EPUB 上限】構造要素数を 10,000 件で統一、超過を fail-closed 化（ADR-0316）。
