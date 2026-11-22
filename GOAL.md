@@ -30,3 +30,10 @@
 - 新規依存は使わない。
 - 256 MiB の read 上限（core::io）は変更しない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- import JSON を 8 MiB 実用上限 + parse 前構造走査へ変更。
+- 構文エラーと構造制限を分離し、既存 E2E 文言を維持。
+- web 17 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 上限設定化 / incremental import は ADR-0317 の未決定。
