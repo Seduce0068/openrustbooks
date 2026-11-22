@@ -197,3 +197,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 新規 ID / 期限切れ / JSON 失敗を fail-closed 化。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - chrono 移行は ADR-0349 の未決定。
+
+## 完了記録（第3cycle-18）
+
+- Document / FileEntry の IPC View 化、id を不透明 UUID 化。
+- emit ペイロードと返り値から生 path を除外、584 tests pass。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- frontend 接続時の View スキーマは ADR-0350 の未決定。
