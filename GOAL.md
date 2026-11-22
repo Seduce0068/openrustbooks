@@ -1,38 +1,32 @@
 # Goal
 
-EPUB 構造要素の数上限を追加する（第2cycle R6 / R3-SE01）。
+バックアップ import JSON の実用上限と構造制限を追加する（第2cycle R6 / R3-SE01）。
 
 ## Scope
 
 ### 背景
 
-ZIP エントリ数とサイズには上限があるが、1 つの OPF / NCX 文書内の
-`<item>` / `<itemref>` / `<meta>` キャプチャ / `<navPoint>` は無制限で、
-64 MiB の文書から数百万要素を確保し得る。
+`IMPORT_JSON_MAX_BYTES` は core の 256 MiB から導出されており、
+`serde_json::from_str::<Value>` の展開で元テキストに加えて
+数百 MB のツリーを確保し得る。ブラウザタブのヒープ枯渇が懸念される。
 
 ### 成果物
 
-- `core/src/epub/*`: 変更
-- `docs/decisions/0316-epub-structure-limits.md`: 追加
+- `web/src/lib.rs`: 変更（実用上限 + エントリ数 / 深さ制限）
+- `docs/decisions/0317-import-json-limits.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. manifest / spine / captures / NCX navPoint の蓄積時点で上限を適用する。
-2. 上限超過は `CoreError::Validation` で fail-closed に拒否する。
-3. 既存 `MAX_TOC_ENTRIES=10_000` と整合した上限を使う。
-4. 単体 test: 各要素の境界値と超過拒否、正常 EPUB の従来動作。
-5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
+1. バイト上限を実用値（例 8 MiB）へ下げる。
+2. `serde_json::Value` のキー数 / 配列長 / ネスト深さを制限する。
+3. 上限超過は固定文言 `IMPORT_JSON_TOO_LARGE_MESSAGE` で拒否する。
+4. パス / ファイル名 / キー / 値をエラーへ出さない。
+5. 既存 E2E 256 件・check 名・export/import 正常系を維持。
+6. verify.sh 全ゲート成功。
 
 ## Constraints
 
-- 新規依存 / unsafe FFI は使わない。
-- 既存 EPUB / ZIP の fail-closed 契約と check 名を変えない。
+- 新規依存は使わない。
+- 256 MiB の read 上限（core::io）は変更しない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- OPF/NCX の構造要素数を 10,000 件で統一上限化し、超過を Validation で拒否。
-- id/href/値を文言へ出さない test を全経路へ追加。
-- core 352 tests、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
-- 大型 EPUB 互換 / ArchiveLimits 統合は ADR-0316 の未決定。
