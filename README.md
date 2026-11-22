@@ -857,6 +857,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0314-gitleaks-gate-order](docs/decisions/0314-gitleaks-gate-order.md)
 - [0315-secret-settings-ui](docs/decisions/0315-secret-settings-ui.md)
 - [0316-epub-structure-limits](docs/decisions/0316-epub-structure-limits.md)
+- [0317-import-json-limits](docs/decisions/0317-import-json-limits.md)
+  - 8 MiB のバイト上限と parse 前の構造走査で、バックアップ import によるヒープ枯渇を防ぐ決定。
   - OPF / NCX の構造要素蓄積時に上限を適用し、細工 EPUB によるメモリ枯渇を fail-closed で拒否する決定。
   - 既存 redaction 契約を維持したまま、desktop のみ API キーを設定・削除できる UI を接続する決定。
   - シークレットスキャンを extra_gates の末尾に置き、未導入時でも他の静的ゲートが実行されるようにする決定。
