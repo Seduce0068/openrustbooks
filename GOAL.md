@@ -28,3 +28,11 @@ CI ゲートの欠落を解消する（R6 レビュー / R4-CI01）。
 - 共通 workflow（Seduce0068/workflows）自体は変更しない（ローカル ci.yml の extra_gates のみ）。
 - 外部サービスへの課金・公開操作は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- no-external-font / 配布パス + manifest / gitleaks を verify.sh と CI へ配線。
+- gitleaks は pre-commit 主軸 + CI 最終ゲート（未導入 fail-closed）。
+- 共通 workflow は未変更、billing 後チェックリストを runbook に明記。
+- R4 指摘すべて反映、verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- 期待値動的取得 / self_test trap / CI gitleaks 導入は ADR-0311 の未決定。

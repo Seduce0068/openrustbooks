@@ -62,10 +62,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 中優先度 -->
-- [ ] 【CI ゲートの欠落を解消】no-external-font-refs / trunk build + E2E / 配布パス検査 /
-      シークレットスキャンが CI で未実行。共通 workflow 対応を検討し、
-      billing 解消後チェックリストを作成。根拠 `.github/workflows/ci.yml:3-7,47-57` /
-      `scripts/verify.sh:250-269,331-387` / R4-CI01 / 重大度 medium-high。
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
 
@@ -106,6 +102,7 @@ status: current
 
 ## 完了
 
+- [x] 【CI ゲート】font/dist/secrets を CI に配線、gitleaks pre-commit を導入（ADR-0311）。
 - [x] 【release 文書】updater 未登録 / 実 WebView 検証済み / ゲート一覧を現行化（ADR-0310）。
 - [x] 【依存ゲート】cargo tree 実測と期限付き例外を追加、CI にも配線（ADR-0309）。
 - [x] 【StorageBackend】create_new/hard_link と resolve 再確認で競合を緩和（ADR-0308）。
