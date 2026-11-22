@@ -334,7 +334,10 @@ pub async fn open_document(
     state.mark_saved(&id);
 
     // Emit event to frontend
-    let _ = app.emit("document-opened", &document);
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
+    if app.emit("document-opened", &document).is_err() {
+        log::warn!("document-opened event failed");
+    }
 
     Ok(document)
 }
@@ -387,7 +390,10 @@ async fn save_document_impl<R: tauri::Runtime>(
     state.add_document(document.clone());
     state.mark_saved(&doc_id);
 
-    let _ = app.emit("document-saved", &document);
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
+    if app.emit("document-saved", &document).is_err() {
+        log::warn!("document-saved event failed");
+    }
 
     Ok(())
 }
@@ -422,7 +428,10 @@ pub async fn close_document(
 
     let document = state.remove_document(&doc_id);
     if document.is_some() {
-        let _ = app.emit("document-closed", doc_id.0);
+        // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（id は出さない）。
+        if app.emit("document-closed", doc_id.0).is_err() {
+            log::warn!("document-closed event failed");
+        }
     }
 
     Ok(())
@@ -465,7 +474,10 @@ pub fn set_document_content(
         *text = content;
         state.add_document(document.clone());
         state.mark_unsaved(&doc_id);
-        let _ = app.emit("document-changed", &document);
+        // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（本文は出さない）。
+        if app.emit("document-changed", &document).is_err() {
+            log::warn!("document-changed event failed");
+        }
         Ok(())
     } else {
         Err(ipc_error(CoreError::validation(

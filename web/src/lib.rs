@@ -1571,6 +1571,15 @@ const CHAPTER_RENDER_FAILED_MESSAGE: &str = "章を表示できませんでし�
 /// リンク解決の失敗の status 固定文言。
 #[cfg(target_arch = "wasm32")]
 const LINK_RESOLUTION_FAILED_MESSAGE: &str = "リンクを解決できませんでした。";
+/// 目次の解析失敗の status 固定文言（生エラー・href は出さない）。
+#[cfg(target_arch = "wasm32")]
+const TOC_PARSE_FAILED_MESSAGE: &str = "目次を読み込めませんでした。";
+/// ランドマークの解析失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const LANDMARK_PARSE_FAILED_MESSAGE: &str = "ランドマークを読み込めませんでした。";
+/// ページ一覧の解析失敗の status 固定文言。
+#[cfg(target_arch = "wasm32")]
+const PAGE_LIST_PARSE_FAILED_MESSAGE: &str = "ページ一覧を読み込めませんでした。";
 /// 現在値保護でバックアップの表示設定を復元しなかった場合の status 固定文言。
 /// 設定値・キー・パスは載せない。
 #[cfg(target_arch = "wasm32")]
@@ -2143,15 +2152,15 @@ fn export_positions() -> usize {
 /// JSON 文字列を検証して取り込む。(読書位置の件数, 履歴の件数) を返す。
 ///
 /// 下書きは復元するが、上記の件数には含めない。
-/// 位置／履歴／下書きの set_item が 1 件でも失敗した場合は `save_failed` に
-/// true を書き、呼び出し側が成功文言で失敗通知を上書きしないようにする。
+/// 位置／履歴／下書きの set_item が失敗した場合は `failed` に失敗件数を書き、
+/// 呼び出し側が成功件数と失敗件数だけを固定文言で告知する（キー・値は出さない）。
 /// バックアップに表示設定があるのに現在値保護で復元しなかった場合は
 /// `settings_preserved` に true を書き、呼び出し側が固定文言で告知する。
 /// 通知自体はこの関数が 1 回だけ発行する。
 #[cfg(target_arch = "wasm32")]
 fn import_positions(
     raw: &str,
-    save_failed: &mut bool,
+    failed: &mut usize,
     settings_preserved: &mut bool,
 ) -> Result<(usize, usize), String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
@@ -2214,7 +2223,7 @@ fn import_positions(
         if storage.set_item(key, &text).is_ok() {
             imported += 1;
         } else {
-            *save_failed = true;
+            *failed += 1;
         }
     }
 
@@ -2300,15 +2309,15 @@ fn import_positions(
             if storage.set_item(key, &text).is_ok() {
                 imported_history += 1;
             } else {
-                *save_failed = true;
+                *failed += 1;
             }
         }
     }
 
     // エディタ下書きの取り込み。現在同じキーが存在する場合は維持し
     // （ADR-0157）、値が文字列で 1 MiB 以下のものだけ復元する（ADR-0167）。
-    // 復元件数は位置・履歴の戻り値に含めず、set_item の失敗は save_failed
-    // にだけ反映する。下書きだけのバックアップを「データなし」と誤判定
+    // 復元件数は位置・履歴の戻り値に含めず、set_item の失敗は failed
+    // の件数にだけ反映する。下書きだけのバックアップを「データなし」と誤判定
     // しないよう、空判定用に成功件数だけ数える。
     let mut imported_drafts = 0_usize;
     if let Some(serde_json::Value::Object(drafts)) = map.get("drafts") {
@@ -2328,14 +2337,14 @@ fn import_positions(
             if storage.set_item(key, text).is_ok() {
                 imported_drafts += 1;
             } else {
-                *save_failed = true;
+                *failed += 1;
             }
         }
     }
 
-    if *save_failed {
+    if *failed > 0 {
         // 位置・履歴・下書きの set_item 失敗は複数件でも 1 回だけ通知する。
-        // キー名・値・件数・生エラーは載せない（ADR-0154 / ADR-0165）。
+        // キー名・値・生エラーは載せない（件数は呼び出し側の status 固定文言だけ）。
         report_save_failure("インポート", SaveErrorTarget::Reader);
     }
 
@@ -3161,11 +3170,25 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     }
                 }
 
-                let toc = opened
-                    .toc()
-                    .ok()
-                    .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
-                    .unwrap_or_default();
+                // nav の解析失敗は「情報源なし（空配列）」と区別して固定文言を status へ出す。
+                // 生エラー・href・タイトルは console / status のどちらにも載せない。
+                let mut nav_warnings: Vec<&'static str> = Vec::new();
+                let mut parse_nav = |result: Result<JsValue, JsValue>,
+                                     operation: &'static str,
+                                     message: &'static str|
+                 -> Vec<TocEntry> {
+                    match result.ok().and_then(|value| {
+                        serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok()
+                    }) {
+                        Some(entries) => entries,
+                        None => {
+                            report_reader_error(operation);
+                            nav_warnings.push(message);
+                            Vec::new()
+                        }
+                    }
+                };
+                let toc = parse_nav(opened.toc(), "TOC parse failed", TOC_PARSE_FAILED_MESSAGE);
                 let mut toc_entries = HashMap::new();
                 for entry in toc {
                     toc_entries.entry(entry.href).or_insert((
@@ -3185,17 +3208,17 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                     })
                     .collect();
 
-                let landmarks = opened
-                    .landmarks()
-                    .ok()
-                    .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
-                    .unwrap_or_default();
+                let landmarks = parse_nav(
+                    opened.landmarks(),
+                    "Landmark parse failed",
+                    LANDMARK_PARSE_FAILED_MESSAGE,
+                );
 
-                let page_list = opened
-                    .page_list()
-                    .ok()
-                    .and_then(|value| serde_wasm_bindgen::from_value::<Vec<TocEntry>>(value).ok())
-                    .unwrap_or_default();
+                let page_list = parse_nav(
+                    opened.page_list(),
+                    "Page list parse failed",
+                    PAGE_LIST_PARSE_FAILED_MESSAGE,
+                );
 
                 let language = opened.language();
                 let has_remote_resources = opened.has_remote_resources();
@@ -3290,8 +3313,11 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 }
                 render_chapter(start_index, start_fragment, Some(start_scroll));
                 // 章描画で status がクリアされるため、その後に警告を出す。
+                // 既存のリモートリソース警告を優先し、nav 失敗は先頭の 1 件だけ告知する。
                 if let Some(message) = remote_resources_warning.get() {
                     set_status.set(message);
+                } else if let Some(message) = nav_warnings.first() {
+                    set_status.set((*message).to_string());
                 }
             });
         }
@@ -3851,18 +3877,21 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 set_status.set(IMPORT_JSON_TOO_LARGE_MESSAGE.to_string());
                 return;
             }
-            let mut save_failed = false;
+            let mut failed = 0usize;
             let mut settings_preserved = false;
-            let result = import_positions(&raw, &mut save_failed, &mut settings_preserved);
-            if save_failed {
-                // 保存失敗通知がリスナー経由で status に反映済みなので上書きしない。
-                return;
-            }
+            let result = import_positions(&raw, &mut failed, &mut settings_preserved);
             match result {
                 Ok((count, history_count)) => {
+                    // 成功件数と失敗件数だけを固定文言で返す（キー・値・パスは出さない）。
+                    // 既存 E2E が期待する成功文言は維持し、失敗がある場合のみ末尾に追加する。
                     let mut message = format!(
                         "読書位置を {count} 件、履歴を {history_count} 件インポートしました。"
                     );
+                    if failed > 0 {
+                        // 保存失敗通知がリスナー経由で出ていても、成功件数と失敗件数を
+                        // 利用者へ残すため呼び出し側で固定文言を上書きする。
+                        message.push_str(&format!(" {failed} 件失敗しました。"));
+                    }
                     if settings_preserved {
                         // 現在値保護で設定を復元しなかった理由を固定文言で告知する。
                         message.push(' ');

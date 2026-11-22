@@ -169,7 +169,10 @@ pub fn run() -> tauri::Result<()> {
                 let state = window.state::<Arc<AppState>>();
                 if state.has_unsaved_changes() {
                     api.prevent_close();
-                    let _ = window.emit("unsaved-changes", ());
+                    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する。
+                    if window.emit("unsaved-changes", ()).is_err() {
+                        log::warn!("unsaved-changes event failed");
+                    }
                 }
             }
         })

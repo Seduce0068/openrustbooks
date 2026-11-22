@@ -247,7 +247,10 @@ async fn create_file_impl<R: tauri::Runtime>(
         .await
         .map_err(ipc_error)?;
 
-    let _ = app.emit("file-created", &path);
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（パスは出さない）。
+    if app.emit("file-created", &path).is_err() {
+        log::warn!("file-created event failed");
+    }
 
     resolved
         .storage
@@ -283,7 +286,9 @@ async fn delete_file_impl<R: tauri::Runtime>(
         .await
         .map_err(ipc_error)?;
 
-    let _ = app.emit("file-deleted", &path);
+    if app.emit("file-deleted", &path).is_err() {
+        log::warn!("file-deleted event failed");
+    }
 
     Ok(())
 }
@@ -328,10 +333,16 @@ async fn rename_file_impl<R: tauri::Runtime>(
         .await
         .map_err(ipc_error)?;
 
-    let _ = app.emit(
-        "file-renamed",
-        serde_json::json!({ "from": from, "to": to }),
-    );
+    // emit 失敗は黙って捨てず、イベント名だけの固定文言で警告する（パスは出さない）。
+    if app
+        .emit(
+            "file-renamed",
+            serde_json::json!({ "from": from, "to": to }),
+        )
+        .is_err()
+    {
+        log::warn!("file-renamed event failed");
+    }
 
     from_resolved
         .storage
