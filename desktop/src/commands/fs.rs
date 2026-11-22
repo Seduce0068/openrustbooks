@@ -69,21 +69,10 @@ struct ResolvedTarget<'a> {
     path: PathBuf,
 }
 
-/// 対象パスが属する root を解決し、read_only を検査する。
-///
-/// - root は絶対・存在・ディレクトリのみ受理し、相対／存在しない root は拒否する。
-/// - `..` は機械的に拒否する。
-/// - 親を canonicalize して root 配下を確認するため、未作成のファイルも許可する。
-/// - 候補 root が一つでも read_only なら fail-closed で拒否する。
-///   親 root が writable でも子の read-only root 配下へ書ける経路を残さない（R4 指摘）。
-/// - canonical target（symlink の解決先）が別の設定 root に属する場合はその root も候補に含め、
-///   read_only なら拒否する。`ResolvedTarget.path` には canonical target を使う（R4 再レビュー）。
-/// - 残った候補から最長（最深）一致 root を選び、その解決済みパスを IO に使う。
-/// - read_only なら `save_document` と同じ固定文言で拒否する（R3-AU01）。
-fn resolve_target_storage<'a>(
-    storages: &'a [LocalStorage],
-    path: &Path,
-) -> CoreResult<ResolvedTarget<'a>> {
+/// 設定済み root を検証し、canonical な root と storage の組を返す。
+fn canonicalize_storage_roots(
+    storages: &[LocalStorage],
+) -> CoreResult<Vec<(PathBuf, &LocalStorage)>> {
     if storages.is_empty() {
         return Err(CoreError::storage("No storage backend available"));
     }
@@ -102,7 +91,11 @@ fn resolve_target_storage<'a>(
         }
         canonical_roots.push((canonical, storage));
     }
+    Ok(canonical_roots)
+}
 
+/// `..` による親ディレクトリ traversal を機械的に拒否する。
+fn reject_parent_traversal(path: &Path) -> CoreResult<()> {
     if path
         .components()
         .any(|component| matches!(component, Component::ParentDir))
@@ -111,31 +104,45 @@ fn resolve_target_storage<'a>(
             "Parent directory traversal is not allowed",
         ));
     }
+    Ok(())
+}
 
-    // canonical target が storage root 自身なら専用の固定文言で拒否する（R2-ER01）。
-    // root 自身は親ディレクトリが root 外になるため、下の候補探索では
-    // "Path escapes storage root" に陥る。候補探索の前に判定する。
-    for (root, _storage) in &canonical_roots {
-        let candidate = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            root.join(path)
-        };
-        if candidate
-            .canonicalize()
-            .is_ok_and(|canonical| canonical == *root)
-        {
-            return Err(CoreError::validation(STORAGE_ROOT_OPERATION_MESSAGE));
-        }
-    }
-
+/// 対象パスが属し得る root を列挙する（書き込み・読み取り共通）。
+///
+/// canonical target（symlink の解決先）が別の設定 root に属する場合はその root も候補に含める
+/// （R4 再レビュー）。`allow_root_target` が true のときだけ root 自身も一覧対象として受理する。
+fn collect_target_candidates<'a>(
+    canonical_roots: &[(PathBuf, &'a LocalStorage)],
+    path: &Path,
+    allow_root_target: bool,
+) -> Vec<ResolvedTarget<'a>> {
     let mut candidates: Vec<ResolvedTarget<'a>> = Vec::new();
-    for (root, _storage) in &canonical_roots {
+
+    for (root, _storage) in canonical_roots {
         let candidate = if path.is_absolute() {
             path.to_path_buf()
         } else {
             root.join(path)
         };
+
+        // read 専用解決では root 自身（`.` / 空文字 / 絶対 root / symlink 経由）を
+        // 一覧対象として受理し、canonical な root パスを IO に渡す。
+        if allow_root_target && let Ok(canonical) = candidate.canonicalize() {
+            let mut matched_root = false;
+            for (other_root, other_storage) in canonical_roots {
+                if canonical == *other_root {
+                    candidates.push(ResolvedTarget {
+                        storage: other_storage,
+                        path: canonical.clone(),
+                    });
+                    matched_root = true;
+                }
+            }
+            if matched_root {
+                continue;
+            }
+        }
+
         let Some(name) = candidate.file_name() else {
             continue;
         };
@@ -162,7 +169,7 @@ fn resolve_target_storage<'a>(
         // canonical target が別の設定 root に属する場合も候補に含める。
         // writable 親 root 内の symlink 経由で read-only 子 root を書き換える
         // 経路を塞ぐため、その root の read_only も必ず検査する（R4 再レビュー high）。
-        for (other_root, other_storage) in &canonical_roots {
+        for (other_root, other_storage) in canonical_roots {
             if effective.starts_with(other_root) {
                 candidates.push(ResolvedTarget {
                     storage: other_storage,
@@ -172,19 +179,13 @@ fn resolve_target_storage<'a>(
         }
     }
 
-    if candidates.is_empty() {
-        return Err(CoreError::validation("Path escapes storage root"));
-    }
+    candidates
+}
 
-    // 候補に read_only root が一つでもあれば拒否する（fail-closed）。
-    if candidates
-        .iter()
-        .any(|candidate| candidate.storage.is_read_only())
-    {
-        return Err(CoreError::validation(READ_ONLY_ROOT_MESSAGE));
-    }
-
-    // 深さは root の component 数で比較する。同深度なら設定順の先頭を保持する。
+/// 最深（root の component 数が最大）の候補を選ぶ。同深度なら設定順の先頭を保持する。
+fn select_deepest_target<'a>(
+    candidates: Vec<ResolvedTarget<'a>>,
+) -> CoreResult<ResolvedTarget<'a>> {
     candidates
         .into_iter()
         .reduce(|best, candidate| {
@@ -199,6 +200,89 @@ fn resolve_target_storage<'a>(
         .ok_or_else(|| CoreError::validation("Path escapes storage root"))
 }
 
+/// 対象パスが属する root を解決し、read_only を検査する。
+///
+/// - root は絶対・存在・ディレクトリのみ受理し、相対／存在しない root は拒否する。
+/// - `..` は機械的に拒否する。
+/// - 親を canonicalize して root 配下を確認するため、未作成のファイルも許可する。
+/// - 候補 root が一つでも read_only なら fail-closed で拒否する。
+///   親 root が writable でも子の read-only root 配下へ書ける経路を残さない（R4 指摘）。
+/// - canonical target（symlink の解決先）が別の設定 root に属する場合はその root も候補に含め、
+///   read_only なら拒否する。`ResolvedTarget.path` には canonical target を使う（R4 再レビュー）。
+/// - 残った候補から最長（最深）一致 root を選び、その解決済みパスを IO に使う。
+/// - read_only なら `save_document` と同じ固定文言で拒否する（R3-AU01）。
+fn resolve_target_storage<'a>(
+    storages: &'a [LocalStorage],
+    path: &Path,
+) -> CoreResult<ResolvedTarget<'a>> {
+    let canonical_roots = canonicalize_storage_roots(storages)?;
+    reject_parent_traversal(path)?;
+
+    // canonical target が storage root 自身なら専用の固定文言で拒否する（R2-ER01）。
+    // root 自身は親ディレクトリが root 外になるため、下の候補探索では
+    // "Path escapes storage root" に陥る。候補探索の前に判定する。
+    for (root, _storage) in &canonical_roots {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            root.join(path)
+        };
+        if candidate
+            .canonicalize()
+            .is_ok_and(|canonical| canonical == *root)
+        {
+            return Err(CoreError::validation(STORAGE_ROOT_OPERATION_MESSAGE));
+        }
+    }
+
+    let candidates = collect_target_candidates(&canonical_roots, path, false);
+    if candidates.is_empty() {
+        return Err(CoreError::validation("Path escapes storage root"));
+    }
+
+    // 候補に read_only root が一つでもあれば拒否する（fail-closed）。
+    if candidates
+        .iter()
+        .any(|candidate| candidate.storage.is_read_only())
+    {
+        return Err(CoreError::validation(READ_ONLY_ROOT_MESSAGE));
+    }
+
+    select_deepest_target(candidates)
+}
+
+/// 読み取り専用の root 解決。`resolve_target_storage` と候補収集・最深一致・
+/// canonical target の別 root 候補化は同じだが、read_only を拒否しない。
+///
+/// 一覧の対象として root 自身（`.` / 空文字 / 絶対 root / symlink 経由）も受理し、
+/// その root の canonical パスを IO に渡す。読み取りは read-only root からも許可する。
+fn resolve_read_target<'a>(
+    storages: &'a [LocalStorage],
+    path: &Path,
+) -> CoreResult<ResolvedTarget<'a>> {
+    let canonical_roots = canonicalize_storage_roots(storages)?;
+    reject_parent_traversal(path)?;
+
+    let candidates = collect_target_candidates(&canonical_roots, path, true);
+    select_deepest_target(candidates)
+}
+
+async fn read_directory_impl(
+    state: &AppState,
+    path: String,
+    options: Option<ListOptions>,
+) -> Result<Vec<FileEntry>, String> {
+    let storages = create_storage(state).await?;
+    let path_buf = PathBuf::from(&path);
+    let resolved = resolve_read_target(&storages, &path_buf).map_err(ipc_error)?;
+
+    resolved
+        .storage
+        .list(&resolved.path, options.unwrap_or_default())
+        .await
+        .map_err(ipc_error)
+}
+
 /// Read directory contents（読み取りは read-only root からも許可する）
 #[command]
 pub async fn read_directory(
@@ -206,16 +290,7 @@ pub async fn read_directory(
     path: String,
     options: Option<ListOptions>,
 ) -> Result<Vec<FileEntry>, String> {
-    let storages = create_storage(&state).await?;
-    let storage = storages
-        .first()
-        .ok_or_else(|| ipc_error(CoreError::storage("No storage backend available")))?;
-
-    let path_buf = PathBuf::from(path);
-    storage
-        .list(&path_buf, options.unwrap_or_default())
-        .await
-        .map_err(ipc_error)
+    read_directory_impl(state.inner().as_ref(), path, options).await
 }
 
 /// command 本体。generic の `AppHandle<R>` を使い、test からも同じ経路で呼べるようにする。
@@ -1006,5 +1081,149 @@ mod tests {
 
         assert_eq!(snapshot(&root.path), before);
         assert_eq!(harness.renamed.load(Ordering::SeqCst), 0);
+    }
+
+    /// 一覧結果のファイル名をソートして比較用の文字列にする。
+    fn entry_names(entries: &[FileEntry]) -> Vec<String> {
+        let mut names: Vec<String> = entries.iter().map(|entry| entry.name.clone()).collect();
+        names.sort();
+        names
+    }
+
+    /// 2 番目以降の root を絶対パスで一覧できること。
+    #[tokio::test]
+    async fn read_directory_resolves_absolute_path_to_second_root() {
+        let first = TempRoot::new();
+        let second = TempRoot::new();
+        fs::create_dir_all(second.path.join("sub")).unwrap();
+        fs::write(second.path.join("sub/note.txt"), b"second").unwrap();
+        fs::write(first.path.join("first.txt"), b"first").unwrap();
+        let state = state_with_roots(vec![
+            (first.path.clone(), false),
+            (second.path.clone(), false),
+        ]);
+
+        let entries = read_directory_impl(
+            &state,
+            second.path.join("sub").to_string_lossy().into_owned(),
+            None,
+        )
+        .await
+        .expect("2 番目の root 配下を絶対パスで一覧できること");
+
+        assert_eq!(entry_names(&entries), vec!["note.txt".to_string()]);
+    }
+
+    /// writable 親 + read-only 子（両順）を絶対 / 相対パスで一覧できること。
+    #[tokio::test]
+    async fn read_directory_lists_read_only_child_root_in_both_orders() {
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(child.join("sub")).unwrap();
+        fs::write(child.join("sub/note.txt"), b"locked").unwrap();
+        // 親 root にも同名ディレクトリを作り、最深 root が選ばれることを確認する。
+        fs::create_dir_all(parent.path.join("sub")).unwrap();
+
+        for roots in [
+            vec![(parent.path.clone(), false), (child.clone(), true)],
+            vec![(child.clone(), true), (parent.path.clone(), false)],
+        ] {
+            let state = state_with_roots(roots);
+
+            let absolute = read_directory_impl(
+                &state,
+                child.join("sub").to_string_lossy().into_owned(),
+                None,
+            )
+            .await
+            .expect("read-only 子 root の絶対パス一覧は許可されること");
+            assert_eq!(entry_names(&absolute), vec!["note.txt".to_string()]);
+
+            let relative = read_directory_impl(&state, "sub".to_string(), None)
+                .await
+                .expect("相対パスは最深 root に解決されること");
+            assert_eq!(entry_names(&relative), vec!["note.txt".to_string()]);
+        }
+    }
+
+    /// 単一 root の root 自身とサブディレクトリを一覧できること。
+    #[tokio::test]
+    async fn read_directory_lists_single_root_and_its_subdirectory() {
+        let root = TempRoot::new();
+        fs::create_dir_all(root.path.join("sub")).unwrap();
+        fs::write(root.path.join("sub/note.txt"), b"data").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+
+        let root_entries = read_directory_impl(&state, ".".to_string(), None)
+            .await
+            .expect("root 自身の一覧は許可されること");
+        assert_eq!(entry_names(&root_entries), vec!["sub".to_string()]);
+
+        let sub_entries = read_directory_impl(&state, "sub".to_string(), None)
+            .await
+            .expect("サブディレクトリの一覧は許可されること");
+        assert_eq!(entry_names(&sub_entries), vec!["note.txt".to_string()]);
+    }
+
+    /// read-only の単一 root からも一覧できること（従来どおりの読み取り許可）。
+    #[tokio::test]
+    async fn read_directory_allows_read_only_single_root() {
+        let root = TempRoot::new();
+        fs::write(root.path.join("locked.txt"), b"locked").unwrap();
+        let state = state_with_roots(vec![(root.path.clone(), true)]);
+
+        for path in [".".to_string(), root.path.to_string_lossy().into_owned()] {
+            let entries = read_directory_impl(&state, path, None)
+                .await
+                .expect("read-only root の一覧は許可されること");
+            assert_eq!(entry_names(&entries), vec!["locked.txt".to_string()]);
+        }
+    }
+
+    /// root 外の絶対パス・親 traversal は拒否されること。
+    #[tokio::test]
+    async fn read_directory_rejects_path_outside_all_roots() {
+        let root = TempRoot::new();
+        let outside = TempRoot::new();
+        let state = state_with_roots(vec![(root.path.clone(), false)]);
+
+        for path in [
+            outside.path.to_string_lossy().into_owned(),
+            "../escape".to_string(),
+        ] {
+            let error = read_directory_impl(&state, path, None)
+                .await
+                .expect_err("root 外のパスは拒否されること");
+            assert_eq!(
+                error,
+                ipc_error(CoreError::validation("Path escapes storage root"))
+            );
+        }
+    }
+
+    /// writable 親 root 内の symlink 経由で read-only 子 root を一覧できること。
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn read_directory_lists_read_only_child_root_via_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let parent = TempRoot::new();
+        let child = parent.path.join("child");
+        fs::create_dir_all(child.join("sub")).unwrap();
+        fs::write(child.join("sub/note.txt"), b"locked").unwrap();
+        let dir_link = parent.path.join("link");
+        if symlink(&child, &dir_link).is_err() {
+            return; // symlink を作成できない環境ではスキップ
+        }
+
+        let state = state_with_roots(vec![(parent.path.clone(), false), (child.clone(), true)]);
+        let entries = read_directory_impl(
+            &state,
+            dir_link.join("sub").to_string_lossy().into_owned(),
+            None,
+        )
+        .await
+        .expect("symlink 経由で read-only 子 root を一覧できること");
+        assert_eq!(entry_names(&entries), vec!["note.txt".to_string()]);
     }
 }
