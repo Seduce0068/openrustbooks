@@ -3927,13 +3927,20 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 return;
             };
             let page = input.value();
+            let normalized = page.trim().to_lowercase();
             let entry = page_list
                 .get()
                 .iter()
-                .find(|entry| entry.title == page)
+                .find(|entry| entry.title.trim().to_lowercase() == normalized)
                 .cloned();
             let Some(entry) = entry else {
-                set_status.set(format!("ページ {} が見つかりません。", page));
+                // 数字だけなら既存の状態文言契約を維持し、それ以外は出さない。
+                let label = page.trim();
+                if !label.is_empty() && label.chars().all(|c| c.is_ascii_digit()) {
+                    set_status.set(format!("ページ {label} が見つかりません。"));
+                } else {
+                    set_status.set("ページが見つかりません。".to_string());
+                }
                 return;
             };
             let path = entry.href.split('#').next().unwrap_or(&entry.href);
@@ -3942,8 +3949,21 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
             });
             if let Some(target_index) = target_index {
                 navigate_to(target_index, entry.fragment);
+            } else if !page.trim().is_empty() && page.trim().chars().all(|c| c.is_ascii_digit()) {
+                set_status.set(format!("ページ {} が見つかりません。", page.trim()));
             } else {
-                set_status.set(format!("ページ {} が見つかりません。", page));
+                set_status.set("ページが見つかりません。".to_string());
+            }
+        }
+    };
+
+    let on_page_go = Rc::new(on_page_go);
+    let on_page_keydown = {
+        let on_page_go = Rc::clone(&on_page_go);
+        move |event: web_sys::KeyboardEvent| {
+            if event.key() == "Enter" {
+                event.prevent_default();
+                on_page_go(web_sys::MouseEvent::new("click").unwrap());
             }
         }
     };
@@ -4605,10 +4625,13 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 </select>
                 <button id="reader-history-delete" class="btn" aria-label="選択した履歴を削除" title="選択した履歴を削除" on:click=on_history_delete disabled=move || history_state.get().0 <= 1>"削除"</button>
                 <button id="reader-history-clear" class="btn" aria-label="閲覧履歴を消去" title="現在の位置を残して履歴を消去" on:click=on_history_clear disabled=move || history_state.get().0 <= 1>"履歴を消去"</button>
-                <input id="reader-page-input" class="reader-chapter-select" type="text" aria-label="ページ" placeholder="ページ" prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
+                <datalist id="reader-page-options">
+                    <For each=move || page_list.get() key=|entry| entry.href.clone() children=move |entry| view! { <option value=entry.title.clone()/> }/>
+                </datalist>
+                <input id="reader-page-input" class="reader-chapter-select" type="text" list="reader-page-options" aria-label="ページ" placeholder="ページ" on:keydown=on_page_keydown prop:disabled=move || page_list.get().is_empty() style="max-width: 6rem;"/>
                 <input id="reader-swipe-threshold" class="reader-chapter-select" type="number" min="30" max="120" aria-label="横スワイプのしきい値" title="横スワイプのしきい値 (px)" on:change=on_swipe_threshold_change style="max-width: 6rem;" prop:value=move || swipe_threshold.get().to_string()/>
                 <input id="reader-vertical-threshold" class="reader-chapter-select" type="number" min="10" max="80" aria-label="縦スクロールのしきい値" title="縦スクロールのしきい値 (px)" on:change=on_vertical_scroll_threshold_change style="max-width: 6rem;" prop:value=move || vertical_scroll_threshold.get().to_string()/>
-                <button id="reader-page-go" class="btn" aria-label="ページへ移動" title="ページへ移動" on:click=on_page_go prop:disabled=move || page_list.get().is_empty()>"移動"</button>
+                <button id="reader-page-go" class="btn" aria-label="ページへ移動" title="ページへ移動" on:click=move |event| on_page_go(event) prop:disabled=move || page_list.get().is_empty()>"移動"</button>
                 <button class="btn" aria-label="次の章へ" title="次の章へ" aria-keyshortcuts="]" on:click=on_next disabled=move || {
                     let index = current.get();
                     !chapters.get().iter().any(|(chapter, _, _)| *chapter > index)
