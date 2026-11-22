@@ -29,3 +29,11 @@ capability / wasm×2 / wasm-test が到達不能。CI は常時 red のまま回
 
 - 外部サービス / 課金 / 公開操作は行わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- gitleaks を extra_gates 末尾へ移動し、13 ゲートを先に実行。
+- 未導入 / 検出時は最後で fail-closed、共通 workflow は未変更。
+- runbook の billing チェックリストを更新。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- CI 側 gitleaks 恒久導入 / CI-H01 は ADR-0314 の未決定。

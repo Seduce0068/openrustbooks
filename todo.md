@@ -22,10 +22,6 @@ status: current
 ### 優先度: 高
 
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
-- [ ] 【CI extra_gates の gitleaks 常時 fail を修正】`exit 1` が extra_gates 途中にあるため、
-      後続11ゲート（rumdl / dependency / version / e2e-count / csp / plugin / updater / capability / wasm×2 / wasm-test）が到達不能。
-      gitleaks 導入を先頭へ移すか、後続ゲートを別ステップへ分割する。
-      根拠 `.github/workflows/ci.yml:57-62` / `docs/decisions/0126-ci-audit-gate.md:24-26` / R4-OP01 / 重大度 high。
 - [ ] 【desktop で API キー／秘密を UI から設定・削除可能にする】API Key 欄は常に readonly で
       update_ai_config / clear_secrets が web から呼ばれていない。既有 command を接続し、
       値を DTO/status へ出さず has_* フラグと固定文言のみを維持。
@@ -158,6 +154,7 @@ status: current
 
 ## 完了
 
+- [x] 【CI gitleaks】最終ゲート化して 13 ゲートの到達性を確保（ADR-0314）。
 - [x] 【文書 close】unsaved 検査と削除を単一ロック化、並行編集の喪失を防止（ADR-0313）。
 - [x] 【文書 root 選択】全候補 read_only 検査と最深一致を実装、入れ子/symlink 迂回を防止（ADR-0312）。
 - [x] 【CI ゲート】font/dist/secrets を CI に配線、gitleaks pre-commit を導入（ADR-0311）。
