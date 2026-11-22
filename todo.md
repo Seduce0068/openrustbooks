@@ -63,9 +63,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
-- [ ] 【withGlobalTauri の実効権限表面を可視化】静的 2 command ゲートは source 検査のみで、
-      実 Webview は全 command へ到達可能。success 文言を明示し実効権限を別ゲートで検証。
-      根拠 `scripts/check-capability-scope.sh:1-5` / `desktop/src/main.rs:133-166` / R3-SE01。
 <!-- 2026-11-22 R6 中優先度 -->
 
 <!-- R6-2026-11-19 中優先度 / 2026-11-19: 解消済みを完了へ移動（ADR-0224 / TD-M10 は ADR-0225 で完了） -->
@@ -107,6 +104,7 @@ status: current
 
 ## 完了
 
+- [x] 【権限表面】capability ゲートの source 検査範囲と実 WebView 到達性を明記（ADR-0332）。
 - [x] 【get_config 失敗】desktop only と IPC 失敗を固定文言で区別（ADR-0331）。
 - [x] 【prefers-contrast E2E】CDP emulation + WCAG 比で 5 check を追加（ADR-0330）。
 - [x] 【EPUB2 NCX E2E】NCX サンプルと 2 check を追加、期待 258 件（ADR-0329）。

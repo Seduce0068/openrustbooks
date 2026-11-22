@@ -81,3 +81,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - WDIO reject 注入は tauri-service 競合で却下、単体 test で代替。
 - web 28 tests、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 再読み込みボタンは ADR-0331 の未決定。
+
+## 完了記録（続き7）
+
+- capability ゲートの source 検査範囲と実 WebView 到達性を明示。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- ACL / withGlobalTauri の見直しは ADR-0332 の未決定。
