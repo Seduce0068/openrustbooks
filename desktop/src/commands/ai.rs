@@ -11,6 +11,7 @@ use openrustbooks_core::{
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State, command};
+#[cfg(not(test))]
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tokio::sync::oneshot;
 
@@ -41,8 +42,9 @@ fn interpret_confirmation(
 }
 
 /// 送信前にネイティブ確認ダイアログを出し、キャンセルなら Err を返す。
-async fn confirm_send(
-    app: &AppHandle,
+#[cfg(not(test))]
+async fn confirm_send<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     operation: &str,
     fields: &[(&str, String)],
 ) -> Result<(), String> {
@@ -62,21 +64,40 @@ async fn confirm_send(
     interpret_confirmation(operation, rx.await)
 }
 
-/// Generate Markdown from natural language prompt
-#[command]
-pub async fn generate_markdown(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
+/// テスト用の確認待ちフック。本番のダイアログの代わりに 1 回だけ呼ばれる。
+///
+/// 確認待ち中に `AppState::disable_ai_service()` を呼んで、
+/// confirm 後に service を取り直す経路を外部 AI API なしで検証する。
+#[cfg(test)]
+static TEST_CONFIRM_HOOK: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>> =
+    std::sync::Mutex::new(None);
+
+/// テスト用 confirm_send。ダイアログを出さず、フックを実行して承認扱いにする。
+#[cfg(test)]
+async fn confirm_send<R: tauri::Runtime>(
+    _app: &AppHandle<R>,
+    operation: &str,
+    fields: &[(&str, String)],
+) -> Result<(), String> {
+    // 本番と同じ要約を組み立てる（引数を実際に使う確認ダイアログの契約を保つ）。
+    let _ = build_summary(operation, fields);
+    if let Some(hook) = TEST_CONFIRM_HOOK.lock().unwrap().take() {
+        hook();
+    }
+    Ok(())
+}
+
+/// command 本体。test からも同じ経路で呼べるよう generic の `AppHandle<R>` を使う。
+async fn generate_markdown_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
     prompt: String,
     context: Option<String>,
     template: Option<String>,
 ) -> Result<GenerateResult, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
+    // confirm 待ち中に設定が変わり得るため、service は confirmation の後に取得する。
     confirm_send(
-        &app,
+        app,
         "Markdown 生成",
         &[
             ("prompt", prompt.clone()),
@@ -86,12 +107,62 @@ pub async fn generate_markdown(
     )
     .await?;
 
+    let service = state
+        .ai_service()
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
+
     service
         .pipeline()
         .generate(GenerateRequest {
             prompt,
             context,
             template,
+        })
+        .await
+        .map_err(ipc_error)
+}
+
+/// Generate Markdown from natural language prompt
+#[command]
+pub async fn generate_markdown(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    prompt: String,
+    context: Option<String>,
+    template: Option<String>,
+) -> Result<GenerateResult, String> {
+    generate_markdown_impl(state.inner().as_ref(), &app, prompt, context, template).await
+}
+
+/// command 本体。confirm 後に service を取り直す。
+async fn refine_markdown_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    content: String,
+    instruction: String,
+    context: Option<String>,
+) -> Result<RefineResult, String> {
+    confirm_send(
+        app,
+        "Markdown 改善",
+        &[
+            ("content", content.clone()),
+            ("instruction", instruction.clone()),
+            ("context", context.clone().unwrap_or_default()),
+        ],
+    )
+    .await?;
+
+    let service = state
+        .ai_service()
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
+
+    service
+        .pipeline()
+        .refine(RefineRequest {
+            content,
+            instruction,
+            context,
         })
         .await
         .map_err(ipc_error)
@@ -106,30 +177,7 @@ pub async fn refine_markdown(
     instruction: String,
     context: Option<String>,
 ) -> Result<RefineResult, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
-    confirm_send(
-        &app,
-        "Markdown 改善",
-        &[
-            ("content", content.clone()),
-            ("instruction", instruction.clone()),
-            ("context", context.clone().unwrap_or_default()),
-        ],
-    )
-    .await?;
-
-    service
-        .pipeline()
-        .refine(RefineRequest {
-            content,
-            instruction,
-            context,
-        })
-        .await
-        .map_err(ipc_error)
+    refine_markdown_impl(state.inner().as_ref(), &app, content, instruction, context).await
 }
 
 /// format 文字列を TableFormat に解釈する（大小文字無視）。
@@ -158,24 +206,20 @@ fn parse_table_alignment(alignment: Option<Vec<String>>) -> Option<Vec<TableAlig
     })
 }
 
-/// Convert structured data to Markdown table
-#[command]
-pub async fn convert_to_table(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
+/// command 本体。入力エラーは確認ダイアログより前に返す既存契約を維持する。
+async fn convert_to_table_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
     data: String,
     format: String,
     headers: Option<Vec<String>>,
     alignment: Option<Vec<String>>,
 ) -> Result<TableResult, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
+    // parse_table_format は confirm 前に置き、不正入力ならダイアログを出さない。
     let table_format = parse_table_format(&format)?;
 
     confirm_send(
-        &app,
+        app,
         "テーブル変換",
         &[
             ("data", data.clone()),
@@ -192,6 +236,10 @@ pub async fn convert_to_table(
     )
     .await?;
 
+    let service = state
+        .ai_service()
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
+
     let table_alignment = parse_table_alignment(alignment);
 
     service
@@ -206,20 +254,36 @@ pub async fn convert_to_table(
         .map_err(ipc_error)
 }
 
-/// Generate front matter for a document
+/// Convert structured data to Markdown table
 #[command]
-pub async fn generate_front_matter(
+pub async fn convert_to_table(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
+    data: String,
+    format: String,
+    headers: Option<Vec<String>>,
+    alignment: Option<Vec<String>>,
+) -> Result<TableResult, String> {
+    convert_to_table_impl(
+        state.inner().as_ref(),
+        &app,
+        data,
+        format,
+        headers,
+        alignment,
+    )
+    .await
+}
+
+/// command 本体。confirm 後に service を取り直す。
+async fn generate_front_matter_impl<R: tauri::Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
     content: String,
     schema: Option<serde_json::Value>,
 ) -> Result<FrontMatterResult, String> {
-    let service = state
-        .ai_service()
-        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
-
     confirm_send(
-        &app,
+        app,
         "フロントマター生成",
         &[
             ("content", content.clone()),
@@ -231,11 +295,26 @@ pub async fn generate_front_matter(
     )
     .await?;
 
+    let service = state
+        .ai_service()
+        .ok_or_else(|| ipc_error(CoreError::ai_pipeline("AI service not initialized")))?;
+
     service
         .pipeline()
         .generate_front_matter(FrontMatterRequest { content, schema })
         .await
         .map_err(ipc_error)
+}
+
+/// Generate front matter for a document
+#[command]
+pub async fn generate_front_matter(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    content: String,
+    schema: Option<serde_json::Value>,
+) -> Result<FrontMatterResult, String> {
+    generate_front_matter_impl(state.inner().as_ref(), &app, content, schema).await
 }
 
 /// Lint Markdown content
@@ -425,5 +504,125 @@ mod tests {
     #[test]
     fn table_alignment_none_returns_none() {
         assert!(parse_table_alignment(None).is_none());
+    }
+
+    /// confirm 待ち中に service を無効化するフックを仕込み、confirm 後の
+    /// 再取得で拒否されること（= 古い service で pipeline が呼ばれないこと）を検証する。
+    async fn assert_rejected_when_disabled_during_confirm<T, F, Fut>(
+        state: &Arc<AppState>,
+        handle: &tauri::AppHandle<tauri::test::MockRuntime>,
+        run: F,
+    ) where
+        F: FnOnce(Arc<AppState>, tauri::AppHandle<tauri::test::MockRuntime>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, String>>,
+    {
+        // ollama は初期化時に HTTP 要求を出さない。毎回作り直して確認前は Some にする。
+        let mut config = state.config();
+        config.ai.enabled = true;
+        config.ai.default_provider = "ollama".to_string();
+        state.update_config(config).unwrap();
+        state.refresh_ai_service().await.unwrap();
+        assert!(
+            state.ai_service().is_some(),
+            "confirm 前は service が存在すること"
+        );
+
+        let disabling = state.clone();
+        *TEST_CONFIRM_HOOK.lock().unwrap() = Some(Box::new(move || disabling.disable_ai_service()));
+
+        let result = run(state.clone(), handle.clone()).await;
+
+        assert!(
+            TEST_CONFIRM_HOOK.lock().unwrap().is_none(),
+            "confirm 待ちフックは 1 回だけ消費されること"
+        );
+        assert!(
+            state.ai_service().is_none(),
+            "confirm 中に service が無効化されていること"
+        );
+        match result {
+            Err(message) => assert_eq!(
+                message,
+                ipc_error(CoreError::ai_pipeline("AI service not initialized"))
+            ),
+            Ok(_) => panic!("service が無効なのに pipeline が呼ばれた"),
+        }
+    }
+
+    /// 4 コマンドすべてで、confirm 待ち中の無効化後に古い service で送信しないこと。
+    /// 入力エラーが confirm より前に返る既存契約も同時に検証する。
+    /// 外部 AI API への送信は行わない（ollama 設定 + service None で拒否）。
+    #[tokio::test]
+    async fn ai_commands_recheck_service_after_confirm() {
+        use openrustbooks_core::AppConfig;
+        use tauri::test::mock_app;
+
+        let app = mock_app();
+        let handle = app.handle().clone();
+        let state = Arc::new(AppState::new(AppConfig::default()));
+
+        // parse_table_format の入力エラーは確認ダイアログより前に返る。
+        *TEST_CONFIRM_HOOK.lock().unwrap() = Some(Box::new(|| {
+            panic!("入力エラーなのに確認ダイアログが呼ばれた");
+        }));
+        let invalid = convert_to_table_impl(
+            state.as_ref(),
+            &handle,
+            "a,b\n1,2".to_string(),
+            "xml".to_string(),
+            None,
+            None,
+        )
+        .await;
+        assert!(
+            TEST_CONFIRM_HOOK.lock().unwrap().is_some(),
+            "不正 format では confirm フックが消費されないこと"
+        );
+        TEST_CONFIRM_HOOK.lock().unwrap().take();
+        match invalid {
+            Err(message) => assert_eq!(
+                message,
+                ipc_error(CoreError::validation(
+                    "Invalid format. Use csv, json, or tsv"
+                ))
+            ),
+            Ok(_) => panic!("不正 format が confirm 前に拒否されなかった"),
+        }
+
+        // 静的フックの取り違えを避けるため、4 コマンドは直列に検証する。
+        assert_rejected_when_disabled_during_confirm(&state, &handle, |state, handle| async move {
+            generate_markdown_impl(state.as_ref(), &handle, "猫の話".to_string(), None, None).await
+        })
+        .await;
+
+        assert_rejected_when_disabled_during_confirm(&state, &handle, |state, handle| async move {
+            refine_markdown_impl(
+                state.as_ref(),
+                &handle,
+                "# 見出し".to_string(),
+                "短く".to_string(),
+                None,
+            )
+            .await
+        })
+        .await;
+
+        assert_rejected_when_disabled_during_confirm(&state, &handle, |state, handle| async move {
+            convert_to_table_impl(
+                state.as_ref(),
+                &handle,
+                "a,b\n1,2".to_string(),
+                "csv".to_string(),
+                None,
+                None,
+            )
+            .await
+        })
+        .await;
+
+        assert_rejected_when_disabled_during_confirm(&state, &handle, |state, handle| async move {
+            generate_front_matter_impl(state.as_ref(), &handle, "# 見出し".to_string(), None).await
+        })
+        .await;
     }
 }
