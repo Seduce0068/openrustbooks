@@ -123,6 +123,43 @@ else:
         if prefix in main_rs:
             errors.append(f"{MAIN_REL} に削除済み plugin が再混入しています: {prefix}")
 
+# --- capability JSON: wdio permission が test 用ファイルに閉じていること --------
+CAP_REL = "desktop/capabilities/wdio/wdio.json"
+cap_path = root / CAP_REL
+cap_text: str | None = None
+try:
+    cap_text = cap_path.read_text(encoding="utf-8")
+except (OSError, UnicodeDecodeError) as exc:
+    errors.append(f"{CAP_REL} を読み込めません: {exc}")
+else:
+    try:
+        cap = json.loads(cap_text)
+    except ValueError as exc:
+        errors.append(f"{CAP_REL} の JSON パースに失敗しました: {exc}")
+    else:
+        if not isinstance(cap, dict):
+            errors.append(f"{CAP_REL} のトップレベルは JSON オブジェクトである必要があります")
+        else:
+            if cap.get("identifier") != "wdio":
+                errors.append(f"{CAP_REL} の identifier は wdio 固定です: {cap.get('identifier')!r}")
+            permissions = cap.get("permissions")
+            if not isinstance(permissions, list) or not all(isinstance(x, str) for x in permissions):
+                errors.append(f"{CAP_REL} の permissions は文字列配列である必要があります")
+            else:
+                if "wdio:default" not in permissions or "wdio-webdriver:default" not in permissions:
+                    errors.append(f"{CAP_REL} に WDIO 用 permission がありません")
+                if "core:default" not in permissions:
+                    errors.append(f"{CAP_REL} に core:default がありません")
+            # 本番 build は build.rs が default capability のみを読む。
+            # wdio capability が他有効 Capability へ混入しないよう、既知の
+            # test permission が tauri.conf.json に出ていないことを検査する。
+            if conf_text is not None:
+                for marker in ("wdio:default", "wdio-webdriver:default"):
+                    if marker in conf_text:
+                        errors.append(
+                            f"{CONF_REL} に test 用 permission {marker} が混入しています"
+                        )
+
 if errors:
     for error in errors:
         print(f"ERROR: {error}", file=sys.stderr)
@@ -130,7 +167,7 @@ if errors:
 
 print(
     "OK: tauri.conf.json に plugins / scope / allowedPaths はなく、"
-    "log / dialog の初期化は維持され、未使用 plugin の再混入はありません"
-    "（wdio は別ゲート）"
+    "log / dialog の初期化は維持され、未使用 plugin の再混入はありません。"
+    "wdio capability は test 用ファイルに閉じられています"
 )
 PY
