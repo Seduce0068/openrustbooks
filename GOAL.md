@@ -26,3 +26,11 @@ a11y 文言とリンク表示を改善する（R6 レビュー / R2-UX01）。
 - 新機能実装（本格的な file picker / ライセンス画面）は行わない。
 - 外部サービス / 秘密情報は扱わない。
 - `master` へ push する。force push はしない。
+
+## 完了記録
+
+- 主要 nav / Settings ラベルを日本語化し、リンク下線と file input focus を改善。
+- Clear data の危険告知と AGPL 全文リンクを追加。
+- E2E 必須文言を維持、R4 medium 2 件を反映。
+- verify.sh 全ゲート成功（E2E 256、WDIO 1）。
+- Label in Name / dialog 統一は ADR-0306 の未決定。

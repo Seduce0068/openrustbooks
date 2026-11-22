@@ -83,11 +83,6 @@ status: current
 
 ### 優先度: 低
 
-- [ ] 【a11y 文言とリンク表示を改善】lang=ja と英語ラベル混在、巨大画像の実行不能な警告、
-      破壊操作の window.confirm、Clear data の名称、非表示 file input の focus、
-      リンクの色のみ識別、ライセンス導線を修正。
-      根拠 `web/src/lib.rs:3869-3888,959-961,3621-3638,3881`、
-      `web/index.html:2,344-351,486-488` / R2-UX01 / 重大度 medium-low。
 - [ ] 【cargo audit / 依存ゲートを強化】rumdl featureless ゲートは serde_yaml /
       tikv-jemalloc-sys の lock 残存を検出できず、cargo audit は unmaintained 警告を許容。
       `cargo tree -i` と lock 残存チェック、既知例外の ID / 期限管理を追加。
@@ -131,6 +126,7 @@ status: current
 
 ## 完了
 
+- [x] 【a11y】日本語化・リンク下線・focus 可視化・危険告知を実装（ADR-0306）。
 - [x] 【EPUB/ZIP 解釈】BOM/fragment/重複 id/外部スキームを core+web 統一（ADR-0305）。
 - [x] 【dead config】9 件を DTO 除外し、config.toml 値保持と未配線表示を実装（ADR-0304）。
 - [x] 【未使用 plugin / 依存】6 plugin と 7 crate を削除、必須 init を log + dialog 化（ADR-0303）。
