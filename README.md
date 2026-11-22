@@ -893,6 +893,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0333-distribution-expected-single-source](docs/decisions/0333-distribution-expected-single-source.md)
 - [0334-document-content-atomic](docs/decisions/0334-document-content-atomic.md)
 - [0335-lint-without-ai-service](docs/decisions/0335-lint-without-ai-service.md)
+- [0336-api-key-blank-guard](docs/decisions/0336-api-key-blank-guard.md)
+  - 空／空白のみの API キー入力を保存 command へ送らず、設定済みキーを誤って削除しないようにする決定。
   - lint / auto-fix はローカル処理として LintConfig から直接構築し、既定の AI 無効でも動作可能にする決定。
   - 本文更新・世代前進・unsaved 設定を単一クリティカルセクションで行い、close との競合を防ぐ決定。
   - check-distribution-path.sh が Checker(expected=N) を AST 抽出し、manifest と照合する決定。
