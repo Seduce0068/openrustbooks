@@ -864,6 +864,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0321-read-directory-root-resolution](docs/decisions/0321-read-directory-root-resolution.md)
 - [0322-config-dto-contract](docs/decisions/0322-config-dto-contract.md)
 - [0323-wasm-error-redaction](docs/decisions/0323-wasm-error-redaction.md)
+- [0324-table-alignment-validation](docs/decisions/0324-table-alignment-validation.md)
+  - 未知の alignment を Left へ黙ってフォールバックせず、TableFormat と同じ validation で拒否する決定。
   - CoreError を共通 fixed_message(code) 経由で JS へ返し、生文字列の漏洩を防ぐ決定。
   - desktop / web の ConfigView / ConfigPatch DTO を 12 ペアで比較し、フィールド drift を CI で検出する決定。
   - ディレクトリ一覧を先頭 storage 固定ではなく、書き込み系と同じ最深一致 root へ解決する決定。

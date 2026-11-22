@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- TableAlignment の未知値を fail-closed 化（ADR-0324）。
 - Wasm JS 境界のエラーを redaction（ADR-0323）。
 - Config DTO 契約を静的ゲート化（ADR-0322）。
 - read_directory を全 root 対応に変更（ADR-0321）。
