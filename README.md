@@ -853,6 +853,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0310-release-doc-current-state](docs/decisions/0310-release-doc-current-state.md)
 - [0311-ci-gate-coverage](docs/decisions/0311-ci-gate-coverage.md)
 - [0312-document-root-selection](docs/decisions/0312-document-root-selection.md)
+- [0313-atomic-document-close](docs/decisions/0313-atomic-document-close.md)
+  - unsaved チェックと文書削除を単一クリティカルセクションで行い、並行編集の喪失を防ぐ決定。
   - 全候補 root を検査し、入れ子の read-only root を save_document から書き換えられないようにする決定。
   - no-external-font-refs / 配布パス / gitleaks を verify.sh と CI extra_gates の両方へ配線する決定。
   - updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。

@@ -2,6 +2,7 @@
 
 ## 2026-11-22
 
+- 文書 close の unsaved 検査と削除を原子化（ADR-0313）。
 - 文書保存の root 選択を全候補 fail-closed 化（ADR-0312）。
 - CI に font/dist/secrets ゲートを追加（ADR-0311）。
 - runbook-release / README を現行状態へ追従（ADR-0310）。
