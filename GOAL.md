@@ -178,3 +178,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - E2E 263 契約を維持しつつ数字以外のエコーを防止。
 - verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - あいまい検索は ADR-0346 の未決定。
+
+## 完了記録（第3cycle-15）
+
+- 削除確認 / ヘルプ dialog に共通 CSS と backdrop 対策を適用。
+- verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- E2E 画像比較は ADR-0347 の未決定。
