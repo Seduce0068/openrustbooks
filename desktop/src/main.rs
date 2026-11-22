@@ -123,7 +123,9 @@ pub fn run() -> tauri::Result<()> {
                 let state_clone = state.inner().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = state_clone.init_ai_service().await {
-                        log::error!("Failed to initialize AI service: {}", e);
+                        // CoreError の Display は provider の host / body / 認証情報を
+                        // 含み得るため、ログへは code() 由来の固定情報だけを出す。
+                        log::error!("Failed to initialize AI service (error kind: {})", e.code());
                     }
                 });
             }
