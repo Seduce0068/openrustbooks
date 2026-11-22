@@ -859,6 +859,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0316-epub-structure-limits](docs/decisions/0316-epub-structure-limits.md)
 - [0317-import-json-limits](docs/decisions/0317-import-json-limits.md)
 - [0318-document-save-cas](docs/decisions/0318-document-save-cas.md)
+- [0319-ai-service-post-confirm-check](docs/decisions/0319-ai-service-post-confirm-check.md)
+  - AI command が confirm 待ち中に無効化された古い service を使わないようにする決定。
   - 保存と並行編集を世代 CAS で検出し、古い snapshot による state の書き戻しを防ぐ決定。
   - 8 MiB のバイト上限と parse 前の構造走査で、バックアップ import によるヒープ枯渇を防ぐ決定。
   - OPF / NCX の構造要素蓄積時に上限を適用し、細工 EPUB によるメモリ枯渇を fail-closed で拒否する決定。
