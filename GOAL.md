@@ -1,41 +1,31 @@
 # Goal
 
-desktop 設定画面から API キーを設定・削除可能にする（第2cycle R6 最高優先 / R5-DC01）。
+EPUB 構造要素の数上限を追加する（第2cycle R6 / R3-SE01）。
 
 ## Scope
 
 ### 背景
 
-API Key 欄は常に readonly で `has_api_key` 表示のみ。
-`update_ai_config` / `clear_secrets` command は存在するが web から呼ばれていない。
-そのため初回インストール後に UI から AI を使い始められない。
+ZIP エントリ数とサイズには上限があるが、1 つの OPF / NCX 文書内の
+`<item>` / `<itemref>` / `<meta>` キャプチャ / `<navPoint>` は無制限で、
+64 MiB の文書から数百万要素を確保し得る。
 
 ### 成果物
 
-- `desktop/src/commands/config.rs`: 必要なら専用 command / DTO 追加
-- `web/src/lib.rs`: 変更（秘密入力 UI + invoke wrapper）
-- `docs/decisions/0315-secret-settings-ui.md`: 追加
+- `core/src/epub/*`: 変更
+- `docs/decisions/0316-epub-structure-limits.md`: 追加
 - `todo.md` / README / 索引 / log: 更新
 
 ### 必須事項
 
-1. desktop のみ API キー入力欄を編集可能にし、保存 command を呼ぶ。
-2. 「秘密を削除」ボタンで `clear_secrets` を呼ぶ。
-3. 秘密値は ConfigView / status / log / DOM の永続表示へ出さない（`has_*` と固定文言のみ）。
-4. ブラウザでは従来どおり readonly / 非接続を維持。
-5. 既存 E2E 256 件・check 名・#settings-language / updater / 保存文言を維持。
-6. verify.sh 全ゲート成功、WDIO ゲート維持。
+1. manifest / spine / captures / NCX navPoint の蓄積時点で上限を適用する。
+2. 上限超過は `CoreError::Validation` で fail-closed に拒否する。
+3. 既存 `MAX_TOC_ENTRIES=10_000` と整合した上限を使う。
+4. 単体 test: 各要素の境界値と超過拒否、正常 EPUB の従来動作。
+5. verify.sh 全ゲート成功、E2E 256 件・WDIO 維持。
 
 ## Constraints
 
-- API キー以外の秘密（client_secret / refresh_token）の UI 編集は行わない。
-- 外部 AI API への送信テストは行わない。
+- 新規依存 / unsafe FFI は使わない。
+- 既存 EPUB / ZIP の fail-closed 契約と check 名を変えない。
 - `master` へ push する。force push はしない。
-
-## 完了記録
-
-- set_openai_api_key と clear_secrets を desktop 設定 UI へ接続。
-- API キー値は DTO/status/log/DOM へ残さず、has_api_key と固定文言のみ。
-- capability scope に 2 command を追加。
-- desktop 149 / web 9 tests、WDIO 1 passing、verify.sh 全ゲート成功（E2E 256）。
-- 他秘密 UI / 削除失敗時 DOM クリアは ADR-0315 の未決定。
