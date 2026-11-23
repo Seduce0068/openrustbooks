@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 350 件）。
+openrustbooks の ADR 一覧（全 351 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -704,3 +704,5 @@ openrustbooks の ADR 一覧（全 350 件）。
   - status: accepted — 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
 - [ADR-0350: document / fs IPC の生パス除外](0350-document-fs-ipc-dto.md)
   - status: accepted — Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
+- [ADR-0351: Betterleaks へのシークレットゲート移行](0351-betterleaks-migration.md)
+  - status: accepted — Gitleaks を Betterleaks v1.10.1 へ置き換え、pre-commit 主軸 + CI 最終ゲートを確立する決定。

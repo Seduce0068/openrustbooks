@@ -64,9 +64,6 @@ status: current
 ### 優先度: 中
 
 <!-- 2026-11-23 R6 中優先度 -->
-- [ ] 【CI シークレットゲートの常時 fail を解消】gitleaks 未導入で extra_gates が常に赤。
-      extra_gates 内で取得 / go install するか共通 workflow 対応を検討（外部取得は要承認）。
-      根拠 `.github/workflows/ci.yml:70-77` / R4-OP01。
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
 <!-- 2026-11-22 R6 中優先度 -->
 
@@ -81,7 +78,10 @@ status: current
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
-- 【CI-H01】billing 解消後の実 CI 検証。trunk build・配布パス検査・
+- 【CI-H01】billing 解消後の実 CI 検証。原因はアカウント側請求ゲート
+  （private repo の Actions 実行拒否、2026-11-15T04:48Z〜06:37Z に発生）。
+  詳細は [調査レポート](docs/reports/github-actions-billing-root-cause.md)。
+  trunk build・配布パス検査・
   E2E 256 件を共通ワークフローのマージゲートへ組み込む。
   E2E 件数の current 表記は `scripts/check-e2e-count-consistency.sh` が
   verify.sh / CI extra_gates からコード出典と突き合わせて自動検査する。
@@ -109,6 +109,7 @@ status: current
 
 ## 完了
 
+- [x] 【CI シークレットゲート】Betterleaks v1.10.1 を pre-commit 主軸 + CI 最終ゲートで導入（ADR-0351）。
 - [x] 【EPUB サニタイズ】入力長 4 MiB / タグ深度 128 の上限を追加（ADR-0345、重複 TODO を整理）。
 - [x] 【document/fs DTO】IPC 境界から生 path と path 由来 id を除外（ADR-0350）。
 - [x] 【audit allowlist】advisory ID + 期限管理で新規警告を fail-closed（ADR-0349）。

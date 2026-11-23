@@ -9,7 +9,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-webdriver.md](runbook-webdriver.md) — WebdriverIO による実 Tauri WebView E2E の手順と制約。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 350 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 351 件の索引。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。
 - [ADR-0219: 検証済み配布物のローカル保持](decisions/0219-verified-artifact-retention.md) — 全ゲート成功時のみ dist を保持し manifest で完全性を記録。
@@ -74,3 +74,4 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
   — `docs/investigation/` を未追跡の当時スナップショットとして導線に明示し、生ファイルは変更しない決定。
 - [investigation/](investigation/) — 別セッションの一時調査スナップショット（未追跡・ADR-0083 で変更/コミットしないと決定）。
   数値は 2026-11-17 時点で現行ではない。成果は `todo.md` / ADR へ吸収済み（ADR-0276）。
+- [調査レポート一覧](reports/index.md)

@@ -213,3 +213,10 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
   - CI の gitleaks 導入（外部取得または共通 workflow 側の対応が必要で、明示承認なしには実施しない）。
   - CI-H01: GitHub Actions の billing 解消後の実 CI 検証 / artifact upload（外部状態の変更が必要）。
 - これらは todo.md に残し、 Turk に放置しない（次回の明示指示または billing 解消後に着手）。
+
+## 完了記録（Betterleaks / billing）
+
+- Betterleaks v1.10.1 を pre-commit 主軸 + CI 最終ゲートへ導入。
+- 全履歴スキャンを維持し、既知 false positive 2 件を fingerprint 例外で管理。
+- billing 原因を特定: private repo の Actions 実行がアカウント側請求ゲートで拒否。コード / workflow 変更は原因ではない。
+- verify.sh 全ゲート成功（secrets rc=0、E2E 263、WDIO 1）。
