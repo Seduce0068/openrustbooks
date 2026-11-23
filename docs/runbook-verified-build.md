@@ -25,10 +25,13 @@ generated:
 
 - Rust 1.95 以上（MSRV、ADR-0214）と `cargo-audit`。未インストール時は audit ゲートが
   fail-closed で失敗する。
-- `gitleaks`（シークレットスキャン）。未インストール時は `check-secrets.sh` が
-  fail-closed で失敗する。ローカルは `pre-commit install` で pre-commit を主軸にし、
-  `verify.sh` と CI の `extra_gates` を最終ゲートとして併設する。
-  pre-commit の gitleaks hook は Go 製のため、初回構築時には Go toolchain が必要。
+- `Betterleaks` v1.10.1（シークレットスキャン）。未インストール時は `check-secrets.sh` が
+  rc=127 で fail-closed となる。ローカルは `pre-commit install`（`.pre-commit-config.yaml`
+  の rev は `v1.10.1`）を主軸にし、`verify.sh` と CI の `extra_gates` を最終ゲートとして併設する。
+  `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt による sha256 検証付きの
+  pinned 導入が可能（既定 bin-dir は `/tmp/betterleaks-bin`、既存バイナリは上書きしない）。
+  CLI は `betterleaks git <repo> --redact --verbose` 形式で、Gitleaks の `detect --source` とは異なる。
+  pre-commit の betterleaks hook は Go 製のため、初回構築時には Go toolchain が必要。
 - `trunk` 0.22.1。E2E は Python 3.10 以降（`websockets`）と Chrome / Chromium を使う。
 - `wasm-bindgen` が PATH にあること。`verify.sh` / `build-desktop.sh` は Cargo.lock が
   固定するバージョンを抽出し、`$HOME/.cache/trunk/wasm-bindgen-<抽出版>` を PATH へ
@@ -138,11 +141,12 @@ python3 -m http.server --directory "$DIST" 8000
   CI の無引数呼び出しでも自己検査として正負両方を実行する（恒真ゲートではない）。
 - `web/index.html` に第三者フォント参照（`fonts.googleapis` / `fonts.gstatic` /
   `preconnect`）が含まれる場合は `check-no-external-font-refs.sh` が失敗する。
-- `gitleaks` 未インストール時は `check-secrets.sh` が「install gitleaks」を表示して
-  rc=127 で失敗する。検出時も gitleaks の終了コードを伝播して fail-closed とする。
-  CI の共通 workflow には gitleaks 導入入力が無いため、`extra_gates` の末尾で
-  存在を検査し、未導入ならそこで fail-closed とする。末尾へ置いたことで、
-  未導入でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は実行済みとなる。
+- `betterleaks` 未インストール時は `check-secrets.sh` が「betterleaks is required」を
+  表示して rc=127 で失敗する。検出時も Betterleaks の終了コードを伝播して fail-closed とする。
+  CI では `extra_gates` の末尾で `scripts/install-betterleaks.sh` が v1.10.1 を
+  checksums.txt 検証付きで導入し、`export PATH` 後に `check-secrets.sh` を実行する。
+  導入失敗もシークレット検出も fail-closed だが、末尾へ置いたことで他の静的ゲート /
+  wasm check / `ci-wasm-test.sh` は先に実行済みとなる。
 - コピーはステージング（`*.tmp.<PID>`）経由で `mv -n -T` により原子的に配置する。
   中途失敗時は EXIT trap がステージングを削除し、不完全な成果物は残らない。
 - 同名ディレクトリは上書きせず連番を探索する。`-99` まで使用中ならエラーとなる。
@@ -153,14 +157,13 @@ python3 -m http.server --directory "$DIST" 8000
 - 引数なしの `verify.sh` では何も残らない。保持したい場合は毎回 `--dist` を明示する。
 - CI の共通ワークフロー `rust-gates.yml@v1` は artifact upload 入力を持たず、
   billing issue も未解消のため、保持はローカル実行に限られる。
-  gitleaks の導入入力も無く、呼び出し側の `apt_packages` では Ubuntu 標準
-  リポジトリに gitleaks が無いため、**現状の CI シークレットゲートは常時 fail
-  （fail-closed）を受容している**。解消策は共通 workflow 側の導入に限らず、
-  `extra_gates` 内でチェックサム付きバイナリを取得するか
-  `go install github.com/gitleaks/gitleaks/v8@v8.28.0` で導入する選択肢もある。
-  gitleaks ゲートは `extra_gates` の末尾（最終ゲート）に置いているため、
-  未導入でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は実行され、
-  末尾で fail-closed となる。下記の billing 解消後チェックリストを参照。
+  共通 workflow にシークレットスキャナの導入入力は無いが、`extra_gates` の末尾で
+  `scripts/install-betterleaks.sh` が Betterleaks v1.10.1 を pinned 導入するため、
+  **CI シークレットゲートの常時 fail は解消済み**。tarball は checksums.txt の
+  sha256 で検証し、失敗時は fail-closed とする。
+  Betterleaks ゲートは `extra_gates` の末尾（最終ゲート）に置いているため、
+  導入失敗やシークレット検出でも他の静的ゲート / wasm check / `ci-wasm-test.sh` は
+  実行済みとなる。下記の billing 解消後チェックリストを参照。
 - `web/dist` は git 管理外で未検証の開発パス残存の可能性がある。復旧には本手順の保持物を使う。
 - 本番プロファイル（`--release` / `--debug`）は未決定（ADR-0219）。
   `trunk build --locked` は ADR-0237 で決定済みで、verify.sh / build-desktop.sh は
@@ -173,15 +176,12 @@ python3 -m http.server --directory "$DIST" 8000
 外部サービスの billing issue 解消後、以下を順に確認してから CI のゲートを更新する。
 共通 workflow（`Seduce0068/workflows/rust-gates.yml@v1`）自体は勝手に変更しない。
 
-- [ ] CI で gitleaks を利用可能にする。共通 workflow 側で導入するほか、
-      `extra_gates` 内でチェックサム付きバイナリを取得する、または
-      `go install github.com/gitleaks/gitleaks/v8@v8.28.0` で導入する選択肢がある。
-      現状は未導入でも、gitleaks は `extra_gates` の末尾（最終ゲート）へ
-      移しているため、他の静的ゲート / wasm check / `ci-wasm-test.sh` は
-      すべて実行済みで、末尾の存在検査でのみ fail-closed となる。
-      導入後は存在検査を通過して `check-secrets.sh` の実スキャンが実行され、
-      シークレット未検出なら CI が green になる可能性がある。
-      検出時は従来どおり fail-closed を維持する。
+- [x] CI で Betterleaks v1.10.1 を利用可能にする。`extra_gates` の末尾で
+      `scripts/install-betterleaks.sh "$RUNNER_TEMP/betterleaks-bin"` が
+      checksums.txt による sha256 検証付きで導入し、`export PATH` 後に
+      `check-secrets.sh` を実行する。導入失敗もシークレット検出も fail-closed を維持する。
+- [ ] 実 CI で pinned install と `check-secrets.sh` が成功し、シークレット未検出時に
+      green になることを確認する。検出時は fail-closed を維持する。
 - [ ] CI で `trunk build` が成功することを確認する（現在は `verify.sh` 側のみ）。
 - [ ] CI で E2E **263 件**（check 246 + equal 17、ADR-0272 の Tauri mock +1）と
       WDIO（`scripts/ci-wdio-test.sh`）が成功することを確認する。

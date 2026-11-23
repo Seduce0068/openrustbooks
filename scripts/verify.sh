@@ -504,7 +504,7 @@ check_no_external_font_refs() {
 	bash "$SCRIPT_DIR/check-no-external-font-refs.sh"
 }
 
-# シークレット走査（gitleaks）。ローカルは pre-commit を主軸とし、
+# シークレット走査（Betterleaks）。ローカルは pre-commit を主軸とし、
 # 本ゲートと CI の extra_gates が最終ゲートとして fail-closed で検査する。
 check_secrets() {
 	bash "$SCRIPT_DIR/check-secrets.sh"

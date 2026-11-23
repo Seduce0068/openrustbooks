@@ -7,10 +7,10 @@
 # wasm32 core / wasm32 web）。さらに wasm-bindgen-test を
 # Node 上で実行する wasm-pack test を末尾に置く（verify.sh の wasm-test と同じスクリプト）。
 # audit / trunk build + E2E / WDIO / 配布保持は verify.sh 側のゲート。
-# gitleaks は共通 workflow 側または extra_gates 内（チェックサム付きバイナリ / go install）で
-# 導入可能。現状は未導入のため、extra_gates の最終ゲート（末尾）で存在検査を行い
-# fail-closed とする。未導入でもそれ以外の静的ゲート / wasm check / wasm-test は
-# すべて実行される。docs/runbook-verified-build.md に記載。
+# Betterleaks（rev v1.10.1）は local では pre-commit を主軸とし、CI では extra_gates の
+# 末尾で pinned install（checksums.txt による sha256 検証）-> check-secrets.sh を実行して
+# 最終ゲートとする。インストール失敗やシークレット検出時は fail-closed。
+# 詳細は docs/runbook-verified-build.md に記載。
 # desktop を含むワークスペース全体を Linux 向けに検証するため、
 # Tauri のビルド依存は apt_packages で渡す。
 name: CI
@@ -67,11 +67,8 @@ jobs:
         cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
         cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
         bash scripts/ci-wasm-test.sh
-        # gitleaks は最終ゲート。未導入ならここで fail-closed にし、共有 workflow
-        # または extra_gates 内で導入する選択肢は docs/runbook-verified-build.md を参照。
-        if command -v gitleaks >/dev/null 2>&1; then
-          bash scripts/check-secrets.sh
-        else
-          echo "ERROR: gitleaks is required; install it in the common workflow or via extra_gates (checksummed binary / go install). Currently missing: fail-closed." >&2
-          exit 1
-        fi
+        # Betterleaks v1.10.1 を pinned install し、最終ゲートでシークレットを走査する。
+        # install スクリプトが checksums.txt で sha256 検証を行い、失敗時は fail-closed。
+        bash scripts/install-betterleaks.sh "$RUNNER_TEMP/betterleaks-bin"
+        export PATH="$RUNNER_TEMP/betterleaks-bin:$PATH"
+        bash scripts/check-secrets.sh

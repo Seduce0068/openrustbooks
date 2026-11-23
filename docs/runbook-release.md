@@ -41,7 +41,7 @@ generated:
 - `scripts/verify.sh` の全ゲートが成功していること。
   ゲートは fmt / check / test / clippy / wasm / dependency-hygiene /
   audit-db-freshness / audit / `trunk build` / build-desktop / check-frontend-dist /
-  パス検査 / E2E / WDIO を含む。E2E の期待総数は現行契約
+  パス検査 / secrets / E2E / WDIO を含む。E2E の期待総数は現行契約
   （[GOAL.md](../GOAL.md) では 263 件）に従う。
   [runbook-verified-build.md](runbook-verified-build.md) に残る 253 件は旧実測例であり、
   現行の期待値ではない。
@@ -51,6 +51,11 @@ generated:
 - 保存先はリポジトリ外の絶対パス（推奨:
   `/home/koppe/.local/share/openrustbooks-verified/`）。`/tmp` は再起動で
   消えるため恒久保持先として使わない。
+- シークレットゲートは Betterleaks v1.10.1 を使う。ローカルは pre-commit
+  （`.pre-commit-config.yaml` の rev `v1.10.1`）を主軸とし、`verify.sh` と CI の
+  `extra_gates` が最終ゲートとして fail-closed で検査する。未導入時は
+  `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt 検証付きに導入できる
+  （CLI は `betterleaks git <repo> --redact --verbose`、Gitleaks の `detect --source` ではない）。
 - Tauri CLI（`cargo install tauri-cli`）は desktop のローカル開発専用である。
   公開 installer をビルド・署名・配布するためのものではない。
 

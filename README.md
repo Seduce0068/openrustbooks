@@ -132,9 +132,13 @@ openrustbooks/
   `cargo install wasm-bindgen-cli --version <Cargo.lock の wasm-bindgen と同一>`)
 - Tauri CLI: `cargo install tauri-cli` (デスクトップアプリ開発時)
 - cargo-audit: `cargo install cargo-audit --locked` (一括検証の audit ゲートで必須)
-- gitleaks: `check-secrets.sh` の secrets ゲートで使用（未導入なら rc=127 で失敗）。
-  ローカルは pre-commit（`.pre-commit-config.yaml`）を主軸とし、`verify.sh` と CI の
-  extra_gates が最終ゲートとして fail-closed で検査する（ツール名は現行の gitleaks のまま）。
+- Betterleaks 1.10.1: `check-secrets.sh` の secrets ゲートで使用（未導入なら rc=127 で失敗）。
+  ローカルは pre-commit（`.pre-commit-config.yaml`、rev `v1.10.1`）を主軸とし、
+  `verify.sh` と CI の extra_gates が最終ゲートとして fail-closed で検査する。
+  `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt による sha256 検証付きの
+  pinned 導入が可能（既定 bin-dir は `/tmp/betterleaks-bin`、既存バイナリは上書きしない）。
+  CLI は `betterleaks git <repo> --redact --verbose` 形式で、Gitleaks の
+  `detect --source` とは異なる。pre-commit hook は Go 製のため初回構築時に Go toolchain が必要。
 - wasm-pack 0.13.1: `ci-wasm-test.sh` の wasm-test ゲートで使用。未導入なら 0.13.1 を
   自動導入し、導入失敗や版不一致なら fail-closed。
 - Node + npm: WDIO ゲート（Tauri WebView を操作、`npm run test:wdio`）で使用。`npm ci` 済みが前提。
@@ -171,6 +175,9 @@ push（`master`）と pull request では、GitHub Actions が静的ゲート /
 共通の再利用ワークフロー（`Seduce0068/workflows` の `rust-gates.yml`、タグ `v1`）
 に委譲しており、`.github/workflows/ci.yml` は Tauri のビルド依存と
 `extra_gates` を渡す呼び出し側になっている。
+シークレットゲートは extra_gates の末尾（最終ゲート）で
+`bash scripts/install-betterleaks.sh "$RUNNER_TEMP/betterleaks-bin"` により
+Betterleaks v1.10.1 を pinned 導入し、`export PATH` 後に `check-secrets.sh` を実行する。
 trunk build / ブラウザ E2E / WDIO / 配布保持は CI には組み込まれておらず、
 ローカルの `./scripts/verify.sh` で実行する（billing 解消後の追加は未実施）。
 desktop を含むワークスペース全体を Linux 向けに検証する。
@@ -186,7 +193,7 @@ cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 
 ### 一括検証
 
-全ゲートを再現するには「前提条件」のツール（gitleaks / wasm-pack / Node + npm /
+全ゲートを再現するには「前提条件」のツール（Betterleaks / wasm-pack / Node + npm /
 Chrome または Chromium / DISPLAY / Python 3.10 以降 + websockets）が必要で、不足すると
 secrets / E2E / WDIO のいずれかが fail-closed で失敗する。Chrome または Chromium は
 CDP E2E 専用で、WDIO は Tauri WebView を操作するため DISPLAY を要する。wasm-pack は
@@ -247,6 +254,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 
 - [要件定義](docs/requirements.md) - ユーザー要件, 未決定事項, 検証条件
 - [アーキテクチャ設計](docs/architecture.md) - 構成案, 開発順序, 技術選定
+- [調査レポート一覧](docs/reports/index.md)
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
 - [WebdriverIO 実 WebView E2E](docs/runbook-webdriver.md) - 実 Tauri WebView の settings 検証手順と制約
 - [リリース運用](docs/runbook-release.md) - 導入・更新・ロールバック・既知問題と公開作業の未決定
@@ -910,6 +918,8 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0348-capability-json-gate](docs/decisions/0348-capability-json-gate.md)
 - [0349-audit-advisory-allowlist](docs/decisions/0349-audit-advisory-allowlist.md)
 - [0350-document-fs-ipc-dto](docs/decisions/0350-document-fs-ipc-dto.md)
+- [0351-betterleaks-migration](docs/decisions/0351-betterleaks-migration.md)
+  - Gitleaks を Betterleaks v1.10.1 へ置き換え、pre-commit 主軸 + CI 最終ゲートを確立する決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
   - wdio permission がテスト用 capability JSON に閉じ、tauri.conf.json へ混入しないことを検査する決定。
@@ -949,7 +959,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
   - シークレットスキャンを extra_gates の末尾に置き、未導入時でも他の静的ゲートが実行されるようにする決定。
   - unsaved チェックと文書削除を単一クリティカルセクションで行い、並行編集の喪失を防ぐ決定。
   - 全候補 root を検査し、入れ子の read-only root を save_document から書き換えられないようにする決定。
-  - no-external-font-refs / 配布パス / gitleaks を verify.sh と CI extra_gates の両方へ配線する決定。
+  - no-external-font-refs / 配布パス / シークレット走査（現行は Betterleaks）を verify.sh と CI extra_gates の両方へ配線する決定。
   - updater 未登録、実 WebView 検証済み、build.rs 配置、ゲート一覧、ADR 要約を現行実装へ追従させる決定。
   - serde_yaml / tikv-jemalloc-sys の依存経路を cargo tree で実測し、ID・理由・期限付き例外として管理する決定。
 

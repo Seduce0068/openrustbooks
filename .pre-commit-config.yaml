@@ -1,10 +1,11 @@
-# gitleaks を pre-commit の主軸として配置する。
+# Betterleaks を pre-commit の主軸として配置する（rev は v1.10.1 にピン留め）。
 # コミット履歴に入る前に検出・ブロックし、verify.sh / CI の check-secrets を最終ゲートとして併設する。
 # 運用: pre-commit install && pre-commit autoupdate
-# gitleaks hook は Go 製のため、初回構築時に Go toolchain が必要（pre-commit が
-# hook リポジトリを clone して go install でビルドする）。
+# 注: main ブランチは v2 開発中のため rev は v1 タグへ固定する。
+# betterleaks hook は Go 製（language: golang）のため、初回構築時に Go toolchain が必要
+# （pre-commit が hook リポジトリを clone して go install でビルドする）。
 repos:
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.10.1
     hooks:
-      - id: gitleaks
+      - id: betterleaks
