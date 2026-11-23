@@ -16,17 +16,18 @@ status: draft
 
 - 待機は条件待ちを優先（[ADR-0235](decisions/0235-e2e-conditional-wait.md)）。
 - 検証条件は [requirements.md](requirements.md) の「検証条件の提案」と
-  「追加検討する品質要件」で VC-001 〜 VC-015 として定義している。
+  「追加検討する品質要件」で VC-001 〜 VC-016 として定義している。
 - VC は [ADR-0233](decisions/0233-solution-selection-rationale.md) により初版の測定可能な受け入れ基準として参照する。
 - E2E check 名は `tools/verify-web-reader.py` を Python AST で解析し、
   `checker.check` / `checker.equal` の第 1 引数（文字列リテラル）を抽出した
   実名のみを完全一致で記載する。一時ファイルは介さず、ソースを直接出典とする。
   抽出手順は `python3` で `ast.parse` し、`ast.Call` のうち
   `func` が `checker` の `check` / `equal` 属性であるものの第 1 引数を集める。
-- 期待総数 263 はコード出典とする。
+- 期待総数 273 はコード出典とする。
   [ADR-0090](decisions/0090-e2e-expected-count.md) は期待総数を常にコードを
-  出典とすることを定め、実体は `tools/verify-web-reader.py:1023` の
-  `Checker(expected=263)` である。EPUB2 NCX の 2 件を含む。
+  出典とすることを定め、実体は `tools/verify-web-reader.py:1028` の
+  `Checker(expected=273)` である。EPUB2 NCX の 2 件と REQ-011（PWA / 小画面対応）の
+  10 件を含む。
 - 1 セルに複数 check を列挙する場合は「；」で区切る。
   check 名自身に「 / 」を含むものがあるため、区切りには「；」を用いる。
 - `<html>` と `_blank` を含む check 名 3 件のみ、markdownlint MD033 / MD037 回避のため
@@ -63,6 +64,7 @@ status: draft
 | VC-013 | REQ-002/004/009 | ADR-0012/0013/0044/0091/0130/0162/0181/0187 | EPUB・MarkdownのHTMLと、アプリの特権操作を分離する。 | script 要素が本文に残らない；script が実行されない；イベントハンドラが実行されない；javascript: リンクの href が除去される；外部リンクの href が保持される；外部リンクに noopener noreferrer が付く；外部画像の src が除去される | HTML サニタイズ・外部リンク |
 | VC-013 | REQ-002/004/009 | ADR-0012/0013/0044/0091/0130/0162/0181/0187 | EPUB・MarkdownのHTMLと、アプリの特権操作を分離する。 | SVG が Blob URL で表示される；SVG の既存 width/height が維持される；SVG から script が除去される；SVG から on* 属性が除去される；SVG から foreignObject が除去される；SVG から javascript: リンクが除去される；SVG から SMIL 属性書き換えが除去される；SVG から外部スキーム参照が除去される；SVG の相対参照は維持される；SVG から xml-stylesheet 処理命令が除去される；SVG のスクリプトが実行されない | SVG サニタイズ |
 | VC-013 | REQ-002/004/009 | ADR-0012/0013/0044/0091/0130/0162/0181/0187 | EPUB・MarkdownのHTMLと、アプリの特権操作を分離する。 | 外部リンクのクリックで window.open が呼ばれる；mailto リンクの href が保持される；mailto リンクのクリックで window.open が呼ばれる；Content-Security-Policy が設定される；外部リンクが `_blank` / noopener,noreferrer で開かれる；mailto が `_blank` / noopener,noreferrer で開かれる | リンクのポップアップ制御・CSP |
+| VC-016 | REQ-011 | ADR-0353 | 320 CSS px 幅で横スクロールせず、タッチ操作領域と iOS PWA インストール導線を確認する | PWA のホーム画面が表示される；Web app manifest への link が設定される；theme-color メタタグが設定される；service worker が登録される；Web Install API 非対応ではインストールボタンが隠れる；320px 幅で横スクロールしない；coarse pointer で操作領域が 44px 以上；About に iOS のホーム画面追加手順が表示される；320px 幅で reader も横スクロールせず safe-area が適用される；320px 幅で editor も横スクロールせず safe-area が適用される | REQ-011 の PWA 導線・小画面対応。ブラウザ側は CDP emulation（modern-web-guidance: install-web-app / form-factor-adaptation / responsive-design） |
 
 ## 未カバー
 
@@ -78,18 +80,18 @@ status: draft
 | VC-010 | REQ-006/007 | ADR-0157/0232 | 外部アプリの更新やクラウドの競合を検知して扱う。 | 取り込み時の新旧判定のみ部分的にカバー。リアルタイムの外部更新・競合検知は E2E 対象外。 |
 | VC-012 | REQ-002/004 | ADR-0136/0159/0232 | 長い文書、大きなPDF・ZIPについて対象サイズを定めて検証する。 | 画像サイズと警告の check のみ。長い文書・大きな PDF / ZIP のサイズ検証は E2E 対象外。 |
 | VC-014 | REQ-002/007 | ADR-0004/0232 | アーカイブ処理でパスの逸脱と過大な展開を扱う。 | core の単体検証であり、E2E check 名が存在しない。 |
-| VC-015 | REQ-004 | ADR-0145/0224 | 実際の対象WebView・ブラウザで表示と操作を確認する。 | 自動 E2E は単一エンジン（CDP 接続）。Chrome / Edge は ADR-0265 で実機 255/0 を確認（履歴値、現行 263 件での再検証は未実施）。未達は Brave（未インストール）/ Firefox（CDP 非対応）/ Safari（macOS 必須）の環境ブロッカー。 |
+| VC-015 | REQ-004 | ADR-0145/0224 | 実際の対象WebView・ブラウザで表示と操作を確認する。 | 自動 E2E は単一エンジン（CDP 接続）。Chrome / Edge は ADR-0265 で実機 255/0 を確認（履歴値、現行 273 件での再検証は未実施）。未達は Brave（未インストール）/ Firefox（CDP 非対応）/ Safari（macOS 必須）の環境ブロッカー。320px / タッチ領域 / iOS 案内の DOM 検証は VC-016 に分離。 |
 
 ## 集計
 
-- 定義した検証条件: 15 件（VC-001 〜 VC-015）。
-- E2E check 名を割り当てた検証条件: 9 件（VC-002 / 003 / 004 / 006 / 009 / 010 / 011 / 012 / 013）。
-- 割り当てた check 数: 263 件（checker.check 246 + checker.equal 17 = 263、
-  期待総数 263 と一致、重複・欠落なし）。
+- 定義した検証条件: 16 件（VC-001 〜 VC-016）。
+- E2E check 名を割り当てた検証条件: 10 件（VC-002 / 003 / 004 / 006 / 009 / 010 / 011 / 012 / 013 / 016）。
+- 割り当てた check 数: 273 件（checker.check 256 + checker.equal 17 = 273、
+  期待総数 273 と一致、重複・欠落なし）。
   Tauri mock 成功経路 +1（ADR-0271 / 0272）は履歴の 255 件から +1 した値へ、
-  EPUB2 NCX の 2 件を加え、さらに prefers-contrast: more の 5 件
-  （ADR-0236）を加えた current 値。
-- REQ / 主要 ADR をカバー表 27 行と未カバー表 9 行のすべてへ割り当てた。
+  EPUB2 NCX の 2 件と prefers-contrast: more の 5 件（ADR-0236）を加え、
+  さらに REQ-011 の PWA / 小画面対応 10 件を加えた current 値。
+- REQ / 主要 ADR をカバー表 28 行と未カバー表 9 行のすべてへ割り当てた。
 - 未カバー表: 9 行（VC-001 / 005 / 006 / 007 / 008 / 010 / 012 / 014 / 015 の各観点）。
 
 ## 参照
@@ -105,3 +107,5 @@ status: draft
 - [ADR-0225: 壊れた画像のセトリング待ち解消](decisions/0225-broken-image-settling.md)
 - [ADR-0198: Reader の a11y 修正](decisions/0198-reader-a11y-fixes.md)
 - [ADR-0058: 本文領域の aria-labelledby](decisions/0058-region-aria-labelledby.md)
+
+- ADR-0353: PWA とレスポンシブ UI によるモバイル対応（REQ-011 / VC-016 / E2E +10 件）。
