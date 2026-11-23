@@ -38,7 +38,7 @@ runbook の保持・更新・ロールバック手順が実行不能だった。
 - bash -n / shellcheck / shfmt -d: rc=0。
 - markdownlint: 0 issues。
 - `./scripts/verify.sh`: 全ゲート成功、E2E **263 passed / 0 failed**、WDIO gate rc=0。
-- `./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified`:
+- `./scripts/verify.sh --dist /home/user/.local/share/openrustbooks-verified`:
   rc=0、`検証済み dist を保持しました: .../ef36be0-20261122T162513Z`。
 
 ## 未決定

@@ -46,7 +46,7 @@ profile・commit・RUSTFLAGS・gzip 条件が不明で比較できない。
 
 - WASM raw: **69,012,923** bytes（約 65.81 MiB）、gzip: **12,183,616** bytes。
 - JS raw: **93,786** bytes、gzip: **15,322** bytes。
-- `/home/koppe` 文字列の WASM 内出現回数: **0**（remap 適用を確認）。
+- `/home/user` 文字列の WASM 内出現回数: **0**（remap 適用を確認）。
 
 ## ツールバージョン
 

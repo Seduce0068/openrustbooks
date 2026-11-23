@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEFAULT_DIST_ROOT="/home/koppe/.local/share/openrustbooks-verified"
+DEFAULT_DIST_ROOT="/home/user/.local/share/openrustbooks-verified"
 
 # 期待件数の単一情報源は tools/verify-web-reader.py の Checker(expected=N)。
 # AST で厳密に 1 件の正の整数リテラルを抽出し、抽出不能 / 複数 / 不正値は

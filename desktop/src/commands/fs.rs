@@ -1053,7 +1053,7 @@ mod tests {
     /// fs コマンドが返す String に、host 上の絶対パスやファイル名が現れないこと。
     #[test]
     fn fs_ipc_error_string_never_contains_host_path() {
-        let host_path = "/home/koppe/secret/private.epub";
+        let host_path = "/home/user/secret/private.epub";
         let raw = CoreError::from(std::io::Error::other(format!("failed to read {host_path}")));
         let rendered = ipc_error(raw);
 
@@ -1069,7 +1069,7 @@ mod tests {
 
         let entry = FileEntry {
             name: "note.txt".to_string(),
-            path: PathBuf::from("/home/koppe/secret/note.txt"),
+            path: PathBuf::from("/home/user/secret/note.txt"),
             is_dir: false,
             size: Some(12),
             modified: None,

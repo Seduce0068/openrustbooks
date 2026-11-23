@@ -40,7 +40,7 @@ generated:
   固定パスのディレクトリ名だけを信じず実際の CLI 出力を照合するため、
   複数バージョンがキャッシュにあっても古い CLI が黙って使われることはない。
 - 保存先は**リポジトリ外の絶対パス**。`--dist` は相対パスとリポジトリ配下を拒否する。
-  推奨先は `/home/koppe/.local/share/openrustbooks-verified/`。
+  推奨先は `/home/user/.local/share/openrustbooks-verified/`。
   `/tmp` は再起動で消えるため恒久保持先としては避ける。
 - `trunk build --offline` が成功するローカルキャッシュが揃っていること（新規依存を取得しない）。
 
@@ -52,9 +52,9 @@ Kubuntu 上でリポジトリルートへ移動し、実際の絶対パスを指
 
 ```bash
 # Kubuntu: リポジトリルートで実行
-cd /home/koppe/ドキュメント/作業用/openrustbooks
+cd /home/user/ドキュメント/作業用/openrustbooks
 echo "=== verify.sh --dist ==="
-./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/
+./scripts/verify.sh --dist /home/user/.local/share/openrustbooks-verified/
 ```
 
 成功すると `===== 全検証成功 =====` の後、
@@ -74,7 +74,7 @@ static port / cdp port、source dist、および dist 内ファイルの SHA256
 
 ```bash
 # Kubuntu: 保持先で実行（<short-sha>-<UTC> は実値へ置換）
-DIST=/home/koppe/.local/share/openrustbooks-verified/<short-sha>-<UTC>
+DIST=/home/user/.local/share/openrustbooks-verified/<short-sha>-<UTC>
 echo "=== manifest ==="
 cat "$DIST/manifest.txt"
 echo "=== SHA256 検証（ヘッダ行を除外） ==="
@@ -99,7 +99,7 @@ SHA256 は完全性のみを保証し、署名による真正性は保証しな�
 
 ```bash
 # Kubuntu: 任意のシェルで実行（<short-sha>-<UTC> は実値へ置換）
-DIST=/home/koppe/.local/share/openrustbooks-verified/<short-sha>-<UTC>
+DIST=/home/user/.local/share/openrustbooks-verified/<short-sha>-<UTC>
 python3 -m http.server --directory "$DIST" 8000
 ```
 
@@ -114,8 +114,8 @@ python3 -m http.server --directory "$DIST" 8000
 ```bash
 # Kubuntu: 保持先で実行（新しい順に並べ、<short-sha>-<UTC> は実値へ置換）
 echo "=== 保持世代一覧 ==="
-ls -1 /home/koppe/.local/share/openrustbooks-verified/
-DIST=/home/koppe/.local/share/openrustbooks-verified/<short-sha>-<UTC>
+ls -1 /home/user/.local/share/openrustbooks-verified/
+DIST=/home/user/.local/share/openrustbooks-verified/<short-sha>-<UTC>
 echo "=== SHA256 検証 ==="
 (cd "$DIST" && grep -E '^[0-9a-f]{64} ' manifest.txt | sha256sum -c -)
 echo "=== serve（別シェルでも可、Ctrl-C で停止） ==="

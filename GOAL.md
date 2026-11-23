@@ -220,3 +220,9 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 - 全履歴スキャンを維持し、既知 false positive 2 件を fingerprint 例外で管理。
 - billing 原因を特定: private repo の Actions 実行がアカウント側請求ゲートで拒否。コード / workflow 変更は原因ではない。
 - verify.sh 全ゲート成功（secrets rc=0、E2E 263、WDIO 1）。
+
+## 公開前サニタイズ
+
+- 現行追跡ファイルの /home/koppe を /home/user へ置換（13 ファイル）。
+- Betterleaks 全履歴スキャン rc=0、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
+- 過去コミットの作者メール / 旧パスは履歴に残存（履歴書き換えは未実施）。

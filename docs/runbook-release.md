@@ -49,7 +49,7 @@ generated:
   検証済み dist が存在し、`manifest.txt` と SHA256 で完全性を確認できること。
   未検証の `web/dist`（開発ビルドの残存）は配布物として使わない。
 - 保存先はリポジトリ外の絶対パス（推奨:
-  `/home/koppe/.local/share/openrustbooks-verified/`）。`/tmp` は再起動で
+  `/home/user/.local/share/openrustbooks-verified/`）。`/tmp` は再起動で
   消えるため恒久保持先として使わない。
 - シークレットゲートは Betterleaks v1.10.1 を使う。ローカルは pre-commit
   （`.pre-commit-config.yaml` の rev `v1.10.1`）を主軸とし、`verify.sh` と CI の
@@ -68,7 +68,7 @@ generated:
 
 ```bash
 # Kubuntu: 保持先で実行（<short-sha>-<UTC> は実値へ置換）
-DIST=/home/koppe/.local/share/openrustbooks-verified/<short-sha>-<UTC>
+DIST=/home/user/.local/share/openrustbooks-verified/<short-sha>-<UTC>
 echo "=== SHA256 検証 ==="
 (cd "$DIST" && grep -E '^[0-9a-f]{64} ' manifest.txt | sha256sum -c -)
 echo "=== serve（Ctrl-C で停止） ==="
@@ -105,11 +105,11 @@ updater 経由の更新はできない。
 
 ```bash
 # Kubuntu: リポジトリルートで実行（<revision> は実値へ置換）
-cd /home/koppe/ドキュメント/作業用/openrustbooks
+cd /home/user/ドキュメント/作業用/openrustbooks
 echo "=== 現在の revision ==="
 git rev-parse --short HEAD
 echo "=== 全ゲート再検証と再保持 ==="
-./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/
+./scripts/verify.sh --dist /home/user/.local/share/openrustbooks-verified/
 ```
 
 git 操作は適用者が行う。本 Runbook は手順の定義のみで、
@@ -130,8 +130,8 @@ git 操作は適用者が行う。本 Runbook は手順の定義のみで、
 ```bash
 # Kubuntu: 保持先で実行（<short-sha>-<UTC> は戻す世代の実値へ置換）
 echo "=== 保持世代一覧 ==="
-ls -1 /home/koppe/.local/share/openrustbooks-verified/
-DIST=/home/koppe/.local/share/openrustbooks-verified/<short-sha>-<UTC>
+ls -1 /home/user/.local/share/openrustbooks-verified/
+DIST=/home/user/.local/share/openrustbooks-verified/<short-sha>-<UTC>
 echo "=== manifest 確認 ==="
 cat "$DIST/manifest.txt"
 echo "=== SHA256 検証 ==="

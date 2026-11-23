@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn ipc_error_never_leaks_secret_path_host_or_body() {
         let secret = "sk-ipc-leak-do-not-expose";
-        let path = "/home/koppe/secret/book.epub";
+        let path = "/home/user/secret/book.epub";
         let host = "https://api.secret.internal";
         let body = "response-body-with-token";
 

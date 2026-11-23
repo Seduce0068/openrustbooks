@@ -15,7 +15,7 @@ status: accepted
 
 ## 背景
 
-配布用 WASM（`web/dist/*_bg.wasm`）に `/home/koppe/...` などの開発ホスト
+配布用 WASM（`web/dist/*_bg.wasm`）に `/home/user/...` などの開発ホスト
 絶対パスが 1811 件含まれていた（todo.md E01）。
 デバッグ情報やパニックメッセージから開発環境のパスが漏れる可能性がある。
 
@@ -46,7 +46,7 @@ status: accepted
 ## 検証
 
 - `RUSTFLAGS="--remap-path-prefix=$HOME=~" trunk build --offline` で
-  生成した WASM の `/home/koppe` 出現回数が 0 件であることを確認した。
+  生成した WASM の `/home/user` 出現回数が 0 件であることを確認した。
 - `./scripts/verify.sh` を実行し、6 ゲート・trunk build・WASM パス検査・
   E2E 223 項目がすべて成功した。
 - CI は billing issue で実行不可（ローカル検証で代替）。

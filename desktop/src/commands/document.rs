@@ -993,7 +993,7 @@ mod tests {
     /// DocumentNotFound の id（path 由来）が IPC 文字列へ漏れないこと。
     #[test]
     fn document_ipc_error_string_never_contains_id_or_path() {
-        let secret_id = "/home/koppe/secret/private.epub";
+        let secret_id = "/home/user/secret/private.epub";
         let rendered = ipc_error(CoreError::DocumentNotFound(secret_id.to_string()));
 
         assert_eq!(rendered, "Internal configuration error");
@@ -1012,10 +1012,10 @@ mod tests {
         );
         metadata.title = Some("Secret Notes".to_string());
         metadata.size_bytes = 42;
-        metadata.path = Some(PathBuf::from("/home/koppe/secret/private.epub"));
+        metadata.path = Some(PathBuf::from("/home/user/secret/private.epub"));
         metadata.extra.insert(
             "host_path".to_string(),
-            serde_json::json!("/home/koppe/secret"),
+            serde_json::json!("/home/user/secret"),
         );
         let document = Document {
             metadata,

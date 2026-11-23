@@ -206,7 +206,7 @@ version・E2E 件数・CSP・Tauri plugin config・updater honesty・capability 
 `cargo audit` / `trunk build --offline --locked` / build-desktop /
 生成 JS グルーを含むパス検査 / E2E / WDIO をまとめて実行できる
 （一時出力先は自動で削除される）。全ゲート成功時だけ成果物を残したい場合は
-`./scripts/verify.sh --dist /home/koppe/.local/share/openrustbooks-verified/` を指定する。
+`./scripts/verify.sh --dist /home/user/.local/share/openrustbooks-verified/` を指定する。
 保持物の確認・SHA256 検証・serve・復旧手順は
 [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) を参照。
 公開 installer / updater / 署名成果物が無い現状と、導入・更新・ロールバック手順は

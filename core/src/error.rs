@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn fixed_message_masks_validation_secret_and_path() {
         let secret = "sk-error-fixed-leak";
-        let path = "/home/koppe/secret/book.epub";
+        let path = "/home/user/secret/book.epub";
         let error = CoreError::validation(format!("invalid {path} with {secret}"));
 
         // Display は内部向けに生値を保持する（既存契約を変えない）。

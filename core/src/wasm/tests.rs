@@ -42,7 +42,7 @@
     #[wasm_bindgen_test]
     fn js_error_masks_validation_secret_and_path() {
         let secret = "sk-wasm-validation-leak";
-        let path = "/home/koppe/secret/book.epub";
+        let path = "/home/user/secret/book.epub";
         let error = crate::error::CoreError::validation(format!("invalid {path} with {secret}"));
 
         let rendered = super::js_error(error)

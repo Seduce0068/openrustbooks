@@ -73,10 +73,10 @@ final-report のメタデータと本文、各 round のフロントマターか
   stale 注記の文言と付与先、昇格の判断基準は未決定。昇格には
   ADR-0083 の supersede が必要であり、本 ADR は行わない。
 - 公開リポジトリでの開発ホストパス除去。
-  `docs/investigation/round-05.md:27` には `strings | grep /home/koppe` の
+  `docs/investigation/round-05.md:27` には `strings | grep /home/user` の
   実測例が残る。ADR-0083 を維持する限り除去できないため、公開時に
   除去する場合は supersede の判断が必要。なお配布 WASM 自体は
-  ADR-0267 の実測で `/home/koppe` の出現が 0 件であることを確認済みで、
+  ADR-0267 の実測で `/home/user` の出現が 0 件であることを確認済みで、
   これは調査レポート内の文字列とは別の事柄である。
 
 ## 読み方の注意
