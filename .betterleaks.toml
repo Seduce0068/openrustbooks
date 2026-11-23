@@ -1,0 +1,17 @@
+# Betterleaks 設定（v1.x / Expr filter）。
+# EXC-BL-001/002: core/src/ai_markdown/client.rs の URL validation test にある
+# ダミー credential URI のみを除外する。実認証情報や他ファイルは対象外。
+# 有効期限: 2027-03-31（期限後は再レビューして削除または更新する）。
+[extend]
+useDefault = true
+
+filter = '''
+  attributes["path"] == "core/src/ai_markdown/client.rs"
+  && finding["rule_id"] == "generic-credential-uri"
+  && filter.containsAny(finding["line"], [
+    "user:secret@",
+    "user:REDACTED@",
+    "api.openai.com",
+    "localhost:11434"
+  ])
+'''

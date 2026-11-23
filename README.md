@@ -137,7 +137,7 @@ openrustbooks/
   `verify.sh` と CI の extra_gates が最終ゲートとして fail-closed で検査する。
   `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt による sha256 検証付きの
   pinned 導入が可能（既定 bin-dir は `/tmp/betterleaks-bin`、既存バイナリは上書きしない）。
-  CLI は `betterleaks git <repo> --redact --verbose` 形式で、Gitleaks の
+  CLI は `betterleaks git <repo> --config .betterleaks.toml --redact --verbose` 形式で、Gitleaks の
   `detect --source` とは異なる。pre-commit hook は Go 製のため初回構築時に Go toolchain が必要。
 - wasm-pack 0.13.1: `ci-wasm-test.sh` の wasm-test ゲートで使用。未導入なら 0.13.1 を
   自動導入し、導入失敗や版不一致なら fail-closed。

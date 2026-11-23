@@ -55,7 +55,7 @@ generated:
   （`.pre-commit-config.yaml` の rev `v1.10.1`）を主軸とし、`verify.sh` と CI の
   `extra_gates` が最終ゲートとして fail-closed で検査する。未導入時は
   `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt 検証付きに導入できる
-  （CLI は `betterleaks git <repo> --redact --verbose`、Gitleaks の `detect --source` ではない）。
+  （CLI は `betterleaks git <repo> --config .betterleaks.toml --redact --verbose`、Gitleaks の `detect --source` ではない）。
 - Tauri CLI（`cargo install tauri-cli`）は desktop のローカル開発専用である。
   公開 installer をビルド・署名・配布するためのものではない。
 

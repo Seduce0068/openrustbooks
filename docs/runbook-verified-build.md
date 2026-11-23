@@ -30,7 +30,7 @@ generated:
   の rev は `v1.10.1`）を主軸にし、`verify.sh` と CI の `extra_gates` を最終ゲートとして併設する。
   `bash scripts/install-betterleaks.sh [bin-dir]` で checksums.txt による sha256 検証付きの
   pinned 導入が可能（既定 bin-dir は `/tmp/betterleaks-bin`、既存バイナリは上書きしない）。
-  CLI は `betterleaks git <repo> --redact --verbose` 形式で、Gitleaks の `detect --source` とは異なる。
+  CLI は `betterleaks git <repo> --config .betterleaks.toml --redact --verbose` 形式で、Gitleaks の `detect --source` とは異なる。
   pre-commit の betterleaks hook は Go 製のため、初回構築時には Go toolchain が必要。
 - `trunk` 0.22.1。E2E は Python 3.10 以降（`websockets`）と Chrome / Chromium を使う。
 - `wasm-bindgen` が PATH にあること。`verify.sh` / `build-desktop.sh` は Cargo.lock が

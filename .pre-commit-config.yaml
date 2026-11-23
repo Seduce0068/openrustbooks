@@ -9,3 +9,5 @@ repos:
     rev: v1.10.1
     hooks:
       - id: betterleaks
+        # 公式 hook の entry に設定ファイル指定を追加（path + rule + test 行だけを除外）。
+        entry: betterleaks git --config .betterleaks.toml --pre-commit --redact --staged --verbose

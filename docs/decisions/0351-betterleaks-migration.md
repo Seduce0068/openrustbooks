@@ -19,15 +19,17 @@ CI の extra_gates は gitleaks の存在検査で常時 fail していた。
 
 ## 決定
 
-- pre-commit は Betterleaks v1.10.1 の公式 hook
-  (`betterleaks git --pre-commit --redact --staged --verbose`) を主軸とする。
+- pre-commit は Betterleaks v1.10.1 の hook を主軸とし、公式 entry に
+  `--config .betterleaks.toml` を追加する。
 - `scripts/check-secrets.sh` は Betterleaks の全履歴スキャン
-  (`betterleaks git <repo> --redact --verbose`) を CI / verify.sh の最終ゲートとして実行する。
+  (`betterleaks git <repo> --config .betterleaks.toml --redact --verbose`) を
+  CI / verify.sh の最終ゲートとして実行する。
 - `scripts/install-betterleaks.sh` が v1.10.1 の tarball を取得し、
   公式 `checksums.txt` とスクリプト内固定 digest の二重照合後に配置する。
 - 未導入 / 走査失敗 / 検出は fail-closed。
-- 既知 false positive は fingerprint 単位で `.betterleaksignore` に
-  例外 ID・理由・有効期限を添えて管理し、ルール全体の無効化は行わない。
+- 既知 false positive は `.betterleaks.toml` の Expr filter で
+  path + rule + test 行に限定して除外し、デフォルト 466 ルールは維持する。
+- 補助として `.betterleaksignore` にも fingerprint 例外を ID・理由・有効期限付きで記録する。
 - 全履歴スキャンを維持するため、作業ツリー走査での置き換えは行わない。
 
 ## 検証（Runtime Proof）
@@ -43,3 +45,4 @@ CI の extra_gates は gitleaks の存在検査で常時 fail していた。
 ## 未決定
 
 - `.betterleaksignore` の有効期限を自動検証するゲートの追加。
+- Expr filter のテスト行条件をさらに狭めるか。
