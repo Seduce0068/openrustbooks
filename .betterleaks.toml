@@ -1,17 +1,79 @@
-# Betterleaks 設定（v1.x / Expr filter）。
-# EXC-BL-001/002: core/src/ai_markdown/client.rs の URL validation test にある
-# ダミー credential URI のみを除外する。実認証情報や他ファイルは対象外。
+# Betterleaks 設定（v1.x / Expr rule-level filter）。
+# デフォルトの generic-credential-uri 判定を維持したまま、
+# URL validation test のダミー credential URI だけを path + match で除外する。
 # 有効期限: 2027-03-31（期限後は再レビューして削除または更新する）。
 [extend]
 useDefault = true
 
+[[rules]]
+id = 'generic-credential-uri'
 filter = '''
+let isExampleValue = filter.matchesAny(finding["secret"], [
+  `(?i)^(?:(?:(?:an?|my)(?:[ _.-]|%(?:20|2d|5f))*)?example(?:(?:[ _.-]|%(?:20|2d|5f))*(?:password|passwd|pwd))?|(?:password|passwd|pwd)(?:[ _.-]|%(?:20|2d|5f))*example)(?:(?:[ _.-]|%(?:20|2d|5f))*[0-9]{1,4})?[!?.]*$`
+]);
+let isInstructionalPlaceholder = filter.matchesAny(finding["secret"], [
+  `(?i)^(?:[a-z0-9]+[_.-])?(?:your[_.-]?(?:password|passwd|pwd)|(?:password|passwd|pwd)[_.-]goes[_.-]?here|replace[_.-]?me|insert[_.-].*[_.-]here|placeholder)$`
+]);
+let isSyntheticExampleURI = filter.matchesAny(finding["match"], [
+  `(?i)^[a-z][a-z0-9+.-]*://(?:foo|user(?:name)?|example(?:[_.-]?user)?):(?:bar|pass(?:word)?|passwd|pwd|example(?:[_.-]?(?:password|passwd|pwd))?)@(?:(?:example|test)\.(?:com|org|net)|example\.invalid)(?::[0-9]{1,5})?(?:[/\s'"\x60#]|$)`
+]);
+let isSyntheticCredentialTuple = filter.matchesAny(finding["match"], [
+  `(?i)^[a-z][a-z0-9+.-]*://(?:foo|test|user(?:name)?|example(?:[_.-]?user)?)[0-9]{0,4}:(?:bar|test|pass(?:word)?|passwd|pwd|token|secret)[0-9]{0,4}[!?.]?@`
+]);
+let isTestOrDocumentationSource = filter.matchesAny(attributes["path"], [
+  `(?i)(?:^|[/\\])(?:__tests__|tests?|testdata|specs?|fixtures?|mocks?|examples?|samples?|demos?|tutorials?|templates?|qa|e2e|documentation|docs?(?:[-_][a-z0-9-]+)?)(?:[/\\]|$)`,
+  `(?i)(?:^|[/\\])readme(?:\.[^/\\]+)?$`,
+  `(?i)(?:^|[/\\])[^/\\]*(?:[_.-](?:test|spec)|(?:test|spec)[_.-])[^/\\]*\.[^/\\]+$`,
+  `(?i)\.(?:example|sample|template)(?:\.[^/\\]+)?$`,
+  `(?i)\.(?:md|mdx|rst|adoc|asciidoc)$`
+]);
+let hasIgnoredHost = filter.matchesAny(finding["match"], [
+  `(?i)^[a-z][a-z0-9+.-]*://[^@\s]+@(?:[a-z0-9_-]+\.)*example(?:\.(?:com|org|net))?\.?(?::[0-9]{1,5})?(?:,(?:[a-z0-9_-]+\.)*example(?:\.(?:com|org|net))?\.?(?::[0-9]{1,5})?)*(?:[/?\s'"\x60#<>{}\[\];)]|,?$)`
+]);
+let hasLowConfidenceHost = filter.matchesAny(finding["match"], [
+  `(?i)^[a-z][a-z0-9+.-]*://[^@\s]+@(?:(?:[a-z0-9_-]+\.)*example(?:\.(?:com|org|net))?|(?:[a-z0-9_-]+\.)*(?:invalid|test|localhost))\.?(?::[0-9]{1,5})?(?:,(?:(?:[a-z0-9_-]+\.)*example(?:\.(?:com|org|net))?|(?:[a-z0-9_-]+\.)*(?:invalid|test|localhost))\.?(?::[0-9]{1,5})?)*(?:[/?\s'"\x60#<>{}\[\];)]|,?$)`
+]);
+let level = (
+  isExampleValue
+  || isSyntheticCredentialTuple
+  || isTestOrDocumentationSource
+  || hasLowConfidenceHost
+) ? "low" : "medium";
+let _ = filter.setConfidence(level);
+
+// Discard mechanically non-literal credentials. Weak and default passwords
+// remain reportable because the URI establishes their credential role.
+isInstructionalPlaceholder
+|| isSyntheticExampleURI
+|| hasIgnoredHost
+|| filter.matchesAny(finding["secret"], [
+  `^\*+$`,
+  `^\.+$`,
+  `(?i)^x{4,}$`,
+  `^•+$`,
+  `(?i)^\[?(?:redacted|masked|filtered)\]?$`,
+  `^\$\{.*}$`,
+  `^\$\([^\r\n]+\)$`,
+  `^#\{[^}\r\n]+}$`,
+  `^\{\{[ \t]*.+[ \t]*}}$`,
+  `^%\{[^}]+}$`,
+  `^\$[A-Za-z_][A-Za-z0-9_]*$`,
+  `(?i)^\$env:[A-Za-z_][A-Za-z0-9_]*$`,
+  `^%[A-Za-z_][A-Za-z0-9_]*%$`,
+  `^<[^>]+>$`,
+  `^\[[A-Za-z_][A-Za-z0-9_.-]*]$`,
+  `^\{[^}]+}$`,
+  `(?:\$\{|#\{|\{\{|%\{)`
+])
+
+// EXC-BL-001/002: 既定判定を維持しつつ、テスト用 URI のみ除外する。
+|| (
   attributes["path"] == "core/src/ai_markdown/client.rs"
-  && finding["rule_id"] == "generic-credential-uri"
-  && filter.containsAny(finding["line"], [
+  && filter.containsAny(finding["match"], [
     "user:secret@",
     "user:REDACTED@",
     "api.openai.com",
     "localhost:11434"
   ])
+)
 '''

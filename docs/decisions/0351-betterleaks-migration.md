@@ -27,8 +27,9 @@ CI の extra_gates は gitleaks の存在検査で常時 fail していた。
 - `scripts/install-betterleaks.sh` が v1.10.1 の tarball を取得し、
   公式 `checksums.txt` とスクリプト内固定 digest の二重照合後に配置する。
 - 未導入 / 走査失敗 / 検出は fail-closed。
-- 既知 false positive は `.betterleaks.toml` の Expr filter で
-  path + rule + test 行に限定して除外し、デフォルト 466 ルールは維持する。
+- 既知 false positive は `.betterleaks.toml` の `generic-credential-uri`
+  ルール単位 filter で path + match に限定して除外する。既定 filter は維持し、
+  デフォルト 466 ルールも維持する（top-level filter は既定値に上書きされるため使わない）。
 - 補助として `.betterleaksignore` にも fingerprint 例外を ID・理由・有効期限付きで記録する。
 - 全履歴スキャンを維持するため、作業ツリー走査での置き換えは行わない。
 
@@ -45,4 +46,4 @@ CI の extra_gates は gitleaks の存在検査で常時 fail していた。
 ## 未決定
 
 - `.betterleaksignore` の有効期限を自動検証するゲートの追加。
-- Expr filter のテスト行条件をさらに狭めるか。
+- rule-level filter に期限切れチェックを組み込むか。
