@@ -2,13 +2,26 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="color-scheme" content="light dark">
+    <!-- PWA: theme-color は OS の配色に追従させ、iOS は独立アプリとして起動する。 -->
+    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="openrustbooks">
+    <meta name="apple-touch-icon" href="/icons/apple-touch-icon.png">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' blob: data:; connect-src 'self' blob: data:">
     <title>openrustbooks</title>
     <meta name="description" content="Rust-powered document reader and editor">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <!-- manifest の URL は固定し、id を明示する（modern-web-guidance: install-web-app）。 -->
+    <link rel="manifest" href="/manifest.webmanifest">
     <link data-trunk rel="copy-file" href="favicon.svg"/>
+    <link data-trunk rel="copy-file" href="manifest.webmanifest"/>
+    <link data-trunk rel="copy-file" href="sw.js"/>
+    <link data-trunk rel="copy-dir" href="icons"/>
     <style>
         * {
             margin: 0;
@@ -16,7 +29,56 @@
             box-sizing: border-box;
         }
 
+        /* 視覚的に隠す要素は display 指定に負けないよう明示する（インストールボタン）。 */
+        [hidden] {
+            display: none !important;
+        }
+
+        /* 見出しはバランス、本文は orphan 防止（modern-web-guidance: form-factor-adaptation）。 */
+        :where(h1, h2, h3) {
+            text-wrap: balance;
+        }
+
+        :where(p, li) {
+            text-wrap: pretty;
+        }
+
+        body {
+            overflow-wrap: break-word;
+        }
+
+        img, video {
+            max-inline-size: 100%;
+            block-size: auto;
+        }
+
+        :where(a, code) {
+            overflow-wrap: anywhere;
+        }
+
+        /* WCAG 2.5.8: 24×24 CSS px、タッチ画面では 44×44。
+           通常の a / .btn / label[for] / checkbox / radio も対象に含める。
+           checkbox / radio は label で包むか label[for] で参照し、両方を 44px にする。
+           本文中の文脈リンク（reader / preview / document）は行の高さを崩さないよう除外。 */
+        :where(button, .btn, a:not(.reader-html a, .document-content a, .preview a), select, textarea, input, [role="button"], label:has(input[type="checkbox"], input[type="radio"]), label[for]) {
+            min-block-size: var(--target-size);
+            min-inline-size: var(--target-size);
+        }
+
+        :where(nav, nav ul, .toolbar) {
+            flex-wrap: wrap;
+        }
+
+        :where(.toolbar > :not(button, input, select, textarea, a, [role="button"], label)) {
+            min-inline-size: 0;
+        }
+
+        html {
+            scroll-padding-top: calc(4rem + env(safe-area-inset-top, 0px));
+        }
+
         :root {
+            --target-size: 24px;
             --color-bg: #ffffff;
             --color-fg: #1a1a2e;
             --color-muted: #6b7280;
@@ -41,6 +103,13 @@
             --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
             --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
             --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+        }
+
+        /* タッチ画面では指先の精度に合わせて 44×44 に拡大する。 */
+        @media (pointer: coarse) {
+            :root {
+                --target-size: 44px;
+            }
         }
 
         @media (prefers-color-scheme: dark) {
@@ -99,20 +168,24 @@
             background: var(--color-bg);
             color: var(--color-fg);
             line-height: 1.6;
-            min-height: 100vh;
+            min-height: 100dvh;
         }
 
         .app {
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
+            min-height: 100dvh;
         }
 
         .app-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: var(--spacing-md) var(--spacing-xl);
+            /* viewport-fit=cover と併用し、ノッチ・システムバーを避ける。 */
+            padding: max(var(--spacing-md), env(safe-area-inset-top, 0px))
+                     max(var(--spacing-xl), env(safe-area-inset-right, 0px))
+                     var(--spacing-md)
+                     max(var(--spacing-xl), env(safe-area-inset-left, 0px));
             border-bottom: 1px solid var(--color-border);
             background: var(--color-bg);
             position: sticky;
@@ -126,9 +199,15 @@
             color: var(--color-primary);
         }
 
+        /* 320px でもナビゲーションが折り返し、横溢れしない。 */
+        .app-header nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs) var(--spacing-md);
+        }
+
         /* リンクは色だけでなく下線でも識別する（WCAG 1.4.1 / modern-web-guidance）。 */
         .app-header nav a {
-            margin-left: var(--spacing-md);
             color: var(--color-muted);
             text-decoration: underline;
             text-underline-offset: 0.2em;
@@ -143,6 +222,9 @@
         .app-main {
             flex: 1;
             padding: var(--spacing-xl);
+            padding-left: max(var(--spacing-xl), env(safe-area-inset-left, 0px));
+            padding-right: max(var(--spacing-xl), env(safe-area-inset-right, 0px));
+            padding-bottom: max(var(--spacing-xl), env(safe-area-inset-bottom, 0px));
             max-width: 1200px;
             margin: 0 auto;
             width: 100%;
@@ -236,7 +318,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: var(--spacing-md);
-            height: calc(100vh - 200px);
+            height: calc(100dvh - 200px);
             min-height: 500px;
         }
 
@@ -316,7 +398,7 @@
         .reader-container {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 200px);
+            height: calc(100dvh - 200px);
         }
 
         .reader-toolbar {
@@ -655,11 +737,102 @@
                 max-height: 160px;
             }
         }
+
+        /* 320 CSS px 対応: どの画面も横スクロールさせない（WCAG 1.4.10 / REQ-011）。 */
+        @media (max-width: 480px) {
+            .app-header {
+                padding-left: max(var(--spacing-md), env(safe-area-inset-left, 0px));
+                padding-right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+            }
+
+            .app-main {
+                padding: var(--spacing-md);
+                padding-left: max(var(--spacing-md), env(safe-area-inset-left, 0px));
+                padding-right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+            }
+
+            .reader-content {
+                padding: var(--spacing-md);
+            }
+
+            .reader-chapter-select {
+                min-width: 0;
+                flex: 1 1 8rem;
+            }
+
+            .reader-chapter-title {
+                flex: 1 1 100%;
+                margin-left: 0;
+            }
+
+            .editor-container,
+            .reader-container {
+                height: auto;
+                min-height: calc(100dvh - 12rem);
+                min-inline-size: 0;
+            }
+
+            /* 1fr は minmax(auto, 1fr) なので、min-content 幅で 320px を突き破る。 */
+            .editor-container {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .editor-toolbar {
+                flex-wrap: wrap;
+            }
+
+            .editor-toolbar,
+            .editor-status,
+            .editor-pane,
+            .preview-pane,
+            .reader-content,
+            .reader-sidebar {
+                min-inline-size: 0;
+                max-inline-size: 100%;
+            }
+
+            .settings-form input[type="text"],
+            .settings-form input[type="password"],
+            .settings-form input[type="number"],
+            .settings-form select {
+                max-inline-size: 100%;
+            }
+
+            dialog[open] {
+                max-inline-size: calc(100% - 2rem);
+            }
+        }
+
+        /* PWA インストール導線。非対応ブラウザでは hidden のまま DOM に残す。 */
+        .pwa-install {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .pwa-install-status {
+            min-inline-size: 0;
+            color: var(--color-muted);
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
     <!-- Trunk builds the Rust/Wasm app and injects the wasm-bindgen loader.
          `#[wasm_bindgen(start)] fn main()` in `src/lib.rs` runs on init. -->
     <link data-trunk rel="rust" data-wasm-opt="z"/>
+
+    <!-- Service Worker: 同一起点のみ・fail-closed。登録失敗時は通常の Web アプリとして動作する。 -->
+    <script type="module">
+        if ("serviceWorker" in navigator && window.isSecureContext) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker
+                    .register("/sw.js", { scope: "/" })
+                    .catch(() => { /* PWA 機能が使えなくても閲覧・編集は継続する。 */ });
+            });
+        }
+    </script>
 </body>
 </html>

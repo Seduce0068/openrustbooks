@@ -69,6 +69,87 @@ fn App() -> impl IntoView {
     }
 }
 
+/// Web Install API が使えるブラウザでのみ表示するインストールボタン（REQ-011）。
+///
+/// `navigator.install()` は Progressive Enhancement であり、Safari を含む
+/// 非対応ブラウザではボタンを hidden にする。その場合は About の固定文言で
+/// 「共有 → ホーム画面に追加」を案内する（modern-web-guidance: install-web-app）。
+const INSTALL_SUCCESS_MESSAGE: &str =
+    "インストールが完了しました（または既にインストール済みです）。";
+const INSTALL_ERROR_MESSAGE: &str = "インストールを開始できませんでした。";
+const IOS_INSTALL_GUIDE: &str =
+    "iOS は Safari の「共有」→「ホーム画面に追加」でインストールします。";
+
+/// `typeof Navigator.prototype.install === "function"` と同じ判定を Rust 側で行う。
+fn supports_web_install() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(navigator_ctor) = js_sys::Reflect::get(&window, &JsValue::from_str("Navigator")) else {
+        return false;
+    };
+    let Ok(prototype) = js_sys::Reflect::get(&navigator_ctor, &JsValue::from_str("prototype"))
+    else {
+        return false;
+    };
+    matches!(
+        js_sys::Reflect::get(&prototype, &JsValue::from_str("install")),
+        Ok(value) if value.is_function()
+    )
+}
+
+#[component]
+fn InstallAppButton() -> impl IntoView {
+    let supported = supports_web_install();
+    let (status, set_status) = signal(String::new());
+
+    view! {
+        <div class="pwa-install">
+            <button
+                id="pwa-install"
+                class="btn btn-primary"
+                type="button"
+                hidden=!supported
+                on:click=move |_| {
+                    let Some(window) = web_sys::window() else {
+                        return;
+                    };
+                    let navigator = window.navigator();
+                    let Ok(install) = js_sys::Reflect::get(&navigator, &JsValue::from_str("install"))
+                    else {
+                        return;
+                    };
+                    let Ok(function) = install.dyn_into::<js_sys::Function>() else {
+                        return;
+                    };
+                    // ユーザー操作の最中に呼ばないと transient user activation を失う。
+                    match function.call0(&navigator) {
+                        Ok(value) => {
+                            if let Ok(promise) = value.dyn_into::<js_sys::Promise>() {
+                                let future = wasm_bindgen_futures::JsFuture::from(promise);
+                                wasm_bindgen_futures::spawn_local(async move {
+                                    match future.await {
+                                        Ok(_) => {
+                                            set_status.set(INSTALL_SUCCESS_MESSAGE.to_string());
+                                        }
+                                        Err(_) => {
+                                            set_status.set(INSTALL_ERROR_MESSAGE.to_string());
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        Err(_) => set_status.set(INSTALL_ERROR_MESSAGE.to_string()),
+                    }
+                }
+            >
+                "このアプリをインストール"
+            </button>
+            <p class="pwa-install-status" role="status" aria-live="polite">{move || status.get()}</p>
+        </div>
+    }
+}
+
 /// Home page - document browser
 #[component]
 fn HomePage() -> impl IntoView {
@@ -84,6 +165,7 @@ fn HomePage() -> impl IntoView {
                 </nav>
             </header>
             <main class="app-main">
+                <InstallAppButton/>
                 <section class="document-browser">
                     <h2>"文書"</h2>
                     <div class="toolbar">
@@ -203,6 +285,7 @@ fn AboutPage() -> impl IntoView {
                     <p>"Rust で作られた文書リーダー / エディターです"</p>
                     <p>"EPUB reading: available"</p>
                     <p>"TXT / Markdown / PDF / ZIP: planned"</p>
+                    <p id="about-install-guide">{IOS_INSTALL_GUIDE}</p>
                     <hr/>
                     <p>"Built with: Tauri, Leptos, Rust"</p>
                     <p id="about-license">"License: AGPL-3.0-or-later"</p>

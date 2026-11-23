@@ -8,6 +8,18 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Desktop application for openrustbooks using Tauri"
 
+# Android ビルドは `tauri android build` が `--lib` で cdylib を要求する。
+# 既存 main.rs に mobile entry point が含まれるため、同一ソースを lib としても公開する。
+[lib]
+name = "openrustbooks_desktop"
+path = "src/main.rs"
+crate-type = ["cdylib", "rlib"]
+
+# main.rs を lib と共有した結果、`#[cfg(not(mobile))] fn main` が lib 側で
+# dead_code になるため、package スコープで許容する。
+[lints.rust]
+dead_code = "allow"
+
 [dependencies]
 # Workspace dependencies
 openrustbooks-core = { path = "../core", features = [] }

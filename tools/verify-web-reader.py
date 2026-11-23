@@ -980,7 +980,8 @@ async def dump_startup_diagnostics(cdp: Cdp, label: str) -> None:
 
 async def run_checks(cdp: Cdp) -> int:
     """checker を生成し、CDP 失敗時も診断とサマリを出して fail-closed で伝播させる。"""
-    # 期待 check 総数: checker.check 241 + checker.equal 17 = 258。
+    # 期待 check 総数: checker.check 246 + checker.equal 17 = 263 を基準に、
+    # REQ-011（PWA / 小画面対応）の check を +10（checker.check 256 + checker.equal 17 = 273）。
     # EPUB2（OPF 2.0 + NCX）サンプルをファイル入力から開き、NCX の目次 2 件と
     # 2 件目の選択による第 2 章移動を確認する check を +2（VC-004）。
     # 内訳: 自然寸法の検証 +2（ラスターの width/height 付与と SVG 既存寸法の維持）、
@@ -1020,7 +1021,11 @@ async def run_checks(cdp: Cdp) -> int:
     # prefers-contrast: more の有効化と、light / dark それぞれの枠線 3:1・
     # 補助文字 4.5:1（emulation 前後の CSS 変数変化と実効コントラスト比） +5
     # （ADR-0236 / WCAG 1.4.11 / 1.4.3）。
-    checker = Checker(expected=263)
+    # PWA / 小画面対応（REQ-011）+10: ホーム表示、manifest link、theme-color、
+    # service worker 登録、install ボタンの隠蔽、320px 横スクロール無し、
+    # coarse pointer の 44px 操作領域、About の iOS インストール案内、
+    # 320px の reader / editor 横スクロール無しと safe-area 適用。
+    checker = Checker(expected=273)
     try:
         return await _run_checks(cdp, checker)
     except RuntimeError as exc:
@@ -1050,7 +1055,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         # 20 秒でマウントしない場合、原因が分かるように接続・読込・描画の痕跡を出す。
         await dump_startup_diagnostics(cdp, "初回マウント待ちタイムアウト")
         # ナビゲーションと Wasm init の競合が疑わしいため、再読み込みは 1 回だけ行う。
-        # check は最後に 1 度だけ実行し、期待総数 258 を維持する。
+        # check は最後に 1 度だけ実行し、期待総数 273 を維持する。
         await cdp.send("Page.reload", {"ignoreCache": True})
         mounted = await wait_until(cdp, reader_selector)
         if not mounted:
@@ -5305,6 +5310,182 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f"(moved={ncx_moved}, index={ncx_index!r}, title={ncx_title!r})",
     )
 
+    # --- PWA / 小画面対応（REQ-011） ----------------------------------------
+    # ホーム画面へ遷移し、manifest・theme-color・Service Worker・インストール導線と、
+    # 320 CSS px / coarse pointer でのレイアウトを確認する。
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/"})
+    home_mounted = await wait_until(cdp, "document.querySelector('.home-page') !== null")
+    checker.check("PWA のホーム画面が表示される", home_mounted)
+
+    manifest_href = await cdp.evaluate(
+        "document.querySelector('link[rel=\"manifest\"]')?.getAttribute('href') ?? ''"
+    )
+    checker.check(
+        "Web app manifest への link が設定される",
+        "manifest.webmanifest" in manifest_href,
+        f"(href={manifest_href!r})",
+    )
+
+    theme_color = await cdp.evaluate(
+        "document.querySelector('meta[name=\"theme-color\"]')?.getAttribute('content') ?? ''"
+    )
+    checker.check(
+        "theme-color メタタグが設定される",
+        bool(theme_color),
+        f"(content={theme_color!r})",
+    )
+
+    sw_registered = await wait_until(
+        cdp,
+        "navigator.serviceWorker?.getRegistration('/').then((r) => !!r)",
+        timeout=10,
+    )
+    checker.check("service worker が登録される", sw_registered)
+
+    # Web Install API は Progressive Enhancement。未対応ならボタンを隠し、About で案内する。
+    install_state = await cdp.evaluate(
+        """(() => {
+            const button = document.querySelector('#pwa-install');
+            const supported = typeof Navigator.prototype.install === 'function';
+            return { found: !!button, hidden: button ? button.hidden : null, supported };
+        })()"""
+    )
+    checker.check(
+        "Web Install API 非対応ではインストールボタンが隠れる",
+        isinstance(install_state, dict)
+        and install_state.get("found") is True
+        and install_state.get("hidden") is (not install_state.get("supported")),
+        f"(state={install_state!r})",
+    )
+
+    # CDP で 320×640 / mobile / touch を emulation し、横スクロールと操作領域を検証する。
+    await cdp.send(
+        "Emulation.setDeviceMetricsOverride",
+        {
+            "width": 320,
+            "height": 640,
+            "deviceScaleFactor": 1,
+            "mobile": True,
+            "screenWidth": 320,
+            "screenHeight": 640,
+        },
+    )
+    await cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 1})
+    await cdp.evaluate(
+        "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+    )
+    inner_width = await cdp.evaluate("window.innerWidth")
+    scroll_width = await cdp.evaluate("document.documentElement.scrollWidth")
+    checker.check(
+        "320px 幅で横スクロールしない",
+        inner_width == 320 and scroll_width <= inner_width,
+        f"(innerWidth={inner_width!r}, scrollWidth={scroll_width!r})",
+    )
+
+    coarse_pointer = await cdp.evaluate("matchMedia('(pointer: coarse)').matches")
+    target_size = await cdp.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--target-size').trim()"
+    )
+    # button だけでなく .btn / 通常 a / select / textarea / input / label / [role=button]
+    # も検査対象にする。本文中の文脈リンクは 24px 規約の対象外なので除外する。
+    control_selector = (
+        "button, .btn, a:not(.reader-html a, .document-content a, .preview a), "
+        "select, textarea, input, [role=\"button\"], "
+        "label:has(input[type=\"checkbox\"], input[type=\"radio\"]), label[for]"
+    )
+    controls_sized = await cdp.evaluate(
+        f"""(() => {{
+            const sized = (control) => {{
+                const style = getComputedStyle(control);
+                const block = parseFloat(style.minBlockSize);
+                const inline = parseFloat(style.minInlineSize);
+                return Number.isFinite(block) && Number.isFinite(inline)
+                    && block >= 44 && inline >= 44;
+            }};
+            const controls = Array.from(document.querySelectorAll({json.dumps(control_selector)}));
+            const realOk = controls.length > 0 && controls.every(sized);
+            // 現在の画面に label / checkbox / radio / select が無くても、
+            // CSS ルールがそれらへ効くことを一時的なプローブで確認する。
+            const probe = document.createElement('div');
+            probe.innerHTML = '<a href="#probe">a</a>'
+                + '<label for="probe-cb">checkbox</label>'
+                + '<input id="probe-cb" type="checkbox">'
+                + '<label for="probe-rb">radio</label>'
+                + '<input id="probe-rb" type="radio">'
+                + '<select><option>o</option></select>';
+            document.body.appendChild(probe);
+            const probeControls = Array.from(probe.querySelectorAll('a, label, input, select'));
+            const probeOk = probeControls.length === 6 && probeControls.every(sized);
+            probe.remove();
+            return realOk && probeOk;
+        }})()"""
+    )
+    checker.check(
+        "coarse pointer で操作領域が 44px 以上",
+        coarse_pointer is True and target_size == "44px" and controls_sized is True,
+        f"(coarse={coarse_pointer!r}, targetSize={target_size!r}, controls={controls_sized!r})",
+    )
+
+    # reader / editor を開いた状態でも 320px の横溢れと safe-area 適用を確認する。
+    safe_area_expr = """(() => {
+        const header = document.querySelector('.app-header');
+        if (!header) return false;
+        const style = getComputedStyle(header);
+        let declaresSafeArea = false;
+        for (const sheet of document.styleSheets) {
+            let rules;
+            try { rules = sheet.cssRules; } catch { continue; }
+            for (const rule of rules) {
+                if (rule.cssText && rule.cssText.includes('env(safe-area-inset')) {
+                    declaresSafeArea = true;
+                    break;
+                }
+            }
+            if (declaresSafeArea) break;
+        }
+        return declaresSafeArea
+            && parseFloat(style.paddingLeft) >= 16
+            && parseFloat(style.paddingTop) >= 16;
+    })()"""
+
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/reader/e2e"})
+    reader_mobile_mounted = await wait_until(
+        cdp, "document.querySelector('.reader-container') !== null"
+    )
+    reader_inner = await cdp.evaluate("window.innerWidth")
+    reader_scroll = await cdp.evaluate("document.documentElement.scrollWidth")
+    reader_safe = await cdp.evaluate(safe_area_expr)
+    checker.check(
+        "320px 幅で reader も横スクロールせず safe-area が適用される",
+        reader_mobile_mounted
+        and reader_inner == 320
+        and reader_scroll <= reader_inner
+        and reader_safe is True,
+        f"(mounted={reader_mobile_mounted}, innerWidth={reader_inner!r}, "
+        f"scrollWidth={reader_scroll!r}, safeArea={reader_safe!r})",
+    )
+
+    await cdp.send("Page.navigate", {"url": f"http://127.0.0.1:{PORT}/editor/e2e"})
+    editor_mobile_mounted = await wait_until(
+        cdp, "document.querySelector('.editor-container') !== null"
+    )
+    editor_inner = await cdp.evaluate("window.innerWidth")
+    editor_scroll = await cdp.evaluate("document.documentElement.scrollWidth")
+    editor_safe = await cdp.evaluate(safe_area_expr)
+    checker.check(
+        "320px 幅で editor も横スクロールせず safe-area が適用される",
+        editor_mobile_mounted
+        and editor_inner == 320
+        and editor_scroll <= editor_inner
+        and editor_safe is True,
+        f"(mounted={editor_mobile_mounted}, innerWidth={editor_inner!r}, "
+        f"scrollWidth={editor_scroll!r}, safeArea={editor_safe!r})",
+    )
+
+    # 以降の About チェックへ影響しないよう emulation を戻す。
+    await cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": False})
+    await cdp.send("Emulation.clearDeviceMetricsOverride")
+
     # About 画面: ライセンスが AGPL-3.0-or-later で、対応形式が「実装済み / 設計段階」に
     # 分けて表示されることを確認する。エディタ画面チェックの直後に遷移する最後の
     # チェックなので、後続の画面状態に影響しない（元の画面へ戻る遷移は不要）。
@@ -5326,6 +5507,14 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         and all(line in about_lines for line in expected_about_lines)
         and "License: MIT" not in about_lines
         and "Supports: EPUB, PDF, Markdown, TXT, ZIP" not in about_lines,
+        f"(mounted={about_mounted}, lines={about_lines!r})",
+    )
+
+    checker.check(
+        "About に iOS のホーム画面追加手順が表示される",
+        about_mounted
+        and isinstance(about_lines, list)
+        and any("Safari" in line and "ホーム画面に追加" in line for line in about_lines),
         f"(mounted={about_mounted}, lines={about_lines!r})",
     )
 
