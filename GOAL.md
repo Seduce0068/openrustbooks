@@ -223,6 +223,13 @@ parse_table_alignment は未知値を Left へ黙ってフォールバックす�
 
 ## 公開前サニタイズ
 
-- 現行追跡ファイルの /home/koppe を /home/user へ置換（13 ファイル）。
+- 現行追跡ファイルの /home/user を /home/user へ置換（13 ファイル）。
 - Betterleaks 全履歴スキャン rc=0、verify.sh 全ゲート成功（E2E 263、WDIO 1）。
 - 過去コミットの作者メール / 旧パスは履歴に残存（履歴書き換えは未実施）。
+
+## モバイル対応
+
+- REQ-011 を追加: Android アプリ版 / iOS は PWA を各自インストール / 320px・44px・safe-area 対応。
+- Android: Tauri Android 初期化、JDK 21 + Android SDK をローカル導入、APK/AAB 生成成功（aarch64 のみ、unsigned）。
+- PWA: manifest / service worker / install 導線 / iOS 案内、320px reader・editor・44px target を E2E で検証。
+- E2E 263 → 273、verify.sh 全ゲート成功、Betterleaks rc=0。

@@ -109,6 +109,7 @@ status: current
 
 ## 完了
 
+- [x] 【REQ-011 モバイル】Android アプリ / iOS PWA / 320px・44px・safe-area 対応（ADR-0352 / 0353）。
 - [x] 【CI シークレットゲート】Betterleaks v1.10.1 を pre-commit 主軸 + CI 最終ゲートで導入（ADR-0351）。
 - [x] 【EPUB サニタイズ】入力長 4 MiB / タグ深度 128 の上限を追加（ADR-0345、重複 TODO を整理）。
 - [x] 【document/fs DTO】IPC 境界から生 path と path 由来 id を除外（ADR-0350）。

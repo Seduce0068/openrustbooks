@@ -258,6 +258,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [検証済み配布物の取得・保持・復旧](docs/runbook-verified-build.md) - 保持・SHA256 検証・serve・復旧手順
 - [WebdriverIO 実 WebView E2E](docs/runbook-webdriver.md) - 実 Tauri WebView の settings 検証手順と制約
 - [リリース運用](docs/runbook-release.md) - 導入・更新・ロールバック・既知問題と公開作業の未決定
+- [モバイル開発](docs/runbook-mobile.md) - Android ビルドと iOS PWA インストール手順
 - [ドキュメント運用規約](docs/documentation-operations.md) - OKF・索引・log・ADR・lint の運用
 - [0001-use-system-webview](docs/decisions/0001-use-system-webview.md)
   - Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -920,6 +921,10 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0350-document-fs-ipc-dto](docs/decisions/0350-document-fs-ipc-dto.md)
 - [0351-betterleaks-migration](docs/decisions/0351-betterleaks-migration.md)
   - Gitleaks を Betterleaks v1.10.1 へ置き換え、pre-commit 主軸 + CI 最終ゲートを確立する決定。
+- [0352-android-app](docs/decisions/0352-android-app.md)
+  - Tauri Android target で APK / AAB を生成し、ローカル再生成する決定。
+- [0353-mobile-pwa-responsive](docs/decisions/0353-mobile-pwa-responsive.md)
+  - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
   - wdio permission がテスト用 capability JSON に閉じ、tauri.conf.json へ混入しないことを検査する決定。

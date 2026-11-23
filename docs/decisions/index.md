@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 351 件）。
+openrustbooks の ADR 一覧（全 353 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -706,3 +706,7 @@ openrustbooks の ADR 一覧（全 351 件）。
   - status: accepted — Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
 - [ADR-0351: Betterleaks へのシークレットゲート移行](0351-betterleaks-migration.md)
   - status: accepted — Gitleaks を Betterleaks v1.10.1 へ置き換え、pre-commit 主軸 + CI 最終ゲートを確立する決定。
+- [ADR-0352: Android アプリ版を Tauri 2 の Android target として追加](0352-android-app.md)
+  - status: accepted — 既存 desktop crate に cdylib ターゲットを追加し、ユーザー管理下のローカルツールチェーンで Android ビルド可能にする決定。
+- [ADR-0353: PWA とレスポンシブ UI によるモバイル対応](0353-mobile-pwa-responsive.md)
+  - status: accepted — iOS は PWA を各自インストールし、Android は別途ネイティブ版を提供する方針で 320px・タッチ対応 UI を実装する決定。
