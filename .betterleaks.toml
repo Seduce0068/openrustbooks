@@ -67,12 +67,13 @@ isInstructionalPlaceholder
 ])
 
 // EXC-BL-001/002: 既定判定を維持しつつ、テスト用 URI のみ除外する。
+// ホスト名単体の一致は避け、ダミー値を含む完全なリテラルのみを対象にする。
 || (
   attributes["path"] == "core/src/ai_markdown/client.rs"
   && filter.containsAny(finding["match"], [
     "user:secret@",
     "user:REDACTED@",
-    "api.openai.com",
+    "user:secret@api.openai.com/v1",
     "localhost:11434"
   ])
 )

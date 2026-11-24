@@ -2,8 +2,8 @@
 # 形式: <git-sha>:<path>:<rule-id>:<line>
 # 例外 ID / 理由 / 有効期限はコメントで管理し、期限切れ時は削除または再レビューする。
 
-# EXC-BL-001: validate_base_url() の userinfo 拒否 test に置いたダミー URL。実認証情報ではない。有効期限 2027-03-31。
-c6d3ba05c0fc95bafddbbf23f8e1347cd27ee314:core/src/ai_markdown/client.rs:generic-credential-uri:515
-
-# EXC-BL-002: 同上（Ollama localhost のダミー URL）。有効期限 2027-03-31。
-c6d3ba05c0fc95bafddbbf23f8e1347cd27ee314:core/src/ai_markdown/client.rs:generic-credential-uri:528
+# EXC-BL-001 / EXC-BL-002（旧 515 / 528 行目のエントリ）は削除。
+# 対象は validate_base_url() の userinfo 拒否 test に置いたダミー URL で、
+# 現在は .betterleaks.toml:69-79 の path + ダミーリテラル限定 filter で
+# 明示的に除外している（行番号変更に依存しない）。有効期限 2027-03-31。
+# 現行の該当行: core/src/ai_markdown/client.rs:677,690（参考値、ignore には使わない）。
