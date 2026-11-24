@@ -2388,7 +2388,7 @@ mod tests {
 
     impl ConfigFileGuard {
         fn new() -> Self {
-            let path = directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+            let path = directories::ProjectDirs::from("com", "openrustbooks", "openrustbooks")
                 .map(|dirs| dirs.config_dir().join("config.toml"));
             let original = path.as_ref().and_then(|p| std::fs::read(p).ok());
             Self { path, original }

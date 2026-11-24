@@ -623,7 +623,7 @@ mod tests {
     }
 
     fn saved_config_toml() -> Option<Vec<u8>> {
-        directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+        directories::ProjectDirs::from("com", "openrustbooks", "openrustbooks")
             .and_then(|dirs| std::fs::read(dirs.config_dir().join("config.toml")).ok())
     }
 
@@ -636,7 +636,7 @@ mod tests {
 
     impl ConfigFileGuard {
         fn new() -> Self {
-            let path = directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+            let path = directories::ProjectDirs::from("com", "openrustbooks", "openrustbooks")
                 .map(|dirs| dirs.config_dir().join("config.toml"));
             let original = path.as_ref().and_then(|p| std::fs::read(p).ok());
             Self { path, original }

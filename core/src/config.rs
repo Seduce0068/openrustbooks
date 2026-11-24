@@ -491,7 +491,7 @@ fn apply_env_max_retries(config: &mut AppConfig, raw: Option<String>) {
 /// `load()` / `save()` / バックアップ退避で同じ場所を参照するための単一情報源。
 #[cfg(not(target_arch = "wasm32"))]
 pub fn config_dir_path() -> Option<PathBuf> {
-    directories::ProjectDirs::from("com", "onoderakeita", "openrustbooks")
+    directories::ProjectDirs::from("com", "openrustbooks", "openrustbooks")
         .map(|dirs| dirs.config_dir().to_path_buf())
 }
 

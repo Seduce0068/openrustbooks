@@ -88,7 +88,7 @@ status: accepted
   （40,831,720 bytes、SHA-256 `f1c50e6afe40bdb7e01596e581542bf7eeed2729678184ff05f99f9485a95004`）
   と AAB（22,707,533 bytes、SHA-256
   `984420aa2be020c21cd286fc5987a297926f74e020608a0faeffc59fee7eb310`）を生成。
-- `aapt2 dump badging` で package `com.onoderakeita.openrustbooks` /
+- `aapt2 dump badging` で package `com.openrustbooks.app` /
   minSdk 24 / targetSdk 37 / `INTERNET` permission を確認。
 - 成果物名は `universal` だが、検証したのは `--target aarch64`（arm64-v8a）のみ。
   全 ABI（armv7 / i686 / x86_64）のビルドと検証は未実施。

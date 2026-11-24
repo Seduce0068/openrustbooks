@@ -108,7 +108,7 @@ impl PromptRegistry {
     #[cfg(not(target_arch = "wasm32"))]
     fn custom_prompts_dir() -> CoreResult<PathBuf> {
         use directories::ProjectDirs;
-        if let Some(proj_dirs) = ProjectDirs::from("com", "onoderakeita", "openrustbooks") {
+        if let Some(proj_dirs) = ProjectDirs::from("com", "openrustbooks", "openrustbooks") {
             Ok(proj_dirs.config_dir().join("prompts"))
         } else {
             Err(CoreError::internal("Could not determine config directory"))
