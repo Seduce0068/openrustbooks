@@ -70,4 +70,3 @@ service-refresh-auditor の指摘）。
   AI を無効化しても実行中の送信は完了する。
 - `save_config()` 失敗時は refresh に到達せず、メモリ上 config と service が
   乖離する（既存挙動）。
-EOF

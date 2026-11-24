@@ -75,4 +75,3 @@ WebView の CSP 対象外のため、同意なく本文が外部へ送られる�
 - カスタムエンドポイントの安全な opt-in 経路（config.toml 直接編集専用フラグ等）。
 - WASM に fetch ベースの AI クライアントを実装する際の同リスト適用。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

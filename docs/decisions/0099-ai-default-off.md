@@ -61,4 +61,3 @@ UI 未接続のため実際の送信は起きていないが、機能を接続�
 ## 未決定（ai-consent-auditor の指摘）
 
 - ~~wasm 側の `ai_enabled: true` ハードコード~~ ADR-0117 で既定 false に修正済み。
-EOF

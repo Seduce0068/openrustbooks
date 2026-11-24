@@ -60,4 +60,3 @@ status: accepted
   `local_roots[].path` / `recent_paths` などのパス情報がまだ DTO に含まれる（中優先度）。
 - `local_roots` を JS から変更できる問題（ADR-0097 の containment はルート内部のみ）。
 - 同意ダイアログの UI。
-EOF

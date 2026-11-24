@@ -83,4 +83,3 @@ secret-auditor の精査）。UI 未接続のため顕在化はしていない�
   （fs-bypass-auditor の指摘。既定 `local_roots` が空で backend 経由に
   置換すると回帰するため保留、ADR-0097 から継続）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

@@ -53,4 +53,3 @@ status: accepted
 - `keydown` 以外のイベント（`keyup` 等）でのモーダル判定。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
-EOF

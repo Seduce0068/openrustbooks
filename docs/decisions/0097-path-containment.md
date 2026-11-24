@@ -61,4 +61,3 @@ Tauri コマンド経由で任意パスの読み書きが可能になり得る�
 - TOCTOU（チェック後の symlink 差し替え）は `O_NOFOLLOW` / `openat2` 等が
   必要で、新規依存なしの範囲では残る。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

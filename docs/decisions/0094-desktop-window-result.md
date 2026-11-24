@@ -49,4 +49,3 @@ code-scanner #10）。
 
 - `.run()` の `expect("error while running tauri application")` の扱い。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

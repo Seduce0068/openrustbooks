@@ -64,4 +64,3 @@ Ollama には `client.rs` に system 経路が無く、テンプレート側が�
 - Ollama API の `system` パラメータ対応は未確認（リポジトリ外仕様）。
   Ollama ペイロードを変更しないため今回の影響はなし。
 - `render()` を `{system, user}` 構造に変更する中長期案（トレイト変更を伴う）。
-EOF

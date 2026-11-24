@@ -62,4 +62,3 @@ status: accepted
 ## 未決定
 
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

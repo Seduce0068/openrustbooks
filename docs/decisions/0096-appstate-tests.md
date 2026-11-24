@@ -54,4 +54,3 @@ status: accepted
 
 - `save_config()` のディスク書き込みテスト（一時ファイルが必要）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

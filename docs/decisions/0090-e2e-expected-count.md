@@ -56,4 +56,3 @@ status: accepted
 - ~~CDP 接続先を起動 PID と照合~~ ADR-0143 で browser-level WS による決定的照合を実装済み。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
-EOF

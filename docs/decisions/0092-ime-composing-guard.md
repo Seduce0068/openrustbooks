@@ -51,4 +51,3 @@ status: accepted
 - `keydown` 以外のイベント（`keyup` 等）での IME 判定。
 - `compositionstart` / `compositionend` の明示的な追跡。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

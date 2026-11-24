@@ -62,4 +62,3 @@ core は `landmarks()` と `page_list()` を公開しているが、Web UI は�
 - landmarks の種別（cover, bodymatter 等）ごとのアイコン表示。
 - landmarks が無い EPUB でのフォールバック。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
-EOF

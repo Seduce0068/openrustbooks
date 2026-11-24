@@ -55,4 +55,3 @@ wasm32 では `pub use wasm::*` により名前が衝突し得るが、Rust 側
   `main()` が `core::init()` を呼ぶ）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
 - EPUB 内 CSS、縦書き・ページ送り（ADR-0012 から継続）。
-EOF

@@ -71,4 +71,3 @@ status: accepted
 - `recent_paths` をファイル名のみで返す代替表現（dto-ux-auditor の推奨）。
 - `data_dir` / `cache_dir` / `config_file` の「設定済み bool」表現。
 - 将来 UI 接続時に config.toml の場所を案内する表示。
-EOF

@@ -59,4 +59,3 @@ test-scanner の監査で次が判明した。
 
 - 条件付き E2E チェック（24 件）のスキップ理由を明示する仕組み（test-scanner #1）。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

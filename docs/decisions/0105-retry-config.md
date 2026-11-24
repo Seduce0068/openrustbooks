@@ -67,4 +67,3 @@ status: accepted
 - ~~`max_retries` の範囲バリデーション（例 0..=10）未実装~~ ADR-0120 で service 境界にクランプを実装済み。
 - ~~`WasmConfig::default().ai_enabled = true` が `AiConfig` の既定 false と
   矛盾~~ ADR-0117 で解消済み。
-EOF

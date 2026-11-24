@@ -69,4 +69,3 @@ ADR-0099 〜 0103 の未決定）。
   実際の送信内容と不一致になる（preview-designer の指摘）。
 - OpenAI の固定 system message をプレビューに含めるか。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF

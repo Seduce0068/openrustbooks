@@ -64,4 +64,3 @@ connect-src 'self' blob: data:
 - 外部 CSS の SRI（todo.md B01 の残り）。
 - `script-src` から `'unsafe-inline'` を外すための nonce 対応。
 - `IntersectionObserver` による画像の遅延読み込み（ADR-0034 から継続）。
-EOF
