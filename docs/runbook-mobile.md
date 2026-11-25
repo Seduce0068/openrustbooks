@@ -189,7 +189,7 @@ Tauri CLI 2.12.6 は `platforms;android-37` を要求するが、現行 sdkmanag
   Google Play 登録が別途必要。
 - 全 ABI（armv7 / i686 / x86_64）は未検証。`universal` という成果物名でも
   arm64-v8a のみをビルドしている。
-- 実機（Galaxy S26 Ultra / Android 16）へのインストールと動作確認は未実施。
+- 実機（汎用の Android 端末）へのインストールと動作確認は未実施。
 - `compileSdk` と `targetSdk` は 37。端末側 Android 16 との互換性は未検証。
 - Android 固有の permission / capability 監査は未実施。Manifest は
   Tauri テンプレート既定（`INTERNET` のみ）を使用する。

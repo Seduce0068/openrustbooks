@@ -97,7 +97,7 @@ status: accepted
 
 - 全 ABI（armv7 / i686 / x86_64）のビルドと検証は未実施。`universal` という
   成果物名は ABI 混在を意味せず、実測は arm64-v8a のみ。
-- 実機（Galaxy S26 Ultra / Android 16）へのインストールと動作確認は未実施。
+- 実機（汎用の Android 端末）へのインストールと動作確認は未実施。
 - 署名鍵と Google Play 登録は未導入。生成 APK は `*-unsigned.apk` である。
 - 初回の `cargo tauri android build` は Web 側 `wasm-opt` の bulk memory 検証で失敗したが、
   Android ツールチェーン起因ではない。検証では既存の検証済み `web/dist` を
