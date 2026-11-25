@@ -1047,7 +1047,7 @@ mod tests {
         );
 
         let raw = json.to_string();
-        for forbidden in ["/home", "koppe", "private.epub", "host_path"] {
+        for forbidden in ["/home", "TEST_USER", "private.epub", "host_path"] {
             assert!(!raw.contains(forbidden), "leaked: {forbidden}");
         }
     }

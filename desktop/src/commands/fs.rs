@@ -1093,7 +1093,7 @@ mod tests {
         );
 
         let raw = json.to_string();
-        for forbidden in ["/home", "koppe", "secret", "\"path\""] {
+        for forbidden in ["/home", "TEST_USER", "secret", "\"path\""] {
             assert!(!raw.contains(forbidden), "leaked: {forbidden}");
         }
     }
@@ -1148,7 +1148,7 @@ mod tests {
         for (event, payload) in &payloads {
             assert!(!payload.contains(&raw_root), "{event} に生 path");
             assert!(!payload.contains("/home"), "{event} に /home");
-            assert!(!payload.contains("koppe"), "{event} にユーザー名");
+            assert!(!payload.contains("TEST_USER"), "{event} にユーザー名");
         }
         assert!(payloads[0].1.contains("\"name\":\"fresh.txt\""));
         assert!(payloads[1].1.contains("\"name\":\"fresh.txt\""));
