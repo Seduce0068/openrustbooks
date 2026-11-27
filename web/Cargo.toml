@@ -22,7 +22,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "console", "Window", "Document", "Element", "HtmlElement",
-    "Node", "EventTarget", "Blob", "File", "FileReader", "DomRect",
+    "Node", "EventTarget", "Blob", "File", "FileList", "FileReader", "DomRect",
     "Url", "Performance", "HtmlInputElement", "HtmlTextAreaElement",
     "HtmlSelectElement", "HtmlButtonElement", "HtmlDivElement",
     "HtmlSpanElement", "HtmlAnchorElement", "HtmlTableElement",
@@ -42,7 +42,6 @@ web-sys = { version = "0.3", features = [
     "XmlHttpRequest", "WebSocket", "MessageEvent", "CloseEvent",
     "ErrorEvent", "ProgressEvent"
 ] }
-gloo = { version = "0.12", features = ["timers", "events", "storage", "console", "net", "utils", "file"] }
 console_error_panic_hook = "0.1"
 tracing = { workspace = true }
 tracing-wasm = "0.2"

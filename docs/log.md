@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- 未使用直接依存 6 件を削除し、web-sys FileList を明示（native/wasm/gpui の --locked check 成功）。
 - 依存 hygiene ゲートへ lock パス引数を追加し、gpui/Cargo.lock も検査対象化（verify-gpui.sh に配線）。
 - GPUI 独立 workspace 用のローカルゲート scripts/verify-gpui.sh を追加（6 passed、clippy rc=0）。
 - Android instrumented test の teardown で FORTIFY の破棄済み mutex ロックを記録（ADR-0356）。

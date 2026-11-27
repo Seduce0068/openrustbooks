@@ -74,9 +74,10 @@ status: current
 - 【GPUI 入力サイズ事前検査】std::fs::read の後に上限検査しており、超過ファイルで事前に
   メモリを消費する。metadata().len() で事前拒否し read 後も再検査、上限定数は core 側で公開
   （R1-REVIEW-GPUI G-02）。
-- 【未使用依存の削除】core の walkdir / ignore / once_cell / parking_lot と web の gloo は
-  Rust ソース参照 0 件。manifest から削除し check --all-targets / wasm check で確認
-  （R4-DISCOVER-DP-03 / 04）。
+- [x] 【未使用依存の削除】core の walkdir / ignore / once_cell / parking_lot / gloo-timers と
+      web の gloo を削除。gloo が暗黙に有効化していた web-sys FileList を明示し、native/wasm --locked check、
+      cargo test、verify-gpui.sh すべて rc=0（R4-DISCOVER-DP-03 / 04）。
+      workspace.dependencies の uuid 未使用・chrono 分裂は ADR-0304 系の残課題として残る。
 - 【unsafe ゲート】verify.sh の clippy に -D clippy::undocumented_unsafe_blocks が無い。
   共通 workflow の clippy 引数も確認して必須化する（R4-DISCOVER-DP-05）。
 - 【WDIO 経路の拡充】現在は IPC 直接呼び出しの正常系 1 件のみ。UI 入力→保存と stale expected /
