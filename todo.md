@@ -120,10 +120,12 @@ status: current
   声明を実装へ合わせる。
 - 【未使用プロンプト】Summarize / Translate / ExplainCode のテンプレートとテストが保守されているが
   pipeline entry point と UI が無い（FG-05）。
-- 【ツール版の文書漂移】trunk 0.22.1/0.22.2、Tauri CLI 2.12.5/2.12.6 が文書ごとに異なる。
-  当時値と現行値を分離（R5-DOC-07）。
-- 【runbook-webdriver の検証内容】update_config_patch の revision +1、config.toml 永続化、
-  元値復元が spec で行われているが runbook に未記載（R5-DOC-08）。
+- [x] 【ツール版の文書漂移】Tauri CLI 2.12.5 は ADR-0282 検証時点、2.12.6 は
+      ADR-0352 の Android 導入時点として注記。trunk 版も runbook の日付前提を維持し、
+      現行値の単一情報源は各 ADR とする（R5-DOC-07）。
+- [x] 【runbook-webdriver の検証内容】update_config_patch の revision +1、config.toml の
+      log_level 永続化、finally での元値復元と復元失敗のマスク回避を runbook へ追記
+      （R5-DOC-08）。
 - 【CI 再現性】wasm-pack がネットワーク install に依存（R4-DP-08）、2 つの lock で
   wasm-bindgen 版が 0.2.129/0.2.130 と漂移（R4-DP-06）、WDIO ファミリの版が 3 種類に割れ
   @wdio/types だけ caret（R4-DP-07）。固定方針を統一する。

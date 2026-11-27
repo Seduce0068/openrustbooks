@@ -97,7 +97,7 @@ openrustbooks/
 - **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）、format 選択と Lint は desktop 向け。
 - **desktop 設定保存 (Tauri)**: browser は読み取り専用 fail-closed、desktop は UI 起点 CAS と
   構造化エラーで接続済み（Tauri mock E2E 256/0）。実 WebView でも settings / get_config /
-  update_config_patch / config.toml 永続化を検証済み（Tauri CLI 2.12.5、ADR-0282）。
+  update_config_patch / config.toml 永続化を検証済み（検証時点の Tauri CLI 2.12.5、ADR-0282）。
   WebdriverIO による独立 E2E ゲートも運用中（ADR-0283、
   [WebdriverIO 実 WebView E2E](docs/runbook-webdriver.md)）。
 - **AI支援 (設計段階)**: Markdown生成・修正・リファクタリング +

@@ -114,6 +114,10 @@ bash scripts/verify.sh --check-wasm-bindgen   # ゲート単独の事前確認�
 - `#settings-language` が表示され、editable である
 - 「更新確認: 未配線」が DOM に含まれる
 - `window.__TAURI__.core.invoke('get_config')` が成功し、数値 revision を返す
+- `update_config_patch` が expected=現在 revision で成功し、revision +1 を返す
+- `config.toml` の `general.log_level` が更新値（debug）で永続化される
+- `finally` で最新 revision を再取得し、元の log_level へ復元する
+- 復元失敗は元処理が失敗した場合はマスクし、成功時のみ失敗として伝える
 
 ## 注意点
 

@@ -184,7 +184,7 @@ desktop 設定保存の前提別状態（一部完了 / 方針のみ / 完了 / 
 [ADR-0274](decisions/0274-a05-traceability-reconciliation.md) を参照。これは当時の
 未検証状態の記録であり、現在は ADR-0282 / ADR-0283 で実 WebView 検証済みである。
 Tauri mock E2E 273/0 は JS / IPC 契約レベルであり、実 WebView の代替ではない（ADR-0273）。
-実 WebView では Tauri CLI 2.12.5 で settings / get_config / update_config_patch /
+実 WebView では検証時点の Tauri CLI 2.12.5 で settings / get_config / update_config_patch /
 config.toml 永続化を検証済み（ADR-0282）。WebdriverIO による独立 E2E ゲートも
 `verify.sh` の末尾で実行する（ADR-0283、
 [WebdriverIO 実 WebView E2E](runbook-webdriver.md)）。
