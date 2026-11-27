@@ -6,8 +6,28 @@ use gpui::{
     Render, Role, SharedString, Styled, Window, div, prelude::*, rgb,
 };
 
-use crate::book::{OPEN_ERROR, OpenedBook, chapter_label, next_index, previous_index};
+use crate::book::{
+    MAX_INPUT_BYTES, OPEN_ERROR, OpenedBook, chapter_label, next_index, previous_index,
+};
+use std::io::Read;
 
+/// EPUB バイト列を上限付きで読む。core は入力長の制限を呼び出し側へ委譲する
+/// （core/src/archive.rs:32-34）ため、ここで事前検査と読み取り量の制限を行う。
+fn read_epub_bytes(path: &str) -> Result<Vec<u8>, &'static str> {
+    let file = std::fs::File::open(path).map_err(|_| OPEN_ERROR)?;
+    let metadata = file.metadata().map_err(|_| OPEN_ERROR)?;
+    if !metadata.is_file() || metadata.len() > MAX_INPUT_BYTES {
+        return Err(OPEN_ERROR);
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_INPUT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| OPEN_ERROR)?;
+    if bytes.len() as u64 > MAX_INPUT_BYTES {
+        return Err(OPEN_ERROR);
+    }
+    Ok(bytes)
+}
 pub struct ReaderView {
     path: SharedString,
     status: SharedString,
@@ -34,7 +54,7 @@ impl ReaderView {
 
     fn open(path: String, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let status = match std::fs::read(&path) {
+        let status = match read_epub_bytes(&path) {
             Ok(bytes) => match OpenedBook::open(bytes) {
                 Ok(book) => {
                     let status = format!(
@@ -51,7 +71,7 @@ impl ReaderView {
                 }
                 Err(error) => error,
             },
-            Err(_) => OPEN_ERROR,
+            Err(error) => error,
         };
         Self {
             path: path.into(),
@@ -342,5 +362,25 @@ mod tests {
         assert_eq!(current_index(cx), 1);
         cx.simulate_keystrokes("left");
         assert_eq!(current_index(cx), 0);
+    }
+
+    #[test]
+    fn oversized_epub_is_rejected_before_read() {
+        let path = std::env::temp_dir().join(format!(
+            "openrustbooks-gpui-oversized-{}.epub",
+            std::process::id()
+        ));
+        let file = std::fs::File::create(&path).expect("一時ファイルを作成できませんでした");
+        file.set_len(MAX_INPUT_BYTES + 1)
+            .expect("スパースファイルのサイズを設定できませんでした");
+        drop(file);
+
+        let result = read_epub_bytes(path.to_str().expect("パスを変換できませんでした"));
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            result.err(),
+            Some(OPEN_ERROR),
+            "上限超過が事前拒否されませんでした"
+        );
     }
 }

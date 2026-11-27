@@ -71,9 +71,9 @@ status: current
 
 ### 優先度: 中
 
-- 【GPUI 入力サイズ事前検査】std::fs::read の後に上限検査しており、超過ファイルで事前に
-  メモリを消費する。metadata().len() で事前拒否し read 後も再検査、上限定数は core 側で公開
-  （R1-REVIEW-GPUI G-02）。
+- [x] 【GPUI 入力サイズ事前検査】read_epub_bytes で metadata 事前拒否と上限 +1 バイトの
+      take 読込を実装（TOCTOU と特殊ファイルの過剰読込を制限）。上限超過を直接検証する
+      test を追加し、cargo test 7 passed / verify-gpui.sh rc=0（R1-REVIEW-GPUI G-02、R4 指摘反映）。
 - [x] 【未使用依存の削除】core の walkdir / ignore / once_cell / parking_lot / gloo-timers と
       web の gloo を削除。gloo が暗黙に有効化していた web-sys FileList を明示し、native/wasm --locked check、
       cargo test、verify-gpui.sh すべて rc=0（R4-DISCOVER-DP-03 / 04）。

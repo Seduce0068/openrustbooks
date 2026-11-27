@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- GPUI ビューアで EPUB 読み込み前のサイズ検査を追加（7 passed、clippy rc=0）。
 - runbook-webdriver の検証内容を実 spec に追従させ、ツール版の当時値を明記。
 - verify.sh の clippy ゲートへ -D clippy::undocumented_unsafe_blocks を追加。
 - 未使用直接依存 6 件を削除し、web-sys FileList を明示（native/wasm/gpui の --locked check 成功）。
