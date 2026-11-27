@@ -69,7 +69,7 @@ e2e expected / e2e result、browser executable / path / version、
 static port / cdp port、source dist、および dist 内ファイルの SHA256
 （現状 5 行）が記録される（ADR-0266）。
 歴史的な実測例では `e2e expected : 253`、`e2e result   : passed: 253, failed: 0` だった。
-現行の期待値は **263**（check 246 + equal 17、ADR-0272 の Tauri mock +1）で、
+現行の期待値は **273**（check 256 + equal 17、REQ-011 の PWA 対応 +10 を含む）で、
 最新の実測は `./scripts/verify.sh` の Runtime Proof を参照する。
 
 ```bash
@@ -183,9 +183,9 @@ python3 -m http.server --directory "$DIST" 8000
 - [ ] 実 CI で pinned install と `check-secrets.sh` が成功し、シークレット未検出時に
       green になることを確認する。検出時は fail-closed を維持する。
 - [ ] CI で `trunk build` が成功することを確認する（現在は `verify.sh` 側のみ）。
-- [ ] CI で E2E **263 件**（check 246 + equal 17、ADR-0272 の Tauri mock +1）と
+- [ ] CI で E2E **273 件**（check 256 + equal 17、REQ-011 の PWA 対応 +10 を含む）と
       WDIO（`scripts/ci-wdio-test.sh`）が成功することを確認する。
-- [ ] `manifest.txt` の `e2e expected` / `e2e result` が 263 / `failed: 0` であることを
+- [ ] `manifest.txt` の `e2e expected` / `e2e result` が 273 / `failed: 0` であることを
       確認し、配布保持（ローカルの `verify.sh --dist`）が原子的に行われることを確認する。
 - [ ] 実 CI での artifact upload を有効化し、保持物をダウンロードして
       SHA256 検証（`grep -E '^[0-9a-f]{64} ' manifest.txt | sha256sum -c -`）まで行う。

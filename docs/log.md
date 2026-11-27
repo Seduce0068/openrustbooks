@@ -1,5 +1,16 @@
 # log
 
+## 2026-11-28
+
+- Android instrumented test（Espresso Web）を追加し、package を公開 identifier へ統一。
+  AVD API 36 で assertion 成功・teardown クラッシュのため `@Ignore` で一時無効化（runbook-mobile.md）。
+
+## 2026-11-27
+
+- E2E 件数の current 表記を 263 から 273 へ追従（README / docs 索引 / runbook 2 件）。
+
+## 2026-11-23
+
 - EPUB2 NCX の Web E2E を追加（ADR-0329）。
 
 ## 2026-11-22

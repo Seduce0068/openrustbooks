@@ -75,6 +75,11 @@ status: current
   残るは Firefox（CDP 非対応）、Brave（未インストール）、Safari（macOS 必須）の環境ブロッカー
   （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 
+- 【AND-UI-01/02 残 / teardown クラッシュ】Android instrumented test（Espresso Web）は
+  AVD API 36 / x86_64 で assertion 成功（1 test / 0 failure）だが instrumentation が
+  `Process crashed` で終了するため `@Ignore` で一時無効。原因解消と無効化解除が残る。
+  テストは `android-test/`、手順は `docs/runbook-mobile.md`。
+
 ### 優先度: 低
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
@@ -109,6 +114,8 @@ status: current
 
 ## 完了
 
+- [x] 【E2E 件数ドキュメント追従】README / docs 索引 / runbook-release / runbook-verified-build
+      の current 表記を 263 から 273 へ更新（コード出典 `Checker(expected=273)` と一致）。
 - [x] 【REQ-011 モバイル】Android アプリ / iOS PWA / 320px・44px・safe-area 対応（ADR-0352 / 0353）。
 - [x] 【CI シークレットゲート】Betterleaks v1.10.1 を pre-commit 主軸 + CI 最終ゲートで導入（ADR-0351）。
 - [x] 【EPUB サニタイズ】入力長 4 MiB / タグ深度 128 の上限を追加（ADR-0345、重複 TODO を整理）。

@@ -232,7 +232,7 @@ version・E2E 件数・CSP・Tauri plugin config・updater honesty・capability 
   （[ADR-0289](docs/decisions/0289-desktop-frontend-build-dependency.md)）。
 - **WDIO**: `ci-wdio-test.sh` を `verify.sh` 末尾の独立ゲートとして実行する。
   debug 限定の `wdio` feature と `@wdio/tauri-service` で実 WebView の settings を
-  検証し、既存 E2E 263 件・check 名は変更しない
+  検証し、既存 E2E 273 件・check 名は変更しない
   （[ADR-0283](docs/decisions/0283-webdriverio-adoption.md) /
   [ADR-0296](docs/decisions/0296-wdio-save-roundtrip.md)）。
 

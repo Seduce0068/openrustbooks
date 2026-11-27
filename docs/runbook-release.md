@@ -42,7 +42,8 @@ generated:
   ゲートは fmt / check / test / clippy / wasm / dependency-hygiene /
   audit-db-freshness / audit / `trunk build` / build-desktop / check-frontend-dist /
   パス検査 / secrets / E2E / WDIO を含む。E2E の期待総数は現行契約
-  （[GOAL.md](../GOAL.md) では 263 件）に従う。
+  （コード出典 `Checker(expected=273)`、[GOAL.md](../GOAL.md) のモバイル記録では
+  273 件）に従う。
   [runbook-verified-build.md](runbook-verified-build.md) に残る 253 件は旧実測例であり、
   現行の期待値ではない。
 - [docs/runbook-verified-build.md](runbook-verified-build.md) の手順で保持した
@@ -182,7 +183,7 @@ config.toml のファイルバックアップも適用前に取得する。
 desktop 設定保存の前提別状態（一部完了 / 方針のみ / 完了 / 未検証 / 環境ブロッカー）は
 [ADR-0274](decisions/0274-a05-traceability-reconciliation.md) を参照。これは当時の
 未検証状態の記録であり、現在は ADR-0282 / ADR-0283 で実 WebView 検証済みである。
-Tauri mock E2E 263/0 は JS / IPC 契約レベルであり、実 WebView の代替ではない（ADR-0273）。
+Tauri mock E2E 273/0 は JS / IPC 契約レベルであり、実 WebView の代替ではない（ADR-0273）。
 実 WebView では Tauri CLI 2.12.5 で settings / get_config / update_config_patch /
 config.toml 永続化を検証済み（ADR-0282）。WebdriverIO による独立 E2E ゲートも
 `verify.sh` の末尾で実行する（ADR-0283、

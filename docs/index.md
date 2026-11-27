@@ -3,10 +3,11 @@
 openrustbooks の設計・要件・判断記録を置くディレクトリ。
 
 - [requirements.md](requirements.md) — ユーザー要件、未決定事項、検証条件（VC-001〜015）。
-- [e2e-traceability.md](e2e-traceability.md) — 検証条件（VC）・REQ / 主要 ADR・E2E check 名（263 件）の対応表。
+- [e2e-traceability.md](e2e-traceability.md) — 検証条件（VC）・REQ / 主要 ADR・E2E check 名（273 件）の対応表。
 - [architecture.md](architecture.md) — 初期提案の構成案。現状は ADR と README を参照。
 - [runbook-verified-build.md](runbook-verified-build.md) — 検証済み dist の保持・SHA256 検証・serve・復旧手順。
 - [runbook-webdriver.md](runbook-webdriver.md) — WebdriverIO による実 Tauri WebView E2E の手順と制約。
+- [runbook-mobile.md](runbook-mobile.md) — Android ビルドと instrumented test（Espresso Web）の手順と既知制約。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
 - [decisions/](decisions/index.md) — 決定記録（ADR）。全 353 件の索引。

@@ -148,6 +148,51 @@ bundle/universalRelease/app-universal-release.aab         22,707,533 bytes
 全 ABI（armv7 / i686 / x86_64）のビルドと検証は未実施。
 `aapt2 dump badging` で package / minSdk / targetSdk / permission を確認できる。
 
+## Android instrumented test（Espresso Web）
+
+実 WebView の DOM を Espresso Web で検証する。Tauri の WebDriver はデスクトップ向けのため
+Android では使用しない。テスト本体は `android-test/androidTest/WebViewSmokeTest.kt`、
+ランナーは `scripts/run-android-instrumented-tests.sh` に置く。
+
+`desktop/gen/android` は生成物のため追跡しない。`cargo tauri android init` で再生成した直後は
+`android-test/` への sourceSets が無いため、`app/build.gradle.kts` の `android { ... }` 内に
+次を追加する（ランナーは配線の有無を検査する）。
+
+```kotlin
+sourceSets {
+    getByName("test") {
+        kotlin.srcDirs("../../../../android-test/unit")
+    }
+    getByName("androidTest") {
+        kotlin.srcDirs("../../../../android-test/androidTest")
+    }
+}
+```
+
+再生成後は `app/build.gradle.kts` の `dependencies` に Espresso Web と runner も追加する。
+
+```kotlin
+androidTestImplementation("androidx.test.espresso:espresso-web:3.5.0")
+androidTestImplementation("androidx.test:runner:1.5.2")
+```
+
+生成プロジェクトの `namespace` と `desktop/tauri.conf.json` の `identifier` が不一致の場合、
+古い `gen/android` を退避してから `cargo tauri android init` を再実行する。
+ランナーは不一致・未配線・options server 欠落を fail-closed で拒否する。
+
+実行には、接続済みエミュレータと Tauri CLI の `android dev` / `android build`
+セッション（options server）が存続していることが必要である。セッションが終了すると
+`cli-options-server.json` が削除され、ランナーは fail-closed で拒否する。
+エミュレータ以外の接続端末はランナーが切断する。
+
+```bash
+./scripts/run-android-instrumented-tests.sh
+```
+
+現状は AVD（API 36 / x86_64）で assertion 自体は成功するが、instrumentation の
+teardown で WebView プロセスがクラッシュし `Process crashed` となるため、
+テストは `@Ignore` で一時無効化している。解除前にクラッシュ原因の解消が必要である。
+
 ## 検証
 
 - `bash -n` / `shellcheck` / `shfmt -d` が `scripts/build-android.sh` に対して成功する。
