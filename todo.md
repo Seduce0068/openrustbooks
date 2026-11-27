@@ -52,13 +52,13 @@ status: current
   導入後の検証手順は ADR-0273 を追跡先とする。
   前提別状態（詳細は ADR-0274）: 前提 1 withGlobalTauri / CSP は一部完了
   （経路確定、nonce/hash と meta/config 一本化は未決定）、
-  前提 2 capability 最小権限は静的スコープゲート完了（2 command 固定・負向 test 11/11、ADR-0278）、
-  実 WebView の権限挙動と実ビルド完了証跡は未検証、
+  前提 2 capability 最小権限は静的スコープゲート完了（現行 4 command・負向 test 11/11 は当時記録、
+  ADR-0278 / ADR-0315）、実ビルド完了証跡は ADR-0355 で確定。実 WebView の権限挙動は未検証、
   前提 3 UI 起点 CAS + 構造化エラーは完了（ADR-0269）、
   前提 4 a11y は実装完了・実 WebView 検証未実施（ADR-0272 / 0273）、
   前提 5 Tauri mock E2E +1 は完了（256/0、ADR-0272）、
   前提 6 実 WebView は検証済み（ADR-0282 / 0283）。
-  未達: capability の実ビルド完了証跡は残す。JS / IPC 契約レベル（mock E2E 256/0）と
+  実ビルド完了証跡は ADR-0355 で確定（wdio ビルド 56 件 / 既定ビルド 0 件、静的ゲート rc=0）。JS / IPC 契約レベル（mock E2E 256/0）と
   実 WebView 検証（ADR-0282 / 0283）は達成済み。E2E 256 件・check 名・コードは変更しない。
 
 ### 優先度: 中

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 353 件）。
+openrustbooks の ADR 一覧（全 355 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -712,3 +712,5 @@ openrustbooks の ADR 一覧（全 353 件）。
   - status: accepted — iOS は PWA を各自インストールし、Android は別途ネイティブ版を提供する方針で 320px・タッチ対応 UI を実装する決定。
 - [ADR-0354: GPUI 版ビューアのプロトタイプ追加](0354-gpui-viewer-prototype.md)
   - status: accepted — core を再利用する独立 GPUI クレートを追加し、既存 Tauri/Android/PWA のゲートを維持する決定。
+- [ADR-0355: capability 最小権限の実ビルド完了証跡](0355-capability-build-proof.md)
+  - status: accepted — 既定ビルドと debug+wdio ビルドの capability 混入差分を実測し、A05 前提 2 を完了とする決定。
