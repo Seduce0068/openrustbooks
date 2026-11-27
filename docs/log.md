@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- Android instrumented test の teardown で FORTIFY の破棄済み mutex ロックを記録（ADR-0356）。
 - capability の実ビルド証跡を追加（ADR-0355）。wdio ビルド 56 件 / 既定ビルド 0 件、静的ゲート rc=0。
 - GPUI ビューアに左右キーの章送りを実装し、GPUI テスト（6 passed）と ydotool の実機入力で検証（ADR-0354 追記）。
 - GPUI 版に test-support テストと wayland/x11 feature を追加（ADR-0354 追記）。

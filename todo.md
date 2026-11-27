@@ -75,10 +75,10 @@ status: current
   残るは Firefox（CDP 非対応）、Brave（未インストール）、Safari（macOS 必須）の環境ブロッカー
   （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 
-- 【AND-UI-01/02 残 / teardown クラッシュ】Android instrumented test（Espresso Web）は
-  AVD API 36 / x86_64 で assertion 成功（1 test / 0 failure）だが instrumentation が
-  `Process crashed` で終了するため `@Ignore` で一時無効。原因解消と無効化解除が残る。
-  テストは `android-test/`、手順は `docs/runbook-mobile.md`。
+- 【AND-UI-01/02 残 / teardown クラッシュ】再現の結果、assertion 成功後に `Process crashed`。
+  `adb logcat -b crash` が `FORTIFY: pthread_mutex_lock called on a destroyed mutex` を記録
+  （ADR-0356）。mutex 所有者は未確認で、native lifecycle の可能性は推測。
+  `@Ignore` を継続し、原因の切り分けと再検証が残る。テストは `android-test/`、手順は `docs/runbook-mobile.md`。
 
 ### 優先度: 低
 

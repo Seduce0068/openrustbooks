@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 355 件）。
+openrustbooks の ADR 一覧（全 356 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -714,3 +714,5 @@ openrustbooks の ADR 一覧（全 355 件）。
   - status: accepted — core を再利用する独立 GPUI クレートを追加し、既存 Tauri/Android/PWA のゲートを維持する決定。
 - [ADR-0355: capability 最小権限の実ビルド完了証跡](0355-capability-build-proof.md)
   - status: accepted — 既定ビルドと debug+wdio ビルドの capability 混入差分を実測し、A05 前提 2 を完了とする決定。
+- [ADR-0356: Android instrumented test の teardown クラッシュ原因](0356-android-teardown-crash.md)
+  - status: accepted — FORTIFY の破棄後 mutex ロックを原因と特定し、@Ignore 継続を決定。

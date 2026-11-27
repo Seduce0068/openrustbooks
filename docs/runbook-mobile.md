@@ -190,8 +190,14 @@ androidTestImplementation("androidx.test:runner:1.5.2")
 ```
 
 現状は AVD（API 36 / x86_64）で assertion 自体は成功するが、instrumentation の
-teardown で WebView プロセスがクラッシュし `Process crashed` となるため、
-テストは `@Ignore` で一時無効化している。解除前にクラッシュ原因の解消が必要である。
+teardown で `Process crashed` となるため、テストは `@Ignore` で一時無効化している。
+`adb logcat -d -b crash` には `FORTIFY: pthread_mutex_lock called on a destroyed mutex`
+が記録された（ADR-0356）。mutex の所有者は未確認で、ネイティブ lifecycle の可能性を残す。
+原因の切り分けが終わるまで `@Ignore` を継続する。
+
+再現時は `web/` で `trunk serve --port 1420` を起動し `adb forward tcp:1420 tcp:1420`
+を設定してからランナーを実行する。フロントエンドが配信されないと assertion 自体が
+失敗し、teardown クラッシュとは別事象になる。
 
 ## 検証
 

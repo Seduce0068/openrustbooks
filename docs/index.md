@@ -10,7 +10,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-mobile.md](runbook-mobile.md) — Android ビルドと instrumented test（Espresso Web）の手順と既知制約。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 355 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 356 件の索引。
 - [gpui/](../gpui/README.md) — GPUI 版ビューアのプロトタイプ（独立 workspace）。
 - [ADR-0207: AppState のスコープと設計受容](decisions/0207-appstate-scope.md) — 設定系トランザクション完了の確認と残リスクの個別追跡。
 - [ADR-0218: AI カスタムエンドポイント opt-in の設計受容](decisions/0218-custom-ai-endpoint.md) — allowlist の現状契約と将来の最小安全設計。

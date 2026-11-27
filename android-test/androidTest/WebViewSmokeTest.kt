@@ -44,9 +44,11 @@ class WebViewSmokeTest {
         return false
     }
 
+    // teardown で FORTIFY が破棄済み mutex へのロックを検出するため一時無効。
+    // 詳細は docs/decisions/0356-android-teardown-crash.md。
+    @Ignore("ADR-0356: teardown の FORTIFY pthread_mutex_lock クラッシュのため一時無効")
     // AND-UI-01 / 02 を 1 回の Activity 起動で検証する。
     // テストごとの再起動で WebView のプロセスがクラッシュする事例があったため統合した。
-    @Ignore("AVD API 36 で assertion は成功するが teardown の WebView プロセスがクラッシュするため一時無効")
     @Test
     fun andUi01And02HomeRendersInRealWebView() {
         assertTrue("h1 が描画されない", waitForDomElement("h1"))
