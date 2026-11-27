@@ -47,6 +47,9 @@ cargo run --locked -- /path/to/book.epub
 （0 → 1 → 1 でクランプ → 0）を検証するテストを追加しています。
 `book.rs` の既存テストは変更していません。
 
+リポジトリ直下から `bash scripts/verify-gpui.sh` でも同じ 4 ゲートを一括実行できる
+（rustc >= 1.100 を要求し、ルートの `verify.sh` とは分離している）。
+
 ```bash
 cd gpui
 cargo fmt --all

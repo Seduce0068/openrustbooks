@@ -21,9 +21,10 @@ status: current
 
 ### 優先度: 高
 
-- 【GPUI 自動ゲート】gpui/ は独立 workspace で MSRV 1.100 を要求するが、verify.sh と CI
-  （rust_toolchain 1.95.0）の対象外で回帰を検出できない。gpui 用 check/test/clippy を
-  ローカルゲートまたは 1.100 固定在ジョブへ配線する（R1-REVIEW-GPUI G-01 / R4-DISCOVER-DP-01）。
+- [x] 【GPUI 自動ゲート】scripts/verify-gpui.sh を追加（rustc >= 1.100 を検査し
+      fmt --check / check --all-targets --locked / test --locked / clippy -D warnings
+      -D undocumented_unsafe_blocks を一括実行）。rc=0、6 passed（G-01 / DP-01 のローカル側を解消）。
+      CI の 1.100 固定在ジョブは共通 workflow 側のため未配線（残課題）。
 - 【gpui lock の依存ガバナンス】gpui/Cargo.lock の serde_yaml / tikv-jemalloc-sys は
   check-dependency-hygiene.sh の対象外（ルート lock 固定）。スクリプトへ lock パス引数を追加し
   両 lock を検査する（R4-DISCOVER-DP-02）。
