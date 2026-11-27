@@ -14,6 +14,8 @@ generated:
 verified:
   - at: "2026-11-28T01:11:40+09:00"
     by: dsh (lead)
+  - at: "2026-11-28T02:05:15+09:00"
+    by: dsh (lead)
 status: stable
 ---
 
@@ -69,30 +71,37 @@ GPUI 公式ドキュメント（`gpui-pre` ソース）では、`test` または
 | 画面文字の検出 | `tesseract -l eng+jpn` | 利用可。OCR で表示テキストを検証可能 |
 | 画像比較 | Python `cv2` / `numpy` | 利用可 |
 | X11/XWayland のキー・クリック | `xdotool` / `wmctrl` / `xwininfo` / `xprop` | 利用可（参考指示にも記載） |
-| Wayland ネイティブのキー・クリック | `ydotool` / `wtype` | 未インストール。`/dev/uinput` は root 所有で非対話利用不可 |
+| Wayland ネイティブのキー・クリック | `ydotool` 1.0.4 | 導入済み。`/dev/uinput` は root:input 0660、ユーザーを `input` グループへ追加、`ydotoold --socket-perm 0666` を起動 |
+| `wtype` / `dotool` / `wdotool` | 未導入 | KDE では `wtype` は virtual-keyboard protocol 未対応で非実用。`ydotool` で十分 |
 
 `kdotool` v0.3.0 には `key` / `click` コマンドが無く、ウィンドウ制御と
-KWin JavaScript 実行（`kwinscript`）のみ。Wayland ネイティブへの物理入力が必要なら、
-`ydotool` の導入と `/dev/uinput` 権限（対話 `sudo` または udev ルール）の承認が必要。
+KWin JavaScript 実行（`kwinscript`）のみ。Wayland ネイティブへの物理入力は
+`ydotool` で行う。`/dev/uinput` は `sudo apt-get install ydotool` で udev ルールが
+適用され root:input 0660 になり、`sudo usermod -aG input koppe` とデーモン起動で
+エージェントから利用できた。
 
-### 実測（未解決）
+### 実測（解決済み）
 
-GPUI ビューアを起動すると `TRACE: open_window ok=true` と `TRACE: activated` が出力される一方、
-`kdotool search` / `wmctrl -l` / `xwininfo -root -tree` のいずれにもウィンドウが現れず、
-`spectacle` の全画面 OCR にも書誌タイトルが検出されなかった。
-つまり「アプリは起動しているが、エージェントから画面を確認できない」状態で、
-原因（Wayland ウィンドウのマッピング／コンポジタ側の登録）は未確認。
-このため OS レベル方式は現状の GPUI 版には使えず、手法 2 が重要になる。
+GPUI ウィンドウが KWin に現れなかった原因は、`gpui-pre-platform` 依存に
+`wayland` / `x11` feature が無く headless バックエンドが選ばれていたこと。
+feature 追加後に `kdotool search --name openrustbooks` が
+`openrustbooks — GPUI`（class=`openrustbooks-gpui`、geometry 1000x788）を検出し、
+`spectacle` + `tesseract` が書誌タイトル・著者・章タイトル・本文を OCR した。
+さらに `ydotool mousemove` で「次の章」ボタン中央へポインタを移動し、
+`ydotool click 0xC0` を送ると章表示が `1 / 2` → `2 / 2`、本文が「第二章」へ変化した。
+OS レベル方式で Wayland ネイティブ GUI の操作検証が可能であることを確認済み。
 
 ## 推奨フロー
 
-- 機能テストは GPUI の `#[gpui::test]` と `render_to_image` で再現性を確保する。
+- 機能テストは GPUI の `#[gpui::test]` と `painted_quads` で再現性を確保する（5 tests 成功）。
 - Web 画面の操作確認は Playwright MCP のスナップショット→クリック→撮影で行う。
-- ネイティブ Window の実機確認が必要な場合のみ `kdotool` + `spectacle` + OCR を使い、
-  取得できない場合は理由を添えてユーザーに目視確認を依頼する（共通指示の「実行環境での自己確認」に従う）。
+- ネイティブ Window の実機確認は `kdotool` → `spectacle` + OCR → `ydotool` の順で行う。
+  座標は `ydotool mousemove` が相対移動のため、`kdotool getmouselocation` で
+  現在位置を確認しながら目的座標へ合わせる。
 
-## 未確認事项
+## 未確認事項
 
-- GPUI の `test-support` feature を本リポジトリで有効化した際のコンパイル成否。
-- Wayland 上で GPUI ウィンドウが KWin に登録されない原因。
-- Wayland ネイティブへのキー／クリック注入手段（`ydotool` 導入と権限）。
+- GPUI のキーボード操作（前の章 / 次の章）。`ReaderView` にキーハンドラが無いため、
+  `dispatch_keystroke` を送っても章は進まない。マウス操作は確認済み。
+- `render_to_image` を使ったスクリーンショット検証（本リポジトリでは `painted_quads` を採用）。
+- `wdotool` / RemoteDesktop portal 経由の代替入力（`ydotool` で要件を満たしたため未検証）。

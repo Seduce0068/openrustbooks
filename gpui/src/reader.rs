@@ -19,7 +19,11 @@ impl ReaderView {
         match path {
             None => Self {
                 path: "（ファイル未指定）".into(),
-                status: "起動引数または OPENRUSTBOOKS_EPUB に EPUB のパスを指定してください".into(),
+                status: format!(
+                    "起動引数または {} に EPUB のパスを指定してください",
+                    crate::EPUB_PATH_ENV
+                )
+                .into(),
                 book: None,
             },
             Some(path) => Self::open(path),
@@ -155,5 +159,50 @@ impl Render for ReaderView {
                     .child(next),
             )
             .child(body)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Background, TestAppContext, rgb};
+
+    #[gpui::test]
+    fn reader_view_paints_expected_backgrounds(cx: &mut TestAppContext) {
+        let (_view, cx) = cx.add_window_view(|_, _| ReaderView::new(None));
+        let quads = cx.update(|window, _| window.painted_quads());
+
+        assert!(
+            quads
+                .iter()
+                .any(|quad| quad.background == Background::from(rgb(0x1e1e1e))),
+            "ルート背景 0x1e1e1e が描画クワッドにありません"
+        );
+        assert!(
+            quads
+                .iter()
+                .any(|quad| quad.background == Background::from(rgb(0x3a3a3a))),
+            "前の章ボタン 0x3a3a3a が描画クワッドにありません"
+        );
+        assert!(
+            quads
+                .iter()
+                .any(|quad| quad.background == Background::from(rgb(0x2e7d32))),
+            "次の章ボタン 0x2e7d32 が描画クワッドにありません"
+        );
+    }
+
+    #[gpui::test]
+    fn reader_view_without_path_has_fixed_status(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| ReaderView::new(None));
+        cx.update(|_, app| {
+            let view = view.read(app);
+            assert!(
+                view.status.contains(crate::EPUB_PATH_ENV),
+                "パス未指定時の案内に環境変数名が含まれていません: {}",
+                view.status
+            );
+            assert!(view.book.is_none(), "パス未指定時に本が開かれています");
+        });
     }
 }

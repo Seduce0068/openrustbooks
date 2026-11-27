@@ -114,6 +114,9 @@ status: current
 
 ## 完了
 
+- [x] 【GPUI GUI テスト】`#[gpui::test]` + `painted_quads` の描画テストと、パス未指定時の
+      固定ステータス検証を追加（cargo test 5 passed）。gpui_platform に wayland / x11 feature を明示し、
+      kdotool で Window 検出・spectacle + tesseract で描画文字を確認（ADR-0354）。
 - [x] 【GPUI 版ビューア】独立 workspace `gpui/` にプロトタイプを追加（ADR-0354）。
       core 再利用・EPUB プレーンテキスト表示・章送り・fail-closed 入力。fmt/check/test 3 件/clippy 成功。
 - [x] 【E2E 件数ドキュメント追従】README / docs 索引 / runbook-release / runbook-verified-build

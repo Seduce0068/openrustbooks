@@ -2,6 +2,8 @@
 
 ## 2026-11-28
 
+- GPUI 版に test-support テストと wayland/x11 feature を追加（ADR-0354 追記）。
+  cargo test 5 passed、kdotool で Window 検出、spectacle + tesseract で描画文字を確認。
 - エージェントの GUI テスト手段を調査しレポートを追加（docs/reports/agent-gui-testing-methods.md）。
 - GPUI 版ビューアのプロトタイプを独立 workspace で追加（ADR-0354）。core を再利用し、fmt/check/test/clippy 成功。
 - Android instrumented test（Espresso Web）を追加し、package を公開 identifier へ統一。

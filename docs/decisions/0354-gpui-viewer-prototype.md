@@ -34,6 +34,8 @@ status: accepted
   固定日本語エラー表示のみを実装する（PoC 範囲）。
 - 画像表示・スクロール位置保持・設定 UI・AI 送信は PoC の対象外とし、既存 Tauri/Leptos 版を唯一の機能完全版として維持する。
 - Rust の unsafe は使用しない。clippy -D warnings -D clippy::undocumented_unsafe_blocks をゲートとする。
+- Linux で実ウィンドウを生成するため、gpui_platform 依存に wayland / x11 feature を明示する。
+  feature が無い場合は headless バックエンドとなり、Window は KWin に登録されない。
 
 ## 代替案
 
@@ -55,11 +57,16 @@ status: accepted
 - cargo check --offline: rc=0。
 - cargo test --offline: 3 passed / 0 failed（純粋ロジックと fail-closed 入力）。
 - cargo clippy --offline --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks: rc=0。
-- cargo run --offline -- /tmp/gpui-sample.epub: プロセスが起動後 40 秒以上生存し、异常終了しなかった。画面上の描画内容はスクリーンショットで確定できず未確認。
+- cargo test: 5 passed / 0 failed（book.rs の純粋ロジック 3 件 + reader.rs の GPUI テスト 2 件）。
+- wayland / x11 feature 有効化後、kdotool search が `openrustbooks — GPUI` を検出
+  （class=openrustbooks-gpui、geometry=1000x788）。spectacle の撮影を tesseract で OCR し、
+  書誌タイトル・著者・章タイトル・本文を検出。さらに ydotool click で「次の章」を押し、
+  章表示 1 / 2 → 2 / 2 と本文「第二章」への変化を確認。
 
 ## 未決定
 
-- 実機 Wayland ウィンドウの目視確認とキーボード操作（前の章 / 次の章）の検証。
+- キーボード操作（前の章 / 次の章）の検証。ReaderView にキーハンドラが無いため、
+  dispatch_keystroke によるテストは未実装。
 - 画像・表紙・スクロール位置保持・設定 UI の移植範囲。
 - gpui-pre の最新版 0.3.14 への更新タイミング（現状は JARVIS 実績のある 0.3.12 固定）。
 

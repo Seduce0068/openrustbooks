@@ -17,7 +17,10 @@ description = "GPUI viewer prototype for openrustbooks (native desktop, standalo
 [dependencies]
 openrustbooks-core = { path = "../core" }
 gpui = { package = "gpui-pre", version = "0.3.12" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.12" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.12", features = ["wayland", "x11"] }
+
+[dev-dependencies]
+gpui = { package = "gpui-pre", version = "0.3.12", features = ["test-support"] }
 
 [profile.release]
 strip = true

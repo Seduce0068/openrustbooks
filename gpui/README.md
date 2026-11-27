@@ -28,13 +28,31 @@ cargo run --locked -- /path/to/book.epub
 
 ## 検証
 
+`gpui-pre` / `gpui-pre-platform` の `test-support` feature を dev-dependency として
+有効化すると、`#[gpui::test]` と `TestAppContext` でウィンドウを生成し、
+`Window::painted_quads()` からラスタライズ前の描画クワッドを検証できます。
+OS ウィンドウを表示せずに、ナビゲーションボタンの配色とパス未指定時の
+ステータスを確認するテストを `reader.rs` に追加しています。
+`book.rs` の既存テストは変更していません。
+
 ```bash
 cd gpui
 cargo fmt --all
 cargo check --locked
 cargo test --locked
+cargo test --locked reader_view_paints_expected_backgrounds
+cargo test --locked reader_view_without_path_has_fixed_status
 cargo clippy --all-targets --locked -- -D warnings -D clippy::undocumented_unsafe_blocks
 ```
+
+### cargo test 結果
+
+`cargo test`: rc=0、**5 passed / 0 failed**（book.rs の純粋ロジック 3 件 +
+reader.rs の GPUI テスト 2 件）。`cargo fmt --all` / `cargo check --all-targets` /
+`cargo clippy --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks` も rc=0。
+
+OS レベル検証では、`ydotool` で「次の章」ボタンをクリックし、章表示が `1 / 2` から
+`2 / 2` へ変化することを `spectacle` + `tesseract` で確認済み（ADR-0354 参照）。
 
 ## 未実装
 
