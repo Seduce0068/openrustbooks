@@ -78,8 +78,9 @@ status: current
       web の gloo を削除。gloo が暗黙に有効化していた web-sys FileList を明示し、native/wasm --locked check、
       cargo test、verify-gpui.sh すべて rc=0（R4-DISCOVER-DP-03 / 04）。
       workspace.dependencies の uuid 未使用・chrono 分裂は ADR-0304 系の残課題として残る。
-- 【unsafe ゲート】verify.sh の clippy に -D clippy::undocumented_unsafe_blocks が無い。
-  共通 workflow の clippy 引数も確認して必須化する（R4-DISCOVER-DP-05）。
+- [x] 【unsafe ゲート】verify.sh の clippy へ -D clippy::undocumented_unsafe_blocks を追加。
+      共通 workflow 内部の clippy 引数はローカルから確認不能のため未確認のまま残す
+      （R4-DISCOVER-DP-05 のローカル側を解消）。
 - 【WDIO 経路の拡充】現在は IPC 直接呼び出しの正常系 1 件のみ。UI 入力→保存と stale expected /
   権限拒否 / 秘密マスクの負向を追加するか、未カバーを runbook に明示（R5-REVIEW-DOCS R5-DOC-09）。
 - 【ブラウザ lint UI 接続】WasmMarkdownLinter は実装・wasm test 済みだが「静的検査」ボタンが

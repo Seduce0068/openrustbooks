@@ -536,7 +536,7 @@ run capability-scope bash scripts/check-capability-scope.sh
 run config-dto-contract bash scripts/check-config-dto-contract.sh
 run check cargo check --all-targets --locked
 run test cargo test --all-targets --locked
-run clippy cargo clippy --all-targets --locked -- -D warnings
+run clippy cargo clippy --all-targets --locked -- -D warnings -D clippy::undocumented_unsafe_blocks
 run wasm-core cargo check -p openrustbooks-core --target wasm32-unknown-unknown --locked
 run wasm-web cargo check -p openrustbooks-web --target wasm32-unknown-unknown --locked
 # wasm-bindgen-test のテストは Node 上で実際に実行する（--no-run では不十分）。
