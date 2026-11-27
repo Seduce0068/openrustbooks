@@ -108,7 +108,5 @@ feature 追加後に `kdotool search --name openrustbooks` が
 
 ## 未確認事項
 
-- GPUI のキーボード操作（前の章 / 次の章）。`ReaderView` にキーハンドラが無いため、
-  `dispatch_keystroke` を送っても章は進まない。マウス操作は確認済み。
 - `render_to_image` を使ったスクリーンショット検証（本リポジトリでは `painted_quads` を採用）。
 - `wdotool` / RemoteDesktop portal 経由の代替入力（`ydotool` で要件を満たしたため未検証）。

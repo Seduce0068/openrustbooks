@@ -925,6 +925,9 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0352-android-app](docs/decisions/0352-android-app.md)
   - Tauri Android target で APK / AAB を生成し、ローカル再生成する決定。
 - [0353-mobile-pwa-responsive](docs/decisions/0353-mobile-pwa-responsive.md)
+- [0354-gpui-viewer-prototype](docs/decisions/0354-gpui-viewer-prototype.md)
+- [0355-capability-build-proof](docs/decisions/0355-capability-build-proof.md)
+- [0356-android-teardown-crash](docs/decisions/0356-android-teardown-crash.md)
   - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。

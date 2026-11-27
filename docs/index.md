@@ -77,4 +77,3 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [investigation/](investigation/) — 別セッションの一時調査スナップショット（未追跡・ADR-0083 で変更/コミットしないと決定）。
   数値は 2026-11-17 時点で現行ではない。成果は `todo.md` / ADR へ吸収済み（ADR-0276）。
 - [調査レポート一覧](reports/index.md)
-- [調査レポート一覧](reports/index.md)

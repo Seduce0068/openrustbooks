@@ -108,8 +108,9 @@ OKF `type: Decision` と `##` 見出しで記述する。追加時は次をす�
 - 254 件（check 237 + equal 17）は
   [ADR-0225](decisions/0225-broken-image-settling.md) の履歴更新として保持する。
 - current 値は 273 件（check 256 + equal 17）で、
-  [ADR-0353](decisions/0272-settings-save-ui.md) が根拠。
-  REQ-011（PWA / 小画面対応）の 10 件を加えた値であり、ADR-0353 を割り当てた。
+  出典は `tools/verify-web-reader.py` の `Checker(expected=273)` であり、
+  REQ-011（PWA / 小画面対応）の 10 件を加えた割当ては
+  [ADR-0353](decisions/0353-mobile-pwa-responsive.md) に記録する。
   出典は `tools/verify-web-reader.py` の `Checker(expected=273)` であり、
   文書側の current 表記を追従させる決定は
   [ADR-0262](decisions/0262-e2e-count-documentation-refresh.md) に記録する。

@@ -21,6 +21,13 @@ status: current
 
 ### 優先度: 高
 
+- 【GPUI 自動ゲート】gpui/ は独立 workspace で MSRV 1.100 を要求するが、verify.sh と CI
+  （rust_toolchain 1.95.0）の対象外で回帰を検出できない。gpui 用 check/test/clippy を
+  ローカルゲートまたは 1.100 固定在ジョブへ配線する（R1-REVIEW-GPUI G-01 / R4-DISCOVER-DP-01）。
+- 【gpui lock の依存ガバナンス】gpui/Cargo.lock の serde_yaml / tikv-jemalloc-sys は
+  check-dependency-hygiene.sh の対象外（ルート lock 固定）。スクリプトへ lock パス引数を追加し
+  両 lock を検査する（R4-DISCOVER-DP-02）。
+
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 集約 -->
@@ -63,6 +70,23 @@ status: current
 
 ### 優先度: 中
 
+- 【GPUI 入力サイズ事前検査】std::fs::read の後に上限検査しており、超過ファイルで事前に
+  メモリを消費する。metadata().len() で事前拒否し read 後も再検査、上限定数は core 側で公開
+  （R1-REVIEW-GPUI G-02）。
+- 【未使用依存の削除】core の walkdir / ignore / once_cell / parking_lot と web の gloo は
+  Rust ソース参照 0 件。manifest から削除し check --all-targets / wasm check で確認
+  （R4-DISCOVER-DP-03 / 04）。
+- 【unsafe ゲート】verify.sh の clippy に -D clippy::undocumented_unsafe_blocks が無い。
+  共通 workflow の clippy 引数も確認して必須化する（R4-DISCOVER-DP-05）。
+- 【WDIO 経路の拡充】現在は IPC 直接呼び出しの正常系 1 件のみ。UI 入力→保存と stale expected /
+  権限拒否 / 秘密マスクの負向を追加するか、未カバーを runbook に明示（R5-REVIEW-DOCS R5-DOC-09）。
+- 【ブラウザ lint UI 接続】WasmMarkdownLinter は実装・wasm test 済みだが「静的検査」ボタンが
+  disabled のまま。UI から呼び出す（R2-DISCOVER-FG FG-01）。
+- 【AI command の UI 接続】desktop の AI 6 command が登録済みで web UI から到達不能。
+  ADR-0127 の段階方針に沿って接続順序を決定（FG-02）。
+- 【document / fs command の UI 接続】open/save/list 等 10 command が未接続で Editor 保存は
+  localStorage ドラフトのまま。接続または未接続の明示を行う（FG-03）。
+
 <!-- 2026-11-23 R6 中優先度 -->
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->
 <!-- 2026-11-22 R6 中優先度 -->
@@ -71,7 +95,7 @@ status: current
 
 - 【B04-B06 / C01 残】UX と a11y の残課題。IME・モーダル・reduced-motion・dark ボタンコントラスト、
   `prefers-contrast: more` は完了（ADR-0236）。Chrome / Edge の実機 255/0 は当時の結果
-  （ADR-0265、履歴値。現行は mock +1 を含む 256 件、ADR-0272）。256 件での実機再検証は未実施。
+  （ADR-0265 は履歴値。現行は 273 件、Checker(expected=273)）。273 件での実機再検証は未実施。
   残るは Firefox（CDP 非対応）、Brave（未インストール）、Safari（macOS 必須）の環境ブロッカー
   （ADR-0230 / 0224 / 0236 / 0265 の未決定を追跡先とする）。
 
@@ -82,12 +106,31 @@ status: current
 
 ### 優先度: 低
 
+- 【GPUI tab_stop と a11y】前の章/次の章ボタンに tab_stop / role / aria_label があるが
+  Enter/Space 活性化と Tab バインドが無い。tab_stop を外すか活性化を追加（G-03）。
+- 【ADR-0354 の外部参照】JARVIS ADR への相対パスが ADR ファイル基準で切れている。
+  リポジトリ外参照と明記する（G-04）。
+- 【死設定 general.language / theme / log_level】編集可能だが DTO 往復のみで表示・ログへ反映されず、
+  未配線告知も無い。ADR-0304 の対象外（FG-06）。
+- 【README / ADR の記述不一致】format 選択と Lint は desktop でも disabled（FG-07）、
+  ZIP は README「実装済み」だが About は planned（FG-08）、window command 3 種は未到達（FG-04）。
+  声明を実装へ合わせる。
+- 【未使用プロンプト】Summarize / Translate / ExplainCode のテンプレートとテストが保守されているが
+  pipeline entry point と UI が無い（FG-05）。
+- 【ツール版の文書漂移】trunk 0.22.1/0.22.2、Tauri CLI 2.12.5/2.12.6 が文書ごとに異なる。
+  当時値と現行値を分離（R5-DOC-07）。
+- 【runbook-webdriver の検証内容】update_config_patch の revision +1、config.toml 永続化、
+  元値復元が spec で行われているが runbook に未記載（R5-DOC-08）。
+- 【CI 再現性】wasm-pack がネットワーク install に依存（R4-DP-08）、2 つの lock で
+  wasm-bindgen 版が 0.2.129/0.2.130 と漂移（R4-DP-06）、WDIO ファミリの版が 3 種類に割れ
+  @wdio/types だけ caret（R4-DP-07）。固定方針を統一する。
+
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。原因はアカウント側請求ゲート
   （private repo の Actions 実行拒否、2026-11-15T04:48Z〜06:37Z に発生）。
   詳細は [調査レポート](docs/reports/github-actions-billing-root-cause.md)。
   trunk build・配布パス検査・
-  E2E 256 件を共通ワークフローのマージゲートへ組み込む。
+  E2E 273 件を共通ワークフローのマージゲートへ組み込む。
   E2E 件数の current 表記は `scripts/check-e2e-count-consistency.sh` が
   verify.sh / CI extra_gates からコード出典と突き合わせて自動検査する。
   根拠 `.github/workflows/ci.yml:6`（no-external-font-refs / audit /
