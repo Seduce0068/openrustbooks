@@ -127,9 +127,11 @@ status: current
 - [x] 【runbook-webdriver の検証内容】update_config_patch の revision +1、config.toml の
       log_level 永続化、finally での元値復元と復元失敗のマスク回避を runbook へ追記
       （R5-DOC-08）。
-- 【CI 再現性】wasm-pack がネットワーク install に依存（R4-DP-08）、2 つの lock で
-  wasm-bindgen 版が 0.2.129/0.2.130 と漂移（R4-DP-06）、WDIO ファミリの版が 3 種類に割れ
-  @wdio/types だけ caret（R4-DP-07）。固定方針を統一する。
+- [x] 【CI 再現性（一部）】wasm-pack 導入失敗時にレジストリ到達性を明示するエラーを追加。
+      wasm-bindgen の版照合はルート lock を単一情報源とし、gpui lock は対象外と明記（ADR-0354）。
+      @wdio/types を 9.31.2 固定（@wdio/globals 9.31.2 は未公開のため 9.31.3 を維持）。
+      npm ls --depth=0 / npm run build:wdio rc=0（親が実行）。__残__: wasm-pack のネットワーク
+      install 自体は解消しておらず、CI 側 pinned install は未決定（R4-DP-08）。
 
 <!-- R6-2026-11-19 低優先度 / 2026-11-19: 外部要因と ADR 未決定を集約 -->
 - 【CI-H01】billing 解消後の実 CI 検証。原因はアカウント側請求ゲート

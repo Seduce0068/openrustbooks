@@ -15,7 +15,7 @@
     "@wdio/mocha-framework": "9.31.2",
     "@wdio/spec-reporter": "9.31.2",
     "@wdio/tauri-service": "1.5.1",
-    "@wdio/types": "^9.31.2",
+    "@wdio/types": "9.31.2",
     "typescript": "5.9.3",
     "webdriverio": "9.31.9"
   }

@@ -26,8 +26,11 @@ if command -v wasm-pack >/dev/null 2>&1; then
 		exit 1
 	fi
 else
-	echo "wasm-pack が見つからないため $WASM_PACK_VERSION を導入します"
-	cargo install wasm-pack --locked --version "$WASM_PACK_VERSION"
+	echo "wasm-pack が見つからないため $WASM_PACK_VERSION を導入します（ネットワークが必要）"
+	if ! cargo install wasm-pack --locked --version "$WASM_PACK_VERSION"; then
+		echo "ERROR: wasm-pack の導入に失敗しました。レジストリ到達性 / CARGO_NET_OFFLINE を確認してください" >&2
+		exit 1
+	fi
 	# cargo install の導入先が PATH に無い CI でも検出できるようにする（CARGO_HOME 対応）。
 	export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 	# 導入後も期待バージョンであることを確認し、不一致なら fail-closed とする。
