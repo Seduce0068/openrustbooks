@@ -21,6 +21,7 @@ gpui_platform = { package = "gpui-pre-platform", version = "0.3.12", features = 
 
 [dev-dependencies]
 gpui = { package = "gpui-pre", version = "0.3.12", features = ["test-support"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [profile.release]
 strip = true

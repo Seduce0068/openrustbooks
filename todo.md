@@ -114,6 +114,9 @@ status: current
 
 ## 完了
 
+- [x] 【GPUI キーハンドラ】左右矢印で章送り（FocusHandle + on_key_down）を実装。
+      GPUI test-support 6 passed（arrow_keys_move_chapter 含む）、ydotool 実機キー入力で
+      1 / 2 ↔ 2 / 2 を OCR 確認（ADR-0354）。
 - [x] 【GPUI GUI テスト】`#[gpui::test]` + `painted_quads` の描画テストと、パス未指定時の
       固定ステータス検証を追加（cargo test 5 passed）。gpui_platform に wayland / x11 feature を明示し、
       kdotool で Window 検出・spectacle + tesseract で描画文字を確認（ADR-0354）。

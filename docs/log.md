@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- GPUI ビューアに左右キーの章送りを実装し、GPUI テスト（6 passed）と ydotool の実機入力で検証（ADR-0354 追記）。
 - GPUI 版に test-support テストと wayland/x11 feature を追加（ADR-0354 追記）。
   cargo test 5 passed、kdotool で Window 検出、spectacle + tesseract で描画文字を確認。
 - エージェントの GUI テスト手段を調査しレポートを追加（docs/reports/agent-gui-testing-methods.md）。

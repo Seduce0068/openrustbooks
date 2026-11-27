@@ -34,6 +34,7 @@ status: accepted
   固定日本語エラー表示のみを実装する（PoC 範囲）。
 - 画像表示・スクロール位置保持・設定 UI・AI 送信は PoC の対象外とし、既存 Tauri/Leptos 版を唯一の機能完全版として維持する。
 - Rust の unsafe は使用しない。clippy -D warnings -D clippy::undocumented_unsafe_blocks をゲートとする。
+- キーハンドラは FocusHandle + track_focus + on_key_down で実装し、右矢印で次章、左矢印で前章へ移動する。既定の Tab キーバインドや設定ファイルによる KeyBinding はPoC外。
 - Linux で実ウィンドウを生成するため、gpui_platform 依存に wayland / x11 feature を明示する。
   feature が無い場合は headless バックエンドとなり、Window は KWin に登録されない。
 
@@ -53,20 +54,21 @@ status: accepted
 
 ## 検証（Runtime Proof）
 
-- cargo fmt --all: rc=0。
-- cargo check --offline: rc=0。
-- cargo test --offline: 3 passed / 0 failed（純粋ロジックと fail-closed 入力）。
+- cargo fmt --all / cargo check --all-targets: rc=0。
+- cargo test: rc=0、**6 passed / 0 failed**（book.rs の純粋ロジック 3 件 +
+  reader.rs の GPUI テスト 3 件）。`arrow_keys_move_chapter` で 0 → 1 → 1（クランプ）→ 0 を検証。
 - cargo clippy --offline --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks: rc=0。
-- cargo test: 5 passed / 0 failed（book.rs の純粋ロジック 3 件 + reader.rs の GPUI テスト 2 件）。
 - wayland / x11 feature 有効化後、kdotool search が `openrustbooks — GPUI` を検出
   （class=openrustbooks-gpui、geometry=1000x788）。spectacle の撮影を tesseract で OCR し、
   書誌タイトル・著者・章タイトル・本文を検出。さらに ydotool click で「次の章」を押し、
   章表示 1 / 2 → 2 / 2 と本文「第二章」への変化を確認。
+- 実機のキー入力: `ydotool key -d 50 106:1 106:0`（右）で 2 / 2、
+  `105:1 105:0`（左）で 1 / 2 へ変化することを OCR で確認。
 
 ## 未決定
 
-- キーボード操作（前の章 / 次の章）の検証。ReaderView にキーハンドラが無いため、
-  dispatch_keystroke によるテストは未実装。
+- 既定の Tab キーバインドと設定ファイルによる KeyBinding。gpui-pre 0.3.12 にはコアの
+  Tab バインドが無く、本 PoC は左右矢印の固定操作のみを実装している。
 - 画像・表紙・スクロール位置保持・設定 UI の移植範囲。
 - gpui-pre の最新版 0.3.14 への更新タイミング（現状は JARVIS 実績のある 0.3.12 固定）。
 

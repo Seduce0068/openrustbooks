@@ -26,35 +26,63 @@ cargo run --locked -- /path/to/book.epub
 
 画面には書誌情報・章タイトル・本文（プレーンテキスト）と、前の章 / 次の章ボタンを表示します。
 
+## キーボード操作
+
+起動時にルートビューへフォーカスを設定します。章が 2 章以上ある場合、次のキーで移動できます。
+
+| キー | 動作 |
+| --- | --- |
+| 右矢印 | 次の章へ移動（末尾ならそのまま） |
+| 左矢印 | 前の章へ移動（先頭ならそのまま） |
+
+章が 1 章のみの場合はキー操作では移動しません（既存ボタンと同じ can_navigate ガード）。
+ボタンの onclick 挙動は変更していません。
+
 ## 検証
 
-`gpui-pre` / `gpui-pre-platform` の `test-support` feature を dev-dependency として
-有効化すると、`#[gpui::test]` と `TestAppContext` でウィンドウを生成し、
+`gpui-pre` の `test-support` feature を dev-dependency として有効化すると、
+`#[gpui::test]` と `TestAppContext` でウィンドウを生成し、
 `Window::painted_quads()` からラスタライズ前の描画クワッドを検証できます。
-OS ウィンドウを表示せずに、ナビゲーションボタンの配色とパス未指定時の
-ステータスを確認するテストを `reader.rs` に追加しています。
+`reader.rs` には描画色・パス未指定時のステータス・2 章 EPUB での左右キー移動
+（0 → 1 → 1 でクランプ → 0）を検証するテストを追加しています。
 `book.rs` の既存テストは変更していません。
 
 ```bash
 cd gpui
 cargo fmt --all
-cargo check --locked
+cargo check --all-targets --locked
 cargo test --locked
 cargo test --locked reader_view_paints_expected_backgrounds
 cargo test --locked reader_view_without_path_has_fixed_status
+cargo test --locked arrow_keys_move_chapter
 cargo clippy --all-targets --locked -- -D warnings -D clippy::undocumented_unsafe_blocks
 ```
 
-### cargo test 結果
+OS レベルでは、対象ウィンドウをアクティブにしたうえで左右キーを送り、
+章表示が 1 / 2 → 2 / 2 → 1 / 2 と変化することを確認します。
 
-`cargo test`: rc=0、**5 passed / 0 failed**（book.rs の純粋ロジック 3 件 +
-reader.rs の GPUI テスト 2 件）。`cargo fmt --all` / `cargo check --all-targets` /
-`cargo clippy --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks` も rc=0。
+```bash
+# 対象ウィンドウを活性化（windowactivate に --sync は無いため ID を再確認する）
+id="$(kdotool search --name 'openrustbooks' | tail -n 1)"
+kdotool windowactivate "$id"
+sleep 1
+echo "active=$(kdotool getactivewindow) expected=$id"
+kdotool getactivewindow getwindowname
 
-OS レベル検証では、`ydotool` で「次の章」ボタンをクリックし、章表示が `1 / 2` から
-`2 / 2` へ変化することを `spectacle` + `tesseract` で確認済み（ADR-0354 参照）。
+# 右矢印（keycode 106）と左矢印（keycode 105）
+ydotool key -d 50 106:1 106:0
+ydotool key -d 50 105:1 105:0
+```
+
+### 検証結果
+
+- `cargo fmt --all` / `cargo check --all-targets` /
+  `cargo clippy --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks`: rc=0
+- `cargo test`: rc=0、**6 passed / 0 failed**（`arrow_keys_move_chapter` を含む）
+- OS レベル: 活性化した Window へ `ydotool key -d 50 106:1 106:0` で 1 / 2 → 2 / 2、
+  `105:1 105:0` で 2 / 2 → 1 / 2 を `spectacle` + `tesseract` の OCR で確認。
 
 ## 未実装
 
-画像・表紙・スクロール位置保持・設定 UI・AI 送信・KeyBinding は未実装です。
+画像・表紙・スクロール位置保持・設定 UI・AI 送信・設定ファイルによる KeyBinding は未実装です（左右キーの固定操作のみ実装）。
 機能完全版としては既存の Tauri/Leptos 版を使用してください。

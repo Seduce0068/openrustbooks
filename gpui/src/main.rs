@@ -22,18 +22,22 @@ fn main() {
 
     application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1000.), px(760.)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(gpui::TitlebarOptions {
-                    title: Some("openrustbooks — GPUI".into()),
+        let window = cx
+            .open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    titlebar: Some(gpui::TitlebarOptions {
+                        title: Some("openrustbooks — GPUI".into()),
+                        ..Default::default()
+                    }),
                     ..Default::default()
-                }),
-                ..Default::default()
-            },
-            |_window, cx| cx.new(|_cx| ReaderView::new(path.clone())),
-        )
-        .expect("open the GPUI reader window");
+                },
+                |_window, cx| cx.new(|cx| ReaderView::new(path.clone(), cx)),
+            )
+            .expect("open the GPUI reader window");
+        window
+            .update(cx, |view, window, cx| window.focus(&view.focus_handle, cx))
+            .expect("focus the GPUI reader view");
         cx.activate(true);
     });
 }

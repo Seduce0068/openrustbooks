@@ -54,8 +54,11 @@ GPUI 公式ドキュメント（`gpui-pre` ソース）では、`test` または
 - `Window::painted_quads()`: ラスタライズせずに描画クワッドを検証。
 
 本リポジトリの `gpui/` クレートでは `gpui-pre` の `test-support` を dev-dependency として有効化し、
-章送りやテキスト描画をこの枠組みへ載せるのが最も確実な経路である。
-**本リポジトリでのコンパイル検証は未実施**（公式ドキュメントに基づく提案）。
+描画色・固定ステータス・左右キーによる章送り（`arrow_keys_move_chapter`）を検証している。
+`cargo test` は **6 passed / 0 failed**。`simulate_keystrokes` / `dispatch_keystroke` は
+基本的に KeyDown を送る（simulated IME により text input が追加される場合がある）ため、
+検証対象には KeyDown で発火する `on_key_down` ハンドラが必要。
+また、キーはフォーカスした要素にのみ届くため `window.focus` が必須。
 
 出典: <https://docs.rs/gpui-pre/latest/src/gpui/window.rs.html> /
 <https://docs.rs/gpui-pre/latest/src/gpui/interactive.rs.html>
@@ -71,14 +74,15 @@ GPUI 公式ドキュメント（`gpui-pre` ソース）では、`test` または
 | 画面文字の検出 | `tesseract -l eng+jpn` | 利用可。OCR で表示テキストを検証可能 |
 | 画像比較 | Python `cv2` / `numpy` | 利用可 |
 | X11/XWayland のキー・クリック | `xdotool` / `wmctrl` / `xwininfo` / `xprop` | 利用可（参考指示にも記載） |
-| Wayland ネイティブのキー・クリック | `ydotool` 1.0.4 | 導入済み。`/dev/uinput` は root:input 0660、ユーザーを `input` グループへ追加、`ydotoold --socket-perm 0666` を起動 |
+| Wayland ネイティブのキー・クリック | `ydotool` 1.0.4 | 導入済み。`/dev/uinput` は root:input 0660、ユーザーを `input` グループへ追加、`ydotoold --socket-perm 0666` を起動。キーは `key -d 50 106:1 106:0`（右）/ `105:1 105:0`（左） |
 | `wtype` / `dotool` / `wdotool` | 未導入 | KDE では `wtype` は virtual-keyboard protocol 未対応で非実用。`ydotool` で十分 |
 
 `kdotool` v0.3.0 には `key` / `click` コマンドが無く、ウィンドウ制御と
 KWin JavaScript 実行（`kwinscript`）のみ。Wayland ネイティブへの物理入力は
 `ydotool` で行う。`/dev/uinput` は `sudo apt-get install ydotool` で udev ルールが
 適用され root:input 0660 になり、`sudo usermod -aG input koppe` とデーモン起動で
-エージェントから利用できた。
+エージェントから利用できた。なお `--socket-perm 0666` は既定 0600 の緩和であり、
+任意ローカルユーザーが仮想入力へイベントを注入できる点に注意。恒久運用では 0600 へ戻す。
 
 ### 実測（解決済み）
 
@@ -89,15 +93,18 @@ feature 追加後に `kdotool search --name openrustbooks` が
 `spectacle` + `tesseract` が書誌タイトル・著者・章タイトル・本文を OCR した。
 さらに `ydotool mousemove` で「次の章」ボタン中央へポインタを移動し、
 `ydotool click 0xC0` を送ると章表示が `1 / 2` → `2 / 2`、本文が「第二章」へ変化した。
-OS レベル方式で Wayland ネイティブ GUI の操作検証が可能であることを確認済み。
+  キー入力では `kdotool windowactivate` 後に active window ID の一致を確認し、
+  `ydotool key -d 50 106:1 106:0` で `2 / 2`、`105:1 105:0` で `1 / 2` への変化も OCR 確認した。
+  OS レベル方式で Wayland ネイティブ GUI のクリック／キー操作を検証可能。
 
 ## 推奨フロー
 
-- 機能テストは GPUI の `#[gpui::test]` と `painted_quads` で再現性を確保する（5 tests 成功）。
+- 機能テストは GPUI の `#[gpui::test]`、`painted_quads`、`simulate_keystrokes` で再現性を確保する（6 tests 成功）。
 - Web 画面の操作確認は Playwright MCP のスナップショット→クリック→撮影で行う。
 - ネイティブ Window の実機確認は `kdotool` → `spectacle` + OCR → `ydotool` の順で行う。
   座標は `ydotool mousemove` が相対移動のため、`kdotool getmouselocation` で
-  現在位置を確認しながら目的座標へ合わせる。
+  現在位置を確認しながら目的座標へ合わせる。キーは `windowactivate` 後に
+  `getactivewindow` が対象 ID と一致することを確認してから送る（`--sync` は非対応）。
 
 ## 未確認事項
 
