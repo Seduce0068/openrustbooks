@@ -413,6 +413,7 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let input_timer = std::rc::Rc::clone(&autosave_timer);
     let input_generation = std::rc::Rc::clone(&autosave_generation);
     let input_last_text = std::rc::Rc::clone(&autosave_last_text);
+    let lint_click_timer = std::rc::Rc::clone(&autosave_timer);
 
     // エディタ表示時に下書きを復元する。prop:value を使わない契約を保つため
     // textarea 自身へ set_value し、シグナルも同じ本文で揃える。
@@ -490,9 +491,28 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                 </button>
                 <button
                     class="btn"
-                    disabled=true
-                    title="静的検査（desktop only, not implemented in the browser build）"
-                    aria-label="静的検査（デスクトップ版のみ・ブラウザー版では未実装）"
+                    title="静的検査（ブラウザー内の Markdown を検査）"
+                    aria-label="静的検査"
+                    on:click=move |_| {
+                        if let Some(window) = web_sys::window()
+                            && let Some(handle) = lint_click_timer.take()
+                        {
+                            window.clear_timeout_with_handle(handle);
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            let source = content.get();
+                            match openrustbooks_core::WasmMarkdownLinter::new(JsValue::NULL)
+                                .and_then(|linter| linter.lint(source))
+                            {
+                                Ok(value) => match value.dyn_into::<js_sys::Array>() {
+                                    Ok(issues) => set_status.set(format!("静的検査: {} 件", issues.length())),
+                                    Err(_) => set_status.set("静的検査に失敗しました".to_string()),
+                                },
+                                Err(_) => set_status.set("静的検査に失敗しました".to_string()),
+                            }
+                        }
+                    }
                 >
                     "静的検査"
                 </button>

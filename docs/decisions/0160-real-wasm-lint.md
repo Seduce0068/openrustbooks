@@ -66,6 +66,10 @@ native の `MarkdownLinter` も wasm でコンパイルされるため、
 - E2E **235 項目すべて成功**。
 - CI は billing issue で実行不可（ローカル検証で代替）。
 
+## 追記（2026-11-28）
+
+- JS 側の呼び出し経路は ADR-0357 で追加済み。本 ADR の「現状なし」は当時点の記録。
+
 ## 未決定
 
 - `converged` / `conflicting_rules` を JS へ公開するか（additive getter）。

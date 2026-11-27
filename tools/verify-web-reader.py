@@ -4883,7 +4883,7 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         f"(mounted={editor_mounted}, preview={markdown_preview!r})",
     )
 
-    # Save は browser local の下書き保存へ有効化され、他の 4 操作は従来どおり
+    # Save と静的検査は browser local で有効。AI 生成 / 推敲 / 書式選択の 3 操作は
     # desktop only で disabled（title / aria の文言は維持）。
     toolbar_controls = await cdp.evaluate(
         "Array.from(document.querySelectorAll('.editor-toolbar button, .editor-toolbar select'))"
@@ -4891,9 +4891,25 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         " disabled: el.disabled, reason: ((el.getAttribute('title') || '') + ' '"
         " + (el.getAttribute('aria-label') || '')).toLowerCase() }))"
     )
+    # 静的検査ボタンの実クリック（Wasm lint の呼び出しと件数表示を確認）。
+    await cdp.evaluate(
+        "Array.from(document.querySelectorAll('.editor-toolbar button'))"
+        ".filter((el) => el.getAttribute('aria-label') === '静的検査')"
+        ".forEach((el) => el.click())"
+    )
+    await asyncio.sleep(0.4)
+    lint_status = await cdp.evaluate(
+        "document.querySelector('.editor-status')?.textContent || ''"
+    )
     controls = toolbar_controls if isinstance(toolbar_controls, list) else []
     save_controls = [item for item in controls if "save draft" in item.get("reason", "")]
-    desktop_controls = [item for item in controls if "save draft" not in item.get("reason", "")]
+    lint_controls = [item for item in controls if "静的検査" in item.get("label", "")]
+    desktop_controls = [
+        item
+        for item in controls
+        if "save draft" not in item.get("reason", "")
+        and "静的検査" not in item.get("label", "")
+    ]
     checker.check(
         "エディタの Save が有効でデスクトップ専用操作が disabled で理由付き",
         isinstance(toolbar_controls, list)
@@ -4901,8 +4917,12 @@ async def _run_checks(cdp: Cdp, checker: Checker) -> int:
         and len(save_controls) == 1
         and save_controls[0].get("disabled") is False
         and "browser local" in save_controls[0].get("reason", "")
-        and len(desktop_controls) == 4
+        and len(desktop_controls) == 3
         and all(item.get("disabled") is True for item in desktop_controls)
+        and len(lint_controls) == 1
+        and lint_controls[0].get("disabled") is False
+        and "ブラウザー内" in lint_controls[0].get("reason", "")
+        and "静的検査: " in str(lint_status)
         and all(
             "desktop only" in item.get("reason", "")
             and "not implemented" in item.get("reason", "")

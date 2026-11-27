@@ -83,8 +83,9 @@ status: current
       （R4-DISCOVER-DP-05 のローカル側を解消）。
 - 【WDIO 経路の拡充】現在は IPC 直接呼び出しの正常系 1 件のみ。UI 入力→保存と stale expected /
   権限拒否 / 秘密マスクの負向を追加するか、未カバーを runbook に明示（R5-REVIEW-DOCS R5-DOC-09）。
-- 【ブラウザ lint UI 接続】WasmMarkdownLinter は実装・wasm test 済みだが「静的検査」ボタンが
-  disabled のまま。UI から呼び出す（R2-DISCOVER-FG FG-01）。
+- [x] 【ブラウザ lint UI 接続】静的検査ボタンを WasmMarkdownLinter へ配線し、問題件数を
+      固定日本語 status で表示（ADR-0357）。E2E toolbar 期待と lint 実クリック検証を追加し、verify.sh 全ゲート成功
+      （273 passed / 0 failed、FG-01）。
 - 【AI command の UI 接続】desktop の AI 6 command が登録済みで web UI から到達不能。
   ADR-0127 の段階方針に沿って接続順序を決定（FG-02）。
 - 【document / fs command の UI 接続】open/save/list 等 10 command が未接続で Editor 保存は
@@ -116,7 +117,8 @@ status: current
 - 【死設定 general.language / theme / log_level】編集可能だが DTO 往復のみで表示・ログへ反映されず、
   未配線告知も無い。ADR-0304 の対象外（FG-06）。
 - [x] 【README / ADR の記述不一致】ZIP を WASM API 公開のみと明記、format/Lint は
-      browser/desktop 共に disabled と訂正。window command 3 種の未到達は REQ-008 が
+      browser/desktop 共に disabled と訂正（その後 Lint のみ ADR-0357 で有効化）。
+      window command 3 種の未到達は REQ-008 が
       初版外（ADR-0232）であることと併せて解釈する（FG-04 / 07 / 08）。
 - [x] 【未使用プロンプト】Summarize / Translate / ExplainCode の 3 テンプレートは
       将来の要求型追加用に保持し、現行 pipeline は 4 種のみと決定。テンプレート削除は

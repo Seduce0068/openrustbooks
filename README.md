@@ -95,7 +95,7 @@ openrustbooks/
 - **ドキュメント閲覧 (実装済み)**: EPUB, Markdown（ZIP は WASM API 公開のみで UI 未接続）
 - **ドキュメント閲覧 (設計段階)**: PDF, TXT
 - **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）。
-  format 選択と Lint ボタンは初版で無効化しており、browser / desktop の別はない。
+  静的検査はブラウザ版で有効（ADR-0357）。AI 生成 / AI 推敲 / 書式選択は desktop only で無効。
 - **desktop 設定保存 (Tauri)**: browser は読み取り専用 fail-closed、desktop は UI 起点 CAS と
   構造化エラーで接続済み（Tauri mock E2E 256/0）。実 WebView でも settings / get_config /
   update_config_patch / config.toml 永続化を検証済み（検証時点の Tauri CLI 2.12.5、ADR-0282）。
@@ -930,6 +930,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0354-gpui-viewer-prototype](docs/decisions/0354-gpui-viewer-prototype.md)
 - [0355-capability-build-proof](docs/decisions/0355-capability-build-proof.md)
 - [0356-android-teardown-crash](docs/decisions/0356-android-teardown-crash.md)
+- [0357-browser-lint-ui](docs/decisions/0357-browser-lint-ui.md) — ブラウザの静的検査を Wasm lint へ接続。
   - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。
