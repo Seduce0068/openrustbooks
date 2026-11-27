@@ -114,6 +114,8 @@ status: current
 
 ## 完了
 
+- [x] 【GPUI 版ビューア】独立 workspace `gpui/` にプロトタイプを追加（ADR-0354）。
+      core 再利用・EPUB プレーンテキスト表示・章送り・fail-closed 入力。fmt/check/test 3 件/clippy 成功。
 - [x] 【E2E 件数ドキュメント追従】README / docs 索引 / runbook-release / runbook-verified-build
       の current 表記を 263 から 273 へ更新（コード出典 `Checker(expected=273)` と一致）。
 - [x] 【REQ-011 モバイル】Android アプリ / iOS PWA / 320px・44px・safe-area 対応（ADR-0352 / 0353）。

@@ -1,0 +1,23 @@
+[package]
+name = "openrustbooks-gpui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "AGPL-3.0-or-later"
+authors = ["openrustbooks contributors"]
+repository = "https://github.com/Seduce0068/openrustbooks"
+description = "GPUI viewer prototype for openrustbooks (native desktop, standalone workspace)"
+
+# Standalone workspace on purpose: the root workspace keeps MSRV 1.95 and
+# cross-compiles core/desktop for Android. GPUI needs a native graphics
+# sysroot and MSRV 1.100, so it must not become a member of the root workspace.
+# See docs/decisions/0354-gpui-viewer-prototype.md.
+[workspace]
+
+[dependencies]
+openrustbooks-core = { path = "../core" }
+gpui = { package = "gpui-pre", version = "0.3.12" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.12" }
+
+[profile.release]
+strip = true

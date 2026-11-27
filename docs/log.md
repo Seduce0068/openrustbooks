@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- GPUI 版ビューアのプロトタイプを独立 workspace で追加（ADR-0354）。core を再利用し、fmt/check/test/clippy 成功。
 - Android instrumented test（Espresso Web）を追加し、package を公開 identifier へ統一。
   AVD API 36 で assertion 成功・teardown クラッシュのため `@Ignore` で一時無効化（runbook-mobile.md）。
 

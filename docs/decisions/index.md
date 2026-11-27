@@ -710,3 +710,5 @@ openrustbooks の ADR 一覧（全 353 件）。
   - status: accepted — 既存 desktop crate に cdylib ターゲットを追加し、ユーザー管理下のローカルツールチェーンで Android ビルド可能にする決定。
 - [ADR-0353: PWA とレスポンシブ UI によるモバイル対応](0353-mobile-pwa-responsive.md)
   - status: accepted — iOS は PWA を各自インストールし、Android は別途ネイティブ版を提供する方針で 320px・タッチ対応 UI を実装する決定。
+- [ADR-0354: GPUI 版ビューアのプロトタイプ追加](0354-gpui-viewer-prototype.md)
+  - status: accepted — core を再利用する独立 GPUI クレートを追加し、既存 Tauri/Android/PWA のゲートを維持する決定。

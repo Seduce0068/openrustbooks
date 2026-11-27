@@ -5,6 +5,9 @@
 # Tauri (generated)
 desktop/gen
 
+# GPUI (standalone workspace build output)
+/gpui/target
+
 # Web/Wasm build output
 web/dist
 web/pkg
