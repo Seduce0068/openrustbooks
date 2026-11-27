@@ -92,9 +92,10 @@ openrustbooks/
   OS のカラースキーム追従、本文言語の反映（スクリーンリーダー対応）、
   移動履歴の永続化、タッチ操作（スワイプ、横・縦の閾値設定可能）、
   章タイトルの検索フィルター、巨大画像の警告とオプトインの縮小（JPEG 品質設定付き）
-- **ドキュメント閲覧 (実装済み)**: EPUB, ZIP, Markdown
+- **ドキュメント閲覧 (実装済み)**: EPUB, Markdown（ZIP は WASM API 公開のみで UI 未接続）
 - **ドキュメント閲覧 (設計段階)**: PDF, TXT
-- **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）、format 選択と Lint は desktop 向け。
+- **テキスト編集 (ブラウザは Markdown のみ)**: textarea + Preview（CodeMirror 6 は未採用）。
+  format 選択と Lint ボタンは初版で無効化しており、browser / desktop の別はない。
 - **desktop 設定保存 (Tauri)**: browser は読み取り専用 fail-closed、desktop は UI 起点 CAS と
   構造化エラーで接続済み（Tauri mock E2E 256/0）。実 WebView でも settings / get_config /
   update_config_patch / config.toml 永続化を検証済み（検証時点の Tauri CLI 2.12.5、ADR-0282）。
@@ -104,6 +105,7 @@ openrustbooks/
   `rumdl`品質保証
 - **クロスプラットフォーム**: デスクトップ (Tauri) + ブラウザ (Wasm)
 - **GPUI 版（プロトタイプ）**: 独立 workspace の `gpui/` に EPUB のプレーンテキスト表示を実装（ADR-0354）。
+  章移動は左右矢印キー、ボタンはマウス操作。Tab キーバインドは未実装。
 - **フォルダ操作 (設計段階)**: 既存フォルダ直接参照, インポート不要
 - **クラウド連携 (設計段階)**: Google Drive (手動保存から開始)
 - **初版スコープ**: 実装・検証済みの提供範囲と未決定の境界は

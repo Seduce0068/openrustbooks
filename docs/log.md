@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- 低優先度の a11y / 文書不一致を解消（GPUI tab_stop、ADR 外部参照、README の lint / ZIP 記述、未使用プロンプトの扱い）。
 - GPUI ビューアで EPUB 読み込み前のサイズ検査を追加（7 passed、clippy rc=0）。
 - runbook-webdriver の検証内容を実 spec に追従させ、ツール版の当時値を明記。
 - verify.sh の clippy ゲートへ -D clippy::undocumented_unsafe_blocks を追加。

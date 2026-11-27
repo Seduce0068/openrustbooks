@@ -55,8 +55,8 @@ status: accepted
 ## 検証（Runtime Proof）
 
 - cargo fmt --all / cargo check --all-targets: rc=0。
-- cargo test: rc=0、**6 passed / 0 failed**（book.rs の純粋ロジック 3 件 +
-  reader.rs の GPUI テスト 3 件）。`arrow_keys_move_chapter` で 0 → 1 → 1（クランプ）→ 0 を検証。
+- cargo test: rc=0、**7 passed / 0 failed**（book.rs の純粋ロジック 3 件 +
+  reader.rs の GPUI テスト 3 件とサイズ検査 1 件）。`arrow_keys_move_chapter` で 0 → 1 → 1（クランプ）→ 0 を検証。
 - cargo clippy --offline --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks: rc=0。
 - wayland / x11 feature 有効化後、kdotool search が `openrustbooks — GPUI` を検出
   （class=openrustbooks-gpui、geometry=1000x788）。spectacle の撮影を tesseract で OCR し、
@@ -74,5 +74,6 @@ status: accepted
 
 ## 参照
 
-- JARVIS ADR-0005: ../jarvis/jarvis/adr/0005-gpui-desktop-adoption.md（ローカル先行事例）
+- JARVIS ADR-0005: リポジトリ外 `~/ドキュメント/作業用/jarvis/jarvis/adr/0005-gpui-desktop-adoption.md`
+  （ローカル先行事例。相対リンクではなく絶対パス参照）
 - GPUI 公式: <https://gpui.rs>

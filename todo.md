@@ -109,17 +109,18 @@ status: current
 
 ### 優先度: 低
 
-- 【GPUI tab_stop と a11y】前の章/次の章ボタンに tab_stop / role / aria_label があるが
-  Enter/Space 活性化と Tab バインドが無い。tab_stop を外すか活性化を追加（G-03）。
-- 【ADR-0354 の外部参照】JARVIS ADR への相対パスが ADR ファイル基準で切れている。
-  リポジトリ外参照と明記する（G-04）。
+- [x] 【GPUI tab_stop と a11y】Tab バインドが無いのに tab_stop を付けていたため削除。
+      左右キーはルートの on_key_down で有効、ボタンはマウス専用として README に明記（G-03）。
+- [x] 【ADR-0354 の外部参照】JARVIS ADR はリポジトリ外の参照であることを明記し、
+      相対リンクではないと訂正（G-04）。
 - 【死設定 general.language / theme / log_level】編集可能だが DTO 往復のみで表示・ログへ反映されず、
   未配線告知も無い。ADR-0304 の対象外（FG-06）。
-- 【README / ADR の記述不一致】format 選択と Lint は desktop でも disabled（FG-07）、
-  ZIP は README「実装済み」だが About は planned（FG-08）、window command 3 種は未到達（FG-04）。
-  声明を実装へ合わせる。
-- 【未使用プロンプト】Summarize / Translate / ExplainCode のテンプレートとテストが保守されているが
-  pipeline entry point と UI が無い（FG-05）。
+- [x] 【README / ADR の記述不一致】ZIP を WASM API 公開のみと明記、format/Lint は
+      browser/desktop 共に disabled と訂正。window command 3 種の未到達は REQ-008 が
+      初版外（ADR-0232）であることと併せて解釈する（FG-04 / 07 / 08）。
+- [x] 【未使用プロンプト】Summarize / Translate / ExplainCode の 3 テンプレートは
+      将来の要求型追加用に保持し、現行 pipeline は 4 種のみと決定。テンプレート削除は
+      REQ-010 のプロンプト管理を失うため ADR-0108 で却下済み（FG-05）。
 - [x] 【ツール版の文書漂移】Tauri CLI 2.12.5 は ADR-0282 検証時点、2.12.6 は
       ADR-0352 の Android 導入時点として注記。trunk 版も runbook の日付前提を維持し、
       現行値の単一情報源は各 ADR とする（R5-DOC-07）。
