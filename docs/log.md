@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- 依存 hygiene ゲートへ lock パス引数を追加し、gpui/Cargo.lock も検査対象化（verify-gpui.sh に配線）。
 - GPUI 独立 workspace 用のローカルゲート scripts/verify-gpui.sh を追加（6 passed、clippy rc=0）。
 - Android instrumented test の teardown で FORTIFY の破棄済み mutex ロックを記録（ADR-0356）。
 - capability の実ビルド証跡を追加（ADR-0355）。wdio ビルド 56 件 / 既定ビルド 0 件、静的ゲート rc=0。

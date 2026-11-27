@@ -33,4 +33,6 @@ echo "===== gpui: test ====="
 cargo test --locked
 echo "===== gpui: clippy ====="
 cargo clippy --all-targets --locked -- -D warnings -D clippy::undocumented_unsafe_blocks
+echo "===== gpui: dependency-hygiene ====="
+bash "$ROOT_DIR/scripts/check-dependency-hygiene.sh" "$GPUI_DIR/Cargo.lock"
 echo "===== gpui: all gates passed ====="

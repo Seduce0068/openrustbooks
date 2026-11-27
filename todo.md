@@ -25,9 +25,9 @@ status: current
       fmt --check / check --all-targets --locked / test --locked / clippy -D warnings
       -D undocumented_unsafe_blocks を一括実行）。rc=0、6 passed（G-01 / DP-01 のローカル側を解消）。
       CI の 1.100 固定在ジョブは共通 workflow 側のため未配線（残課題）。
-- 【gpui lock の依存ガバナンス】gpui/Cargo.lock の serde_yaml / tikv-jemalloc-sys は
-  check-dependency-hygiene.sh の対象外（ルート lock 固定）。スクリプトへ lock パス引数を追加し
-  両 lock を検査する（R4-DISCOVER-DP-02）。
+- [x] 【gpui lock の依存ガバナンス】check-dependency-hygiene.sh へ lock パス引数を追加し、
+      cargo tree の実行ディレクトリも lock の親へ切替。ルート / gpui の両 lock で rc=0、
+      verify-gpui.sh のゲートに組み込み（R4-DISCOVER-DP-02）。
 
 <!-- 2026-11-23 R6: review + discovery 第3cycle -->
 <!-- 2026-11-22 R6: swarm-project-review + swarm-todo-discovery 第2cycle -->

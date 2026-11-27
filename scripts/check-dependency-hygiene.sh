@@ -25,12 +25,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-LOCK_FILE="$ROOT_DIR/Cargo.lock"
+# 第 1 引数で検査対象 lock を差し替えられる（既定はルート workspace）。
+# 独立 workspace（例: gpui/）の lock も同じ例外テーブルで検査する。
+LOCK_FILE="${1:-$ROOT_DIR/Cargo.lock}"
 
 die() {
 	echo "ERROR: $*" >&2
 	exit 1
 }
+
+if (($# > 0)) && [[ -z "$1" ]]; then
+	die "lock パス引数が空です（省略するか有効なパスを指定）"
+fi
+[[ -f "$LOCK_FILE" ]] || die "Cargo.lock が見つかりません: $LOCK_FILE"
+LOCK_DIR="$(cd "$(dirname "$LOCK_FILE")" && pwd)" || die "lock の親ディレクトリを解決できません: $LOCK_FILE"
 
 # 既知例外テーブル。期限は「再レビュー期限」であり上流の対応約束ではない。
 #   ID      : 例外識別子（ログ／ADR との対応に使う）
@@ -42,12 +50,12 @@ declare -A EXC_ID EXC_EXPIRY EXC_CHAIN EXC_REASON
 EXC_ID[serde_yaml]="EXC-DEP-001"
 EXC_EXPIRY[serde_yaml]="2027-03-31"
 EXC_CHAIN[serde_yaml]="rumdl"
-EXC_REASON[serde_yaml]="rumdl v0.3.2 の非 optional 依存。core は rumdl を default-features=false で宣言済みだが、rumdl 本体が serde_yaml をハード依存するため lock に残存する。rumdl 側の削除には依存更新が必要でスコープ外のため、期限まで明示例外とする。"
+EXC_REASON[serde_yaml]="rumdl v0.3.x（ルート lock 0.3.2 / gpui lock 0.3.4）の非 optional 依存。core は rumdl を default-features=false で宣言済みだが、rumdl 本体が serde_yaml をハード依存するため lock に残存する。rumdl 側の削除には依存更新が必要でスコープ外のため、期限まで明示例外とする。"
 
 EXC_ID["tikv-jemalloc-sys"]="EXC-DEP-002"
 EXC_EXPIRY["tikv-jemalloc-sys"]="2027-03-31"
 EXC_CHAIN["tikv-jemalloc-sys"]="tikv-jemallocator rumdl"
-EXC_REASON["tikv-jemalloc-sys"]="rumdl v0.3.2 の native target 向け非 optional 依存 tikv-jemallocator 経由（wasm ターゲットでは入らない）。core の rumdl は default-features=false だが rumdl 本体がハード依存するため lock に残存する。依存更新はスコープ外のため期限まで明示例外とする。"
+EXC_REASON["tikv-jemalloc-sys"]="rumdl v0.3.x（ルート lock 0.3.2 / gpui lock 0.3.4）の native target 向け非 optional 依存 tikv-jemallocator 経由（wasm ターゲットでは入らない）。core の rumdl は default-features=false だが rumdl 本体がハード依存するため lock に残存する。依存更新はスコープ外のため期限まで明示例外とする。"
 
 TARGETS=(serde_yaml tikv-jemalloc-sys)
 
@@ -87,8 +95,6 @@ if ! bash "$SCRIPT_DIR/check-rumdl-featureless.sh" "$manifest"; then
 	die "rumdl の featureless 宣言が壊れており依存例外を適用できません: $manifest"
 fi
 
-[[ -f "$LOCK_FILE" ]] || die "Cargo.lock が見つかりません: $LOCK_FILE"
-
 lock_has_crate() {
 	local crate="$1" rc=0
 	grep -q -F "name = \"$crate\"" "$LOCK_FILE" || rc=$?
@@ -123,7 +129,7 @@ fetch_tree() {
 	}
 	# --locked で lock の変更を禁止し、--offline でネットワーク取得を禁止する
 	# （verify.sh の cargo check --locked と同じ前提）。
-	TREE_OUT="$(cd "$ROOT_DIR" && cargo tree -i "$crate" --prefix none --depth 1 --locked --offline 2>"$err_file")" || rc=$?
+	TREE_OUT="$(cd "$LOCK_DIR" && cargo tree -i "$crate" --prefix none --depth 1 --locked --offline 2>"$err_file")" || rc=$?
 	if ((rc != 0)); then
 		# 「存在しない」は正規の結果（消去済み）。それ以外は検査不能として失敗。
 		if [[ -z "$TREE_OUT" ]] && grep -q 'did not match any packages' "$err_file"; then
