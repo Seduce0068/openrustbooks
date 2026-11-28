@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 360 件）。
+openrustbooks の ADR 一覧（全 361 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -724,3 +724,5 @@ openrustbooks の ADR 一覧（全 360 件）。
   - status: accepted — 一覧取得のみを接続し、生 path を出さない DTO / ゲートを確定。
 - [ADR-0360: Wasm lint DTO / import 告知 / JS エラー型の設計判断](0360-wasm-and-design-decisions.md)
   - status: accepted — 収束情報公開・未配線告知・文字列エラー維持を確定。
+- [ADR-0361: AI generate / refine の desktop UI 接続](0361-ai-desktop-ui.md)
+  - status: accepted — 段階 4 を接続し、送信同意と結果確認の契約を維持。

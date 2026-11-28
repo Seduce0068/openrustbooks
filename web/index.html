@@ -344,6 +344,31 @@
             background: var(--color-secondary);
         }
 
+        .ai-inputs {
+            display: flex;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-sm);
+        }
+
+        .ai-input {
+            flex: 1;
+            min-width: 0;
+            padding: var(--spacing-sm);
+        }
+
+        .ai-confirm-dialog {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            background: var(--color-bg);
+            max-width: min(90vw, 48rem);
+        }
+
+        .ai-diff-excerpt {
+            color: var(--color-muted);
+            overflow-wrap: anywhere;
+        }
+
         .editor-pane,
         .preview-pane {
             border: 1px solid var(--color-border);

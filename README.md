@@ -934,6 +934,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0358-general-dead-settings-readonly](docs/decisions/0358-general-dead-settings-readonly.md) — general の死設定を読み取り専用化。
 - [0359-read-directory-file-tree](docs/decisions/0359-read-directory-file-tree.md) — read_directory を FileTree へ接続。
 - [0360-wasm-and-design-decisions](docs/decisions/0360-wasm-and-design-decisions.md) — Wasm lint DTO 等 3 件の設計判断。
+- [0361-ai-desktop-ui](docs/decisions/0361-ai-desktop-ui.md) — AI generate / refine の desktop UI 接続。
   - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。

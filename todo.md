@@ -88,8 +88,9 @@ status: current
 - [x] 【ブラウザ lint UI 接続】静的検査ボタンを WasmMarkdownLinter へ配線し、問題件数を
       固定日本語 status で表示（ADR-0357）。E2E toolbar 期待と lint 実クリック検証を追加し、verify.sh 全ゲート成功
       （273 passed / 0 failed、FG-01）。
-- 【AI command の UI 接続】desktop の AI 6 command が登録済みで web UI から到達不能。
-  ADR-0127 の段階方針に沿って接続順序を決定（FG-02）。
+- [x] 【AI command の UI 接続】generate / refine を desktop 限定で接続（ADR-0361）。
+      ブラウザは disabled 維持、結果確認ダイアログと redaction 固定、verify.sh 全ゲート成功。
+      convert_to_table / generate_front_matter は専用 UI が無いため見送り（ADR-0127）。
 - 【document / fs command の UI 接続】open/save/list 等 10 command が未接続で Editor 保存は
   localStorage ドラフトのまま。接続または未接続の明示を行う（FG-03）。
 

@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- AI generate / refine を desktop UI へ接続（ADR-0361、verify.sh 全ゲート成功）。
 - 設計判断 3 件を確定（ADR-0360）。cookie 0.18.3 へ更新し audit rc=0。
 - read_directory を FileTree へ接続（ADR-0359、35 passed / verify.sh 全ゲート成功）。
 - バックログ 4 件を並列処理（コメント実事実化 / test 専用 API / wasm import / 静的ゲート）。

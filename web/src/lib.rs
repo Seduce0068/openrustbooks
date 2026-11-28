@@ -487,6 +487,180 @@ mod file_tree_view_tests {
     }
 }
 
+/// AI コマンド結果の mirror DTO。既知 5 フィールド以外は受け付けず、
+/// code / message / 生本文断片などを IPC 境界で捨てる（fail-closed）。
+#[derive(serde::Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+struct AiResultView {
+    content: String,
+    /// desktop の DiffResult は構造を固定せず JSON として受け取る。
+    diff: serde_json::Value,
+    lint_passed: bool,
+    /// 契約上 mirror するが画面には出さない。
+    #[allow(dead_code)]
+    attempts: usize,
+    #[allow(dead_code)]
+    tokens_used: usize,
+}
+
+/// 実行中の AI 操作。内容は signal とメモリだけに保持し、DOM 属性へは出さない。
+#[derive(Clone)]
+enum AiOperation {
+    Generate {
+        prompt: String,
+    },
+    Refine {
+        content: String,
+        instruction: String,
+    },
+}
+
+const AI_GENERATE_STARTED_MESSAGE: &str = "AI 生成を開始しました";
+const AI_REFINE_STARTED_MESSAGE: &str = "AI 推敲を開始しました";
+const AI_PROMPT_REQUIRED_MESSAGE: &str = "生成する内容を入力してください";
+const AI_INSTRUCTION_REQUIRED_MESSAGE: &str = "推敲の指示を入力してください";
+const AI_SAVED_MESSAGE: &str = "AI の結果を反映しました";
+const AI_DISCARDED_MESSAGE: &str = "AI の結果を破棄しました";
+const AI_LINT_UNCONFIRMED_MESSAGE: &str = "静的検査に合格しませんでした。結果を確認してください。";
+const AI_FAILED_MESSAGE: &str = "AI の処理に失敗しました。しばらくしてからもう一度お試しください。";
+
+/// desktop ランタイム判定。invoke_update と同じ Reflect 経路で
+/// __TAURI__.core.invoke の存在を確認する。ブラウザでは false 固定。
+fn is_desktop_runtime() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let window: JsValue = window.into();
+    let Ok(tauri) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__")) else {
+        return false;
+    };
+    if tauri.is_undefined() || tauri.is_null() {
+        return false;
+    }
+    let Ok(core) = js_sys::Reflect::get(&tauri, &JsValue::from_str("core")) else {
+        return false;
+    };
+    if core.is_undefined() || core.is_null() {
+        return false;
+    }
+    matches!(
+        js_sys::Reflect::get(&core, &JsValue::from_str("invoke")),
+        Ok(value) if value.is_function()
+    )
+}
+
+/// AI command の引数を JSON から JsValue へ変換する。
+fn ai_command_args(args: serde_json::Value) -> Result<JsValue, CommandError> {
+    serde_wasm_bindgen::to_value(&args).map_err(|_| internal_error())
+}
+
+/// invoke_update を再利用し、結果を mirror DTO へ変換する薄いラッパ。
+async fn ai_command_result(command: &str, args: &JsValue) -> Result<AiResultView, CommandError> {
+    let value = invoke_update(command, args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
+/// generate_markdown(prompt, context, template) の呼び出し。
+async fn invoke_generate_markdown(
+    prompt: String,
+    context: Option<String>,
+    template: Option<String>,
+) -> Result<AiResultView, CommandError> {
+    let args = ai_command_args(serde_json::json!({
+        "prompt": prompt,
+        "context": context,
+        "template": template,
+    }))?;
+    ai_command_result("generate_markdown", &args).await
+}
+
+/// refine_markdown(content, instruction, context) の呼び出し。
+async fn invoke_refine_markdown(
+    content: String,
+    instruction: String,
+    context: Option<String>,
+) -> Result<AiResultView, CommandError> {
+    let args = ai_command_args(serde_json::json!({
+        "content": content,
+        "instruction": instruction,
+        "context": context,
+    }))?;
+    ai_command_result("refine_markdown", &args).await
+}
+
+/// 差分は行数だけをテキストで返す。内容（本文片・secret・path）は DOM へ出さない。
+fn ai_diff_excerpt(diff: &serde_json::Value) -> String {
+    let count = diff
+        .get("hunks")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|hunk| hunk.get("lines").and_then(serde_json::Value::as_array))
+        .flatten()
+        .filter_map(|line| line.get("content").and_then(serde_json::Value::as_str))
+        .count();
+    format!("差分: {count} 行（全文は適用後にエディターで確認してください）")
+}
+
+/// AI 入力の値を DOM から直接読む（signal と属性へ本文を残さない）。
+fn ai_input_text(id: &str) -> String {
+    web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.get_element_by_id(id))
+        .and_then(|element| element.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|input| input.value().trim().to_string())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod ai_contract_tests {
+    use super::{AiResultView, ai_diff_excerpt};
+
+    fn sample_result() -> serde_json::Value {
+        serde_json::json!({
+            "content": "# 見出し",
+            "diff": { "hunks": [{ "lines": [{ "content": "+ 先頭の行" }] }] },
+            "lint_passed": false,
+            "attempts": 2,
+            "tokens_used": 42,
+        })
+    }
+
+    #[test]
+    fn mirror_accepts_only_the_five_fields() {
+        let view: AiResultView = serde_json::from_value(sample_result()).expect("valid mirror");
+        assert!(!view.lint_passed);
+        assert_eq!(view.attempts, 2);
+        assert_eq!(view.tokens_used, 42);
+        let mut extra = sample_result();
+        extra
+            .as_object_mut()
+            .expect("object")
+            .insert("code".to_string(), serde_json::json!("SECRET"));
+        assert!(serde_json::from_value::<AiResultView>(extra).is_err());
+    }
+
+    #[test]
+    fn diff_excerpt_never_echoes_content() {
+        let diff = serde_json::json!({
+            "hunks": [{ "lines": [
+                { "content": "+ sk-SECRET0123456789" },
+                { "content": "  /home/user/private.txt" },
+                { "content": "- 末尾の行" }
+            ] }]
+        });
+        let text = ai_diff_excerpt(&diff);
+        assert!(text.contains("3 行"), "{text}");
+        assert!(!text.contains("sk-"), "{text}");
+        assert!(!text.contains("/home"), "{text}");
+        assert!(!text.contains("末尾"), "{text}");
+        assert_eq!(
+            ai_diff_excerpt(&serde_json::json!({})),
+            "差分: 0 行（全文は適用後にエディターで確認してください）"
+        );
+    }
+}
+
 /// 最小構成のエディタ（ADR-0127: CodeMirror は導入しない）。
 ///
 /// `on:input` で textarea の値を `content` シグナルへ反映し、`<Preview/>`
@@ -504,6 +678,144 @@ mod file_tree_view_tests {
 fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let (content, set_content) = signal(String::new());
     let (status, set_status) = signal(String::new());
+
+    // AI 操作は desktop ランタイム（__TAURI__.core.invoke）でのみ有効。
+    // 状態は signal とメモリだけに保持し、DOM 属性や status へ本文・code は出さない。
+    let is_desktop = is_desktop_runtime();
+    let (ai_busy, set_ai_busy) = signal(false);
+    let (ai_pending, set_ai_pending) = signal(None::<AiOperation>);
+    let (ai_result, set_ai_result) = signal(None::<AiResultView>);
+    let (ai_diff_text, set_ai_diff_text) = signal(String::new());
+    let ai_dialog_ref: NodeRef<leptos::html::Dialog> = NodeRef::new();
+    let ai_discard_ref: NodeRef<leptos::html::Button> = NodeRef::new();
+
+    let apply_ai_content: std::rc::Rc<dyn Fn(String)> = std::rc::Rc::new(move |text: String| {
+        set_content.set(text.clone());
+        if let Some(window) = web_sys::window()
+            && let Some(document) = window.document()
+            && let Some(element) = document.get_element_by_id("editor-input")
+            && let Ok(textarea) = element.dyn_into::<web_sys::HtmlTextAreaElement>()
+        {
+            textarea.set_value(&text);
+        }
+    });
+
+    let apply_for_run = std::rc::Rc::clone(&apply_ai_content);
+    let run_ai: std::rc::Rc<dyn Fn(AiOperation)> =
+        std::rc::Rc::new(move |operation: AiOperation| {
+            if !is_desktop || ai_busy.get() {
+                return;
+            }
+            set_ai_busy.set(true);
+            set_ai_result.set(None);
+            set_ai_diff_text.set(String::new());
+            set_ai_pending.set(Some(operation.clone()));
+            set_status.set(
+                match &operation {
+                    AiOperation::Generate { .. } => AI_GENERATE_STARTED_MESSAGE,
+                    AiOperation::Refine { .. } => AI_REFINE_STARTED_MESSAGE,
+                }
+                .to_string(),
+            );
+            let apply = std::rc::Rc::clone(&apply_for_run);
+            wasm_bindgen_futures::spawn_local(async move {
+                let result = match operation {
+                    AiOperation::Generate { prompt } => {
+                        invoke_generate_markdown(prompt, None, None).await
+                    }
+                    AiOperation::Refine {
+                        content,
+                        instruction,
+                    } => invoke_refine_markdown(content, instruction, None).await,
+                };
+                set_ai_busy.set(false);
+                match result {
+                    Ok(view) if view.lint_passed => {
+                        set_ai_pending.set(None);
+                        apply(view.content);
+                        set_status.set(AI_SAVED_MESSAGE.to_string());
+                    }
+                    Ok(view) => {
+                        set_ai_diff_text.set(ai_diff_excerpt(&view.diff));
+                        set_ai_result.set(Some(view));
+                        set_status.set(AI_LINT_UNCONFIRMED_MESSAGE.to_string());
+                        if let Some(dialog) = ai_dialog_ref.get() {
+                            let _ = dialog.show_modal();
+                        }
+                        if let Some(button) = ai_discard_ref.get() {
+                            let _ = button.focus();
+                        }
+                    }
+                    Err(_) => {
+                        set_ai_pending.set(None);
+                        set_status.set(AI_FAILED_MESSAGE.to_string());
+                    }
+                }
+            });
+        });
+
+    let on_ai_generate = {
+        let run = std::rc::Rc::clone(&run_ai);
+        move |_: web_sys::MouseEvent| {
+            let prompt = ai_input_text("editor-ai-prompt");
+            if prompt.is_empty() {
+                set_status.set(AI_PROMPT_REQUIRED_MESSAGE.to_string());
+                return;
+            }
+            run(AiOperation::Generate { prompt });
+        }
+    };
+    let on_ai_refine = {
+        let run = std::rc::Rc::clone(&run_ai);
+        move |_: web_sys::MouseEvent| {
+            let instruction = ai_input_text("editor-ai-instruction");
+            if instruction.is_empty() {
+                set_status.set(AI_INSTRUCTION_REQUIRED_MESSAGE.to_string());
+                return;
+            }
+            run(AiOperation::Refine {
+                content: content.get(),
+                instruction,
+            });
+        }
+    };
+    let on_ai_keep = {
+        let apply = std::rc::Rc::clone(&apply_ai_content);
+        move |_: web_sys::MouseEvent| {
+            if let Some(view) = ai_result.get() {
+                apply(view.content);
+            }
+            set_ai_result.set(None);
+            set_ai_pending.set(None);
+            set_ai_diff_text.set(String::new());
+            set_status.set(AI_SAVED_MESSAGE.to_string());
+            if let Some(dialog) = ai_dialog_ref.get() {
+                dialog.close();
+            }
+        }
+    };
+    let on_ai_regenerate = {
+        let run = std::rc::Rc::clone(&run_ai);
+        move |_: web_sys::MouseEvent| {
+            let operation = ai_pending.get();
+            set_ai_result.set(None);
+            if let Some(dialog) = ai_dialog_ref.get() {
+                dialog.close();
+            }
+            if let Some(operation) = operation {
+                run(operation);
+            }
+        }
+    };
+    let on_ai_discard = move |_: web_sys::MouseEvent| {
+        set_ai_result.set(None);
+        set_ai_pending.set(None);
+        set_ai_diff_text.set(String::new());
+        set_status.set(AI_DISCARDED_MESSAGE.to_string());
+        if let Some(dialog) = ai_dialog_ref.get() {
+            dialog.close();
+        }
+    };
 
     // 保存失敗（ADR-0154 / 0164）のうち Editor 向けだけを受け取り、
     // 利用者向けの status に表示する。Reader 向けイベントは受け取らない。
@@ -640,17 +952,19 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                 </button>
                 <button
                     class="btn"
-                    disabled=true
+                    disabled=move || !is_desktop || ai_busy.get()
                     title="AI 生成（desktop only, not implemented in the browser build）"
                     aria-label="AI 生成（デスクトップ版のみ・ブラウザー版では未実装）"
+                    on:click=on_ai_generate
                 >
                     "AI 生成"
                 </button>
                 <button
                     class="btn"
-                    disabled=true
+                    disabled=move || !is_desktop || ai_busy.get()
                     title="AI 推敲（desktop only, not implemented in the browser build）"
                     aria-label="AI 推敲（デスクトップ版のみ・ブラウザー版では未実装）"
+                    on:click=on_ai_refine
                 >
                     "AI 推敲"
                 </button>
@@ -690,6 +1004,13 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                     <option value="markdown">"Markdown"</option>
                     <option value="txt">"プレーンテキスト"</option>
                 </select>
+            </div>
+            // AI の入力はツールバー外に置く（ツールバー子要素 5 個を不変に保つ）。
+            <div class="ai-inputs">
+                <label for="editor-ai-prompt">"生成プロンプト"</label>
+                <input id="editor-ai-prompt" class="ai-input" type="text" aria-label="生成プロンプト" placeholder="生成する内容を入力" disabled=move || !is_desktop || ai_busy.get()/>
+                <label for="editor-ai-instruction">"推敲指示"</label>
+                <input id="editor-ai-instruction" class="ai-input" type="text" aria-label="推敲指示" placeholder="推敲の指示を入力" disabled=move || !is_desktop || ai_busy.get()/>
             </div>
             <p class="editor-status" role="status" aria-live="polite">{move || status.get()}</p>
             <textarea
@@ -765,6 +1086,17 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
             <div class="preview-pane">
                 <Preview content=content set_content=set_content/>
             </div>
+            // lint 不合格のときだけ開く確認ダイアログ。本文・パス・code は属性へ出さない。
+            <dialog id="editor-ai-dialog" class="ai-confirm-dialog" node_ref=ai_dialog_ref aria-labelledby="editor-ai-title">
+                <h2 id="editor-ai-title">"AI の結果を確認してください"</h2>
+                <p>"静的検査に合格しませんでした。差分の抜粋を確認してください。"</p>
+                <p class="ai-diff-excerpt">{move || ai_diff_text.get()}</p>
+                <div class="dialog-actions">
+                    <button type="button" class="btn" on:click=on_ai_keep>"このまま保存"</button>
+                    <button type="button" class="btn" on:click=on_ai_regenerate>"再生成"</button>
+                    <button type="button" class="btn" node_ref=ai_discard_ref autofocus on:click=on_ai_discard>"破棄"</button>
+                </div>
+            </dialog>
         </div>
     }
 }
