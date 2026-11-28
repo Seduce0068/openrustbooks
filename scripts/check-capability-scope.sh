@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # web 側ソースが呼び出す設定 command 4 種（get_config / update_config_patch /
-# set_openai_api_key / clear_secrets）+ ファイル一覧 read_directory に限定する静的ゲート（fail-closed）。
+# set_openai_api_key / clear_secrets）+ ファイル一覧 read_directory
+# + document command 2 種（open_document / get_document_content）に限定する静的ゲート（fail-closed）。
 # これはソース検査であり、runtime の capability / ACL ではない。
 # withGlobalTauri=true のため、実 WebView からは invoke_handler 登録済みの全 command
 # （fs / document / ai / window を含む）へ到達可能な点に注意（ADR-0324 で可視化）。
@@ -26,19 +27,24 @@ from pathlib import Path
 root = Path(sys.argv[1])
 errors: list[str] = []
 
-# 設定画面から許可する command 名（GOAL.md の必須事項 1）。
-# 設定 command 4 種 + ファイル一覧 read_directory（commands::fs:: に登録）。
+# web 側ソースから許可する command 名（7 種、GOAL.md の必須事項 1 の拡張）。
+# 設定 command 4 種 + ファイル一覧 read_directory（commands::fs::）
+# + document 2 種（commands::document::）。
 ALLOWED_COMMANDS = {
     "get_config",
     "update_config_patch",
     "set_openai_api_key",
     "clear_secrets",
     "read_directory",  # ファイル一覧（設定 command ではない）
+    "open_document",  # 文書を開く（設定 command ではない）
+    "get_document_content",  # 本文取得（設定 command ではない）
 }
 
-# invoke_handler の commands::config:: 登録を検査する対象は設定 command 4 種のみ。
-# read_directory は commands::fs:: に登録されるため、後段で別途検査する。
-CONFIG_COMMANDS = ALLOWED_COMMANDS - {"read_directory"}
+# invoke_handler の登録検査は配置モジュールごとに分ける。
+# 設定 4 種は commands::config::、read_directory は commands::fs::、
+# document 2 種は commands::document:: に登録されるため、それぞれ後段で検査する。
+CONFIG_COMMANDS = ALLOWED_COMMANDS - {"read_directory", "open_document", "get_document_content"}
+DOCUMENT_COMMANDS = {"open_document", "get_document_content"}
 
 
 def read_text(rel: str) -> str | None:
@@ -54,6 +60,7 @@ def read_text(rel: str) -> str | None:
 web_rs = read_text("web/src/lib.rs")
 if web_rs is not None:
     # invoke("...") / invoke_update("...") の第 1 引数（文字列リテラル）だけを抽出する。
+    # 許可集合は ALLOWED_COMMANDS の 7 command で、集合外の抽出結果は extra で検出する。
     # 関数定義 `async fn invoke(command: &str, ...)` は文字列が続かないため一致しない。
     # `invoke_fn.call2(...)` や `JsValue::from_str("invoke")` も `\("` に続かないため無視する。
     command_pattern = r'\binvoke(?:_update)?\s*\(\s*"([^"]*)"'
@@ -100,7 +107,8 @@ if web_rs is not None:
                 f"({label}, pattern={pattern!r})"
             )
 
-# desktop/src/main.rs: invoke_handler に設定 command 4 種 + ファイル一覧 read_directory が登録されているかを確認する。
+# desktop/src/main.rs: invoke_handler に設定 command 4 種 + ファイル一覧 read_directory
+# + document command 2 種（open_document / get_document_content）が登録されているかを確認する。
 # 抽出不能なら検査できないため fail-closed とする（cargo check も必須ゲートだが、
 # 本ゲート単体を fail-open にしない）。
 main_rs = read_text("desktop/src/main.rs")
@@ -115,6 +123,9 @@ if main_rs is not None:
         fs_registered = set(
             re.findall(r"commands::fs::([A-Za-z0-9_]+)", handler_match.group(1))
         )
+        document_registered = set(
+            re.findall(r"commands::document::([A-Za-z0-9_]+)", handler_match.group(1))
+        )
         missing_in_handler = CONFIG_COMMANDS - registered
         if missing_in_handler:
             errors.append(
@@ -126,6 +137,13 @@ if main_rs is not None:
                 "desktop/src/main.rs の invoke_handler にファイル一覧 command の登録がありません: "
                 "read_directory (commands::fs::)"
             )
+        missing_document_in_handler = DOCUMENT_COMMANDS - document_registered
+        if missing_document_in_handler:
+            errors.append(
+                "desktop/src/main.rs の invoke_handler に document command の登録がありません: "
+                + ", ".join(sorted(missing_document_in_handler))
+                + " (commands::document::)"
+            )
 
 # desktop/tauri.conf.json の plugins ブロックは完全削除済みで、
 # check-tauri-plugin-config.sh が担当する。本ゲートは web 側の IPC 表面のみを検査する。
@@ -135,5 +153,5 @@ if errors:
         print(f"ERROR: {error}", file=sys.stderr)
     sys.exit(1)
 
-print("OK: web 側ソースの設定 command 4 種 + ファイル一覧 read_directory の呼び出しは get_config / update_config_patch / set_openai_api_key / clear_secrets / read_directory に限定されています（source inspection のみ。実 WebView は invoke_handler 登録全 command へ到達可能）")
+print("OK: web 側ソースの設定 command 4 種 + ファイル一覧 read_directory + document command 2 種の呼び出しは get_config / update_config_patch / set_openai_api_key / clear_secrets / read_directory / open_document / get_document_content に限定されています（source inspection のみ。実 WebView は invoke_handler 登録全 command へ到達可能）")
 PY

@@ -91,8 +91,9 @@ status: current
 - [x] 【AI command の UI 接続】generate / refine を desktop 限定で接続（ADR-0361）。
       ブラウザは disabled 維持、結果確認ダイアログと redaction 固定、verify.sh 全ゲート成功。
       convert_to_table / generate_front_matter は専用 UI が無いため見送り（ADR-0127）。
-- 【document / fs command の UI 接続】open/save/list 等 10 command が未接続で Editor 保存は
-  localStorage ドラフトのまま。接続または未接続の明示を行う（FG-03）。
+- [x] 【document/fs UI 接続・段階 2】FileTree から open_document → `/editor/UUID` →
+      get_document_content を接続（ADR-0362）。下書き優先と入力中の上書き防止を追加。
+      save_document / 複数 root 選択は次段階として残る（FG-03 の一部）。
 
 <!-- 2026-11-23 R6 中優先度 -->
 <!-- 2026-11-22 R6 第2cycle 中優先度 -->

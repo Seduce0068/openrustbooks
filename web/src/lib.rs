@@ -5,7 +5,7 @@
 
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::path;
 #[cfg(target_arch = "wasm32")]
 use openrustbooks_core::WasmEpubBook;
@@ -217,7 +217,10 @@ fn EditorPage() -> impl IntoView {
     view! {
         <div class="app editor-page">
             <header class="app-header">
-                <h1>"Editor: " {move || doc_id.get()}</h1>
+                <h1>"Editor: " {move || {
+                    let id = doc_id.get();
+                    if is_placeholder_doc_id(&id) || is_uuid_id(&id) { id } else { "invalid".to_string() }
+                }}</h1>
                 <nav>
                     <a href="/" title="ホームへ戻る" aria-label="ホームへ戻る">"← ホーム"</a>
                 </nav>
@@ -360,6 +363,66 @@ async fn fetch_file_entries() -> Result<Vec<FileEntryView>, CommandError> {
     serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
 }
 
+/// `open_document` の返り値 mirror。id は desktop が採番した不透明 UUID だけを取り、
+/// format / title / size_bytes 等は受け取らない（本文・サイズは status / DOM へ出さない）。
+#[derive(serde::Deserialize, Debug, Clone)]
+struct OpenedDocumentView {
+    id: String,
+}
+
+/// 文書を開けなかったときの固定日本語文言。IPC の code / message / path は出さない。
+const FILE_TREE_OPEN_ERROR_MESSAGE: &str = "文書を開けませんでした";
+
+/// id が UUID かを判定する。route へ差し込む前に検証し、path 由来の文字列を
+/// `/editor/<id>` へ連結しない。
+fn is_uuid_id(id: &str) -> bool {
+    uuid::Uuid::parse_str(id).is_ok()
+}
+
+/// read_directory が返した名前 1 個が論理キーとして安全かを判定する。
+/// 絶対パス・`/`・`\\`・`..`・`~`・制御文字を拒否する。
+fn is_safe_logical_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && !name.starts_with('~')
+        && !name.chars().any(char::is_control)
+}
+
+/// root 相対の論理キーを組み立てる。名前セグメントだけを `/` で連結し、
+/// 危険なセグメントが 1 つでもあれば `None`（fail-closed）。
+fn join_logical_names(parts: &[&str]) -> Option<String> {
+    if parts.is_empty() || parts.iter().any(|part| !is_safe_logical_name(part)) {
+        return None;
+    }
+    Some(parts.join("/"))
+}
+
+/// FileTree 1 行の論理キー。現在の一覧は既定 root 直下なので名前 1 セグメント。
+fn file_tree_logical_key(name: &str) -> Option<String> {
+    join_logical_names(&[name])
+}
+
+/// `open_document` を論理キーで呼び、成功した DocumentView.id（UUID）を返す。
+async fn open_document_by_key(key: &str) -> Result<String, CommandError> {
+    let args: JsValue = serde_wasm_bindgen::to_value(&serde_json::json!({ "path": key }))
+        .map_err(|_| internal_error())?;
+    let value = invoke_update("open_document", &args).await?;
+    serde_wasm_bindgen::from_value::<OpenedDocumentView>(value)
+        .map(|view| view.id)
+        .map_err(|_| internal_error())
+}
+
+/// `get_document_content` を呼び、本文文字列だけを返す。
+async fn fetch_document_content(id: &str) -> Result<String, CommandError> {
+    let args: JsValue = serde_wasm_bindgen::to_value(&serde_json::json!({ "id": id }))
+        .map_err(|_| internal_error())?;
+    let value = invoke_update("get_document_content", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
 /// File tree component
 ///
 /// `read_directory` の実 IPC 結果を mirror 経由で受け取り、`name` と
@@ -367,6 +430,7 @@ async fn fetch_file_entries() -> Result<Vec<FileEntryView>, CommandError> {
 /// 従来のプレースホルダへ戻す（生 path / path 由来 id は出さない）。
 #[component]
 fn FileTree() -> impl IntoView {
+    let navigate = use_navigate();
     let entries = RwSignal::new(Vec::<FileEntryView>::new());
     let failed = RwSignal::new(false);
     let status = RwSignal::new(String::new());
@@ -412,8 +476,40 @@ fn FileTree() -> impl IntoView {
                             .into_iter()
                             .map(|entry| {
                                 let is_dir = entry.is_dir;
+                                let name_for_click = entry.name.clone();
+                                let navigate_for_row = navigate.clone();
+                                let status_for_row = status;
                                 view! {
-                                    <li class="file-tree-entry" data-is-dir=if is_dir { "true" } else { "false"}>
+                                    <li
+                                        class="file-tree-entry"
+                                        data-is-dir=if is_dir { "true" } else { "false" }
+                                        on:click=move |_: web_sys::MouseEvent| {
+                                            if is_dir {
+                                                return;
+                                            }
+                                            if !is_desktop_runtime() {
+                                                status_for_row.set(FILE_TREE_OPEN_ERROR_MESSAGE.to_string());
+                                                return;
+                                            }
+                                            let Some(key) = file_tree_logical_key(&name_for_click) else {
+                                                status_for_row.set(FILE_TREE_OPEN_ERROR_MESSAGE.to_string());
+                                                return;
+                                            };
+                                            let navigate = navigate_for_row.clone();
+                                            let status = status_for_row;
+                                            wasm_bindgen_futures::spawn_local(async move {
+                                                match open_document_by_key(&key).await {
+                                                    Ok(id) if is_uuid_id(&id) => {
+                                                        navigate(
+                                                            &format!("/editor/{id}"),
+                                                            leptos_router::NavigateOptions::default(),
+                                                        );
+                                                    }
+                                                    _ => status.set(FILE_TREE_OPEN_ERROR_MESSAGE.to_string()),
+                                                }
+                                            });
+                                        }
+                                    >
                                         <span class="file-tree-name">{entry.name}</span>
                                         <span class="file-tree-kind">{if is_dir { "dir" } else { "file" }}</span>
                                     </li>
@@ -433,7 +529,10 @@ fn FileTree() -> impl IntoView {
 
 #[cfg(test)]
 mod file_tree_view_tests {
-    use super::{FileEntryView, file_tree_error_status_message, file_tree_request};
+    use super::{
+        FileEntryView, OpenedDocumentView, file_tree_error_status_message, file_tree_logical_key,
+        file_tree_request, is_uuid_id, join_logical_names,
+    };
 
     fn sample_json() -> serde_json::Value {
         serde_json::json!({
@@ -484,6 +583,56 @@ mod file_tree_view_tests {
             file_tree_error_status_message(),
             "ファイル一覧を取得できませんでした"
         );
+    }
+
+    #[test]
+    fn logical_key_uses_name_only_without_path_or_username() {
+        let key = file_tree_logical_key("notes.md").expect("valid name");
+        assert_eq!(key, "notes.md");
+        assert!(!key.contains('/'), "{key}");
+        assert!(!key.contains(".."), "{key}");
+        assert!(!key.contains("alice"), "{key}");
+        assert!(!key.starts_with('/'), "{key}");
+        // 複数セグメントを渡した場合も区切りは `/` だけ、名前は 1 セグメントずつ。
+        assert_eq!(
+            join_logical_names(&["docs", "notes.md"]).as_deref(),
+            Some("docs/notes.md")
+        );
+    }
+
+    #[test]
+    fn logical_key_rejects_absolute_path_parent_and_username() {
+        for name in [
+            "/home/alice/notes.md",
+            "C:\\Users\\alice\\notes.md",
+            "../notes.md",
+            "..",
+            ".",
+            "docs/notes.md",
+            "~notes.md",
+            "a\u{0000}b",
+        ] {
+            assert!(
+                file_tree_logical_key(name).is_none(),
+                "危険な名前は論理キーにしない: {name}"
+            );
+        }
+        assert!(join_logical_names(&[]).is_none());
+        assert!(join_logical_names(&["docs", "..", "notes.md"]).is_none());
+    }
+
+    #[test]
+    fn opened_document_view_uses_validated_uuid_id() {
+        let json = serde_json::json!({
+            "id": "3f4c9a2e-6b7d-4c81-9f0a-2b5d8e1c7a44",
+            "format": "markdown",
+            "title": "Node",
+            "size_bytes": 12
+        });
+        let view: OpenedDocumentView = serde_json::from_value(json).expect("valid view");
+        assert!(is_uuid_id(&view.id));
+        assert!(!is_uuid_id("../../settings"));
+        assert!(!is_uuid_id("/home/alice/notes.md"));
     }
 }
 
@@ -892,34 +1041,73 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let input_last_text = std::rc::Rc::clone(&autosave_last_text);
     let lint_click_timer = std::rc::Rc::clone(&autosave_timer);
 
-    // エディタ表示時に下書きを復元する。prop:value を使わない契約を保つため
-    // textarea 自身へ set_value し、シグナルも同じ本文で揃える。
-    Effect::new(move |_| {
-        let Some(draft) = load_editor_draft(&doc_id.get()) else {
-            return;
-        };
-        set_content.set(draft.clone());
-        // 上限超の下書きでも本文はそのまま復元し、固定文言だけで警告する。
-        // 本文・サイズ値は status / console へ出さない。
-        if draft.len() > EDITOR_DRAFT_MAX_BYTES {
-            set_status.set(EDITOR_DRAFT_TOO_LARGE_RESTORED_MESSAGE.to_string());
-        }
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        let Some(document) = window.document() else {
-            return;
-        };
-        let Some(element) = document.get_element_by_id("editor-input") else {
-            return;
-        };
-        if let Ok(textarea) = element.dyn_into::<web_sys::HtmlTextAreaElement>() {
-            textarea.set_value(&draft);
+    // 表示本文を textarea と content シグナルへ同時に入れる。prop:value を使わない
+    // 契約を保つため textarea 自身へ set_value する（本文は DOM 属性へ出さない）。
+    let apply_body: std::rc::Rc<dyn Fn(String)> = std::rc::Rc::new(move |text: String| {
+        set_content.set(text.clone());
+        if let Some(window) = web_sys::window()
+            && let Some(document) = window.document()
+            && let Some(element) = document.get_element_by_id("editor-input")
+            && let Ok(textarea) = element.dyn_into::<web_sys::HtmlTextAreaElement>()
+        {
+            textarea.set_value(&text);
         }
     });
 
+    // 下書きの復元と sample / e2e 以外の本文取得。IPC が遅れて届いても
+    // 古い世代の結果は新しい doc_id の本文を上書きしない。
+    let content_generation = std::rc::Rc::clone(&autosave_generation);
+    Effect::new(move |_| {
+        let id = doc_id.get();
+        if let Some(draft) = load_editor_draft(&id) {
+            apply_body(draft.clone());
+            // 上限超の下書きでも本文はそのまま復元し、固定文言だけで警告する。
+            // 本文・サイズ値は status / console へ出さない。
+            if draft.len() > EDITOR_DRAFT_MAX_BYTES {
+                set_status.set(EDITOR_DRAFT_TOO_LARGE_RESTORED_MESSAGE.to_string());
+            }
+        }
+        if is_placeholder_doc_id(&id) {
+            return;
+        }
+        if !is_desktop_runtime() || !is_uuid_id(&id) {
+            set_status.set("文書 ID が不正です".to_string());
+            return;
+        }
+        let generation = content_generation.get();
+        let generation_cell = std::rc::Rc::clone(&content_generation);
+        let id_for_fetch = id.clone();
+        let apply = std::rc::Rc::clone(&apply_body);
+        // 取得開始時点の本文を控え、IPC 応答前にユーザーが入力していれば適用しない。
+        let text_at_request = content.get();
+        wasm_bindgen_futures::spawn_local(async move {
+            let Ok(ipc_text) = fetch_document_content(&id_for_fetch).await else {
+                // 失敗時は生エラーを status へ出さず、下書き復元の文言を維持する。
+                return;
+            };
+            if generation_cell.get() != generation
+                || doc_id.get() != id_for_fetch
+                || content.get() != text_at_request
+            {
+                return;
+            }
+            let draft_notice = EDITOR_DRAFT_RESTORED_DIFFERENT_MESSAGE;
+            let (text, notice) = match load_editor_draft(&id_for_fetch) {
+                Some(draft) if draft != ipc_text => (draft, Some(draft_notice)),
+                _ => (ipc_text, None),
+            };
+            apply(text);
+            if let Some(notice) = notice {
+                set_status.set(notice.to_string());
+            }
+        });
+    });
+
     view! {
-        <div class="editor-container" data-doc-id=move || doc_id.get()>
+        <div class="editor-container" data-doc-id=move || {
+            let id = doc_id.get();
+            if is_placeholder_doc_id(&id) || is_uuid_id(&id) { id } else { "invalid".to_string() }
+        }>
             <div class="editor-toolbar">
                 <button
                     class="btn"
@@ -2554,6 +2742,16 @@ const EDITOR_UNSAVED_MESSAGE: &str = "未保存の変更があります";
 
 /// 自動保存に成功したことを伝える文言。
 const EDITOR_AUTOSAVED_MESSAGE: &str = "下書きを自動保存しました";
+
+/// IPC 本文と異なるローカル下書きを復元したときの固定文言。
+/// 本文・サイズ・path は一切含まない。
+const EDITOR_DRAFT_RESTORED_DIFFERENT_MESSAGE: &str =
+    "ローカルの下書きを復元しました。保存済みの内容と異なります";
+
+/// sample / e2e の固定 id は IPC を持たないため get_document_content を呼ばない。
+fn is_placeholder_doc_id(id: &str) -> bool {
+    matches!(id, "sample" | "e2e")
+}
 
 /// エディタの下書きを保存する localStorage キーの接頭辞。
 const EDITOR_DRAFT_KEY_PREFIX: &str = "openrustbooks:editor:";
