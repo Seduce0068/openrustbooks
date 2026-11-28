@@ -170,6 +170,9 @@ status: current
 
 ## 完了
 
+- [x] 【残る設計判断 3 件】WasmLintFixResult の収束情報を公開、import 復元オプションを
+      未配線告知、wasm JS エラーは文字列維持（ADR-0360）。wasm-pack test 20 passed、
+      cargo test 35 passed。cookie 0.18.3 更新で audit rc=0。
 - [x] 【document/fs UI 接続・段階 1】read_directory を FileTree へ接続（ADR-0359）。
       生 path を出さない 6 フィールド mirror、固定失敗文言、capability ゲート 5 command 化。
       cargo test 35 passed、verify.sh 全ゲート成功。open_document 以降は段階 2 として残る。

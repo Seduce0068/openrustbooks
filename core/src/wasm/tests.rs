@@ -1,8 +1,10 @@
     use super::{
         ERR_ENTRIES, ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmArchive,
-        WasmArchiveEntry, WasmEpubBook, WasmMarkdownLinter,
+        WasmArchiveEntry, WasmEpubBook, WasmLintFixResult, WasmMarkdownLinter,
     };
+    use crate::ai_markdown::lint::{validate_with_auto_fix, LintResultWrapper, MarkdownLinter};
     use crate::archive::{ArchiveLimits, ArchiveReader};
+    use crate::config::LintConfig;
     use std::io::{Cursor, Write};
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -36,6 +38,16 @@
     fn linter() -> WasmMarkdownLinter {
         // null は LintConfig としてパースできないため既定設定へフォールバックする。
         WasmMarkdownLinter::new(JsValue::NULL).expect("linter should build")
+    }
+
+    /// `conflicting_rules()` getter の JS 配列を `Vec<String>` へ戻す。
+    fn conflicting_rules(result: &WasmLintFixResult) -> Vec<String> {
+        serde_wasm_bindgen::from_value(
+            result
+                .conflicting_rules()
+                .expect("conflicting_rules should serialize"),
+        )
+        .expect("conflicting_rules should deserialize")
     }
 
     /// CoreError::validation に secret / path を入れても js_error へ漏れないこと。
@@ -133,6 +145,92 @@
             rules.iter().any(|rule| rule == "MD009"),
             "lint のみの経路でも問題は報告されること: {rules:?}"
         );
+    }
+
+    /// `auto_fix=true` の Wasm DTO が native `LintResultWrapper` と一致すること。
+    #[wasm_bindgen_test]
+    async fn convergence_matches_native_with_auto_fix() {
+        let config = LintConfig::default();
+        assert!(config.auto_fix, "default config should enable auto_fix");
+        let wasm = WasmMarkdownLinter::new(
+            serde_wasm_bindgen::to_value(&config).expect("config should serialize"),
+        )
+        .expect("wasm linter should build");
+        let native = MarkdownLinter::new(&config).expect("native linter should build");
+
+        let content = "# Title\n\nTrailing spaces here   \n";
+        let dto = wasm
+            .lint_and_fix(content.into())
+            .await
+            .expect("lint_and_fix should succeed");
+        let expected = validate_with_auto_fix(&native, content, config.auto_fix)
+            .await
+            .expect("native validation should succeed");
+
+        assert_eq!(dto.converged(), expected.converged);
+        assert_eq!(conflicting_rules(&dto), expected.conflicting_rules);
+        assert_eq!(dto.passed(), expected.passed);
+        assert_eq!(dto.fixed_content(), expected.fixed_content);
+        assert_eq!(dto.fixes_applied(), expected.fixes_applied);
+        // 通常の修正経路では収束し、競合ルールは空になる。
+        assert!(dto.converged());
+        assert!(conflicting_rules(&dto).is_empty());
+    }
+
+    /// `auto_fix=false` の lint のみ経路でも native と一致すること。
+    #[wasm_bindgen_test]
+    async fn convergence_matches_native_without_auto_fix() {
+        let config = LintConfig {
+            auto_fix: false,
+            ..Default::default()
+        };
+        let wasm = WasmMarkdownLinter::new(
+            serde_wasm_bindgen::to_value(&config).expect("config should serialize"),
+        )
+        .expect("wasm linter should build");
+        let native = MarkdownLinter::new(&config).expect("native linter should build");
+
+        let content = "# Title\n\nTrailing spaces here   \n";
+        let dto = wasm
+            .lint_and_fix(content.into())
+            .await
+            .expect("lint_and_fix should succeed");
+        let expected = validate_with_auto_fix(&native, content, config.auto_fix)
+            .await
+            .expect("native validation should succeed");
+
+        assert_eq!(dto.converged(), expected.converged);
+        assert_eq!(conflicting_rules(&dto), expected.conflicting_rules);
+        assert_eq!(dto.passed(), expected.passed);
+        assert_eq!(dto.fixed_content(), expected.fixed_content);
+        assert_eq!(dto.fixes_applied(), expected.fixes_applied);
+        // lint のみの経路は修正しないため収束扱い（native の契約）。
+        assert!(dto.converged());
+        assert!(conflicting_rules(&dto).is_empty());
+    }
+
+    /// 未収束・競合ルール非空の値も DTO へそのまま伝わること。
+    /// rumdl の入力からは安定して再現できないため native 構造体を直接変換して検証する。
+    #[wasm_bindgen_test]
+    fn non_converged_native_result_is_exposed_without_mutation() {
+        let original = "# Title\n\nTrailing spaces here   \n";
+        let native = LintResultWrapper {
+            passed: false,
+            issues: vec![],
+            fixed_content: original.to_string(),
+            fixes_applied: 0,
+            converged: false,
+            conflicting_rules: vec!["MD009".to_string(), "MD010".to_string()],
+        };
+        let dto = WasmLintFixResult::from(native);
+
+        assert!(!dto.converged(), "未収束はそのまま公開されること");
+        assert_eq!(
+            conflicting_rules(&dto),
+            vec!["MD009".to_string(), "MD010".to_string()]
+        );
+        assert!(!dto.passed(), "未収束なら fail-closed で不合格のこと");
+        assert_eq!(dto.fixed_content(), original);
     }
 
     #[wasm_bindgen_test]

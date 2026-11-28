@@ -4833,6 +4833,9 @@ fn Reader(doc_id: Signal<String>) -> impl IntoView {
                 <button id="reader-import" class="btn" title="読書位置のバックアップを読み込む" aria-label="読書位置のバックアップを読み込む" on:click=on_import_click>"読み込み"</button>
                 <input id="reader-import-file" class="reader-file-input" type="file" accept=".json,application/json" aria-label="読書位置バックアップファイルを選択" aria-describedby="reader-import-file-help" on:change=on_import_change/>
                 <span id="reader-import-file-help" class="visually-hidden">"Tab キーでこの入力へ移動し、Enter キーでファイル選択ダイアログを開きます。既存の読書位置を上書きする場合があります。"</span>
+                // 設定 import の明示的な復元オプションは今回 UI を用意しないため未配線。
+                // 現在値保護の契約は変えず、settings-notice と同じ固定文言で告知する。
+                <p class="settings-notice">"設定の明示的な復元オプション: 未配線（現在の設定は保持され、バックアップの設定を明示的に復元する UI はありません）"</p>
                 <button id="reader-back" class="btn" aria-label="前の履歴へ戻る" title="前の履歴へ戻る" aria-keyshortcuts="Alt+ArrowLeft" on:click=on_history_back disabled=move || !can_back.get()>"戻る"</button>
                 <button id="reader-forward" class="btn" aria-label="次の履歴へ進む" title="次の履歴へ進む" aria-keyshortcuts="Alt+ArrowRight" on:click=on_history_forward disabled=move || !can_forward.get()>"進む"</button>
                 <select id="reader-history" class="reader-chapter-select" aria-label="履歴" title="閲覧履歴" on:change=on_history_select prop:disabled=move || history_state.get().0 <= 1>

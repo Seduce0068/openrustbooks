@@ -6,7 +6,7 @@
 //! でのみこのモジュールをコンパイルするため、各項目に個別の cfg は付与しない。
 
 use crate::{
-    ai_markdown::lint::{LintIssue, LintSeverity, MarkdownLinter},
+    ai_markdown::lint::{LintIssue, LintResultWrapper, LintSeverity, MarkdownLinter},
     config::LintConfig,
 };
 use serde::{Deserialize, Serialize};
@@ -16,8 +16,8 @@ use wasm_bindgen::prelude::*;
 ///
 /// featureless の rumdl を直接配線した実 lint。ADR-0156 の fail-closed スタブを
 /// 解消し、ブラウザでも `MarkdownLinter` の判定結果をそのまま返す。
-/// `converged` / `conflicting_rules` は `WasmLintFixResult` にまだ公開しない
-/// （ADR-0156 の未決定を維持し、構造体変更を最小限に留める）。
+/// `converged` / `conflicting_rules` も native `LintResultWrapper` の値を
+/// そのまま `WasmLintFixResult` の getter として公開する。
 #[wasm_bindgen]
 pub struct WasmMarkdownLinter {
     inner: MarkdownLinter,
@@ -76,12 +76,7 @@ impl WasmMarkdownLinter {
                 .await
                 .map_err(super::js_error)?;
 
-        Ok(WasmLintFixResult {
-            passed: result.passed,
-            issues: result.issues.iter().map(to_wasm_issue).collect(),
-            fixed_content: result.fixed_content,
-            fixes_applied: result.fixes_applied,
-        })
+        Ok(WasmLintFixResult::from(result))
     }
 }
 
@@ -132,6 +127,25 @@ pub struct WasmLintFixResult {
     issues: Vec<WasmLintIssue>,
     fixed_content: String,
     fixes_applied: usize,
+    /// native `LintResultWrapper.converged` の値をそのまま保持する。
+    converged: bool,
+    /// native `LintResultWrapper.conflicting_rules` の値をそのまま保持する。
+    conflicting_rules: Vec<String>,
+}
+
+/// native の判定結果を JS 公開用 DTO へ変換する唯一の経路。
+/// 既存フィールドに加え `converged` / `conflicting_rules` も値を変えずにコピーする。
+impl From<LintResultWrapper> for WasmLintFixResult {
+    fn from(result: LintResultWrapper) -> Self {
+        Self {
+            passed: result.passed,
+            issues: result.issues.iter().map(to_wasm_issue).collect(),
+            fixed_content: result.fixed_content,
+            fixes_applied: result.fixes_applied,
+            converged: result.converged,
+            conflicting_rules: result.conflicting_rules,
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -155,5 +169,18 @@ impl WasmLintFixResult {
     #[wasm_bindgen(getter)]
     pub fn fixes_applied(&self) -> usize {
         self.fixes_applied
+    }
+
+    /// 自動修正が収束したか。native の判定値をそのまま返す。
+    #[wasm_bindgen(getter)]
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    /// 未収束時に検出された競合ルール名。native の判定値をそのまま配列で返す。
+    #[wasm_bindgen(getter)]
+    pub fn conflicting_rules(&self) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(&self.conflicting_rules)
+            .map_err(|_| JsValue::from_str(super::SERIALIZATION_FAILED_MESSAGE))
     }
 }
