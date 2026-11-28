@@ -5908,44 +5908,16 @@ fn SettingsForm() -> impl IntoView {
             <section>
                 <h3>"一般設定"</h3>
                 <label for="settings-language">"言語"</label>
-                <input id="settings-language" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.general.language).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(value) = input_value(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.general.language = value; }
-                            });
-                        }
-                    }/>
+                <input id="settings-language" type="text" readonly=true prop:disabled=move || saving.get()
+                    prop:value=move || config.get().map(|v| v.general.language).unwrap_or_default()/>
                 <label for="settings-theme">"テーマ"</label>
-                <input id="settings-theme" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.general.theme).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(value) = input_value(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.general.theme = value; }
-                            });
-                        }
-                    }/>
+                <input id="settings-theme" type="text" readonly=true prop:disabled=move || saving.get()
+                    prop:value=move || config.get().map(|v| v.general.theme).unwrap_or_default()/>
                 <label for="settings-log-level">"ログレベル"</label>
-                <input id="settings-log-level" type="text" readonly=move || !editable.get() || saving.get() prop:disabled=move || saving.get()
-                    prop:value=move || config.get().map(|v| v.general.log_level).unwrap_or_default()
-                    on:input=move |event| {
-                        if saving.get() {
-                            return;
-                        }
-                        if let Some(value) = input_value(&event) {
-                            config.update(|slot| {
-                                if let Some(view) = slot { view.general.log_level = value; }
-                            });
-                        }
-                    }/>
+                <input id="settings-log-level" type="text" readonly=true prop:disabled=move || saving.get()
+                    prop:value=move || config.get().map(|v| v.general.log_level).unwrap_or_default()/>
+                // R2-DEAD-WEB: 3 設定は表示専用。言語・テーマ・ログレベルは未配線のため読み取り専用に固定する。
+                <p class="settings-notice">"言語・テーマ・ログレベル: 未配線（表示言語・UI テーマ・ログ出力へは反映されません。設定画面には現在値を表示します）"</p>
                 // ADR-0304: telemetry は未配線の死設定。DTO から除外したため
                 // 入力を置かず、固定文言で正直に表示する。
                 <p class="settings-notice">"テレメトリ: 未配線（送信機能は実装されていません）"</p>

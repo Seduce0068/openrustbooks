@@ -116,8 +116,9 @@ status: current
       左右キーはルートの on_key_down で有効、ボタンはマウス専用として README に明記（G-03）。
 - [x] 【ADR-0354 の外部参照】JARVIS ADR はリポジトリ外の参照であることを明記し、
       相対リンクではないと訂正（G-04）。
-- 【死設定 general.language / theme / log_level】編集可能だが DTO 往復のみで表示・ログへ反映されず、
-  未配線告知も無い。ADR-0304 の対象外（FG-06）。
+- [x] 【死設定 general.language / theme / log_level】3 input を常時 readonly + 未配線告知、
+      desktop merge_secrets で現在値復元（ADR-0358）。DTO 契約不変、WDIO 3 passing、
+      cargo fmt/check/test/clippy/wasm rc=0（FG-06）。
 - [x] 【README / ADR の記述不一致】ZIP を WASM API 公開のみと明記、format/Lint は
       browser/desktop 共に disabled と訂正（その後 Lint のみ ADR-0357 で有効化）。
       window command 3 種の未到達は REQ-008 が

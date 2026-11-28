@@ -931,6 +931,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0355-capability-build-proof](docs/decisions/0355-capability-build-proof.md)
 - [0356-android-teardown-crash](docs/decisions/0356-android-teardown-crash.md)
 - [0357-browser-lint-ui](docs/decisions/0357-browser-lint-ui.md) — ブラウザの静的検査を Wasm lint へ接続。
+- [0358-general-dead-settings-readonly](docs/decisions/0358-general-dead-settings-readonly.md) — general の死設定を読み取り専用化。
   - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。

@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 357 件）。
+openrustbooks の ADR 一覧（全 358 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -718,3 +718,5 @@ openrustbooks の ADR 一覧（全 357 件）。
   - status: accepted — FORTIFY の破棄後 mutex ロックを原因と特定し、@Ignore 継続を決定。
 - [ADR-0357: ブラウザ版の静的検査ボタンを Wasm lint へ接続](0357-browser-lint-ui.md)
   - status: accepted — WasmMarkdownLinter を UI へ配線し、問題件数を固定文言で表示。
+- [ADR-0358: general の死設定を読み取り専用化し未配線を告知](0358-general-dead-settings-readonly.md)
+  - status: accepted — DTO 不変で 3 設定を readonly 化し、desktop で現在値を復元。

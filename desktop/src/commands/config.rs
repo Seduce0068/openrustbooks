@@ -523,7 +523,7 @@ fn is_placeholder(secret: Option<&str>) -> bool {
 /// The DTO sent to JS contains presence flags instead of secret values, so an
 /// update round-trip would otherwise erase every stored credential. Keeping
 /// this a pure function makes the rule testable without an [`AppState`].
-/// DTO 外フィールド（パス・シークレット・マップ等）の復元はここが唯一の箇所。
+/// DTO 外フィールド（パス・シークレット・マップ等）と未配線の死設定（DTO 内を含む）の復元はここが唯一の箇所。
 pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppConfig {
     let mut merged = incoming.clone();
 
@@ -582,6 +582,13 @@ pub(crate) fn merge_secrets(current: &AppConfig, incoming: &AppConfig) -> AppCon
     // 変更したが、DTO 往復のためフィールド自体は残る。JS が値を書き換えても現在値を
     // 復元し、config.toml へ誤った値が保存されないようにする（fail-closed）。
     merged.general.check_updates = current.general.check_updates;
+
+    // ADR-0277 / ADR-0304: language / theme / log_level は表示・ログへ未配線の死設定。
+    // DTO 互換のためフィールドは残すが、JS が書き換えても現在値を復元し、
+    // config.toml へ誤った値を保存しない（check_updates と同じ fail-closed）。
+    merged.general.language = current.general.language.clone();
+    merged.general.theme = current.general.theme.clone();
+    merged.general.log_level = current.general.log_level.clone();
 
     // ADR-0304: 未配線の死設定は DTO から除外したため、JS 往復で消えないよう
     // 現在値（config.toml から読み込んだ値）を復元する。値は JS に開示されない。
@@ -1182,6 +1189,27 @@ mod tests {
         let merged = merge_secrets(&current, &incoming);
 
         assert!(merged.general.check_updates);
+    }
+
+    #[test]
+    fn merge_secrets_ignores_js_general_dead_setting_rewrites() {
+        // ADR-0277 / ADR-0304: language / theme / log_level は DTO を往復するが
+        // 表示・ログへ未配線。JS が値を書き換えても config.toml の現在値を保持する。
+        let mut current = AppConfig::default();
+        current.general.language = "en".to_string();
+        current.general.theme = "light".to_string();
+        current.general.log_level = "warn".to_string();
+
+        let mut incoming = current.clone();
+        incoming.general.language = "ja".to_string();
+        incoming.general.theme = "dark".to_string();
+        incoming.general.log_level = "trace".to_string();
+
+        let merged = merge_secrets(&current, &incoming);
+
+        assert_eq!(merged.general.language, "en");
+        assert_eq!(merged.general.theme, "light");
+        assert_eq!(merged.general.log_level, "warn");
     }
 
     #[test]
@@ -1939,7 +1967,8 @@ mod tests {
 
         assert!(merged.ai.enabled);
         assert!(!merged.lint.enabled);
-        assert_eq!(merged.general.theme, "dark");
+        // ADR-0277 / ADR-0304: general.theme の JS 書き換えは現在値へ復元される。
+        assert_eq!(merged.general.theme, current.general.theme);
         assert_eq!(merged.editor.font_size, 20.0);
         assert_eq!(merged.reader.theme, "sepia");
         // 公開フィールドを変えても merge_secrets() で隠しフィールドは維持される。
@@ -2423,6 +2452,7 @@ mod tests {
 
         assert_eq!(view.revision, expected + 1);
         assert_eq!(state.config_with_revision().1, expected + 1);
-        assert_eq!(state.config().general.theme, "dark");
+        // ADR-0277 / ADR-0304: general.theme の JS 書き換えは現在値へ復元される。
+        assert_eq!(state.config().general.theme, current.general.theme);
     }
 }

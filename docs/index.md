@@ -10,7 +10,7 @@ openrustbooks の設計・要件・判断記録を置くディレクトリ。
 - [runbook-mobile.md](runbook-mobile.md) — Android ビルドと instrumented test（Espresso Web）の手順と既知制約。
 - [runbook-release.md](runbook-release.md) — 導入・更新・ロールバック・既知問題と公開作業の未決定。
 - [documentation-operations.md](documentation-operations.md) — OKF・索引・log・ADR・lint の運用規約。
-- [decisions/](decisions/index.md) — 決定記録（ADR）。全 357 件の索引。
+- [decisions/](decisions/index.md) — 決定記録（ADR）。全 358 件の索引。
 - [ADR-0357: ブラウザ版の静的検査ボタンを Wasm lint へ接続](decisions/0357-browser-lint-ui.md)
   — WasmMarkdownLinter を UI へ配線し、問題件数を固定文言で表示。
 - [gpui/](../gpui/README.md) — GPUI 版ビューアのプロトタイプ（独立 workspace）。

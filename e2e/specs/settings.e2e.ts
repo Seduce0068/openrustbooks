@@ -5,7 +5,11 @@ import path from 'node:path';
 
 type ConfigView = {
   revision: number;
-  general: { log_level: string } & Record<string, unknown>;
+  general: {
+    language: string;
+    theme: string;
+    log_level: string;
+  } & Record<string, unknown>;
   ai?: { openai: { has_api_key: boolean } & Record<string, unknown> } & Record<string, unknown>;
 } & Record<string, unknown>;
 
@@ -55,8 +59,10 @@ describe('wdio: real Tauri WebView settings', () => {
       return tauri.core.invoke('update_config_patch', patchArgs) as Promise<ConfigView>;
     }, args);
 
-  const statusText = async () =>
-    (await browser.$('p.settings-notice[role="status"]')).getText();
+  const statusText = () =>
+    browser.execute(
+      () => document.querySelector('p.settings-notice[role="status"]')?.textContent || ''
+    );
 
   const setInputValue = async (selector: string, value: string) => {
     await browser.waitUntil(
@@ -84,6 +90,17 @@ describe('wdio: real Tauri WebView settings', () => {
     );
   };
 
+  const isReadOnly = async (selector: string) => {
+    await browser.waitUntil(
+      () => browser.execute((sel: string) => !!document.querySelector(sel), selector),
+      { timeout: 10000 }
+    );
+    return browser.execute(
+      (sel: string) => (document.querySelector(sel) as HTMLInputElement).readOnly,
+      selector
+    );
+  };
+
   const restoreLogLevel = async (original: string) => {
     const current = await getConfig();
     const restored = await patchConfig({
@@ -97,7 +114,7 @@ describe('wdio: real Tauri WebView settings', () => {
     expect(persistedLogLevel()).toBe(original);
   };
 
-  it('shows editable settings and reads config through real IPC', async () => {
+  it('shows settings and reads config through real IPC', async () => {
     await browser.url('http://localhost:1420/settings');
 
     const heading = await browser.$('h1');
@@ -108,7 +125,6 @@ describe('wdio: real Tauri WebView settings', () => {
 
     const language = await browser.$('#settings-language');
     await expect(language).toBeDisplayed();
-    await expect(language).toBeEnabled();
 
     const hasUpdaterNotice = await browser.execute(() =>
       document.body.innerText.includes('更新確認: 未配線')
@@ -131,7 +147,11 @@ describe('wdio: real Tauri WebView settings', () => {
         },
       });
       expect(updated.revision).toBe(view.revision + 1);
-      expect(persistedLogLevel()).toBe('debug');
+      // 死設定の general 3 項目は IPC が成功しても現在値のまま。
+      expect(updated.general.language).toBe(view.general.language);
+      expect(updated.general.theme).toBe(view.general.theme);
+      expect(updated.general.log_level).toBe(originalLogLevel);
+      expect(persistedLogLevel()).toBe(originalLogLevel);
     } catch (error) {
       primaryFailed = true;
       throw error;
@@ -155,35 +175,24 @@ describe('wdio: real Tauri WebView settings', () => {
     }
   });
 
-  it('saves log level through the settings UI and persists it', async () => {
+  it('keeps dead general settings read-only and shows a fixed notice', async () => {
     await browser.url('http://localhost:1420/settings');
-    const view = await getConfig();
-    const original = view.general.log_level;
-    let attempted = false;
-    let primaryFailed = false;
-    try {
-      attempted = true;
-      await setInputValue('#settings-log-level', 'debug');
-      await (await browser.$('#settings-save')).click();
-      expect(await statusText()).toBe('設定を保存しました。');
-      expect(await (await browser.$('#settings-revision')).getText()).toBe(
-        String(view.revision + 1)
-      );
-      expect(persistedLogLevel()).toBe('debug');
-    } catch (error) {
-      primaryFailed = true;
-      throw error;
-    } finally {
-      if (attempted) {
-        try {
-          await restoreLogLevel(original);
-        } catch (restoreError) {
-          if (!primaryFailed) throw restoreError;
-        }
-      }
+    for (const selector of [
+      '#settings-language',
+      '#settings-theme',
+      '#settings-log-level',
+    ]) {
+      await expect(await browser.$(selector)).toBeDisplayed();
+      expect(await isReadOnly(selector)).toBe(true);
     }
+    const notice = await browser.execute(() =>
+      Array.from(document.querySelectorAll('p.settings-notice'))
+        .map((element) => element.textContent?.trim() || '')
+        .find((text) => text.startsWith('言語・テーマ・ログレベル: 未配線')) || ''
+    );
+    expect(notice.startsWith('言語・テーマ・ログレベル: 未配線')).toBe(true);
+    expect(notice.includes('設定画面には現在値を表示します')).toBe(true);
   });
-
   it('masks secrets and treats an empty API key as a no-op', async () => {
     await browser.url('http://localhost:1420/settings');
     const view = await getConfig();

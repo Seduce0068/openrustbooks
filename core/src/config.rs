@@ -33,8 +33,16 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneralConfig {
     /// Application language (ISO 639-1)
+    ///
+    /// 未配線の死設定（ADR-0304）。表示言語へは反映されず、DTO 往復のため残す。
+    /// config.toml の値は読み書きとも維持し、JS の変更は ADR-0277 の fail-closed
+    /// 復元（desktop の `merge_secrets()`）で現在値へ戻す。
     pub language: String,
     /// Theme (light, dark, system)
+    ///
+    /// 未配線の死設定（ADR-0304）。UI テーマへは反映されず、DTO 往復のため残す。
+    /// config.toml の値は読み書きとも維持し、JS の変更は ADR-0277 の fail-closed
+    /// 復元（desktop の `merge_secrets()`）で現在値へ戻す。
     pub theme: String,
     /// Enable telemetry.
     ///
@@ -44,6 +52,10 @@ pub struct GeneralConfig {
     /// Check for updates on startup
     pub check_updates: bool,
     /// Log level
+    ///
+    /// 未配線の死設定（ADR-0304）。ログ出力レベルへは反映されず、DTO 往復のため残す。
+    /// config.toml の値は読み書きとも維持し、JS の変更は ADR-0277 の fail-closed
+    /// 復元（desktop の `merge_secrets()`）で現在値へ戻す。
     pub log_level: String,
     /// Data directory
     pub data_dir: Option<PathBuf>,
