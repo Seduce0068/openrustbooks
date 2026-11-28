@@ -494,9 +494,9 @@ impl AppState {
     /// documents と unsaved_changes のロックは順番に取得・解放する（同時保持しない）。
     /// 文書が存在しない場合でも unsaved キーを削除し、孤立フラグを掃除する。
     ///
-    /// `close_document_atomic` の導入で production の呼び出しは無くなったが、
-    /// ADR-0208 の削除契約を残すため維持する（unit test から使用）。
-    #[allow(dead_code)]
+    /// `close_document_atomic` の導入で production の呼び出しは無くなったため、
+    /// ADR-0208 の削除契約を unit test 専用 API として残す。
+    #[cfg(test)]
     pub fn remove_document(&self, id: &DocumentId) -> Option<Document> {
         let removed = self.documents.write().unwrap().remove(id);
         self.unsaved_changes.write().unwrap().remove(id);
@@ -563,9 +563,9 @@ impl AppState {
     /// Mark document as having unsaved changes
     ///
     /// 編集コマンドは `update_document_content_atomic` 経由で unsaved を立てる
-    /// ため production からは呼ばれないが、状態確認 API として維持する
-    /// （unit test および close の割込み再現から使用）。
-    #[allow(dead_code)]
+    /// ため production からは呼ばれない。unit test および close の割込み再現
+    /// 専用の API として `cfg(test)` でのみ公開する。
+    #[cfg(test)]
     pub fn mark_unsaved(&self, id: &DocumentId) {
         self.unsaved_changes
             .write()
@@ -584,8 +584,8 @@ impl AppState {
     /// Check if document has unsaved changes
     ///
     /// `close_document_atomic` が両 guard 保持下で同じ判定を行うため production
-    /// では未使用だが、状態確認 API として維持する（unit test から使用）。
-    #[allow(dead_code)]
+    /// では未使用。unit test 専用の状態確認 API として `cfg(test)` でのみ公開する。
+    #[cfg(test)]
     pub fn is_unsaved(&self, id: &DocumentId) -> bool {
         self.unsaved_changes
             .read()

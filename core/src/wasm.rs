@@ -110,11 +110,9 @@ pub use lint::{WasmLintFixResult, WasmLintIssue, WasmMarkdownLinter};
 
 // `wasm/tests.rs` が参照する DTO と ADR-0223 の 4 固定文言は、元の実効可視性を
 // 保つためテストビルド時だけ親へ取り込む（公開 API には含めない）。
-// `ERR_ENTRIES` は tests が直接参照しないため unused を局限的に許容する。
 #[cfg(all(test, target_arch = "wasm32"))]
 use archive::WasmArchiveEntry;
 #[cfg(all(test, target_arch = "wasm32"))]
-#[allow(unused_imports)]
 use archive::{ERR_ENTRIES, ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8};
 
 /// Utility functions for Wasm

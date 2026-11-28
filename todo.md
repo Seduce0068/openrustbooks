@@ -170,6 +170,9 @@ status: current
 
 ## 完了
 
+- [x] 【バックログ小規模 4 件】陳腐化コメント（global shortcut / updater）、test 専用メソッドの
+      `#[cfg(test)]` 化、wasm 未使用 import の解消、2 つの静的ゲートを追加。
+      cargo fmt/check/test/clippy、wasm-pack test、両ゲート正/負向 rc を確認。
 - [x] 【GPUI キーハンドラ】左右矢印で章送り（FocusHandle + on_key_down）を実装。
       GPUI test-support 6 passed（arrow_keys_move_chapter 含む）、ydotool 実機キー入力で
       1 / 2 ↔ 2 / 2 を OCR 確認（ADR-0354）。

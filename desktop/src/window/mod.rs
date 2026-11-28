@@ -7,9 +7,8 @@ pub fn setup_window(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Er
     // Set window title
     window.set_title("openrustbooks")?;
 
-    // Note: Global shortcuts are registered via tauri_plugin_global_shortcut
-    // The plugin handles shortcut registration automatically based on tauri.conf.json
-    // or can be configured programmatically via the plugin API
+    // Note: global keyboard shortcuts are not implemented. No shortcut plugin is
+    // registered in the application builder, and this setup only sets the title.
 
     Ok(())
 }

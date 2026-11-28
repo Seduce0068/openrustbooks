@@ -5921,7 +5921,7 @@ fn SettingsForm() -> impl IntoView {
                 // ADR-0304: telemetry は未配線の死設定。DTO から除外したため
                 // 入力を置かず、固定文言で正直に表示する。
                 <p class="settings-notice">"テレメトリ: 未配線（送信機能は実装されていません）"</p>
-                // ADR-0222 / R6 A05: updater は未実装（plugin 初期化のみ）のため、
+                // ADR-0222 / R6 A05 / ADR-0282: updater は未実装（plugin 未登録）のため、
                 // check_updates は editable トグルを置かず固定文言で正直に表示する。
                 // 値は DTO 往復のため view に残すが、desktop の merge_secrets() が
                 // 現在値を復元し JS 側の変更を無視する（ADR-0277）。

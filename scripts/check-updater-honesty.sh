@@ -81,6 +81,19 @@ if web_rs is not None:
             'web/src/lib.rs に editable な id="settings-check-updates" が存在します'
         )
 
+    # updater の実事実は plugin 未登録（ADR-0282）。旧 ADR-0277 の
+    # 「plugin 初期化のみ」という表現は陳腐化しているため、再混入を
+    # fail-closed で検出する。表記ゆれ（「の」/ 空白）も誤逃げしない。
+    if re.search(r"plugin\s*の?\s*初期化のみ", web_rs) is not None:
+        errors.append(
+            "web/src/lib.rs に陳腐化した updater コメント『plugin 初期化のみ』が"
+            "あります（実事実は plugin 未登録）"
+        )
+    if re.search(r"plugin\s*(?:の|が)?\s*未登録", web_rs) is None:
+        errors.append(
+            "web/src/lib.rs に updater の実事実コメント『plugin 未登録』がありません"
+        )
+
 # --- desktop/src/commands/config.rs: 現在値復元が残っている ----------------------
 config_rs = read_text("desktop/src/commands/config.rs")
 if config_rs is not None:

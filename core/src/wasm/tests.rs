@@ -1,6 +1,6 @@
     use super::{
-        ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmArchive, WasmArchiveEntry,
-        WasmEpubBook, WasmMarkdownLinter,
+        ERR_ENTRIES, ERR_ENTRY_READ, ERR_INVALID_ARCHIVE, ERR_INVALID_UTF8, WasmArchive,
+        WasmArchiveEntry, WasmEpubBook, WasmMarkdownLinter,
     };
     use crate::archive::{ArchiveLimits, ArchiveReader};
     use std::io::{Cursor, Write};
@@ -397,6 +397,20 @@
         assert_js_error(archive.read_entry("missing.txt"), ERR_ENTRY_READ);
         assert_js_error(archive.read_entry_text("missing.txt"), ERR_ENTRY_READ);
         assert_js_error(archive.read_entry_text("bad.txt"), ERR_INVALID_UTF8);
+    }
+
+    /// ADR-0223 の 4 つ目の固定文言（`entries()` のシリアライズ失敗）も
+    /// 内部詳細を漏らさない固定文字列であることを検証する。
+    /// 通常の入力からはシリアライズ失敗を誘発できないため定数自体を検証する。
+    #[wasm_bindgen_test]
+    fn wasm_archive_entries_error_message_is_fixed() {
+        assert_eq!(ERR_ENTRIES, "ZIP entries unavailable");
+        for marker in ["SECRET", "CoreError", "Validation", "ZipError"] {
+            assert!(
+                !ERR_ENTRIES.contains(marker),
+                "ERR_ENTRIES leaked {marker:?}: {ERR_ENTRIES:?}"
+            );
+        }
     }
 
     /// エラー文言にパス・本文・内部型名が混ざらないことを明示的に検証する。

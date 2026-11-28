@@ -4,6 +4,7 @@
 # dialog には config 型が無いため、scope / allowedPaths は無効キー（R6 R2 / GOAL.md）。
 # 今回の契約は plugins ブロックの完全削除と未使用 plugin 登録の削除であり、
 # 静的ゲートで再混入を防ぐ。
+# window/mod.rs への global shortcut 再混入も検出する。
 # 無効キーは JSON キーとして検出し、正当な文字列との部分一致による誤検知を避ける。
 # 第 1 引数で検査対象の repo root を差し替えられる（負向 test 用）。
 set -euo pipefail
@@ -122,6 +123,25 @@ else:
     for prefix in REMOVED_PLUGIN_PREFIXES:
         if prefix in main_rs:
             errors.append(f"{MAIN_REL} に削除済み plugin が再混入しています: {prefix}")
+
+# --- window/mod.rs: global shortcut の再混入を検出（ADR-0303） ---------------------
+WINDOW_REL = "desktop/src/window/mod.rs"
+SHORTCUT_RE = re.compile(r"\bglobal_shortcut\b", re.IGNORECASE)
+
+window_path = root / WINDOW_REL
+try:
+    window_rs = window_path.read_text(encoding="utf-8")
+except (OSError, UnicodeDecodeError) as exc:
+    errors.append(f"{WINDOW_REL} を読み込めません: {exc}")
+else:
+    # コメント / 文字列 supernumerary の記述では誤検知しないよう、行コメントを除外する。
+    for line in window_rs.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+            continue
+        if SHORTCUT_RE.search(line) is not None:
+            errors.append(f"{WINDOW_REL} に global_shortcut が再混入しています")
+            break
 
 # --- capability JSON: wdio permission が test 用ファイルに閉じていること --------
 CAP_REL = "desktop/capabilities/wdio/wdio.json"
