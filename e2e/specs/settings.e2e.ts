@@ -6,6 +6,7 @@ import path from 'node:path';
 type ConfigView = {
   revision: number;
   general: { log_level: string } & Record<string, unknown>;
+  ai?: { openai: { has_api_key: boolean } & Record<string, unknown> } & Record<string, unknown>;
 } & Record<string, unknown>;
 
 type PatchArgs = { patch: ConfigView & { expected: number } };
@@ -42,6 +43,60 @@ function persistedLogLevel(): string {
 }
 
 describe('wdio: real Tauri WebView settings', () => {
+  const getConfig = () =>
+    browser.execute(async () => {
+      const tauri = (window as any).__TAURI__;
+      return tauri.core.invoke('get_config') as Promise<ConfigView>;
+    });
+
+  const patchConfig = (args: PatchArgs) =>
+    browser.execute(async (patchArgs: PatchArgs) => {
+      const tauri = (window as any).__TAURI__;
+      return tauri.core.invoke('update_config_patch', patchArgs) as Promise<ConfigView>;
+    }, args);
+
+  const statusText = async () =>
+    (await browser.$('p.settings-notice[role="status"]')).getText();
+
+  const setInputValue = async (selector: string, value: string) => {
+    await browser.waitUntil(
+      () => browser.execute((sel: string) => !!document.querySelector(sel), selector),
+      { timeout: 10000 }
+    );
+    await browser.execute(
+      (args: { sel: string; val: string }) => {
+        const el = document.querySelector(args.sel) as HTMLInputElement;
+        el.value = args.val;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      },
+      { sel: selector, val: value }
+    );
+  };
+
+  const getInputValue = async (selector: string) => {
+    await browser.waitUntil(
+      () => browser.execute((sel: string) => !!document.querySelector(sel), selector),
+      { timeout: 10000 }
+    );
+    return browser.execute(
+      (sel: string) => (document.querySelector(sel) as HTMLInputElement).value,
+      selector
+    );
+  };
+
+  const restoreLogLevel = async (original: string) => {
+    const current = await getConfig();
+    const restored = await patchConfig({
+      patch: {
+        ...current,
+        expected: current.revision,
+        general: { ...current.general, log_level: original },
+      },
+    });
+    expect(restored.revision).toBe(current.revision + 1);
+    expect(persistedLogLevel()).toBe(original);
+  };
+
   it('shows editable settings and reads config through real IPC', async () => {
     await browser.url('http://localhost:1420/settings');
 
@@ -59,21 +114,6 @@ describe('wdio: real Tauri WebView settings', () => {
       document.body.innerText.includes('更新確認: 未配線')
     );
     expect(hasUpdaterNotice).toBe(true);
-
-    const getConfig = () =>
-      browser.execute(async () => {
-        const tauri = (window as any).__TAURI__;
-        return tauri.core.invoke('get_config') as Promise<ConfigView>;
-      });
-
-    const patchConfig = (args: PatchArgs) =>
-      browser.execute(async (patchArgs: PatchArgs) => {
-        const tauri = (window as any).__TAURI__;
-        return tauri.core.invoke(
-          'update_config_patch',
-          patchArgs
-        ) as Promise<ConfigView>;
-      }, args);
 
     const view = await getConfig();
     expect(typeof view.revision).toBe('number');
@@ -98,7 +138,6 @@ describe('wdio: real Tauri WebView settings', () => {
     } finally {
       if (attempted) {
         try {
-          // 1 回目が reject しても最新 revision で復元できるよう再取得する。
           const current = await getConfig();
           const restored = await patchConfig({
             patch: {
@@ -110,10 +149,65 @@ describe('wdio: real Tauri WebView settings', () => {
           expect(restored.revision).toBe(current.revision + 1);
           expect(persistedLogLevel()).toBe(originalLogLevel);
         } catch (restoreError) {
-          // 元の失敗をマスクしない。元処理が成功した場合のみ復元失敗を伝える。
           if (!primaryFailed) throw restoreError;
         }
       }
     }
+  });
+
+  it('saves log level through the settings UI and persists it', async () => {
+    await browser.url('http://localhost:1420/settings');
+    const view = await getConfig();
+    const original = view.general.log_level;
+    let attempted = false;
+    let primaryFailed = false;
+    try {
+      attempted = true;
+      await setInputValue('#settings-log-level', 'debug');
+      await (await browser.$('#settings-save')).click();
+      expect(await statusText()).toBe('設定を保存しました。');
+      expect(await (await browser.$('#settings-revision')).getText()).toBe(
+        String(view.revision + 1)
+      );
+      expect(persistedLogLevel()).toBe('debug');
+    } catch (error) {
+      primaryFailed = true;
+      throw error;
+    } finally {
+      if (attempted) {
+        try {
+          await restoreLogLevel(original);
+        } catch (restoreError) {
+          if (!primaryFailed) throw restoreError;
+        }
+      }
+    }
+  });
+
+  it('masks secrets and treats an empty API key as a no-op', async () => {
+    await browser.url('http://localhost:1420/settings');
+    const view = await getConfig();
+    const serialized = JSON.stringify(view);
+    for (const key of [
+      'api_key',
+      'client_secret',
+      'refresh_token',
+      'extra_headers',
+      'path',
+      'recent_paths',
+    ]) {
+      expect(serialized.includes('"' + key + '"')).toBe(false);
+    }
+    const hasKey = view.ai?.openai.has_api_key;
+    expect(typeof hasKey).toBe('boolean');
+    expect(await (await browser.$('#settings-api-key-state')).getText()).toBe(
+      hasKey ? '設定済み' : '未設定'
+    );
+    expect(await getInputValue('#settings-api-key')).toBe('');
+    await (await browser.$('#settings-api-key-save')).click();
+    expect(await statusText()).toBe('入力がありません。変更はありません。');
+    const after = await getConfig();
+    expect(after.revision).toBe(view.revision);
+    expect(persistedLogLevel()).toBe(view.general.log_level);
   });
 });

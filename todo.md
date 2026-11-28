@@ -81,8 +81,10 @@ status: current
 - [x] 【unsafe ゲート】verify.sh の clippy へ -D clippy::undocumented_unsafe_blocks を追加。
       共通 workflow 内部の clippy 引数はローカルから確認不能のため未確認のまま残す
       （R4-DISCOVER-DP-05 のローカル側を解消）。
-- 【WDIO 経路の拡充】現在は IPC 直接呼び出しの正常系 1 件のみ。UI 入力→保存と stale expected /
-  権限拒否 / 秘密マスクの負向を追加するか、未カバーを runbook に明示（R5-REVIEW-DOCS R5-DOC-09）。
+- [x] 【WDIO 経路の拡充（一部）】settings spec に UI 入力→保存→永続化と秘密マスク／空キー
+      no-op を追加（settings 3 passing、ci-wdio-test.sh rc=0）。stale expected の CAS 競合は
+      WDIO 再現試行で UI 初回 fetch と IPC 干渉が競合し失敗したため除外し、runbook に未カバーを明示
+      （R5-DOC-09 の一部／残は desktop command 側の単体検証）。
 - [x] 【ブラウザ lint UI 接続】静的検査ボタンを WasmMarkdownLinter へ配線し、問題件数を
       固定日本語 status で表示（ADR-0357）。E2E toolbar 期待と lint 実クリック検証を追加し、verify.sh 全ゲート成功
       （273 passed / 0 failed、FG-01）。

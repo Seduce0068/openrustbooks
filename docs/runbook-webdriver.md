@@ -114,6 +114,11 @@ bash scripts/verify.sh --check-wasm-bindgen   # ゲート単独の事前確認�
 - `#settings-language` が表示され、editable である
 - 「更新確認: 未配線」が DOM に含まれる
 - `window.__TAURI__.core.invoke('get_config')` が成功し、数値 revision を返す
+- 設定 UI のログレベル入力（DOM value 代入＋合成 input イベント）→「設定を保存」→固定成功文言→revision +1→config.toml 永続化
+- `get_config` の DTO に秘密キー名 / パスキー名が無く（値レベルの保証ではない）、空 API キー保存が no-op 固定文言になる
+- WDIO は settings 3 件 + epub 1 件の別ゲート。`Checker(expected=273)` の Web E2E とは件数系統が異なる
+- 未カバー: stale expected の CAS 競合は UI の初回 `fetch_config` と IPC 干渉の競合で
+  不安定なため WDIO から除外（desktop command 側の単体 test / ADR-0269 を参照）
 - `update_config_patch` が expected=現在 revision で成功し、revision +1 を返す
 - `config.toml` の `general.log_level` が更新値（debug）で永続化される
 - `finally` で最新 revision を再取得し、元の log_level へ復元する
