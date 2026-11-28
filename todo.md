@@ -172,6 +172,9 @@ status: current
 
 ## 完了
 
+- [x] 【document/fs UI 接続・段階 3】save_document を desktop UI へ接続（ADR-0363）。
+      有効 UUID のみ IPC、保存後の世代/本文再確認、下書き削除結果の固定文言化。
+      cargo test 43 passed、verify.sh 全ゲート成功。
 - [x] 【残る設計判断 3 件】WasmLintFixResult の収束情報を公開、import 復元オプションを
       未配線告知、wasm JS エラーは文字列維持（ADR-0360）。wasm-pack test 20 passed、
       cargo test 35 passed。cookie 0.18.3 更新で audit rc=0。

@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- save_document を desktop UI へ接続（ADR-0363、R4 の競合指摘を修正）。
 - FileTree から文書編集へ接続（ADR-0362、verify.sh 全ゲート成功）。
 - AI generate / refine を desktop UI へ接続（ADR-0361、verify.sh 全ゲート成功）。
 - 設計判断 3 件を確定（ADR-0360）。cookie 0.18.3 へ更新し audit rc=0。

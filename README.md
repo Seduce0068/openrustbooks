@@ -936,6 +936,7 @@ cd .. && python3 tools/verify-web-reader.py --dist web/dist
 - [0360-wasm-and-design-decisions](docs/decisions/0360-wasm-and-design-decisions.md) — Wasm lint DTO 等 3 件の設計判断。
 - [0361-ai-desktop-ui](docs/decisions/0361-ai-desktop-ui.md) — AI generate / refine の desktop UI 接続。
 - [0362-document-open-stage2](docs/decisions/0362-document-open-stage2.md) — FileTree から文書編集へ接続。
+- [0363-save-document-ui](docs/decisions/0363-save-document-ui.md) — 下書きを desktop の save_document へ昇格。
   - iOS は PWA、Android はアプリ版、320px / 44px / safe-area 対応の決定。
   - Document / FileEntry を IPC 境界用 View へ変換し、絶対パスとパス由来 id を JS へ出さない決定。
   - 既知 advisory 警告を ID と有効期限で管理し、新規 ID / 期限切れを fail-closed で拒否する決定。

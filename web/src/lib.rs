@@ -1041,6 +1041,68 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
     let input_last_text = std::rc::Rc::clone(&autosave_last_text);
     let lint_click_timer = std::rc::Rc::clone(&autosave_timer);
 
+    // ディスク保存（desktop 専用）。クリック時に runtime を再確認し、
+    // 保留中の自動保存タイマーを止めて世代を進めることで、保存後に古い
+    // コールバックが下書きを再作成しないようにする。
+    let on_save_to_disk = {
+        let timer = std::rc::Rc::clone(&autosave_timer);
+        let generation = std::rc::Rc::clone(&autosave_generation);
+        let last_text = std::rc::Rc::clone(&autosave_last_text);
+        move |_: web_sys::MouseEvent| {
+            if !is_desktop_runtime() {
+                return;
+            }
+            let id = doc_id.get();
+            let text = content.get();
+            let Some(request) = save_document_request(&id, &text) else {
+                set_status.set(SAVE_TO_DISK_ERROR_MESSAGE.to_string());
+                return;
+            };
+            let Ok(args) = serde_wasm_bindgen::to_value(&request) else {
+                set_status.set(SAVE_TO_DISK_ERROR_MESSAGE.to_string());
+                return;
+            };
+            if let Some(window) = web_sys::window()
+                && let Some(handle) = timer.take()
+            {
+                window.clear_timeout_with_handle(handle);
+            }
+            generation.set(generation.get() + 1);
+            let saved_generation = generation.get();
+            let generation_cell = std::rc::Rc::clone(&generation);
+            let id_for_save = id.clone();
+            let text_for_save = text.clone();
+            let last_text_for_save = std::rc::Rc::clone(&last_text);
+            wasm_bindgen_futures::spawn_local(async move {
+                let result = invoke_update("save_document", &args).await;
+                // 保存中に別文書へ遷移／本文が変わった場合は後始末をしない。
+                if generation_cell.get() != saved_generation
+                    || doc_id.get() != id_for_save
+                    || content.get() != text_for_save
+                {
+                    return;
+                }
+                match result {
+                    Ok(_) => {
+                        let cleared = remove_editor_draft(&id_for_save);
+                        *last_text_for_save.borrow_mut() = Some(text_for_save);
+                        set_status.set(
+                            if cleared {
+                                SAVE_TO_DISK_SUCCESS_MESSAGE
+                            } else {
+                                SAVE_TO_DISK_DRAFT_CLEAR_FAILED_MESSAGE
+                            }
+                            .to_string(),
+                        );
+                    }
+                    Err(_) => {
+                        set_status.set(SAVE_TO_DISK_ERROR_MESSAGE.to_string());
+                    }
+                }
+            });
+        }
+    };
+
     // 表示本文を textarea と content シグナルへ同時に入れる。prop:value を使わない
     // 契約を保つため textarea 自身へ set_value する（本文は DOM 属性へ出さない）。
     let apply_body: std::rc::Rc<dyn Fn(String)> = std::rc::Rc::new(move |text: String| {
@@ -1192,6 +1254,20 @@ fn Editor(doc_id: Signal<String>) -> impl IntoView {
                     <option value="markdown">"Markdown"</option>
                     <option value="txt">"プレーンテキスト"</option>
                 </select>
+            </div>
+            // ディスク保存はツールバー外に置く（ツールバー子要素 5 個を不変に保つ）。
+            // ブラウザでは disabled にし、title / aria に desktop only を明示する。
+            <div class="save-to-disk">
+                <button
+                    id="save-to-disk"
+                    class="btn"
+                    disabled=move || !is_desktop
+                    title="ディスクに保存（desktop only, not implemented in the browser build）"
+                    aria-label="ディスクに保存（desktop only / デスクトップ版のみ・ブラウザー版では無効）"
+                    on:click=on_save_to_disk
+                >
+                    "ディスクに保存"
+                </button>
             </div>
             // AI の入力はツールバー外に置く（ツールバー子要素 5 個を不変に保つ）。
             <div class="ai-inputs">
@@ -2748,9 +2824,26 @@ const EDITOR_AUTOSAVED_MESSAGE: &str = "下書きを自動保存しました";
 const EDITOR_DRAFT_RESTORED_DIFFERENT_MESSAGE: &str =
     "ローカルの下書きを復元しました。保存済みの内容と異なります";
 
+/// ディスク保存の成否を伝える固定日本語文言。IPC の code / message / path は出さない。
+const SAVE_TO_DISK_SUCCESS_MESSAGE: &str = "文書を保存しました";
+const SAVE_TO_DISK_ERROR_MESSAGE: &str = "文書を保存できませんでした";
+/// 保存自体は成功したがローカル下書きを消せなかった場合の固定文言。
+const SAVE_TO_DISK_DRAFT_CLEAR_FAILED_MESSAGE: &str =
+    "文書を保存しましたが、ローカルの下書きを削除できませんでした";
+
 /// sample / e2e の固定 id は IPC を持たないため get_document_content を呼ばない。
 fn is_placeholder_doc_id(id: &str) -> bool {
     matches!(id, "sample" | "e2e")
+}
+
+/// `save_document` へ渡す引数を組み立てる。有効 UUID 以外は受け付けない。
+/// placeholder は desktop に登録されていないため IPC へ渡さない（fail-closed）。
+/// 引数は id と content の 2 つだけに固定する。
+fn save_document_request(id: &str, content: &str) -> Option<serde_json::Value> {
+    if !is_uuid_id(id) {
+        return None;
+    }
+    Some(serde_json::json!({ "id": id, "content": content }))
 }
 
 /// エディタの下書きを保存する localStorage キーの接頭辞。
@@ -2788,6 +2881,87 @@ fn save_editor_draft(doc_id: &str, content: &str) -> bool {
     } else {
         report_save_failure("下書き", SaveErrorTarget::Editor);
         false
+    }
+}
+
+/// ディスク保存の成功後に、その文書のローカル下書きだけを削除する。
+/// localStorage が使えない場合も利用者へは何も出さない（固定文言のみ）。
+fn remove_editor_draft(doc_id: &str) -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return false;
+    };
+    storage.remove_item(&editor_draft_key(doc_id)).is_ok()
+}
+
+#[cfg(test)]
+mod save_to_disk_tests {
+    use super::{
+        SAVE_TO_DISK_DRAFT_CLEAR_FAILED_MESSAGE, SAVE_TO_DISK_ERROR_MESSAGE,
+        SAVE_TO_DISK_SUCCESS_MESSAGE, is_placeholder_doc_id, is_uuid_id, save_document_request,
+    };
+
+    const VALID_UUID: &str = "3f4c9a2e-6b7d-4c81-9f0a-2b5d8e1c7a44";
+
+    #[test]
+    fn request_accepts_only_valid_uuid() {
+        for id in ["sample", "e2e"] {
+            assert!(
+                save_document_request(id, "本文").is_none(),
+                "placeholder は却下: {id}"
+            );
+        }
+        let id = VALID_UUID;
+        let args = save_document_request(id, "本文").expect("UUID は許可");
+        assert_eq!(args["id"].as_str(), Some(id));
+        assert_eq!(args["content"].as_str(), Some("本文"));
+        assert_eq!(args.as_object().map_or(0, |object| object.len()), 2);
+        assert!(!args.to_string().contains("path"), "path は渡さない: {id}");
+    }
+
+    #[test]
+    fn request_rejects_raw_path_and_arbitrary_id() {
+        for id in [
+            "/home/alice/notes.md",
+            "C:\\Users\\alice\\notes.md",
+            "../notes.md",
+            "..",
+            "/",
+            "sample/../../etc/passwd",
+            "file:///etc/passwd",
+            "not-a-uuid",
+            "",
+        ] {
+            assert!(
+                save_document_request(id, "本文").is_none(),
+                "path 由来 / 不正な id は拒否: {id}"
+            );
+            assert!(
+                !is_placeholder_doc_id(id) && !is_uuid_id(id),
+                "不正な id を検証で通さない: {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn status_messages_are_fixed_without_error_details() {
+        assert_eq!(SAVE_TO_DISK_SUCCESS_MESSAGE, "文書を保存しました");
+        assert_eq!(SAVE_TO_DISK_ERROR_MESSAGE, "文書を保存できませんでした");
+        assert_eq!(
+            SAVE_TO_DISK_DRAFT_CLEAR_FAILED_MESSAGE,
+            "文書を保存しましたが、ローカルの下書きを削除できませんでした"
+        );
+        for message in [
+            SAVE_TO_DISK_SUCCESS_MESSAGE,
+            SAVE_TO_DISK_ERROR_MESSAGE,
+            SAVE_TO_DISK_DRAFT_CLEAR_FAILED_MESSAGE,
+        ] {
+            assert!(!message.contains("code"));
+            assert!(!message.contains("message"));
+            assert!(!message.contains("/"));
+        }
     }
 }
 

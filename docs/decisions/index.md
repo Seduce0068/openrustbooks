@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 362 件）。
+openrustbooks の ADR 一覧（全 363 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -728,3 +728,5 @@ openrustbooks の ADR 一覧（全 362 件）。
   - status: accepted — 段階 4 を接続し、送信同意と結果確認の契約を維持。
 - [ADR-0362: FileTree から文書編集への段階 2 接続](0362-document-open-stage2.md)
   - status: accepted — UUID 検証・下書き優先・入力中の上書き防止を確定。
+- [ADR-0363: save_document の desktop UI 接続](0363-save-document-ui.md)
+  - status: accepted — 下書き昇格と保存後の競合制御を確定。
