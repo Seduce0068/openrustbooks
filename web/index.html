@@ -302,14 +302,28 @@
             flex-wrap: wrap;
         }
 
-        /* File tree: 初版は未接続なので、クリック可能な項目や
-           cursor: pointer / hover 変形は定義しない。 */
+        /* File tree: read_directory の結果を表示する。クリック操作は段階 2 で接続する。 */
         .file-tree {
             font-family: var(--font-mono);
             font-size: 0.875rem;
         }
 
         .file-tree-placeholder {
+            color: var(--color-muted);
+        }
+
+        .file-tree-entries {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .file-tree-entry {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .file-tree-status {
             color: var(--color-muted);
         }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# web 側ソースが呼び出す設定 command を get_config / update_config_patch /
-# set_openai_api_key / clear_secrets に限定する静的ゲート（fail-closed）。
+# web 側ソースが呼び出す設定 command 4 種（get_config / update_config_patch /
+# set_openai_api_key / clear_secrets）+ ファイル一覧 read_directory に限定する静的ゲート（fail-closed）。
 # これはソース検査であり、runtime の capability / ACL ではない。
 # withGlobalTauri=true のため、実 WebView からは invoke_handler 登録済みの全 command
 # （fs / document / ai / window を含む）へ到達可能な点に注意（ADR-0324 で可視化）。
@@ -27,12 +27,18 @@ root = Path(sys.argv[1])
 errors: list[str] = []
 
 # 設定画面から許可する command 名（GOAL.md の必須事項 1）。
+# 設定 command 4 種 + ファイル一覧 read_directory（commands::fs:: に登録）。
 ALLOWED_COMMANDS = {
     "get_config",
     "update_config_patch",
     "set_openai_api_key",
     "clear_secrets",
+    "read_directory",  # ファイル一覧（設定 command ではない）
 }
+
+# invoke_handler の commands::config:: 登録を検査する対象は設定 command 4 種のみ。
+# read_directory は commands::fs:: に登録されるため、後段で別途検査する。
+CONFIG_COMMANDS = ALLOWED_COMMANDS - {"read_directory"}
 
 
 def read_text(rel: str) -> str | None:
@@ -94,7 +100,7 @@ if web_rs is not None:
                 f"({label}, pattern={pattern!r})"
             )
 
-# desktop/src/main.rs: invoke_handler に設定 command が登録されているかを確認する。
+# desktop/src/main.rs: invoke_handler に設定 command 4 種 + ファイル一覧 read_directory が登録されているかを確認する。
 # 抽出不能なら検査できないため fail-closed とする（cargo check も必須ゲートだが、
 # 本ゲート単体を fail-open にしない）。
 main_rs = read_text("desktop/src/main.rs")
@@ -106,11 +112,19 @@ if main_rs is not None:
         registered = set(
             re.findall(r"commands::config::([A-Za-z0-9_]+)", handler_match.group(1))
         )
-        missing_in_handler = ALLOWED_COMMANDS - registered
+        fs_registered = set(
+            re.findall(r"commands::fs::([A-Za-z0-9_]+)", handler_match.group(1))
+        )
+        missing_in_handler = CONFIG_COMMANDS - registered
         if missing_in_handler:
             errors.append(
                 "desktop/src/main.rs の invoke_handler に設定画面用 command の登録がありません: "
                 + ", ".join(sorted(missing_in_handler))
+            )
+        if "read_directory" not in fs_registered:
+            errors.append(
+                "desktop/src/main.rs の invoke_handler にファイル一覧 command の登録がありません: "
+                "read_directory (commands::fs::)"
             )
 
 # desktop/tauri.conf.json の plugins ブロックは完全削除済みで、
@@ -121,5 +135,5 @@ if errors:
         print(f"ERROR: {error}", file=sys.stderr)
     sys.exit(1)
 
-print("OK: web 側ソースの設定 command 呼び出しは get_config / update_config_patch / set_openai_api_key / clear_secrets に限定されています（source inspection のみ。実 WebView は invoke_handler 登録全 command へ到達可能）")
+print("OK: web 側ソースの設定 command 4 種 + ファイル一覧 read_directory の呼び出しは get_config / update_config_patch / set_openai_api_key / clear_secrets / read_directory に限定されています（source inspection のみ。実 WebView は invoke_handler 登録全 command へ到達可能）")
 PY

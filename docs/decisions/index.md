@@ -1,6 +1,6 @@
 # decisions
 
-openrustbooks の ADR 一覧（全 358 件）。
+openrustbooks の ADR 一覧（全 359 件）。
 
 - [ADR-0001: デスクトップ版にOS WebViewを採用する](0001-use-system-webview.md)
   - status: accepted — Tauriの標準的なOS WebView方式を採用する決定と、その影響。
@@ -720,3 +720,5 @@ openrustbooks の ADR 一覧（全 358 件）。
   - status: accepted — WasmMarkdownLinter を UI へ配線し、問題件数を固定文言で表示。
 - [ADR-0358: general の死設定を読み取り専用化し未配線を告知](0358-general-dead-settings-readonly.md)
   - status: accepted — DTO 不変で 3 設定を readonly 化し、desktop で現在値を復元。
+- [ADR-0359: read_directory を FileTree へ接続](0359-read-directory-file-tree.md)
+  - status: accepted — 一覧取得のみを接続し、生 path を出さない DTO / ゲートを確定。

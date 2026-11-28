@@ -2,6 +2,7 @@
 
 ## 2026-11-28
 
+- read_directory を FileTree へ接続（ADR-0359、35 passed / verify.sh 全ゲート成功）。
 - バックログ 4 件を並列処理（コメント実事実化 / test 専用 API / wasm import / 静的ゲート）。
 - general の 3 死設定を読み取り専用化し未配線告知を追加（ADR-0358、WDIO 3 passing）。
 - WDIO に設定 UI 保存と秘密マスクのケースを追加（settings 3 passing、CAS は未カバー明示）。

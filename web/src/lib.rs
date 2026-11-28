@@ -310,15 +310,180 @@ fn AboutPage() -> impl IntoView {
     }
 }
 
+/// `read_directory` の IPC 境界 DTO。desktop の `FileEntryView` と同じ
+/// 6 フィールドだけを持ち、`path` は持たない（ADR-0350）。
+///
+/// 生 path / path 由来 id を DOM と status へ出さないため、未知フィールドは
+/// 受け付けない。DOM へ表示するのは `name` と `is_dir` だけである。
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+struct FileEntryView {
+    name: String,
+    is_dir: bool,
+    size: Option<u64>,
+    /// desktop は `chrono::DateTime<Utc>` を RFC3339 文字列で送る。
+    modified: Option<String>,
+    format: Option<String>,
+    mime_type: Option<String>,
+}
+
+/// 一覧取得失敗時に status へ出す固定日本語文言。
+/// IPC の code / message や path は一切含めない。
+const FILE_TREE_LOAD_ERROR_MESSAGE: &str = "ファイル一覧を取得できませんでした";
+
+/// 失敗文言を一箇所へ固定するための helper（unit test からも参照する）。
+fn file_tree_error_status_message() -> &'static str {
+    FILE_TREE_LOAD_ERROR_MESSAGE
+}
+
+/// read_directory の引数を一箇所で組み立てる（path は既定 root の空文字固定）。
+fn file_tree_request() -> serde_json::Value {
+    serde_json::json!({
+        "path": "",
+        "options": {
+            "include_hidden": false,
+            "recursive": false,
+            "max_entries": 200,
+            "format_filter": null
+        }
+    })
+}
+
+/// `read_directory` を呼び出して mirror へ変換する。
+///
+/// 引数の `path` は空文字（既定 root）固定。IPC の生エラーは保持せず、
+/// 呼び出し側は成否だけを見て固定文言を表示する。
+async fn fetch_file_entries() -> Result<Vec<FileEntryView>, CommandError> {
+    let args: JsValue =
+        serde_wasm_bindgen::to_value(&file_tree_request()).map_err(|_| internal_error())?;
+    let value = invoke_update("read_directory", &args).await?;
+    serde_wasm_bindgen::from_value(value).map_err(|_| internal_error())
+}
+
 /// File tree component
 ///
-/// 初版ではファイル一覧を接続していない。以前の固定ダミー項目は
-/// クリック可能な誤解を与えるため削除し、状態を説明する固定文言だけを
-/// 表示する（ADR-0127 の未配線方針に合わせる）。
+/// `read_directory` の実 IPC 結果を mirror 経由で受け取り、`name` と
+/// `is_dir` だけを DOM へ表示する。取得失敗時は固定文言を status へ出し、
+/// 従来のプレースホルダへ戻す（生 path / path 由来 id は出さない）。
 #[component]
 fn FileTree() -> impl IntoView {
+    let entries = RwSignal::new(Vec::<FileEntryView>::new());
+    let failed = RwSignal::new(false);
+    let status = RwSignal::new(String::new());
+
+    // Leptos 0.8 に on_mount は無いため、Effect::new（初回のみ実行）で代替する。
+    Effect::new(move |_| {
+        wasm_bindgen_futures::spawn_local(async move {
+            match fetch_file_entries().await {
+                Ok(list) => {
+                    entries.set(list);
+                    failed.set(false);
+                    status.set(String::new());
+                }
+                Err(_) => {
+                    // error.code / message は保持せず、固定文言だけを出す。
+                    entries.set(Vec::new());
+                    failed.set(true);
+                    status.set(file_tree_error_status_message().to_string());
+                }
+            }
+        });
+    });
+
     view! {
-        <p class="file-tree-placeholder">"ファイル一覧は未接続です"</p>
+        <div class="file-tree-view">
+            <ul class="file-tree-entries">
+                {move || {
+                    let items: Vec<AnyView> = if failed.get() {
+                        vec![view! {
+                            <li class="file-tree-placeholder">"ファイル一覧は未接続です"</li>
+                        }
+                        .into_view()
+                        .into_any()]
+                    } else if entries.get().is_empty() {
+                        vec![view! {
+                            <li class="file-tree-placeholder">"ファイル一覧は空です"</li>
+                        }
+                        .into_view()
+                        .into_any()]
+                    } else {
+                        entries
+                            .get()
+                            .into_iter()
+                            .map(|entry| {
+                                let is_dir = entry.is_dir;
+                                view! {
+                                    <li class="file-tree-entry" data-is-dir=if is_dir { "true" } else { "false"}>
+                                        <span class="file-tree-name">{entry.name}</span>
+                                        <span class="file-tree-kind">{if is_dir { "dir" } else { "file" }}</span>
+                                    </li>
+                                }
+                                .into_view()
+                                .into_any()
+                            })
+                            .collect::<Vec<_>>()
+                    };
+                    items
+                }}
+            </ul>
+            <p class="file-tree-status" role="status" aria-live="polite">{move || status.get()}</p>
+        </div>
+    }
+}
+
+#[cfg(test)]
+mod file_tree_view_tests {
+    use super::{FileEntryView, file_tree_error_status_message, file_tree_request};
+
+    fn sample_json() -> serde_json::Value {
+        serde_json::json!({
+            "name": "notes.md",
+            "is_dir": false,
+            "size": 12,
+            "modified": "2026-01-01T00:00:00Z",
+            "format": "markdown",
+            "mime_type": "text/markdown"
+        })
+    }
+
+    #[test]
+    fn mirror_has_desktop_fields_and_no_path() {
+        let view: FileEntryView = serde_json::from_value(sample_json()).expect("valid view");
+        assert_eq!(view.name, "notes.md");
+        assert!(!view.is_dir);
+        let value = serde_json::to_value(&view).expect("serialize mirror");
+        let object = value.as_object().expect("object");
+        for key in ["name", "is_dir", "size", "modified", "format", "mime_type"] {
+            assert!(object.contains_key(key), "missing field: {key}");
+        }
+        assert_eq!(object.len(), 6);
+        assert!(!object.contains_key("path"), "mirror must not carry path");
+    }
+
+    #[test]
+    fn mirror_rejects_path_field() {
+        let mut json = sample_json();
+        json.as_object_mut()
+            .expect("object")
+            .insert("path".to_string(), serde_json::json!("should-not-be-kept"));
+        assert!(serde_json::from_value::<FileEntryView>(json).is_err());
+    }
+
+    #[test]
+    fn file_tree_request_uses_empty_root_path() {
+        let request = file_tree_request();
+        assert_eq!(request["path"].as_str(), Some(""));
+        assert_eq!(request["options"]["max_entries"].as_u64(), Some(200));
+        assert_eq!(request["options"]["recursive"].as_bool(), Some(false));
+        assert!(!request.to_string().contains("/home"));
+    }
+
+    #[test]
+    fn failure_status_message_is_fixed() {
+        assert_eq!(
+            file_tree_error_status_message(),
+            "ファイル一覧を取得できませんでした"
+        );
     }
 }
 
